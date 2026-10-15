@@ -7,7 +7,7 @@ Local fallback:
 `claude --dangerously-skip-permissions -p "Read CLAUDE.md. First do the fresh-start check in 'Launcher session' rule 1 and stop on LEFTOVER RUN. Then run writing-plans on docs/PROBLEM.md and docs/DECISIONS.md into docs/PLAN.md, dispatch product for docs/SPEC.md, then start the orchestrator as CLAUDE.md 'Launcher session' says. Do not ask me anything."`
 (the settings.json allowlist covers the interactive case; the flag covers a headless run where prompts would hang)
 
-Before launching: `docs/PROBLEM.md`, `docs/DECISIONS.md` and the `DEADLINE:` line in `docs/CONTEXT.md` are filled, preflight passes, and origin has no `integration` or `task/*` branch (a fresh start that finds them stops with LEFTOVER RUN). On 15 Oct origin still holds the dry run's `integration` and `task/1..9`: run step 4 of the dry run below before kickoff.
+Before launching: `docs/PROBLEM.md`, `docs/DECISIONS.md` and the `DEADLINE:` line in `docs/CONTEXT.md` are filled, preflight passes, and origin has no `integration` or `task/*` branch (a fresh start that finds them stops with LEFTOVER RUN). After the 15 Oct dry run, `integration` and `task/1..9` must be deleted on GitHub before kickoff (copies are in `archive/dryrun-1015/`).
 
 ## Recovery
 - The launcher's hourly `30x-watchdog` Routine wakes the session, also in a fresh container, and re-dispatches the orchestrator with RESUME when none is running.
@@ -17,7 +17,9 @@ Before launching: `docs/PROBLEM.md`, `docs/DECISIONS.md` and the `DEADLINE:` lin
 1. Branch `dryrun/<name>` from `main` with a fake company in PROBLEM.md, DECISIONS.md and a `DEADLINE:` a few hours out. Push it.
 2. Start a cloud session on that branch with the launch prompt above, prefixed with: "DRY RUN: branch dryrun/<name> plays the role of main. Never push to or merge into main; wherever CLAUDE.md or an agent says main, use dryrun/<name>."
 3. Kill test: after one task has a done line on `origin/integration`, archive the session, unarchive it and fire its `30x-watchdog` (fresh container). Then archive it for good, delete its watchdog and start a new session with the same prefix and `RESUME`.
-4. Clean up before the real run (Roberto, hard stop): `bash scripts/archive-run.sh <name>` to preview, then `--yes`; drop the dry run's tables from Supabase and delete their `supabase_migrations.schema_migrations` rows; delete the dry run's `30x-watchdog` and archive its session. The Worker URL is overwritten by the real run's first deploy.
+4. Clean up before the real run. Tell a cloud session "CLEAN UP DRY RUN <name>"; it archives the session, deletes its `30x-watchdog`, copies `integration` and `task/*` to `archive/<name>/` with `scripts/archive-run.sh <name> --yes`, and deploys a placeholder Worker with no cron. Two steps are yours, in a browser, because agents cannot do them (the git proxy refuses branch deletes; the safety check blocks dropping live tables):
+   - GitHub, https://github.com/Robertzu43/30x-hackathon-roberto-zuniga/branches: delete `integration` and every `task/*`.
+   - Supabase dashboard, SQL editor: drop the run's tables, delete their `supabase_migrations.schema_migrations` rows and the demo users. The session gives you the exact SQL.
 
 ## Checklist and results (dry run 15 Oct 2026, fake company Rutas del Norte)
 | Check | Result |
@@ -53,12 +55,13 @@ Cost of the dry run so far: about 17.50 USD across the two launcher sessions.
 - RESUME is a ledger line `RESUMED at <task> <time>`, not a heartbeat line (heartbeats moved to the launcher).
 - Worktrees live in `.worktrees/` (gitignored) and are removed after merge (the run had used two locations).
 - Per-task QA runs against `wrangler dev` before the first deploy; the final happy path always against the deployed URL.
-- A fresh start that finds a previous run's branches stops with LEFTOVER RUN; `scripts/archive-run.sh` clears them.
+- A fresh start that finds a previous run's branches stops with LEFTOVER RUN, keeps copies under `archive/`, and emails Roberto the GitHub link to delete the originals.
+- Cloud sessions cannot delete GitHub branches (proxy 403) and agents may not drop live tables; cleanup between runs is two browser steps for Roberto, nothing in a terminal.
 - `scripts/run_status.py` works from any folder and reports a mistyped deadline as `(invalid)`.
 - Per-task QA tests the task's own worktree through `scripts/qa-server.sh` (gitignored mode-600 `.dev.vars`, bounded start, stop deletes it); the deployed URL is only for the final happy path.
 - Only the orchestrator deploys, from `integration` after a merge and a green suite (a builder had deployed from its unmerged worktree).
 - The orchestrator creates `integration` before the first task (the first tasks had been built in the main working tree).
 
 ## Still to verify by hand, once
-- AWS: `AWS_PROFILE_NAME=<profile> bash scripts/aws-setup.sh` (phone sign-in), then preflight shows "aws identity", only if an AC will need AWS.
-- REA: `npx rea-agents setup` once, then disabled; only if PROBLEM.md names an existing system.
+- AWS, only if an AC will need it: ask a cloud session to run `scripts/aws-setup.sh`; you only open the sign-in link it emails or prints, on your phone.
+- REA, only if PROBLEM.md names an existing system: a cloud session sets it up as `docs/RESOURCES.md` describes.

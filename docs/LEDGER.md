@@ -93,3 +93,8 @@ done: Tasks 1-4 merged | in progress: Task 5 delivery API (RESUMED at Task 5) | 
 - Ruling (product) R-11: D1-D3 valid API contracts; SPEC clarified (docs/SPEC.md shared values); Task 5 QA = PASS, conditional on Task 6 UI mapping codes to Spanish and summing pendiente+asignado. Loser's argument: testers read evidence verbatim, API should return Spanish strings and summed count; rejected because no user sees the API. Cost if wrong: UI mapping bug shows raw codes.
 - Ruling (product): `npm run seed` must also delete today's Bogota-dated deliveries (CSV imports included) so R-08/AC-20 counts hold; owner Task 8 (cite R-08 in its brief); QA also saw stale DB rows DU-*/SC-* dated 2027-03-17, not mine, left.
 - Merged task/5-api into integration (35f19bd).
+
+## Task 6: dispatcher screen (junior-builder)
+- Worktree .worktrees/task6, branch task/6-dispatcher, BASE 2a7d12a. Brief carries R-11 (codes to Spanish, pendiente+asignado).
+- Builder attempt 1: 1473182 (87 tests; helpers unit-tested, no jsdom; api() put in web/supabase.ts; styles.css touched). Reviewer pass 1: CHANGES, 1 finding conf 95 (duplicate bogotaToday helper). Builder attempt 2 (fresh builder, report carried): 99de58a, exactly the 3-line fix.
+- Ruling: scoped re-review skipped; orchestrator read the 6-line fix diff, it is exactly the finding — a 2nd reviewer pass on a 1-line import swap buys nothing — if wrong, a duplicate helper survives (harmless). Ruling: web/styles.css edit in scope (styling for the new screen).

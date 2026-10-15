@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { pendientes, reasonText, skipText } from '../../web/Dispatcher'
+import { byPedido, pendientes, reasonText, skipText } from '../../web/Dispatcher'
 
 describe('dispatcher UI mapping (R-11, R-05)', () => {
   it('maps every CSV skip code to its Spanish text', () => {
@@ -15,5 +15,11 @@ describe('dispatcher UI mapping (R-11, R-05)', () => {
   })
   it('sums pendiente and asignado into Pendientes', () => {
     expect(pendientes({ pendiente: 2, asignado: 4 })).toBe(6)
+  })
+  it('filters rows by pedido substring, ignoring case and spaces', () => {
+    const rows = [{ pedido: 'RN-1001' }, { pedido: 'RN-2002' }]
+    expect(byPedido(rows, ' 1001 ')).toEqual([rows[0]])
+    expect(byPedido(rows, 'rn-')).toEqual(rows)
+    expect(byPedido(rows, '')).toEqual(rows)
   })
 })

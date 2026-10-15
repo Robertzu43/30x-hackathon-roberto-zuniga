@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Installed per clone by the SessionStart hook (git config core.hooksPath .githooks).
+# CLAUDE.md: secret scan, then the test suite. Either failing blocks the commit.
+cd "$(git rev-parse --show-toplevel)" || exit 1
+bash .claude/hooks/secret-scan.sh || exit 1
+if [ -f package.json ]; then npm test --if-present -- --run || exit 1; fi
+exit 0

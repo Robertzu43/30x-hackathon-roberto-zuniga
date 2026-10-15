@@ -1,0 +1,26 @@
+name = "30x-hackathon"
+account_id = "f23a90e15150a8af524f01d3bce393ab"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+APP_ENV = "production"
+RESEND_FROM = "onboarding@resend.dev"
+SUPABASE_URL = "https://dhjumvswohajnusdifim.supabase.co"  # public
+SUPABASE_ANON_KEY = "sb_publishable_qKF4nId7_l5TJ78gSEAgWQ_bfZiFx4K"     # public by design; RLS protects data
+WORKERS_AI_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"  # product LLM; change here, not in code
+
+[ai]
+binding = "AI"  # Workers AI: no key, authorised by the account
+
+[assets]
+directory = "./dist"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
+[[kv_namespaces]]
+binding = "KV"
+id = "715b34210bab409e81ef707e105f0334"
+
+# Secrets (wrangler secret put): RESEND_API_KEY, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_POOLER_URL. Optional: TYPESAFE_API_KEY, ANTHROPIC_API_KEY

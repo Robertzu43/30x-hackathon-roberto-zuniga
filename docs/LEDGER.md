@@ -138,3 +138,6 @@ done: Tasks 1-10 merged into integration | in progress: final review + QA happy 
 - Ruling: QA's untracked e2e/qa-acs.spec.ts not committed (unreviewed, scratch) — if wrong, extra e2e coverage is missing. Ruling: happy-path.webm re-recorded by QA committed (AC-26 evidence). Observation not ruled: one unreproduced flash of "No tienes entregas" on courier load.
 - Merging integration into dryrun/e2e (dry run, never main).
 RUN COMPLETE 2026-10-15T22:36Z
+
+## Heartbeat 2026-10-15 22:37Z
+done: Tasks 1-10 + README + seed-test fix, integration merged into dryrun/e2e, deployed | in progress: nothing | blocked: none | rulings: T10 CONDITIONAL accepted, seed test opt-in, README refresh | next: RUN COMPLETE

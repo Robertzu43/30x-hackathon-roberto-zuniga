@@ -65,7 +65,7 @@ A second reviewer on the same diff is a defect. A reviewer who rewrites code is 
 - Superpowers always: every build goes brainstorming -> writing-plans -> subagent-driven-development; every builder works test-driven-development then verification-before-completion; every merge goes through finishing-a-development-branch. No code outside that path, in any session.
 - Minimum code that satisfies the acceptance criterion. No speculative abstractions.
 - Never cut validation, auth, tests or error handling to save time.
-- Every task ends with: tests passing, lint passing, a commit on the task branch, a 5-line report in the ledger.
+- Every task ends with: tests passing, lint passing, a commit on the task branch, a 5-line report returned to the orchestrator, which writes it to the ledger (the orchestrator is the only ledger writer).
 - Ponytail: ULTRA is pinned for every session and every subagent by the repo's own hooks (`PONYTAIL_DEFAULT_MODE=ultra` in `.claude/settings.json`; SessionStart and SubagentStart inject the ruleset). `ponytail` is also preloaded into both builders and `ponytail-review` into the reviewer. Ultra is the floor, not a suggestion: if a builder thinks a rule should bend, it says so in its report and the reviewer or product rules; it does not bend it.
 - Stack: TypeScript + Hono on Cloudflare Workers, Supabase (supabase-js, migrations via CLI), Resend, Vitest. See `docs/INFRA.md`.
 - UI: Vite + React served by the Worker (Static Assets). Spanish copy, es-CO locale (see INFRA.md). Follow the preloaded `minimalist-ui` skill (leonxlnx taste-skill pack) on every page; it exists to keep AI-slop UI out.

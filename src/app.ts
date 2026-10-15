@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { requireRole, type AuthEnv } from './lib/auth'
 
 export type Env = {
   SUPABASE_URL: string
@@ -8,9 +9,11 @@ export type Env = {
   RESEND_FROM: string
 }
 
-export const app = new Hono<{ Bindings: Env }>()
+export const app = new Hono<AuthEnv>()
 
 app.get('/api/health', (c) => c.json({ ok: true }))
+
+app.get('/api/me', requireRole(), (c) => c.json(c.get('user')))
 
 app.notFound((c) => c.json({ error: 'not found' }, 404))
 

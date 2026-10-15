@@ -19,6 +19,20 @@ class RunStatus(unittest.TestCase):
         self.assertEqual(parse_deadline("Exact hour: <Roberto fills at kickoff>"), (Z("2026-10-18T17:00Z"), "default"))
         self.assertEqual(parse_deadline("DEADLINE: <Roberto fills at kickoff>")[1], "default")
 
+    def test_typo_deadline_is_flagged_invalid(self):
+        self.assertEqual(parse_deadline("DEADLINE: 2026-10-18 18:00 COT"), (Z("2026-10-18T17:00Z"), "invalid"))
+
+    def test_cli_works_from_any_directory(self):
+        import os, subprocess, tempfile
+        script = Path(__file__).resolve().parents[1] / "run_status.py"
+        with tempfile.TemporaryDirectory() as d:
+            subprocess.run(["git", "init", "-q", d], check=True)
+            os.makedirs(f"{d}/docs/sub")
+            Path(f"{d}/docs/CONTEXT.md").write_text("DEADLINE: 2030-01-01T00:00-05:00\n")
+            Path(f"{d}/docs/LEDGER.md").write_text("")
+            out = subprocess.run(["python3", str(script)], cwd=f"{d}/docs/sub", capture_output=True, text=True).stdout
+        self.assertIn("DEADLINE 2030-01-01T05:00Z (set)", out)
+
     def test_naive_deadline_is_bogota(self):
         self.assertEqual(parse_deadline("DEADLINE: 2026-10-18 18:00"), (Z("2026-10-18T23:00Z"), "set"))
 

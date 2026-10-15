@@ -74,7 +74,7 @@ if [ -n "${AWS_PROFILE_NAME:-}" ]; then
 fi
 
 echo "== Clock"
-python3 scripts/run_status.py | grep -q '(default)' && echo "WARN  DEADLINE not set in docs/CONTEXT.md; agents assume 2026-10-18T12:00-05:00" || ok "deadline set: $(python3 scripts/run_status.py | sed -n 's/^DEADLINE //p')"
+python3 scripts/run_status.py | grep -qE '\((default|invalid)\)' && echo "WARN  DEADLINE missing or unparseable in docs/CONTEXT.md; agents assume 2026-10-18T12:00-05:00" || ok "deadline set: $(python3 scripts/run_status.py | sed -n 's/^DEADLINE //p')"
 
 echo "== Workers AI (product LLM)"
 MODEL=$(sed -n 's/^WORKERS_AI_MODEL *= *"\([^"]*\)".*/\1/p' wrangler.toml); MODEL="${MODEL:-@cf/meta/llama-3.3-70b-instruct-fp8-fast}"

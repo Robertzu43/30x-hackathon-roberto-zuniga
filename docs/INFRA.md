@@ -76,7 +76,7 @@ Most challenges will want some LLM step (classify a message, extract fields from
 QA needs a browser to click the deployed app. Playwright with Chromium is installed in the session (`npx playwright install chromium --with-deps`). QA writes its happy-path checks as a Playwright script in `e2e/`, runs them against the deployed URL, and records the final run with `recordVideo` to `docs/demo/happy-path.webm`. That recording is the fallback demo if the live one fails and the first thing Roberto watches on Sunday.
 
 ## Status channel
-The orchestrator's heartbeat runs every 5 hours of work and is emailed through Resend to `HEARTBEAT_EMAIL` (Roberto's inbox on his phone), 5 lines, same text as the ledger. PREFLIGHT FAILED, any hard stop, the T-6h freeze and the T-2h shutdown email immediately. If `HEARTBEAT_EMAIL` is unset, ledger only. Until a domain is verified in Resend, `onboarding@resend.dev` only delivers to the Resend sign-up address, so `HEARTBEAT_EMAIL` must be that address.
+The launcher sends the heartbeat every 5 hours (when `scripts/run_status.py` says `HEARTBEAT_DUE yes`) and it is emailed through Resend to `HEARTBEAT_EMAIL` (Roberto's inbox on his phone), 5 lines, same text as the ledger. PREFLIGHT FAILED, any hard stop, the T-6h freeze and the T-2h shutdown email immediately. If `HEARTBEAT_EMAIL` is unset, ledger only. Until a domain is verified in Resend, `onboarding@resend.dev` only delivers to the Resend sign-up address, so `HEARTBEAT_EMAIL` must be that address.
 
 ## CI
 `.github/workflows/ci.yml` runs lint, typecheck and unit tests on every push. It gives judges green checks on the public repo and gives the orchestrator a second opinion when the local run is flaky. Deploy stays manual (`wrangler deploy` by the orchestrator), not CI, so a red CI never blocks a demo fix.
@@ -87,7 +87,7 @@ The orchestrator must outlive Roberto's laptop, so the hackathon runs in a Claud
 2. Environment at https://claude.ai/code (Environments): name `30x-hackathon`. Environment variables: the contents of `.env` without comments (on the laptop: `grep -vE '^#|^$' .env | pbcopy`, then paste). Network: full access (agents deploy, email, read docs). Setup script: `bash scripts/cloud-setup.sh`.
 3. Launch from the laptop with `claude --cloud "<launch prompt from docs/DRY-RUN.md>"`, or start the session on the web. Then close the laptop; the session keeps running.
 4. Every cloud session is a fresh container with HTTPS-only egress: raw TCP to Postgres (5432/6543) is blocked, which is why migrations go through the Management API. AWS needs one sign-in per session: `scripts/aws-login-remote.sh` emails you the URL. Everything else comes from the environment variables. `.mcp.json` in the repo registers the AWS MCP server for every session.
-5. A dead session is resumed by starting a new cloud session with the word RESUME (below). A scheduled recovery routine that does this automatically is possible once the heartbeat pushes the ledger to GitHub; not configured yet.
+5. The launcher's hourly `30x-watchdog` Routine wakes the session (also in a fresh container) and restarts the orchestrator with RESUME; proven in the 15 Oct dry run. If the session itself is gone, start a new cloud session with the word RESUME (below).
 
 ## Session resilience
 Cloud sessions can time out or hit limits. Everything that matters is on disk and in git: plan, spec, ledger, task branches. A new session resumes by reading `docs/LEDGER.md` and dispatching the orchestrator with "RESUME". Roberto's job when a session dies: start a new one with that one word.

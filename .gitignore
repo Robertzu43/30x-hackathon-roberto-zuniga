@@ -8,3 +8,4 @@ dist/
 .superpowers/
 *.pem
 __pycache__/
+.worktrees/

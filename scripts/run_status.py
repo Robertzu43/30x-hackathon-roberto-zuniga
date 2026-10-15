@@ -21,10 +21,12 @@ def _iso(value: str) -> datetime:
 
 def parse_deadline(context_text: str) -> tuple[datetime, str]:
     m = re.search(r"^DEADLINE:\s*(.+?)\s*$", context_text, re.M)
+    if not m or m.group(1).startswith("<"):  # missing or still the kickoff placeholder
+        return _iso(DEFAULT_DEADLINE), "default"
     try:
         return _iso(m.group(1)), "set"
-    except (AttributeError, ValueError):
-        return _iso(DEFAULT_DEADLINE), "default"
+    except ValueError:  # a typo: say so, so the launcher's hourly output shows why the default is in use
+        return _iso(DEFAULT_DEADLINE), "invalid"
 
 
 def last_heartbeat(ledger_text: str) -> datetime | None:
@@ -55,7 +57,9 @@ def _branches() -> list[str]:
 
 
 def main() -> None:
-    read = lambda p: Path(p).read_text() if Path(p).exists() else ""
+    top = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True).stdout.strip()
+    root = Path(top or ".")
+    read = lambda p: (root / p).read_text() if (root / p).exists() else ""
     r = report(datetime.now(timezone.utc), read("docs/CONTEXT.md"), read("docs/LEDGER.md"), _branches())
     yn = lambda b: "yes" if b else "no"
     print(f"PHASE {r['phase']}")

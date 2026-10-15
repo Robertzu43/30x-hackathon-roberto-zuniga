@@ -64,3 +64,11 @@ done: preflight passed, plan scanned, rulings R-01..R-10 ledgered | in progress:
 - Ruling: accept CONDITIONAL, put empty-pedido/valor-0 in docs/IDEAS.md — no AC requires rejection, R-02 allows non-negative — if wrong, a blank order number imports; fix is one line.
 - Note for T5/T6: skipped[].line counts data rows from 1 (header excluded).
 - Merged task/2-domain into integration; full suite green.
+
+## Task 3: schema, RLS, seed (senior-builder)
+- Builder (1 attempt): commit ef0c189; migration 20261015200000_core applied live via db-push; seed idempotent; 48 tests incl. live seed test; added devDependency @types/node (typecheck for test); pendiente rows have null courier_id.
+- Reviewer (1 pass): PASS, no findings >= 95. QA (1 run): PASS (RLS on both tables, anon sees nothing, courier JWT sees only own rows, cannot write directly; demo logins work). UI parts of AC-01/02/23 left to Tasks 6-8.
+- QA note for T8/README: demo password lives only in scripts/seed.mjs; /demo and README must show it and document `npm run seed` before Demo Day. Couriers can only write through the Worker (T5).
+- Ruling: accept @types/node devDependency — needed by typecheck, CLAUDE.md allows justified deps — costs nothing.
+- Hygiene: QA left /andres.jwt, /luisa.jwt, /carolina.jwt (short-lived demo-user tokens) at filesystem root; the safety check blocked my rm, so they remain for a human to delete. Outside the repo, demo accounts only.
+- Merged task/3-schema into integration; full suite green.

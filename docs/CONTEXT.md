@@ -10,7 +10,7 @@
 ## Dates that bind the plan
 - 16 Oct: kickoff. Challenges, evaluation criteria and itinerary are shared here, not before.
 - 18 Oct: deadline to upload the project. Roberto writes the exact time on the next line at kickoff; until then agents assume 2026-10-18T12:00-05:00.
-DEADLINE: <Roberto fills at kickoff, ISO with offset, e.g. 2026-10-18T18:00-05:00>
+DEADLINE: 2026-10-16T03:00-05:00
 - 19-20 Oct: Demo Day in front of the companies. The company decides.
 - 21 Oct: winners announced.
 

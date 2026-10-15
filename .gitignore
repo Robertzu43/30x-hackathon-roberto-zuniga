@@ -8,3 +8,5 @@ dist/
 .superpowers/
 *.pem
 __pycache__/
+test-results/
+playwright-report/

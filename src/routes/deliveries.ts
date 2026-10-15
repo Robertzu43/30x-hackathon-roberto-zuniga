@@ -140,3 +140,11 @@ deliveries.get('/summary', dispatcher, async (c) => {
       .map(({ pedido, cliente, direccion, courier_name, failure_reason }) => ({ pedido, cliente, direccion, courier_name, failure_reason })),
   })
 })
+
+// Public, no session (AC-23): counts only, never rows or PII. Pendiente = pendiente + asignado (R-05).
+deliveries.get('/demo/summary', async (c) => {
+  const date = bogotaToday()
+  const rows = must(await adminClient(c.env).from('deliveries').select('status').eq('delivery_date', date)) as { status: Status }[]
+  const count = (s: Status) => rows.filter((r) => r.status === s).length
+  return c.json({ date, entregado: count('entregado'), fallido: count('fallido'), pendiente: count('pendiente') + count('asignado') })
+})

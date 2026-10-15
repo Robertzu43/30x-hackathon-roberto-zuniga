@@ -1,4 +1,5 @@
 import { Courier } from './Courier'
+import { Demo } from './Demo'
 import { Dispatcher } from './Dispatcher'
 import { Login } from './Login'
 
@@ -6,7 +7,7 @@ import { Login } from './Login'
 export function App() {
   const path = location.pathname.replace(/\/+$/, '') || '/'
   if (path === '/mensajero') return <Login role="courier"><Courier /></Login>
-  if (path === '/demo') return <Page title="Demo" />
+  if (path === '/demo') return <Demo />
   if (path === '/') return <Login role="dispatcher"><Dispatcher /></Login>
   return <Page title="Página no encontrada" />
 }

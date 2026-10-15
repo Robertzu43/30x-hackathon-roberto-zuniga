@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { formatCOP, formatDate } from '../src/lib/format'
+import { bogotaToday, formatCOP, formatDate } from '../src/lib/format'
 import { SKIP_LABELS, type ImportRow, type Skipped } from '../src/lib/csv'
 import { REASON_LABELS, type Reason, type Status } from '../src/lib/status'
 import type { Delivery } from '../src/routes/deliveries'
@@ -17,8 +17,6 @@ export const skipText = (code: string) => SKIP_LABELS[code as Skipped['reason']]
 export const reasonText = (code: string | null) => (code ? (REASON_LABELS[code as Reason] ?? code) : '')
 export const pendientes = (s: { pendiente: number; asignado: number }) => s.pendiente + s.asignado
 const STATUS_TEXT: Record<Status, string> = { pendiente: 'Pendiente', asignado: 'Asignado', entregado: 'Entregado', fallido: 'Fallido' }
-
-const today = () => new Date(Date.now() - 5 * 3600e3).toISOString().slice(0, 10) // Bogotá, UTC-5
 
 export function Dispatcher() {
   const [rows, setRows] = useState<Delivery[]>([])
@@ -53,7 +51,7 @@ export function Dispatcher() {
   return (
     <main>
       <header className="bar">
-        <p className="eyebrow">Rutas del Norte · {formatDate(today())}</p>
+        <p className="eyebrow">Rutas del Norte · {formatDate(bogotaToday())}</p>
         <button onClick={signOut}>Cerrar sesión</button>
       </header>
       <h1>Despacho</h1>

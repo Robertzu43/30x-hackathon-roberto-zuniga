@@ -21,10 +21,15 @@ describe('dates', () => {
 
 describe('money', () => {
   it('formatCOP', () => expect(formatCOP(45000)).toMatch(/^\$\s?45\.000$/));
-  it.each(['45000', '45.000', '$45.000', '45.000,00', ' $ 45.000 '])('parseCOP %s', (raw) => {
+  it.each(['45000', '45.000', '$45.000', '45.000,00', ' $ 45.000 ', '$45,000', '45.000,0'])('parseCOP %s', (raw) => {
     expect(parseCOP(raw)).toBe(45000);
   });
-  it.each(['45.000,50', 'abc', '', '-5', '4.5'])('parseCOP rejects %s', (raw) => {
+  it('parseCOP comma thousands', () => {
+    expect(parseCOP('1,000')).toBe(1000);
+    expect(parseCOP('1,234,567')).toBe(1234567);
+    expect(parseCOP('45,0')).toBe(45);
+  });
+  it.each(['45.000,50', 'abc', '', '-5', '4.5', '45,5', '45,50', '1,2345', '1,000.5', '1,00,000'])('parseCOP rejects %s', (raw) => {
     expect(parseCOP(raw)).toBeNull();
   });
 });

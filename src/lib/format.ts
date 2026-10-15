@@ -16,6 +16,8 @@ export const formatDate = (iso: string): string => iso.split('-').reverse().join
 export const formatCOP = (n: number): string => `$ ${new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 }).format(n)}`;
 
 export function parseCOP(raw: string): number | null {
-  const s = raw.replace(/[$\s]/g, '').replace(/,0+$/, '');
+  let s = raw.replace(/[$\s]/g, '');
+  // comma + exactly 3 digits (no other shape) is a thousands separator; otherwise a comma is decimal and must be all zeros
+  s = /^\d{1,3}(,\d{3})+$/.test(s) ? s.replace(/,/g, '') : s.replace(/,0{1,2}$/, '');
   return /^(\d+|\d{1,3}(\.\d{3})+)$/.test(s) ? Number(s.replace(/\./g, '')) : null;
 }

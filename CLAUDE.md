@@ -27,11 +27,20 @@ This repo is the source of truth: agents (`.claude/agents/`), hooks (`.claude/ho
 0. Only if `docs/PROBLEM.md` names an existing system to understand: one time-boxed REA analysis task producing `docs/ANALYSIS-<system>.md` (see `docs/RESOURCES.md`). Builders read the analysis file; they never run REA themselves.
 1. Roberto + main session: `brainstorming` until `docs/PROBLEM.md` and `docs/DECISIONS.md` are settled. This is the ONLY stage with a human in it.
 2. Main session: `writing-plans` -> `docs/PLAN.md`. Then dispatch `product` to write `docs/SPEC.md`.
-3. Main session: dispatch `orchestrator` with the plan path and walk away. It runs `subagent-driven-development` and `finishing-a-development-branch` to the end.
+3. Main session: become the launcher (next section): it starts the orchestrator with the plan path and keeps the run alive. It runs `subagent-driven-development` and `finishing-a-development-branch` to the end.
 
 Skills are preloaded via the `skills:` list in each agent's frontmatter, so their full text is in the agent's context at startup. Each agent proves it by quoting a heading in its first report. The `Skill` tool stays as a fallback. Every skill the agents name lives in `.claude/skills/` in this repo (superpowers set, `ponytail`, `ponytail-review`, `minimalist-ui`, `design-taste-frontend`, `typesafe-ai`); no plugin install is needed in any session. If a skill is missing, the agent says so and continues with the rules in this file. The orchestrator dispatches one implementer per task,
 one reviewer per task, one debate round when they disagree, Product rules, ledger records it.
 A second reviewer on the same diff is a defect. A reviewer who rewrites code is a defect.
+
+## Launcher session (the main session after the plan exists)
+The orchestrator is one long subagent call; the launcher keeps it alive and owns the clock.
+1. On start, fresh or RESUME: `git fetch origin`; if `origin/integration` exists, `git checkout integration`. List Routines and delete every one named `30x-watchdog`, then create one: `create_trigger` with name `30x-watchdog`, cron `0 * * * *`, prompt `TICK`, `initiation: human_request`, bound to this session. Dispatch `orchestrator` in the background with `docs/PLAN.md` on a fresh start, `RESUME` otherwise. Where `create_trigger` does not exist (local or headless `-p` run), skip the Routine and dispatch the orchestrator in the foreground; if it ends before `RUN COMPLETE`, dispatch it again with `RESUME`.
+2. On every wake (a `TICK`, or a notice that the orchestrator finished): the fetch and checkout from rule 1, then `python3 scripts/run_status.py`.
+   - `HEARTBEAT_DUE yes`: write five lines from the ledger tail (done / in progress / blocked / rulings since last / next) and run `bash scripts/heartbeat.sh "<lines>"`.
+   - Orchestrator not running, `RUN_COMPLETE no`, `PHASE` not `OVER`: dispatch `orchestrator` with `RESUME` in the background.
+   - `RUN_COMPLETE yes` or `PHASE OVER`: final heartbeat, `bash scripts/sync.sh`, delete `30x-watchdog`, stop.
+3. The launcher never writes product code and never dispatches builders, reviewer, QA or product.
 
 ## Decision principles (borrowed from gstack autoplan, adapted)
 - Claims need evidence. Name the command and its output. A mock is not a live check. "Done, unverified" is not done.
@@ -57,9 +66,9 @@ A second reviewer on the same diff is a defect. A reviewer who rewrites code is 
 - Objective anchor: every task cites AC ids. Every reviewer finding cites an AC id or a CLAUDE.md rule, or it is discarded. Nobody adds ACs except `product`, and only from CONTEXT/PROBLEM/DECISIONS.
 - Ideas go to `docs/IDEAS.md`, never into code. A builder who wants to add something writes one line there and continues the task as briefed.
 - Order of work: MUST ACs first, in dependency order. SHOULD ACs only when every MUST has passed QA. Demo requirements are MUST.
-- Clock: `docs/CONTEXT.md` holds the upload deadline. At T-6h the orchestrator freezes features: only failing-test fixes, README, demo data and deploy. At T-2h: deploy, verify the URL on a clean session, final ledger summary, stop.
-- Status heartbeat: every 5 hours of work the orchestrator runs `scripts/heartbeat.sh` (ledger + email to `HEARTBEAT_EMAIL` through Resend), and immediately on PREFLIGHT FAILED, any hard stop, the T-6h freeze and the T-2h shutdown. Five lines: done / in progress / blocked / rulings / next. This is what Roberto reads from his phone.
-- Resume: a new session dispatches the orchestrator with "RESUME"; it continues from the ledger. Nothing is only in memory.
+- Clock: `docs/CONTEXT.md` holds the upload deadline on its `DEADLINE:` line; `python3 scripts/run_status.py` turns it into `PHASE`, and the orchestrator runs it before every task dispatch. FREEZE (T-6h): only failing-test fixes, README, demo data and deploy. SHUTDOWN (T-2h): deploy, verify the URL on a clean session, final ledger summary, `RUN COMPLETE`, stop.
+- Status heartbeat: `scripts/heartbeat.sh` (ledger + `sync.sh` + email to `HEARTBEAT_EMAIL` through Resend). The launcher sends it whenever `run_status.py` says `HEARTBEAT_DUE yes` (every 5 hours); the orchestrator sends it immediately on PREFLIGHT FAILED, any hard stop, the first FREEZE and the first SHUTDOWN. Five lines: done / in progress / blocked / rulings / next. This is what Roberto reads from his phone.
+- Resume: any session started with "RESUME" follows "Launcher session"; the orchestrator fetches origin first and continues from the ledger. `scripts/sync.sh` runs after every merge and every heartbeat, so nothing lives only in the container.
 
 ## Code rules (Ponytail ULTRA mode is on for every agent that writes code)
 - Superpowers always: every build goes brainstorming -> writing-plans -> subagent-driven-development; every builder works test-driven-development then verification-before-completion; every merge goes through finishing-a-development-branch. No code outside that path, in any session.
@@ -78,7 +87,7 @@ A second reviewer on the same diff is a defect. A reviewer who rewrites code is 
 - SessionStart: installs the git hooks path, injects `using-superpowers`, activates Ponytail ULTRA. SubagentStart: injects Ponytail ULTRA into every subagent.
 - PostToolUse on Edit/Write: run lint on the touched file.
 - Pre-commit (`.githooks/pre-commit`, installed by the SessionStart hook via `git config core.hooksPath .githooks`): secret scan (`.claude/hooks/secret-scan.sh`) then the test suite. Either failing blocks the commit.
-- Stop hook: if `docs/LEDGER.md` has no entry for the current task, refuse to stop.
+- No Stop hook: `UNLEDGERED` in `run_status.py` lists task branches the ledger never mentions, and RESUME reconciles them first.
 
 ## Demo requirements (non-negotiable, product owns these)
 - `README.md` with: the problem in the company's words, what was built, how to run, how to deploy, what's not done.

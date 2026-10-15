@@ -17,6 +17,5 @@ O="$T/origin.git"
 git --git-dir="$O" rev-parse -q --verify refs/heads/integration >/dev/null
 git --git-dir="$O" rev-parse -q --verify refs/heads/task/01-a >/dev/null
 git --git-dir="$O" show integration:docs/LEDGER.md | grep -q 'task/01-a done'
-echo "$out" | tail -1 | grep -q 'committed yes'
-echo "$out" | tail -1 | grep -q 'failed task/02-b'
+test "$(echo "$out" | tail -1)" = "sync: committed yes, pushed 3, failed task/02-b"
 test "$(git --git-dir="$O" rev-parse task/02-b)" = "$REMOTE_02B"

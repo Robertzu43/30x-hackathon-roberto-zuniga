@@ -31,6 +31,7 @@ class RunStatus(unittest.TestCase):
     def test_run_complete(self):
         self.assertTrue(report(Z("2026-10-16T10:00Z"), CTX, "a\nRUN COMPLETE 2026-10-18\n", [])["run_complete"])
         self.assertFalse(report(Z("2026-10-16T10:00Z"), CTX, "not RUN COMPLETE yet\n", [])["run_complete"])
+        self.assertTrue(report(Z("2026-10-16T10:00Z"), CTX, "- RUN COMPLETE 2026-10-18T22:40Z\n", [])["run_complete"])
 
     def test_unledgered(self):
         r = report(Z("2026-10-16T10:00Z"), CTX, "task/01-schema done", ["task/02-api", "task/01-schema"])

@@ -36,9 +36,10 @@ A second reviewer on the same diff is a defect. A reviewer who rewrites code is 
 ## Launcher session (the main session after the plan exists)
 The orchestrator is one long subagent call; the launcher keeps it alive and owns the clock.
 1. On start, fresh or RESUME: `git fetch origin`; if `origin/integration` exists, `git checkout integration`. List Routines and delete every one named `30x-watchdog`, then create one: `create_trigger` with name `30x-watchdog`, cron `0 * * * *`, prompt `TICK`, `initiation: human_request`, bound to this session. Dispatch `orchestrator` in the background with `docs/PLAN.md` on a fresh start, `RESUME` otherwise. Where `create_trigger` does not exist (local or headless `-p` run), skip the Routine and dispatch the orchestrator in the foreground; if it ends before `RUN COMPLETE`, dispatch it again with `RESUME`.
-2. On every wake (a `TICK`, or a notice that the orchestrator finished): the fetch and checkout from rule 1, then `python3 scripts/run_status.py`.
+2. On every wake (a `TICK`, or a notice that the orchestrator finished): first decide liveness. The orchestrator is running only if `ListAgents` (or `TaskList`) lists it as live; a completion notice, an empty list, or a fresh container after a reclaim means it is not. Memory of having dispatched it is not evidence. While it is running: `git fetch origin` only, never a checkout (it may be mid-merge in this same working tree). When it is not running: the fetch and checkout from rule 1. Then `python3 scripts/run_status.py`.
    - `HEARTBEAT_DUE yes`: write five lines from the ledger tail (done / in progress / blocked / rulings since last / next) and run `bash scripts/heartbeat.sh "<lines>"`.
-   - Orchestrator not running, `RUN_COMPLETE no`, `PHASE` not `OVER`: dispatch `orchestrator` with `RESUME` in the background.
+   - Orchestrator not running, `RUN_COMPLETE no`, `PHASE` not `OVER`: dispatch `orchestrator` with `RESUME` in the background. Never dispatch a second orchestrator while one is listed.
+   - A heartbeat during a merge may print `sync: committed no`; the ledger line goes out with the next sync. That is expected.
    - `RUN_COMPLETE yes` or `PHASE OVER`: final heartbeat, `bash scripts/sync.sh`, delete `30x-watchdog`, stop.
 3. The launcher never writes product code and never dispatches builders, reviewer, QA or product.
 

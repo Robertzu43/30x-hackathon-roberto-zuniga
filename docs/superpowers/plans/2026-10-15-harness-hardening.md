@@ -542,7 +542,7 @@ Get the `30x-hackathon` environment id with `list_environments`. Then call `crea
 
 - [ ] **Step 3: Wait for one finished task, then kill**
 
-Wait until `git fetch origin && git show origin/integration:docs/LEDGER.md` shows at least one task done line. Then `archive_session` the run.
+Wait until `git fetch origin && git show origin/integration:docs/LEDGER.md` shows at least one task done line. Then `archive_session` the run. Also exercise the liveness rule once with a fresh container (for example by letting the session go idle until it is reclaimed, then firing its Routine with `fire_trigger`): the launcher must see no live orchestrator and dispatch RESUME.
 
 - [ ] **Step 4: Resume**
 

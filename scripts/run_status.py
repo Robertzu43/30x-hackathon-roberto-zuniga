@@ -43,7 +43,7 @@ def report(now: datetime, context_text: str, ledger_text: str, branches: list[st
         "deadline_source": source,
         "hours_left": round(left, 1),
         "heartbeat_due": beat is None or now - beat >= timedelta(hours=HEARTBEAT_H),
-        "run_complete": re.search(r"^RUN COMPLETE", ledger_text, re.M) is not None,
+        "run_complete": re.search(r"^\W*RUN COMPLETE", ledger_text, re.M) is not None,
         "unledgered": sorted(b for b in set(branches) if not re.search(rf"(?<![\w/.-]){re.escape(b)}(?![\w/-]|\.\w)", ledger_text)),
     }
 

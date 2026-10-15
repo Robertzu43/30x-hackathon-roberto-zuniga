@@ -106,3 +106,9 @@ done: Tasks 1-4 merged | in progress: Task 5 delivery API (RESUMED at Task 5) | 
 - Worktree .worktrees/task7, branch task/7-courier, BASE d1ca83e. Brief extended with AC-02 redirects (ruling above).
 - Builder (1 attempt): 9ae86eb; web/Courier.tsx, redirects in web/Login.tsx (outside list, per ruling), 89 tests, 360px Playwright check by builder. Reviewer (1 pass): PASS, none >= 95 (sub-threshold: no double-tap guard on save).
 - QA (1 run): PASS. AC-02/14/16/17/18/19/20 verified in Chromium 360x740 + curl; closes the Task 6 AC-02 and AC-14/AC-20 gaps. Merged task/7-courier into integration (9ae86eb).
+
+## Task 8: demo page, README, deploy, happy path (senior-builder)
+- Worktree .worktrees/task8, branch task/8-demo, BASE 39705d2. Brief extended: seed must delete all of today Bogota-dated deliveries (R-08, product ruling); demo password in README.
+- Builder (1 attempt): 6af7f5e seed fix (R-08/R-11), 9c58a8a demo page, /api/demo/summary, README, e2e + happy-path.webm; deployed https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev (Roberto's Cloudflare, pre-authorised); added devDependency @playwright/test@1.56.1 (needed by AC-26 recorded e2e). Reviewer (1 pass): PASS. QA (1 run, deployed URL, clean chromium): PASS AC-22/23/24/26.
+- Ruling: accept @playwright/test devDependency — AC-26 needs `playwright test` — costs nothing. Ruling: AC-23's "only demo accounts' deliveries" superseded by R-11 (seed resets all of today).
+- Merged task/8-demo into integration (9c58a8a). All 8 MUST tasks passed QA; SHOULD tasks 9, 10 next.

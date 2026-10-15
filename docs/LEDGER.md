@@ -79,3 +79,10 @@ done: preflight passed, plan scanned, rulings R-01..R-10 ledgered | in progress:
 - Ruling: accept CONDITIONAL for Task 4 — dispatcher-only routes do not exist yet — if wrong, caught by Task 5 QA and final QA, which must re-run AC-03/AC-04 on real routes.
 - Hygiene: two demo JWT files remain in the session scratchpad (rm blocked); short-lived, demo accounts, outside repo.
 - Merged task/4-auth into integration; full suite green.
+
+## Task 5: delivery API (senior-builder)
+- Skill proof (Step 0): subagent-driven-development "Rulings, not stalls"; finishing-a-development-branch "Step 5: Execute Choice". RESUMED at Task 5 (dryrun/e2e plays main). Preflight PASSED (WARN: pooler, resend.dev sender, AWS login needed; no AC uses AWS).
+- Worktree .worktrees/task5, branch task/5-api, BASE 115281f.
+
+## Heartbeat 2026-10-15 21:05Z
+done: Tasks 1-4 merged | in progress: Task 5 delivery API (RESUMED at Task 5) | blocked: none (AWS LOGIN NEEDED, no task uses AWS) | rulings since last: none | next: T5 review/QA, then T6-T8

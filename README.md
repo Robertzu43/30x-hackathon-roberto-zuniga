@@ -47,6 +47,7 @@ Requisitos: Node 22, y en el entorno (nunca en un archivo del repo) `SUPABASE_UR
 ```bash
 npm ci
 npm run lint && npm run typecheck && npm test   # pruebas unitarias y de API
+# La prueba test/seed.test.ts contra Supabase real es opcional (RUN_LIVE_SEED_TEST=1) y borra todos los pedidos de hoy; sin esa variable se omite.
 npm run build && npx wrangler dev               # http://localhost:8787 (el Worker local necesita SUPABASE_SERVICE_ROLE_KEY en .dev.vars, que git ignora)
 npm run seed                                    # deja hoy exactamente con los 12 pedidos de demostración
 ```

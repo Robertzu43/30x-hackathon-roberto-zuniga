@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { bogotaToday } from '../src/lib/format';
 
 const env = process.env;
-describe.skipIf(!env.SUPABASE_SERVICE_ROLE_KEY)('seed (live Supabase)', () => {
+describe.skipIf(!env.RUN_LIVE_SEED_TEST)('seed (live Supabase)', () => {
   it('is idempotent, replaces all of today, keeps other days, and anon sees nothing (R-08, R-11)', async () => {
     const admin = createClient(env.SUPABASE_URL!, env.SUPABASE_SERVICE_ROLE_KEY!);
     const today = bogotaToday();

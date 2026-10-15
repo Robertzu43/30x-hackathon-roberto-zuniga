@@ -86,3 +86,10 @@ done: preflight passed, plan scanned, rulings R-01..R-10 ledgered | in progress:
 
 ## Heartbeat 2026-10-15 21:05Z
 done: Tasks 1-4 merged | in progress: Task 5 delivery API (RESUMED at Task 5) | blocked: none (AWS LOGIN NEEDED, no task uses AWS) | rulings since last: none | next: T5 review/QA, then T6-T8
+- Builder (1 attempt): commit 35f19bd; src/routes/deliveries.ts + fakeDb; 84 tests (26 new); lint/typecheck green; client `date` on import ignored per R-07 (brief said optional); summary returns raw pendiente and asignado separately, so T6 UI must show pendiente+asignado (R-05).
+- Reviewer (1 pass): PASS, no findings >= 95. Sub-threshold note: concurrent double confirm gives 500, nothing duplicated.
+- Ruling: follow R-07 over the brief's optional `date` on import — SPEC ruling outranks plan text — if wrong, no date picker on import (already out of scope).
+- QA (1 run): FAIL on strict spec wording only; all behaviour ACs pass (AC-03/04/05/07-11/13/14/18/19/20 on live wrangler dev with demo JWTs). Discrepancies D1 route path, D2 reason codes snake_case, D3 skip-reason codes and pendiente/asignado separate.
+- Ruling (product) R-11: D1-D3 valid API contracts; SPEC clarified (docs/SPEC.md shared values); Task 5 QA = PASS, conditional on Task 6 UI mapping codes to Spanish and summing pendiente+asignado. Loser's argument: testers read evidence verbatim, API should return Spanish strings and summed count; rejected because no user sees the API. Cost if wrong: UI mapping bug shows raw codes.
+- Ruling (product): `npm run seed` must also delete today's Bogota-dated deliveries (CSV imports included) so R-08/AC-20 counts hold; owner Task 8 (cite R-08 in its brief); QA also saw stale DB rows DU-*/SC-* dated 2027-03-17, not mine, left.
+- Merged task/5-api into integration (35f19bd).

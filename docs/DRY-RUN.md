@@ -17,7 +17,7 @@ Local fallback:
 
 Checklist to verify in the cloud session before kickoff:
 - `bash scripts/preflight.sh` prints PREFLIGHT PASSED. Paste the KV id and Supabase URL/anon key into wrangler.toml, `wrangler secret put` the three secrets, `wrangler deploy` a hello-world that reads one row from Supabase; open the URL from your phone.
-- Write one throwaway migration with RLS, `supabase db push`, confirm it appears in the dashboard; then a second migration dropping it.
+- Write one throwaway migration with RLS, `bash scripts/db-push.sh`, confirm it appears in the dashboard; then a second migration dropping it.
 - Playwright: QA records `docs/demo/happy-path.webm` on the dry run; watch it on your phone.
 - Email: the first heartbeat arrives in your inbox right after preflight passes, then every 5 hours.
 - Kill the session mid-run, start a new one with "RESUME", confirm it continues from the ledger without redoing a finished task.

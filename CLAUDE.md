@@ -42,7 +42,7 @@ A second reviewer on the same diff is a defect. A reviewer who rewrites code is 
 
 ## Autonomy (pre-authorised by Roberto, do not ask again)
 - Merging task worktrees into `integration`, and `integration` into `main` once the full suite and QA happy path pass.
-- Deploying to Roberto's own Cloudflare account (`wrangler deploy`), including creating KV namespaces, and running `supabase db push` against the hackathon project.
+- Deploying to Roberto's own Cloudflare account (`wrangler deploy`), including creating KV namespaces, and running `bash scripts/db-push.sh` (migrations over the Supabase Management API) against the hackathon project.
 - Installing npm dependencies when a builder justifies it in its report.
 - Creating and deleting git worktrees and task branches.
 - Running the full test suite, seeding demo data, rewriting README.
@@ -72,7 +72,7 @@ A second reviewer on the same diff is a defect. A reviewer who rewrites code is 
 - LLM calls: only through `src/lib/llm.ts`, schema-validated, with fallback. Provider is Workers AI through the `AI` binding (`env.AI.run`, model from the `WORKERS_AI_MODEL` var, JSON-schema `response_format`); no API key exists or is needed. Anthropic only if `ANTHROPIC_API_KEY` is set in the session and product names the AC. Typed yes/no or pick-one decisions in hot loops may use TypeSafe/Jev per `docs/RESOURCES.md`. Prompts in `src/prompts/`. The `design-taste-frontend` skill (same pack, invoke with the Skill tool) is for the `/demo` pitch page only.
 
 ## Infrastructure
-`docs/INFRA.md` is the plumbing. Stack is Cloudflare Workers for compute and deploy, Supabase for Postgres, Auth and Storage (the only data layer; no D1, no R2), Resend for email, decided in `docs/DECISIONS.md`. Schema changes are migrations in `supabase/migrations/` only. Every table has RLS on from its first migration. Email goes through one helper `src/lib/email.ts`; tests mock it, nothing else calls Resend directly. The AWS path in INFRA.md is reference only. Secrets never enter the repo: env vars in the session, `wrangler secret put` for the Worker. The orchestrator's first action is `bash scripts/preflight.sh`; if it fails, the run stops with PREFLIGHT FAILED and nothing is built, because nothing could deploy.
+`docs/INFRA.md` is the plumbing. Stack is Cloudflare Workers for compute and deploy, Supabase for Postgres, Auth and Storage (the only data layer; no D1, no R2), Resend for email, decided in `docs/DECISIONS.md`. Schema changes are migrations in `supabase/migrations/` only, applied with `bash scripts/db-push.sh`. Every table has RLS on from its first migration. Email goes through one helper `src/lib/email.ts`; tests mock it, nothing else calls Resend directly. The AWS path in INFRA.md is reference only. Secrets never enter the repo: env vars in the session, `wrangler secret put` for the Worker. The orchestrator's first action is `bash scripts/preflight.sh`; if it fails, the run stops with PREFLIGHT FAILED and nothing is built, because nothing could deploy. Only what deploy needs can fail it (Cloudflare, git push, Supabase over HTTPS, Resend); AWS sign-in and raw Postgres access are warnings.
 
 ## Hooks
 - SessionStart: installs the git hooks path, injects `using-superpowers`, activates Ponytail ULTRA. SubagentStart: injects Ponytail ULTRA into every subagent.
@@ -171,6 +171,6 @@ Constraints for each level:
 - help_level: LOW. Nobody is watching; do not ask, flag only security risks in the ledger.
 - AWS is an available resource, not the default stack. Compute/deploy stay on Cloudflare Workers, data on Supabase, email on Resend (docs/DECISIONS.md). Use AWS when an AC needs S3-style object storage the company already uses, SES, Textract/Transcribe/Bedrock, or anything the company's own systems live on. Say which AC in the task brief.
 - Spend: the project has a spend limit. On sudden Access Denied, log "possible spend limit" in the ledger and continue on non-AWS paths.
-- Credentials come from `aws login`, valid 12h. The orchestrator runs `aws sts get-caller-identity --profile $AWS_PROFILE_NAME` in every heartbeat; on ExpiredToken it runs `aws login --profile $AWS_PROFILE_NAME --remote` once (90-day silent renewal) and, if that still fails, emails "AWS LOGIN NEEDED" and continues on non-AWS paths.
+- Credentials come from `aws login`, valid 12h. The orchestrator runs `aws sts get-caller-identity --profile $AWS_PROFILE_NAME` in every heartbeat; on failure it runs `bash scripts/aws-login-remote.sh`, which emails Roberto the sign-in URL, and continues on non-AWS paths until he completes it.
 - Before any AWS task, load the matching toolkit skill (`retrieve_skill`) and prefer it. Never create IAM users or access keys; team access is managed by AWS.
 <!-- END AWS Agent Toolkit rules -->

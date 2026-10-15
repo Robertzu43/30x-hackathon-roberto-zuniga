@@ -20,7 +20,7 @@ One data layer. Builders do not create D1 databases or R2 buckets; a task that n
 5. Storage: create bucket `files`, private. Access via signed URLs from the Worker.
 
 ### How agents use it
-- Schema lives in `supabase/migrations/*.sql`, applied with `supabase db push` (CLI, linked by project ref + access token). Every migration ships with a `-- down` comment block. No schema changes through the dashboard.
+- Schema lives in `supabase/migrations/*.sql`, applied with `bash scripts/db-push.sh`: Supabase Management API over HTTPS, needs only the access token and project ref, works from the cloud sandbox where Postgres ports are closed, and records versions in `supabase_migrations.schema_migrations` so the CLI agrees. `supabase migration new <name>` still creates the files. Every migration ships with a `-- down` comment block. No schema changes through the dashboard.
 - Row Level Security ON for every table from the first migration. The anon key is public by design (and the repo is public), so RLS is the only thing between the internet and the data. Reviewer treats a table without RLS as a finding at 100.
 - Worker talks to Supabase with `@supabase/supabase-js` using the service_role key from `wrangler secret`, applying its own authorization checks, or with the user's JWT forwarded from the client when RLS should decide. Pick one per endpoint and say which in the code.
 - Direct SQL from the Worker (if needed for reports): `postgres` package over the pooler URL. Not both ORMs; supabase-js first.
@@ -35,7 +35,7 @@ One data layer. Builders do not create D1 databases or R2 buckets; a task that n
 2. `bash scripts/aws-setup.sh`: installs AWS CLI v2 and uv, runs `aws login --remote` (prints a URL you open on your phone and sign in with your social provider), verifies identity, runs the `aws configure agent-toolkit` wizard, points `aws-mcp` at your profile, lists the toolkit skills.
 3. Start a new session; the MCP server and skills load from then on.
 4. Facts that bind the weekend:
-   - Login credentials last 12h; renewal for 90 days without the browser. The orchestrator checks identity every heartbeat and re-runs `aws login --remote` on expiry. If that renewal needs you (verify in the dry run), the "AWS LOGIN NEEDED" email is the one AWS thing you may have to do from your phone.
+   - Login credentials last 12h and live in the container, so every cloud session starts signed out. `scripts/aws-login-remote.sh` starts the sign-in and emails you the URL; the "AWS LOGIN NEEDED" email is the one AWS thing you may have to do from your phone, and only if a task needs AWS.
    - All regional resources in us-east-2. No cross-Region anything. Toolkit commands on us-east-1.
    - Free plan supports a subset of services. SES may need the paid plan or "advanced features"; check `aws freetier get-account-plan-state` and the supported-services list during the dry run before promising email through SES. Resend stays the default sender.
    - Spend limit pauses the project when exceeded: set it in AWS Settings > Billing (USD 20 is plenty) and expect Access Denied to mean "limit hit" first.
@@ -86,7 +86,7 @@ The orchestrator must outlive Roberto's laptop, so the hackathon runs in a Claud
 1. Connect GitHub to the Claude account at https://claude.ai/connect-github. The cloud clones the repo from GitHub; without this nothing starts.
 2. Environment at https://claude.ai/code (Environments): name `30x-hackathon`. Environment variables: the contents of `.env` without comments (on the laptop: `grep -vE '^#|^$' .env | pbcopy`, then paste). Network: full access (agents deploy, email, read docs). Setup script: `bash scripts/cloud-setup.sh`.
 3. Launch from the laptop with `claude --cloud "<launch prompt from docs/DRY-RUN.md>"`, or start the session on the web. Then close the laptop; the session keeps running.
-4. Every cloud session is a fresh container. AWS therefore needs one `aws login --profile 30x --remote` per session (URL opened on the phone); everything else comes from the environment variables. `.mcp.json` in the repo registers the AWS MCP server for every session.
+4. Every cloud session is a fresh container with HTTPS-only egress: raw TCP to Postgres (5432/6543) is blocked, which is why migrations go through the Management API. AWS needs one sign-in per session: `scripts/aws-login-remote.sh` emails you the URL. Everything else comes from the environment variables. `.mcp.json` in the repo registers the AWS MCP server for every session.
 5. A dead session is resumed by starting a new cloud session with the word RESUME (below). A scheduled recovery routine that does this automatically is possible once the heartbeat pushes the ledger to GitHub; not configured yet.
 
 ## Session resilience
@@ -113,7 +113,7 @@ See `.env.example`. Also `HEARTBEAT_EMAIL` for heartbeats; `ANTHROPIC_API_KEY` i
 AWS adds: `AWS_PROFILE_NAME` (login profile), `AWS_REGION=us-east-2`, and only if used `S3_BUCKET`, `SES_FROM`. No access keys anywhere.
 
 ## Preflight
-`bash scripts/preflight.sh` runs: wrangler whoami, KV create-or-confirm, gh auth status, Supabase (CLI link, REST ping with anon key, service-role query, migration list), Resend send to a test address, and if AWS vars are set: sts get-caller-identity, S3 put/get/delete, SES quota + a send to a verified address. It prints PASS/FAIL per line and exits non-zero on any FAIL. The orchestrator runs it as its first action and stops with "PREFLIGHT FAILED" if it fails, since nothing downstream can deploy.
+`bash scripts/preflight.sh` runs: wrangler whoami + Workers API scope, KV create-or-confirm, git push access, Supabase (publishable key, secret key admin, Management API SQL; pooler TCP as a warning), Resend send to a test address, Workers AI inference, and AWS as warnings only. It prints PASS/FAIL/WARN per line and exits non-zero on any FAIL; only what deploy needs can FAIL. The orchestrator runs it as its first action and stops with "PREFLIGHT FAILED" if it fails, since nothing downstream can deploy.
 
 ## Deploy
 `wrangler deploy` to `<project>.<your-subdomain>.workers.dev`. Custom domain only if DECISIONS.md asks. The deployed URL goes in README and the ledger. QA runs the happy path against it, not against localhost.

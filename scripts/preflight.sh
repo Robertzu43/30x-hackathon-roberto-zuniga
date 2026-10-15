@@ -19,7 +19,8 @@ need CLOUDFLARE_API_TOKEN && need CLOUDFLARE_ACCOUNT_ID && {
 }
 
 echo "== GitHub"
-gh auth status >/dev/null 2>&1 && ok "gh auth" || bad "gh auth (set GH_TOKEN or run gh auth login)"
+git push --dry-run origin HEAD >/dev/null 2>&1 && ok "git push access to origin" || bad "git push access to origin (cloud: connect GitHub at claude.ai/connect-github; laptop: gh auth login)"
+gh auth status >/dev/null 2>&1 && echo "INFO  gh cli authenticated" || echo "INFO  gh cli not authenticated (optional: git push and the GitHub MCP tools are the cloud paths)"
 
 echo "== Supabase"
 need SUPABASE_URL && need SUPABASE_ANON_KEY && {
@@ -32,16 +33,16 @@ need SUPABASE_SERVICE_ROLE_KEY && {
   [ "$code" = "200" ] && ok "service_role admin access" || bad "service_role admin access ($code)"
 }
 need SUPABASE_ACCESS_TOKEN && need SUPABASE_PROJECT_REF && {
-  npx -y supabase projects list >/dev/null 2>&1 && ok "supabase CLI auth" || bad "supabase CLI auth"
+  code=$(curl -s -o /tmp/sb-mgmt.json -w "%{http_code}" -X POST "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H "Content-Type: application/json" -d '{"query":"select 1 as ok"}')
+  { [ "$code" = 200 ] || [ "$code" = 201 ]; } && ok "management api sql over https (migrations: scripts/db-push.sh)" || bad "management api sql ($code): $(head -c 120 /tmp/sb-mgmt.json)"
   [ -d supabase ] || npx -y supabase init >/dev/null 2>&1
-  npx -y supabase link --project-ref "$SUPABASE_PROJECT_REF" >/dev/null 2>&1 && ok "supabase link $SUPABASE_PROJECT_REF" || bad "supabase link"
-  npx -y supabase migration list >/dev/null 2>&1 && ok "migration list" || bad "migration list (db password/pooler?)"
+  npx -y supabase link --project-ref "$SUPABASE_PROJECT_REF" >/dev/null 2>&1 && ok "supabase CLI link" || echo "INFO  supabase CLI link failed (optional: db-push.sh does not need it)"
 }
 need SUPABASE_POOLER_URL && {
   # node + pg from a scratch prefix: works on macOS and Linux without psql or sudo
   d="${TMPDIR:-/tmp}/30x-preflight-pg"; [ -d "$d/node_modules/pg" ] || npm i -s --prefix "$d" pg >/dev/null 2>&1
   NODE_PATH="$d/node_modules" node -e "const{Client}=require('pg');new Client({connectionString:process.env.SUPABASE_POOLER_URL,ssl:{rejectUnauthorized:false}}).connect().then(c=>c.query('select 1')).then(()=>process.exit(0)).catch(e=>{console.error(e.message);process.exit(1)})" 2>/tmp/pf-pg.err \
-    && ok "pooler connection (6543)" || bad "pooler connection: $(head -c 120 /tmp/pf-pg.err)"
+    && ok "pooler connection (6543)" || echo "WARN  pooler TCP unreachable from here ($(head -c 80 /tmp/pf-pg.err)); expected in the cloud sandbox (HTTPS only), the Worker connects from Cloudflare"
 }
 
 echo "== Email (Resend)"
@@ -53,27 +54,17 @@ need RESEND_API_KEY && need PREFLIGHT_TEST_EMAIL && {
 }
 
 if [ -n "${AWS_PROFILE_NAME:-}" ]; then
-  echo "== AWS (Agent Toolkit, profile $AWS_PROFILE_NAME, region us-east-2)"
-  export PATH="$HOME/.local/bin:$PATH"
-  command -v aws >/dev/null && ok "aws cli $(aws --version 2>&1 | cut -d' ' -f1)" || bad "aws cli missing: run scripts/aws-setup.sh"
-  if aws sts get-caller-identity --profile "$AWS_PROFILE_NAME" >/dev/null 2>&1; then ok "aws identity"
+  echo "== AWS (reserve, never blocks the run: profile $AWS_PROFILE_NAME, region us-east-2)"
+  export PATH="$HOME/.local/bin:$PATH"; unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN  # sandbox placeholders must not shadow the profile
+  if ! command -v aws >/dev/null; then echo "WARN  aws cli missing (scripts/cloud-setup.sh installs it)"
+  elif aws sts get-caller-identity --profile "$AWS_PROFILE_NAME" >/dev/null 2>&1; then
+    ok "aws identity"
+    [ "$(aws configure get region --profile "$AWS_PROFILE_NAME")" = "us-east-2" ] && ok "region us-east-2" || echo "WARN  profile region is not us-east-2"
+    plan=$(aws freetier get-account-plan-state --profile "$AWS_PROFILE_NAME" --query accountPlanType --output text 2>/dev/null) && echo "INFO  account plan: $plan"
+    aws agent-toolkit list-available-skills --region us-east-1 --profile "$AWS_PROFILE_NAME" >/dev/null 2>&1 && ok "agent toolkit" || echo "WARN  agent toolkit not reachable"
+    [ -n "${S3_BUCKET:-}" ] && { echo ok > /tmp/pf.txt; aws s3 cp /tmp/pf.txt "s3://$S3_BUCKET/preflight.txt" --profile "$AWS_PROFILE_NAME" >/dev/null 2>&1 && aws s3 rm "s3://$S3_BUCKET/preflight.txt" --profile "$AWS_PROFILE_NAME" >/dev/null 2>&1 && ok "s3 put/delete" || echo "WARN  s3 put/delete on $S3_BUCKET failed"; }
   else
-    aws login --profile "$AWS_PROFILE_NAME" --remote >/dev/null 2>&1 && aws sts get-caller-identity --profile "$AWS_PROFILE_NAME" >/dev/null 2>&1 \
-      && ok "aws identity (renewed)" || bad "aws login expired: AWS LOGIN NEEDED (aws login --profile $AWS_PROFILE_NAME --remote)"
-  fi
-  [ "$(aws configure get region --profile "$AWS_PROFILE_NAME")" = "us-east-2" ] && ok "region us-east-2" || bad "profile region is not us-east-2"
-  plan=$(aws freetier get-account-plan-state --profile "$AWS_PROFILE_NAME" --query accountPlanType --output text 2>/dev/null) && echo "INFO  account plan: $plan"
-  aws agent-toolkit list-available-skills --region us-east-1 --profile "$AWS_PROFILE_NAME" >/dev/null 2>&1 && ok "agent toolkit" || bad "agent toolkit (re-run scripts/aws-setup.sh step 5)"
-  grep -rsq "AWS_MCP_PROXY_PROFILES" ~/.claude.json .mcp.json .claude/ 2>/dev/null && ok "aws-mcp profile env set" || echo "WARN  aws-mcp entry has no AWS_MCP_PROXY_PROFILES; MCP server will fail to start"
-  if [ -n "${S3_BUCKET:-}" ]; then
-    echo ok > /tmp/pf.txt
-    aws s3 cp /tmp/pf.txt "s3://$S3_BUCKET/preflight.txt" --profile "$AWS_PROFILE_NAME" >/dev/null 2>&1 \
-      && aws s3 rm "s3://$S3_BUCKET/preflight.txt" --profile "$AWS_PROFILE_NAME" >/dev/null 2>&1 \
-      && ok "s3 put/delete" || bad "s3 put/delete on $S3_BUCKET"
-  fi
-  if [ -n "${SES_FROM:-}" ]; then
-    aws sesv2 get-account --profile "$AWS_PROFILE_NAME" --query ProductionAccessEnabled --output text 2>/dev/null | grep -qi true \
-      && ok "ses production access" || echo "WARN  SES sandbox or unavailable on this plan; Resend is the sender"
+    echo "WARN  AWS LOGIN NEEDED: not signed in here. bash scripts/aws-login-remote.sh emails the sign-in URL; AWS tasks are parked until then, everything else continues"
   fi
 fi
 
@@ -95,7 +86,7 @@ echo "== Status channel (email heartbeat)"
 
 echo "== Secrets hygiene"
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 && {
-  git ls-files | grep -Eq '(^|/)\.env($|\.)' && bad ".env tracked by git" || ok "no .env tracked"
+  git ls-files | grep -E '(^|/)\.env($|\.)' | grep -vq '\.env\.example$' && bad ".env tracked by git" || ok "no .env tracked"
 }
 
 echo

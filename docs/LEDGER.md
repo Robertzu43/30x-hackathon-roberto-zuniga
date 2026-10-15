@@ -137,3 +137,4 @@ done: Tasks 1-10 merged into integration | in progress: final review + QA happy 
 - QA full happy path: PASS. All 25 MUST ACs pass; AC-15 and AC-21 PASS; AC-28 CONDITIONAL (cron in wrangler.toml, test passing; live email never seen, needs verified Resend domain, in README). lint, typecheck, test green; e2e happy-path passed on the deployed URL; demo reseeded (4/2/6).
 - Ruling: QA's untracked e2e/qa-acs.spec.ts not committed (unreviewed, scratch) — if wrong, extra e2e coverage is missing. Ruling: happy-path.webm re-recorded by QA committed (AC-26 evidence). Observation not ruled: one unreproduced flash of "No tienes entregas" on courier load.
 - Merging integration into dryrun/e2e (dry run, never main).
+RUN COMPLETE 2026-10-15T22:36Z

@@ -47,3 +47,10 @@ Product rulings at plan time (copied verbatim from docs/SPEC.md, AC-25):
 
 ## Heartbeat 2026-10-15 20:28Z
 done: preflight passed, plan scanned, rulings R-01..R-10 ledgered | in progress: Task 1 scaffold | blocked: none (AWS login needed but no task uses AWS) | rulings since last: 3 plan-scan rulings | next: T1 to T10 in order
+
+## Task 1: scaffold worker + SPA + toolchain (senior-builder) — done
+- Builder (1 attempt): AC-22/AC-27; app.ts/index.ts/SPA shell/styles/configs; lint, typecheck, 3 tests, build all exit 0; commit e421024; no extra deps; 500 handler added returning JSON.
+- Reviewer (1 pass): PASS, no findings >= 95. QA (1 run): CONDITIONAL (scaffold only: local routes and health verified; page render and deployed URL are checked by Task 8 happy path).
+- Ruling: web/api.ts, omitted from Task 1's file list, is created by Task 6 together with web/supabase.ts (it depends on it) — keeps task files consistent — costs nothing if wrong.
+- Ruling: accept QA CONDITIONAL for Task 1 — remaining parts are not checkable before later tasks exist — if wrong, caught at final QA.
+- Merged task/1-scaffold into integration at e421024.

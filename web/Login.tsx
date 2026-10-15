@@ -4,10 +4,7 @@ import { api, supabase } from './supabase'
 type Role = 'dispatcher' | 'courier'
 // Role probe: each endpoint answers 403 to the other role.
 const PROBE: Record<Role, string> = { dispatcher: '/couriers', courier: '/me/deliveries' }
-const OTHER: Record<Role, { text: string; href: string }> = {
-  dispatcher: { text: 'Esta pantalla es para despacho', href: '/mensajero' },
-  courier: { text: 'Esta pantalla es para mensajeros', href: '/' },
-}
+export const HOME: Record<Role, string> = { dispatcher: '/', courier: '/mensajero' }
 
 export const signOut = () => supabase.auth.signOut()
 
@@ -27,7 +24,11 @@ export function Login({ role, children }: { role: Role; children: ReactNode }) {
     if (session !== 'in') return setOk(null)
     api(PROBE[role]).then(
       () => setOk(true),
-      (e) => setOk(e.status === 403 ? false : null),
+      (e) => {
+        setOk(e.status === 403 ? false : null)
+        // Wrong role: send the user to their own screen (AC-02).
+        if (e.status === 403) location.replace(HOME[role === 'dispatcher' ? 'courier' : 'dispatcher'])
+      },
     )
   }, [session, role])
 
@@ -52,12 +53,5 @@ export function Login({ role, children }: { role: Role; children: ReactNode }) {
         </form>
       </main>
     )
-  if (ok === false)
-    return (
-      <main>
-        <h1>{OTHER[role].text}</h1>
-        <p><a href={OTHER[role].href}>Ir a {OTHER[role].href}</a> · <button onClick={signOut}>Cerrar sesión</button></p>
-      </main>
-    )
-  return ok ? <>{children}</> : <main><p>Cargando…</p></main>
+  return ok ? <>{children}</> : <main><p>{ok === false ? 'Redirigiendo…' : 'Cargando…'}</p></main>
 }

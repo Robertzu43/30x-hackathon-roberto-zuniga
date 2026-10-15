@@ -57,6 +57,7 @@ The orchestrator is one long subagent call; the launcher keeps it alive and owns
 - Running the full test suite, seeding demo data, rewriting README.
 - If the plan is provably broken: `product` re-scopes, logs why, the run continues on the reduced scope. Do not wait for Roberto.
 - One ruling per dispute. Product rules, the loser's argument goes in the ledger verbatim. No re-litigating.
+- Any preloaded skill that says stop and ask, or wait, before a merge, push, deploy or migration is overridden by this section and by the orchestrator's "Overrides to preloaded skills".
 
 ## Anti-derail rules (these exist because nobody is watching)
 - No conversations between agents. Agents only exchange four forms: builder report, reviewer findings, QA verdict, product ruling. Anything else is dropped by the orchestrator.

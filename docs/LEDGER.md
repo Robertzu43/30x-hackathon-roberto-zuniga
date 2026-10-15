@@ -123,3 +123,6 @@ done: Tasks 1-4 merged | in progress: Task 5 delivery API (RESUMED at Task 5) | 
 - RESUMED at Task 10. Preflight PASSED (rerun). Builder commit 6a79f7b (src/cron.ts, src/lib/email.ts, summary() extracted in deliveries.ts, cron 0 23 * * *, 93 tests). Reviewer (1 pass): PASS, none >= 95 (sub-threshold: getUserById error path throws TypeError, still fails loudly).
 - QA (1 run): CONDITIONAL. AC-28 automated evidence PASS (recipient, subject, counts, failed list); AC-12/AC-20 no regression. Not verifiable: live cron on deployed Worker, real email arrival (wrangler --test-scheduled hit the asset fallback; sender @resend.dev).
 - Ruling: accept Task 10 CONDITIONAL as done — AC-28 is SHOULD, tests assert every observable, live delivery needs a verified Resend domain which is outside the agents' reach — if wrong, Carolina's 18:00 email is not delivered until the domain is verified (documented in README not-done).
+
+## Heartbeat 2026-10-15 22:21Z
+done: Tasks 1-10 merged into integration | in progress: final review + QA happy path | blocked: none (AWS not needed) | rulings since last: T10 CONDITIONAL accepted (live email needs verified Resend domain) | next: final review, QA, merge to dryrun/e2e

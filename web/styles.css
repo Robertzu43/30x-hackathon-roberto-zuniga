@@ -94,3 +94,20 @@ th { font: 0.75rem var(--mono); text-transform: uppercase; letter-spacing: 0.05e
 .counts { display: flex; gap: 2rem; margin: 0 0 1.5rem; }
 .counts dt { color: var(--muted); font-size: 0.85rem; }
 .counts dd { margin: 0; font: 400 2.5rem/1.1 var(--serif); color: var(--ink); }
+
+/* courier phone screen: 360 px first, tap targets >= 44 px */
+.courier { padding: 1rem; }
+.courier h1 { font-size: 2rem; margin-bottom: 1rem; }
+.courier button, .tap { min-height: 44px; display: inline-flex; align-items: center; gap: 0.5rem; }
+.courier .bar button { padding: 0 0.75rem; }
+.courier p { margin: 0.25rem 0; overflow-wrap: anywhere; }
+.deliveries { list-style: none; padding: 0; margin: 1rem 0; display: grid; gap: 0.75rem; }
+.deliveries .card { padding: 1rem; }
+.row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+.deliveries .row:last-child { justify-content: flex-start; }
+.deliveries .row button { flex: 1; }
+button.alt { background: var(--surface); color: var(--ink); border: 1px solid var(--border); }
+button.alt:hover { background: var(--canvas); }
+fieldset { border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem; min-width: 0; }
+fieldset label { display: flex; }
+fieldset input { width: 1.25rem; height: 1.25rem; }

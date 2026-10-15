@@ -3,6 +3,7 @@
 # Usage: scripts/heartbeat.sh "<5-line status>"  -> appends to docs/LEDGER.md and emails HEARTBEAT_EMAIL through Resend.
 MSG="$1"; TS=$(date -u +"%Y-%m-%d %H:%MZ")
 printf "\n## Heartbeat %s\n%s\n" "$TS" "$MSG" >> docs/LEDGER.md
+bash scripts/sync.sh  # ledger + branches to GitHub, so a lost container loses nothing
 TO="${HEARTBEAT_EMAIL:-}"
 if [ -n "$TO" ] && [ -n "${RESEND_API_KEY:-}" ]; then
   code=$(curl -s -o /tmp/heartbeat.json -w "%{http_code}" -X POST https://api.resend.com/emails \

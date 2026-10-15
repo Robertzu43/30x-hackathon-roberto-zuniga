@@ -46,16 +46,6 @@
         ]
       }
     ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/ledger-check.sh"
-          }
-        ]
-      }
-    ],
     "SessionStart": [
       {
         "matcher": "startup|resume|clear|compact",

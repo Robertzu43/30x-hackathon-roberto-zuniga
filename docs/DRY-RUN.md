@@ -10,9 +10,10 @@ Fill PROBLEM.md and DECISIONS.md for it, then run:
 5. Walk away for 2 hours. Come back and check: ledger has rulings, worktrees were used, tests ran, QA never saw briefs, at least one debate happened.
 
 Launch for the real run (after brainstorming is done). In the cloud, so it survives the laptop closing (environment `30x-hackathon`, see INFRA.md):
-`claude --cloud "Read CLAUDE.md. Run writing-plans on docs/PROBLEM.md and docs/DECISIONS.md into docs/PLAN.md, dispatch product for docs/SPEC.md, then dispatch orchestrator with docs/PLAN.md. Do not ask me anything."`
+`claude --cloud "Read CLAUDE.md and follow 'Launcher session'. Run writing-plans on docs/PROBLEM.md and docs/DECISIONS.md into docs/PLAN.md, dispatch product for docs/SPEC.md, then start the orchestrator as CLAUDE.md 'Launcher session' says. Do not ask me anything."`
 Local fallback:
-`claude --dangerously-skip-permissions -p "Read CLAUDE.md. Run writing-plans on docs/PROBLEM.md and docs/DECISIONS.md into docs/PLAN.md, dispatch product for docs/SPEC.md, then dispatch orchestrator with docs/PLAN.md. Do not ask me anything."`
+`claude --dangerously-skip-permissions -p "Read CLAUDE.md and follow 'Launcher session'. Run writing-plans on docs/PROBLEM.md and docs/DECISIONS.md into docs/PLAN.md, dispatch product for docs/SPEC.md, then start the orchestrator as CLAUDE.md 'Launcher session' says. Do not ask me anything."`
+Recovery: start any session with `RESUME`; CLAUDE.md "Launcher session" handles it.
 (the settings.json allowlist covers the interactive case; the flag covers a headless cloud session where prompts would hang)
 
 Checklist to verify in the cloud session before kickoff:

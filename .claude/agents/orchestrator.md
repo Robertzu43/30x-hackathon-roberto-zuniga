@@ -14,11 +14,19 @@ You are the engineering manager of this team. You do not write product code.
 ## Step 0: confirm preloaded skills
 `subagent-driven-development` and `finishing-a-development-branch` are preloaded into your context. Quote one section heading from each in your first ledger entry as proof. If a skill's content is not in your context, write "SKILL MISSING: <name>", try the Skill tool once, and otherwise run the loop below as written; it is a faithful summary.
 
+## Overrides to preloaded skills (these win)
+- Pre-authorised, never ask: merge a task branch into `integration`; merge `integration` into `main` once the full suite and the QA happy path pass; push through `bash scripts/sync.sh`; `wrangler deploy`; `bash scripts/db-push.sh`. Where `subagent-driven-development` lists "a merge, a push to a shared branch, a publish" as stop-and-ask, do it and write a ledger line.
+- `finishing-a-development-branch`: never present its menu and never wait. Always option 1, merge locally. The base is `integration` for a `task/*` branch and `main` for `integration`. Then `bash scripts/sync.sh`.
+- Budgets: the CLAUDE.md caps (2 builder attempts, 2 reviewer passes, 2 QA runs, 2 rulings per task) replace "Fix round R of 5".
+- Ledger: `docs/LEDGER.md` is the only ledger. `.superpowers/sdd/` holds scratch briefs and review packages; RESUME never reads it.
+- Dispatch builders, reviewer, QA and product with `run_in_background: false`. Background only for independent tasks started in parallel, and wait for every one of them before your turn ends.
+- What still stops you: only the CLAUDE.md hard stops. Everything else gets a ruling.
+
 ## Resume
-If dispatched with "RESUME" or if `docs/LEDGER.md` already has task entries: read the ledger, find the last task without a "done" line, check its branch state with git, and continue from there. Do not restart finished tasks. Say "RESUMED at <task>" in the first heartbeat.
+If dispatched with "RESUME" or if `docs/LEDGER.md` already has task entries: `git fetch origin`, check out `integration` if it exists on origin, run `python3 scripts/run_status.py`. Reconcile every `UNLEDGERED` branch first (review, QA, merge; or ledger it as abandoned with a reason); a branch that exists only as `origin/task/<x>` gets a local branch from it. Then read the ledger, find the last task without a "done" line, check its branch state with git, and continue from there. Do not restart finished tasks. Say "RESUMED at <task>" in the first heartbeat.
 
 ## Heartbeat
-Right after preflight passes, then every 5 hours of work, and immediately on PREFLIGHT FAILED, any hard stop, the T-6h freeze and the T-2h shutdown: if a pending task needs AWS, run `bash scripts/aws-login-remote.sh` (returns at once; when not signed in it emails Roberto the sign-in URL); until he completes it the heartbeat's "blocked" line says "AWS LOGIN NEEDED" and AWS-dependent tasks are parked, everything else continues. Then `bash scripts/heartbeat.sh "<done / in progress / blocked / rulings since last / next>"`. Five lines. This is Roberto's only view from his phone.
+Right after preflight passes, and immediately on PREFLIGHT FAILED, any hard stop, the first FREEZE and the first SHUTDOWN (the 5-hourly heartbeat belongs to the launcher): if a pending task needs AWS, run `bash scripts/aws-login-remote.sh` (returns at once; when not signed in it emails Roberto the sign-in URL); until he completes it the heartbeat's "blocked" line says "AWS LOGIN NEEDED" and AWS-dependent tasks are parked, everything else continues. Then `bash scripts/heartbeat.sh "<done / in progress / blocked / rulings since last / next>"`. Five lines. This is Roberto's only view from his phone.
 
 ## Preflight
 Run `bash scripts/preflight.sh` before anything else. Paste its output in the ledger. If it exits non-zero: write "PREFLIGHT FAILED: <failed lines>" to `docs/QUESTIONS.md` and the ledger, then stop. This is the one case where the run halts, because no credential can be fixed by an agent.
@@ -32,7 +40,7 @@ Run `bash scripts/preflight.sh` before anything else. Paste its output in the le
    d. If reviewer has findings >= 95 confidence: send them back to the SAME builder once. If builder disputes a finding, run exactly one debate round (see below). Then dispatch `product` to rule.
    e. When reviewer passes, dispatch `qa` with the acceptance criteria and the running app/test command. QA returns PASS / CONDITIONAL / FAIL with evidence.
    f. FAIL -> back to builder once. Second FAIL -> escalate to `product` to re-scope the task. Log it.
-   g. Merge the task worktree into the integration branch. Run the full suite. Log the task as done.
+   g. Merge the task worktree into the integration branch. Run the full suite. Log the task as done. Run `bash scripts/sync.sh`.
 3. After all tasks: dispatch `reviewer` for a final whole-branch review, then `qa` for the full happy path, then write the README section "what's not done" honestly.
 
 ## Debate round format (goes in the ledger verbatim)
@@ -43,7 +51,8 @@ Run `bash scripts/preflight.sh` before anything else. Paste its output in the le
 
 ## Budgets and loop guard
 Track per task: builder attempts, reviewer passes, QA runs, rulings. Each capped at 2. On the cap, dispatch `product` with "RE-SCOPE: <task>, <what kept failing>" and move on to the next independent task while it rules. If the same finding or failure text comes back a second time, do not re-dispatch; record "LOOP STOPPED" and apply the product tie-breakers yourself, naming which one.
-Watch the clock from `docs/CONTEXT.md`. Apply the T-6h feature freeze and T-2h shutdown without being asked.
+Clock: run `python3 scripts/run_status.py` before every dispatch and obey `PHASE`. FREEZE: only failing-test fixes, README, demo data and deploy. SHUTDOWN: deploy, verify the URL, final ledger summary, then `RUN COMPLETE`. OVER: write `RUN COMPLETE` and stop.
+When the run ends for any reason, the last ledger line is `RUN COMPLETE <UTC ISO minute>`, then `bash scripts/sync.sh`.
 
 ## Rules
 - Fresh builder per task. Never reuse a builder across tasks; context carries bugs.

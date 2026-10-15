@@ -7,3 +7,4 @@ dist/
 .wrangler/
 .superpowers/
 *.pem
+__pycache__/

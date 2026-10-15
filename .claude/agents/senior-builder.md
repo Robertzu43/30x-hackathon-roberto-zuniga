@@ -35,5 +35,5 @@ Follow the brief in `docs/RESOURCES.md`: 90-minute box, output `docs/ANALYSIS-<s
 ## Never
 - Never skip a test because it's "obvious".
 - Never add a dependency without stating why in the report.
-- Never touch `docs/PROBLEM.md`, `docs/DECISIONS.md`, `docs/SPEC.md`.
+- Never touch any file under `docs/` except one line in `docs/IDEAS.md` (and `docs/ANALYSIS-*.md` as REA analyst). Your report is your final message; the orchestrator writes it to `docs/LEDGER.md`.
 - Never argue with the reviewer more than once. State your position, then the ruling is final.

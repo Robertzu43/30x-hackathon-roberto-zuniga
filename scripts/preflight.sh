@@ -27,10 +27,14 @@ need SUPABASE_URL && need SUPABASE_ANON_KEY && {
   # /rest/v1/ (OpenAPI root) now demands a secret key; /auth/v1/settings is the public endpoint a publishable/anon key must pass
   code=$(curl -s -o /dev/null -w "%{http_code}" "$SUPABASE_URL/auth/v1/settings" -H "apikey: $SUPABASE_ANON_KEY")
   [ "$code" = "200" ] && ok "anon/publishable key accepted (auth settings)" || bad "anon/publishable key rejected ($code)"
+  curl -s "$SUPABASE_URL/auth/v1/settings" -H "apikey: $SUPABASE_ANON_KEY" | grep -q '"mailer_autoconfirm":true' \
+    || echo "WARN  Confirm email is on: QA cannot sign up users (INFRA.md Supabase step 4)"
 }
 need SUPABASE_SERVICE_ROLE_KEY && {
   code=$(curl -s -o /dev/null -w "%{http_code}" "$SUPABASE_URL/auth/v1/admin/users?per_page=1"     -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY")
   [ "$code" = "200" ] && ok "service_role admin access" || bad "service_role admin access ($code)"
+  code=$(curl -s -o /dev/null -w "%{http_code}" "$SUPABASE_URL/storage/v1/bucket/files" -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY")
+  [ "$code" = "200" ] || echo "WARN  storage bucket 'files' missing: bash scripts/db-push.sh"
 }
 need SUPABASE_ACCESS_TOKEN && need SUPABASE_PROJECT_REF && {
   code=$(curl -s -o /tmp/sb-mgmt.json -w "%{http_code}" -X POST "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H "Content-Type: application/json" -d '{"query":"select 1 as ok"}')
@@ -51,6 +55,7 @@ need RESEND_API_KEY && need PREFLIGHT_TEST_EMAIL && {
     -H "Authorization: Bearer $RESEND_API_KEY" -H "Content-Type: application/json" \
     -d "{\"from\":\"${RESEND_FROM:-onboarding@resend.dev}\",\"to\":[\"$PREFLIGHT_TEST_EMAIL\"],\"subject\":\"30x preflight\",\"text\":\"ok\"}")
   [ "$code" = "200" ] && ok "resend send ($code)" || bad "resend send ($code): $(cat /tmp/resend.json)"
+  case "${RESEND_FROM:-onboarding@resend.dev}" in *@resend.dev) echo "WARN  RESEND_FROM is @resend.dev: mail reaches only the Resend sign-up address; verify a domain before any AC emails other people";; esac
 }
 
 if [ -n "${AWS_PROFILE_NAME:-}" ]; then
@@ -67,6 +72,9 @@ if [ -n "${AWS_PROFILE_NAME:-}" ]; then
     echo "WARN  AWS LOGIN NEEDED: not signed in here. bash scripts/aws-login-remote.sh emails the sign-in URL; AWS tasks are parked until then, everything else continues"
   fi
 fi
+
+echo "== Clock"
+python3 scripts/run_status.py | grep -q '(default)' && echo "WARN  DEADLINE not set in docs/CONTEXT.md; agents assume 2026-10-18T12:00-05:00" || ok "deadline set: $(python3 scripts/run_status.py | sed -n 's/^DEADLINE //p')"
 
 echo "== Workers AI (product LLM)"
 MODEL=$(sed -n 's/^WORKERS_AI_MODEL *= *"\([^"]*\)".*/\1/p' wrangler.toml); MODEL="${MODEL:-@cf/meta/llama-3.3-70b-instruct-fp8-fast}"

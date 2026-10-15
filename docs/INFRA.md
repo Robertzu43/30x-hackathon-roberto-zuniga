@@ -16,8 +16,8 @@ One data layer. Builders do not create D1 databases or R2 buckets; a task that n
    - Pooler, Transaction mode, port 6543 (Project Settings -> Database -> Connection string -> Transaction): this is what the Worker uses, since Workers open many short-lived connections and have no IPv6 guarantee. User is `postgres.dhjumvswohajnusdifim`, host `aws-0-<region>.pooler.supabase.com`.
    The DB password is a secret: session env (`SUPABASE_DB_URL`, `SUPABASE_POOLER_URL`) and `wrangler secret put SUPABASE_POOLER_URL`. Never in a file. The secret scan blocks any `postgres://user:pass@` line.
 3. Create a personal access token (Account -> Access Tokens) named `30x-agent` so the CLI can link and push migrations: `SUPABASE_ACCESS_TOKEN`.
-4. Auth: enable Email provider. Disable "Confirm email" for the hackathon unless the challenge needs it (otherwise QA cannot create users without inbox access). Set Site URL to the Worker URL once deployed.
-5. Storage: create bucket `files`, private. Access via signed URLs from the Worker.
+4. Auth: enable Email provider. Disable "Confirm email" for the hackathon unless the challenge needs it (otherwise QA cannot create users without inbox access); done by `curl -s -X PATCH "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/config/auth" -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H "Content-Type: application/json" -d '{"mailer_autoconfirm":true}'` (applied 15 Oct). Set Site URL to the Worker URL once deployed.
+5. Storage: bucket `files`, private, comes from migration `supabase/migrations/20261015000000_files_bucket.sql` (`bash scripts/db-push.sh`). Access via signed URLs from the Worker.
 
 ### How agents use it
 - Schema lives in `supabase/migrations/*.sql`, applied with `bash scripts/db-push.sh`: Supabase Management API over HTTPS, needs only the access token and project ref, works from the cloud sandbox where Postgres ports are closed, and records versions in `supabase_migrations.schema_migrations` so the CLI agrees. `supabase migration new <name>` still creates the files. Every migration ships with a `-- down` comment block. No schema changes through the dashboard.

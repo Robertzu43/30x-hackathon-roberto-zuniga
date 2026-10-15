@@ -1,9 +1,12 @@
+import { Dispatcher } from './Dispatcher'
+import { Login } from './Login'
+
 // No router lib: the Worker serves index.html for every non-API path (SPA fallback).
 export function App() {
   const path = location.pathname.replace(/\/+$/, '') || '/'
   if (path === '/mensajero') return <Page title="Mensajero" />
   if (path === '/demo') return <Page title="Demo" />
-  if (path === '/') return <Page title="Despacho" />
+  if (path === '/') return <Login role="dispatcher"><Dispatcher /></Login>
   return <Page title="Página no encontrada" />
 }
 

@@ -112,3 +112,8 @@ done: Tasks 1-4 merged | in progress: Task 5 delivery API (RESUMED at Task 5) | 
 - Builder (1 attempt): 6af7f5e seed fix (R-08/R-11), 9c58a8a demo page, /api/demo/summary, README, e2e + happy-path.webm; deployed https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev (Roberto's Cloudflare, pre-authorised); added devDependency @playwright/test@1.56.1 (needed by AC-26 recorded e2e). Reviewer (1 pass): PASS. QA (1 run, deployed URL, clean chromium): PASS AC-22/23/24/26.
 - Ruling: accept @playwright/test devDependency — AC-26 needs `playwright test` — costs nothing. Ruling: AC-23's "only demo accounts' deliveries" superseded by R-11 (seed resets all of today).
 - Merged task/8-demo into integration (9c58a8a). All 8 MUST tasks passed QA; SHOULD tasks 9, 10 next.
+
+## Task 9 (SHOULD): board search and past-date close (junior-builder)
+- Worktree .worktrees/task9, branch task/9-search, BASE edf6e47.
+- Builder (1 attempt): cb4e00e, byPedido helper + date input, 92 tests, Playwright check by builder. Reviewer (1 pass): PASS. QA (1 run): PASS AC-15, AC-21, no regression AC-12/AC-20. Minor (deferred): redundant /deliveries refetch on date change; blank courier cell for unassigned failed rows in historical view.
+- Merged task/9-search into integration (cb4e00e).

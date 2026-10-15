@@ -16,6 +16,10 @@ type Preview = { valid: ImportRow[]; skipped: Skipped[] }
 export const skipText = (code: string) => SKIP_LABELS[code as Skipped['reason']] ?? code
 export const reasonText = (code: string | null) => (code ? (REASON_LABELS[code as Reason] ?? code) : '')
 export const pendientes = (s: { pendiente: number; asignado: number }) => s.pendiente + s.asignado
+export const byPedido = <T extends { pedido: string }>(rows: T[], q: string) => {
+  const n = q.trim().toLowerCase()
+  return rows.filter((d) => d.pedido.toLowerCase().includes(n))
+}
 const STATUS_TEXT: Record<Status, string> = { pendiente: 'Pendiente', asignado: 'Asignado', entregado: 'Entregado', fallido: 'Fallido' }
 
 export function Dispatcher() {
@@ -23,16 +27,19 @@ export function Dispatcher() {
   const [couriers, setCouriers] = useState<{ id: string; full_name: string }[]>([])
   const [summary, setSummary] = useState<Summary | null>(null)
   const [error, setError] = useState('')
+  const [date, setDate] = useState(bogotaToday())
+  const [q, setQ] = useState('')
+  const shown = byPedido(rows, q)
 
   const load = useCallback(async () => {
     try {
-      const [r, s] = await Promise.all([api<Delivery[]>('/deliveries'), api<Summary>('/summary')])
+      const [r, s] = await Promise.all([api<Delivery[]>('/deliveries'), api<Summary>(`/summary?date=${date}`)])
       setRows(r)
       setSummary(s)
     } catch (e) {
       setError((e as Error).message)
     }
-  }, [])
+  }, [date])
   useEffect(() => {
     load()
     api<typeof couriers>('/couriers').then(setCouriers, () => {})
@@ -56,17 +63,18 @@ export function Dispatcher() {
       </header>
       <h1>Despacho</h1>
       {error && <p role="alert" className="error">{error}</p>}
-      <Closing s={summary} />
+      <Closing s={summary} date={date} onDate={setDate} />
       <ImportCsv onDone={load} />
       <section>
         <h2>Entregas</h2>
+        <input type="search" aria-label="Buscar pedido" placeholder="Buscar pedido" value={q} onChange={(e) => setQ(e.target.value)} />
         <div className="scroll">
           <table>
             <thead>
               <tr>{['Pedido', 'Cliente', 'Teléfono', 'Dirección', 'Barrio', 'Valor', 'Estado', 'Motivo', 'Mensajero'].map((h) => <th key={h}>{h}</th>)}</tr>
             </thead>
             <tbody>
-              {rows.map((d) => (
+              {shown.map((d) => (
                 <tr key={d.id}>
                   <td>{d.pedido}</td><td>{d.cliente}</td><td>{d.telefono}</td><td>{d.direccion}</td><td>{d.barrio}</td>
                   <td>{formatCOP(d.valor)}</td>
@@ -87,18 +95,19 @@ export function Dispatcher() {
               ))}
             </tbody>
           </table>
-          {!rows.length && <p className="muted">No hay entregas para hoy.</p>}
+          {!shown.length && <p className="muted">{rows.length ? 'Ningún pedido coincide.' : 'No hay entregas para hoy.'}</p>}
         </div>
       </section>
     </main>
   )
 }
 
-function Closing({ s }: { s: Summary | null }) {
+function Closing({ s, date, onDate }: { s: Summary | null; date: string; onDate: (d: string) => void }) {
   if (!s) return null
   return (
     <section className="card">
       <h2>Cierre del día</h2>
+      <input type="date" aria-label="Fecha del cierre" value={date} max={bogotaToday()} onChange={(e) => e.target.value && onDate(e.target.value)} />
       <dl className="counts">
         <div><dt>Entregados</dt><dd>{s.entregado}</dd></div>
         <div><dt>Fallidos</dt><dd>{s.fallido}</dd></div>

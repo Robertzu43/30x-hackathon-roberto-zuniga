@@ -54,3 +54,13 @@ done: preflight passed, plan scanned, rulings R-01..R-10 ledgered | in progress:
 - Ruling: web/api.ts, omitted from Task 1's file list, is created by Task 6 together with web/supabase.ts (it depends on it) — keeps task files consistent — costs nothing if wrong.
 - Ruling: accept QA CONDITIONAL for Task 1 — remaining parts are not checkable before later tasks exist — if wrong, caught at final QA.
 - Merged task/1-scaffold into integration at e421024.
+
+## Task 2: domain logic (junior-builder)
+- Skill proof (Step 0): subagent-driven-development "Rulings, not stalls"; finishing-a-development-branch "Step 5: Execute Choice". Resumed at Task 2 after container restart; preflight PASSED (AWS warn only, no AC needs AWS).
+- Builder attempt 1: commit 0f24342, 39 tests. Reviewer pass 1: CHANGES (parseCOP('$45,000') -> 45, AC-10/R-02, conf 100).
+- Ruling: comma + exactly 3 digits = thousands separator ('$45,000' -> 45000); comma + 1-2 digits = decimal, only if zeros — PLAN Review Focus 1 expects '$45,000' to parse and R-02 forbids guessing money — if wrong, a brand writing '45,000' meaning 45 decimal is misread (very unlikely in COP).
+- Builder attempt 2 (fresh builder, report file carried): commit 2408b5f, 47 tests. Reviewer pass 2: ADDRESSED, no new findings.
+- QA (1 run): CONDITIONAL, all ACs pass. Gaps: empty pedido and valor 0 accepted (no AC).
+- Ruling: accept CONDITIONAL, put empty-pedido/valor-0 in docs/IDEAS.md — no AC requires rejection, R-02 allows non-negative — if wrong, a blank order number imports; fix is one line.
+- Note for T5/T6: skipped[].line counts data rows from 1 (header excluded).
+- Merged task/2-domain into integration; full suite green.

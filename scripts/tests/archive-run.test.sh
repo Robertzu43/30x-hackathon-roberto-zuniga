@@ -25,4 +25,12 @@ git --git-dir="$O" rev-parse -q --verify refs/heads/main >/dev/null || fail "mai
 git --git-dir="$O" rev-parse -q --verify refs/heads/dryrun/e2e >/dev/null || fail "other branches must stay"
 bash "$ROOT/scripts/archive-run.sh" dry1 --yes > out.txt 2>&1 || fail "second run must exit 0"
 grep -qi 'nothing to archive' out.txt || fail "second run must say nothing to archive"
+# a label already used must be refused, nothing moved
+git push -q origin main:refs/heads/integration
+bash "$ROOT/scripts/archive-run.sh" dry1 --yes > out.txt 2>&1 && fail "reused label must exit non-zero"
+grep -qi 'already used' out.txt || fail "reused label must say so"
+git --git-dir="$O" rev-parse -q --verify refs/heads/integration >/dev/null || fail "reused label must not delete anything"
+# a --single-branch clone must still see the run's branches
+git clone -q --single-branch --branch main "$O" "$T/single" && cd "$T/single"
+bash "$ROOT/scripts/archive-run.sh" dry2 > out.txt 2>&1; grep -q 'integration' out.txt || fail "single-branch clone must see integration"
 exit 0

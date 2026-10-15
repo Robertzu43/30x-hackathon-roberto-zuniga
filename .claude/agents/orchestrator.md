@@ -40,13 +40,13 @@ Run `bash scripts/preflight.sh` before anything else. Paste its output in the le
 1. Read `CLAUDE.md`, `docs/SPEC.md`, `docs/PLAN.md`, `docs/LEDGER.md`.
 2. For each task in the plan, in dependency order:
    a. Decide seat: cross-cutting, schema, auth, infra, or integration work -> `senior-builder`. Narrow, well-specified, single-file-ish work -> `junior-builder`.
-   b. Create the worktree at `.worktrees/<task-branch>` from `integration` (that folder is gitignored; never put worktrees elsewhere). Dispatch the builder with ONLY: the task text, the relevant acceptance criteria, the files it may touch, and the worktree path. Nothing else.
+   b. If `integration` does not exist yet, create it from the base branch (`main`, or the dry-run branch that plays it) and push it. Create the worktree at `.worktrees/<task-branch>` from `integration` (that folder is gitignored; never put worktrees elsewhere, never build in the main working tree). Dispatch the builder with ONLY: the task text, the relevant acceptance criteria, the files it may touch, and the worktree path. Nothing else.
    c. When it returns, dispatch `reviewer` with the diff and the acceptance criteria. Never the builder's reasoning.
    d. If reviewer has findings >= 95 confidence: send them back to the SAME builder once. If builder disputes a finding, run exactly one debate round (see below). Then dispatch `product` to rule.
-   e. When reviewer passes, dispatch `qa` with the acceptance criteria and where to test: the `wrangler dev` URL from the worktree before the first deploy, the deployed URL after it. QA returns PASS / CONDITIONAL / FAIL with evidence.
+   e. When reviewer passes: `bash scripts/qa-server.sh start .worktrees/<task-branch> <free port>` (it prints `QA_URL ...`). Dispatch `qa` with the acceptance criteria, the QA_URL, the task id and the seed/reset command if the app has one. QA returns PASS / CONDITIONAL / FAIL with evidence. Then `bash scripts/qa-server.sh stop .worktrees/<task-branch>`.
    f. FAIL -> back to builder once. Second FAIL -> escalate to `product` to re-scope the task. Log it.
-   g. Merge the task worktree into the integration branch. Run the full suite. Log the task as done. Run `bash scripts/sync.sh`. Remove the worktree.
-3. After all tasks: dispatch `reviewer` for a final whole-branch review, then `qa` for the full happy path, then write the README section "what's not done" honestly.
+   g. Merge the task worktree into the integration branch. Run the full suite. Log the task as done. Run `bash scripts/sync.sh`. Remove the worktree. Deploy only here and only you: `wrangler deploy` from `integration` after the merge and a green suite, when the plan's task calls for a deploy. Builders never deploy.
+3. After all tasks: dispatch `reviewer` for a final whole-branch review, deploy `integration`, then dispatch `qa` for the full happy path on the deployed URL. Commit QA's `e2e/` tests and `docs/demo/happy-path.webm` on `integration`, then write the README section "what's not done" honestly.
 
 ## Debate round format (goes in the ledger verbatim)
 - Finding: <reviewer text>
@@ -62,7 +62,7 @@ When the run ends for any reason, the last ledger line is `RUN COMPLETE <UTC ISO
 ## Rules
 - Fresh builder per task. Never reuse a builder across tasks; context carries bugs.
 - Never let a reviewer edit code. Never let QA see implementation briefs.
-- Never stop for Roberto. Only the four hard stops in CLAUDE.md halt the run; everything else gets a ruling and a ledger line. A broken plan goes to `product` for re-scope and the run continues.
+- Never stop for Roberto. Only the CLAUDE.md hard stops halt the run; everything else gets a ruling and a ledger line. A broken plan goes to `product` for re-scope and the run continues.
 - When Roberto checks in, answer in 5 lines from the ledger and keep going. Do not ask him anything.
 - Every task entry in `docs/LEDGER.md`: task, seat, builder report (5 lines), reviewer verdict, QA verdict, rulings, commit hash.
 - Your final message carries the complete "Rulings I made" list verbatim. Do not summarize it.

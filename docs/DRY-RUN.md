@@ -2,12 +2,12 @@
 
 ## Launch the real run (after brainstorming is done)
 In the cloud, so it survives the laptop closing (environment `30x-hackathon`, see INFRA.md):
-`claude --cloud "Read CLAUDE.md and follow 'Launcher session'. Run writing-plans on docs/PROBLEM.md and docs/DECISIONS.md into docs/PLAN.md, dispatch product for docs/SPEC.md, then start the orchestrator as CLAUDE.md 'Launcher session' says. Do not ask me anything."`
+`claude --cloud "Read CLAUDE.md. First do the fresh-start check in 'Launcher session' rule 1 and stop on LEFTOVER RUN. Then run writing-plans on docs/PROBLEM.md and docs/DECISIONS.md into docs/PLAN.md, dispatch product for docs/SPEC.md, then start the orchestrator as CLAUDE.md 'Launcher session' says. Do not ask me anything."`
 Local fallback:
-`claude --dangerously-skip-permissions -p "Read CLAUDE.md and follow 'Launcher session'. Run writing-plans on docs/PROBLEM.md and docs/DECISIONS.md into docs/PLAN.md, dispatch product for docs/SPEC.md, then start the orchestrator as CLAUDE.md 'Launcher session' says. Do not ask me anything."`
+`claude --dangerously-skip-permissions -p "Read CLAUDE.md. First do the fresh-start check in 'Launcher session' rule 1 and stop on LEFTOVER RUN. Then run writing-plans on docs/PROBLEM.md and docs/DECISIONS.md into docs/PLAN.md, dispatch product for docs/SPEC.md, then start the orchestrator as CLAUDE.md 'Launcher session' says. Do not ask me anything."`
 (the settings.json allowlist covers the interactive case; the flag covers a headless run where prompts would hang)
 
-Before launching: `docs/PROBLEM.md`, `docs/DECISIONS.md` and the `DEADLINE:` line in `docs/CONTEXT.md` are filled, preflight passes, and origin has no `integration` or `task/*` branch (a fresh start that finds them stops with LEFTOVER RUN).
+Before launching: `docs/PROBLEM.md`, `docs/DECISIONS.md` and the `DEADLINE:` line in `docs/CONTEXT.md` are filled, preflight passes, and origin has no `integration` or `task/*` branch (a fresh start that finds them stops with LEFTOVER RUN). On 15 Oct origin still holds the dry run's `integration` and `task/1..9`: run step 4 of the dry run below before kickoff.
 
 ## Recovery
 - The launcher's hourly `30x-watchdog` Routine wakes the session, also in a fresh container, and re-dispatches the orchestrator with RESUME when none is running.
@@ -55,6 +55,9 @@ Cost of the dry run so far: about 17.50 USD across the two launcher sessions.
 - Per-task QA runs against `wrangler dev` before the first deploy; the final happy path always against the deployed URL.
 - A fresh start that finds a previous run's branches stops with LEFTOVER RUN; `scripts/archive-run.sh` clears them.
 - `scripts/run_status.py` works from any folder and reports a mistyped deadline as `(invalid)`.
+- Per-task QA tests the task's own worktree through `scripts/qa-server.sh` (gitignored mode-600 `.dev.vars`, bounded start, stop deletes it); the deployed URL is only for the final happy path.
+- Only the orchestrator deploys, from `integration` after a merge and a green suite (a builder had deployed from its unmerged worktree).
+- The orchestrator creates `integration` before the first task (the first tasks had been built in the main working tree).
 
 ## Still to verify by hand, once
 - AWS: `AWS_PROFILE_NAME=<profile> bash scripts/aws-setup.sh` (phone sign-in), then preflight shows "aws identity", only if an AC will need AWS.

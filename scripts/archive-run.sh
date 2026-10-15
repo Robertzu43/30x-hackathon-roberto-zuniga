@@ -6,9 +6,12 @@
 # Deleting branches is a CLAUDE.md hard stop: only Roberto runs this with --yes.
 set -u
 LABEL="${1:?usage: scripts/archive-run.sh <label> [--yes]}"; YES="${2:-}"
-git fetch -q --prune origin || { echo "archive-run: fetch failed"; exit 1; }
+# explicit refspec: a --single-branch clone would otherwise not see integration/task/*
+git fetch -q --prune origin '+refs/heads/*:refs/remotes/origin/*' || { echo "archive-run: fetch failed"; exit 1; }
 branches=$(git for-each-ref --format='%(refname:short)' refs/remotes/origin/integration refs/remotes/origin/task | sed 's#^origin/##')
 [ -z "$branches" ] && { echo "archive-run: nothing to archive"; exit 0; }
+git ls-remote --exit-code origin "refs/heads/archive/$LABEL/*" >/dev/null 2>&1 \
+  && { echo "archive-run: label '$LABEL' already used on origin; pick another"; exit 1; }
 for b in $branches; do echo "archive-run: origin/$b -> archive/$LABEL/$b"; done
 [ "$YES" = "--yes" ] || { echo "archive-run: preview only; re-run with --yes to move them"; exit 0; }
 fails=0

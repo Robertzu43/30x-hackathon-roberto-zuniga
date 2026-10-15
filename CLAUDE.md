@@ -74,6 +74,7 @@ The orchestrator is one long subagent call; the launcher keeps it alive and owns
 ## Code rules (Ponytail ULTRA mode is on for every agent that writes code)
 - Superpowers always: every build goes brainstorming -> writing-plans -> subagent-driven-development; every builder works test-driven-development then verification-before-completion; every merge goes through finishing-a-development-branch. No code outside that path, in any session.
 - Minimum code that satisfies the acceptance criterion. No speculative abstractions.
+- The first product task scaffolds `package.json` with `lint`, `typecheck` and `test` scripts and an `eslint.config.js`.
 - Never cut validation, auth, tests or error handling to save time.
 - Every task ends with: tests passing, lint passing, a commit on the task branch, a 5-line report returned to the orchestrator, which writes it to the ledger (the orchestrator is the only ledger writer).
 - Ponytail: ULTRA is pinned for every session and every subagent by the repo's own hooks (`PONYTAIL_DEFAULT_MODE=ultra` in `.claude/settings.json`; SessionStart and SubagentStart inject the ruleset). `ponytail` is also preloaded into both builders and `ponytail-review` into the reviewer. Ultra is the floor, not a suggestion: if a builder thinks a rule should bend, it says so in its report and the reviewer or product rules; it does not bend it.
@@ -86,7 +87,7 @@ The orchestrator is one long subagent call; the launcher keeps it alive and owns
 
 ## Hooks
 - SessionStart: installs the git hooks path, injects `using-superpowers`, activates Ponytail ULTRA. SubagentStart: injects Ponytail ULTRA into every subagent.
-- PostToolUse on Edit/Write: run lint on the touched file.
+- PostToolUse on Edit/Write: lint the touched file; errors go back to the agent (exit 2). Silent until the product has `eslint.config.js` and eslint installed.
 - Pre-commit (`.githooks/pre-commit`, installed by the SessionStart hook via `git config core.hooksPath .githooks`): secret scan (`.claude/hooks/secret-scan.sh`) then the test suite. Either failing blocks the commit.
 - No Stop hook: `UNLEDGERED` in `run_status.py` lists task branches the ledger never mentions, and RESUME reconciles them first.
 

@@ -75,10 +75,7 @@ npm run seed   # deja la demo limpia otra vez
 
 ## Qué no está hecho
 
-- **AC-15 (SHOULD), buscar un pedido en el tablero**: no está. Hoy se usa Ctrl+F del navegador.
-- **AC-21 (SHOULD), cierre de un día pasado**: la API acepta `?date=aaaa-mm-dd`, pero la pantalla solo muestra hoy. El historial sí queda guardado en la base de datos.
-- **AC-28 (SHOULD), correo de cierre a las 6 p. m.**: no está (no hay cron ni `src/lib/email.ts`).
-- Las tareas 9 (búsqueda y cierre de días pasados) y 10 (correo de las 6 p. m.) del plan no se construyeron.
+- **AC-28 (SHOULD), correo de cierre a las 6 p. m.**: construido (cron `0 23 * * *`, que son las 6 p. m. en Bogotá, en `src/cron.ts`; envío por `src/lib/email.ts`). Una prueba automatizada lo verifica con Resend simulado. Pero el remitente es una dirección `@resend.dev`: el envío real a Carolina requiere un dominio verificado en Resend y `RESEND_FROM` con esa dirección (`wrangler secret put`). El cron en vivo nunca se vio enviando un correo.
 - El motivo "otro" no tiene campo de texto libre (decisión R-09).
 - Sin registro de usuarios ni cambio de contraseña: las cuentas las crea el seed o se crean en Supabase Auth con su fila en `profiles`.
 - Sin integración con WhatsApp ni con las tiendas de las marcas (fuera de alcance): el CSV es la única entrada.

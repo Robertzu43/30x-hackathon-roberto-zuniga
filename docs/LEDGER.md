@@ -72,3 +72,10 @@ done: preflight passed, plan scanned, rulings R-01..R-10 ledgered | in progress:
 - Ruling: accept @types/node devDependency — needed by typecheck, CLAUDE.md allows justified deps — costs nothing.
 - Hygiene: QA left /andres.jwt, /luisa.jwt, /carolina.jwt (short-lived demo-user tokens) at filesystem root; the safety check blocked my rm, so they remain for a human to delete. Outside the repo, demo accounts only.
 - Merged task/3-schema into integration; full suite green.
+
+## Task 4: auth middleware (senior-builder)
+- Builder (1 attempt): commit b55fba9; requireRole/adminClient/GET /api/me; any throw or bad token gives 401, wrong role 403; 58 tests; app is now Hono<AuthEnv>; requireRole() with no args = any authenticated role.
+- Reviewer (1 pass): PASS, no findings >= 95. QA (1 run): CONDITIONAL — /api/me verified live with real demo tokens (401 on none/garbage/tampered, 200 with correct role); AC-03/AC-04 on data routes untestable until Task 5.
+- Ruling: accept CONDITIONAL for Task 4 — dispatcher-only routes do not exist yet — if wrong, caught by Task 5 QA and final QA, which must re-run AC-03/AC-04 on real routes.
+- Hygiene: two demo JWT files remain in the session scratchpad (rm blocked); short-lived, demo accounts, outside repo.
+- Merged task/4-auth into integration; full suite green.

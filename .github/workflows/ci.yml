@@ -6,8 +6,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
+        if: hashFiles('package-lock.json') != ''
         with: { node-version: 22, cache: npm }
+      # npm steps run only once the product exists (package-lock.json); the harness alone has nothing to build
       - run: npm ci
+        if: hashFiles('package-lock.json') != ''
       - run: npm run lint --if-present
+        if: hashFiles('package-lock.json') != ''
       - run: npm run typecheck --if-present
+        if: hashFiles('package-lock.json') != ''
       - run: npm test --if-present -- --run
+        if: hashFiles('package-lock.json') != ''

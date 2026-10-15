@@ -48,7 +48,8 @@ export async function seed(url, key) {
     if (pe) throw pe;
   }
   const today = new Date(Date.now() - 5 * 3600e3).toISOString().slice(0, 10); // Bogota UTC-5
-  const { error: de } = await db.from('deliveries').delete().like('pedido', 'RDN-%');
+  // R-11: today's board is exactly the seed (CSV imports and demo runs go too); other days untouched.
+  const { error: de } = await db.from('deliveries').delete().eq('delivery_date', today);
   if (de) throw de;
   const rows = ROWS.map(([cliente, telefono, direccion, barrio, valor], i) => ({
     delivery_date: today, pedido: `RDN-${1001 + i}`, cliente, telefono, direccion: `${direccion}, Bogotá`, barrio, valor,

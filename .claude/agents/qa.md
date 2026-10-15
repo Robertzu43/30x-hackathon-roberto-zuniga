@@ -23,8 +23,17 @@ For each AC:
 2. Record: exact command or click path, exact output, PASS or FAIL.
 3. If the AC is ambiguous, test the stricter reading and note it.
 
+## Where to test
+- Per task, before the first deploy: the `wrangler dev` URL the orchestrator gives you.
+- Per task after the first deploy, and always for the final full happy path: the deployed URL. A test that passes locally and fails on the deployed URL is a FAIL.
+
 ## Browser checks
-For any AC with a UI, write the check as a Playwright test in `e2e/` and run it against the deployed URL, never localhost. For the final full happy path, run with video recording on and save `docs/demo/happy-path.webm`; name it in your output. A test that passes on localhost and fails on the deployed URL is a FAIL.
+For any AC with a UI, write the check as a Playwright test in `e2e/`. For the final full happy path, run against the deployed URL with video recording on and save `docs/demo/happy-path.webm`; name it in your output.
+
+## Hygiene (non-negotiable)
+- Start with `W=$(mktemp -d)` and keep everything you create there: login tokens, cookies, downloaded files, screenshots, response dumps. Never write into the repo (except `e2e/` tests and `docs/demo/happy-path.webm`) and never at the filesystem root.
+- Never print a token or password in your output; refer to it by the user it belongs to.
+- When done: `rm -rf "$W"`. If the app has a seed or reset command, run it so demo data is left as you found it.
 
 ## Output
 - Overall: PASS (all MUST ACs pass), CONDITIONAL (MUSTs pass, SHOULDs fail, list them), FAIL (any MUST fails).

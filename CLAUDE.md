@@ -17,8 +17,8 @@ This repo is the source of truth: agents (`.claude/agents/`), hooks (`.claude/ho
 
 ## Chain of command
 1. `docs/PROBLEM.md` and `docs/DECISIONS.md` are the source of truth. Roberto owns them. Nobody edits them except Roberto.
-2. `product` owns `docs/SPEC.md` (acceptance criteria) and adjudicates every dispute. Product never writes code.
-3. `senior-builder` and `junior-builder` write code, one task each, in their own git worktree.
+2. `product` owns `docs/SPEC.md` (acceptance criteria) and adjudicates every dispute and every question about what the product does (formats, values, edge cases, what an AC means), disputed or not. The orchestrator rules on process only. Product never writes code.
+3. `senior-builder` and `junior-builder` write code, one task each, in their own git worktree under `.worktrees/`.
 4. `reviewer` reviews every task diff (Ponytail review + confidence-scored findings, reports only >= 95).
 5. `qa` tests only against `docs/SPEC.md` acceptance criteria. QA never reads task briefs.
 6. `orchestrator` runs the loop and keeps `docs/LEDGER.md`.
@@ -35,7 +35,7 @@ A second reviewer on the same diff is a defect. A reviewer who rewrites code is 
 
 ## Launcher session (the main session after the plan exists)
 The orchestrator is one long subagent call; the launcher keeps it alive and owns the clock.
-1. On start, fresh or RESUME: `git fetch origin`; if `origin/integration` exists, `git checkout integration`. List Routines and delete every one named `30x-watchdog`, then create one: `create_trigger` with name `30x-watchdog`, cron `0 * * * *`, prompt `TICK`, `initiation: human_request`, bound to this session. Dispatch `orchestrator` in the background with `docs/PLAN.md` on a fresh start, `RESUME` otherwise. Where `create_trigger` does not exist (local or headless `-p` run), skip the Routine and dispatch the orchestrator in the foreground; if it ends before `RUN COMPLETE`, dispatch it again with `RESUME`.
+1. On start, fresh or RESUME: `git fetch origin`. Fresh start only: if origin already has `integration` or any `task/*` branch, a previous run left them; that is the LEFTOVER RUN hard stop (heartbeat it; Roberto clears them with `scripts/archive-run.sh <label> --yes`). Then, if `origin/integration` exists, `git checkout integration`. List Routines and delete every one named `30x-watchdog`, then create one: `create_trigger` with name `30x-watchdog`, cron `0 * * * *`, prompt `TICK`, `initiation: human_request`, bound to this session. Dispatch `orchestrator` in the background with `docs/PLAN.md` on a fresh start, `RESUME` otherwise. Where `create_trigger` does not exist (local or headless `-p` run), skip the Routine and dispatch the orchestrator in the foreground; if it ends before `RUN COMPLETE`, dispatch it again with `RESUME`.
 2. On every wake (a `TICK`, or a notice that the orchestrator finished): first decide liveness. The orchestrator is running only if `ListAgents` (or `TaskList`) lists it as live; a completion notice, an empty list, or a fresh container after a reclaim means it is not. Memory of having dispatched it is not evidence. While it is running: `git fetch origin` only, never a checkout (it may be mid-merge in this same working tree). When it is not running: the fetch and checkout from rule 1. Then `python3 scripts/run_status.py`.
    - `HEARTBEAT_DUE yes`: write five lines from the ledger tail (done / in progress / blocked / rulings since last / next) and run `bash scripts/heartbeat.sh "<lines>"`.
    - Orchestrator not running, `RUN_COMPLETE no`, `PHASE` not `OVER`: dispatch `orchestrator` with `RESUME` in the background. Never dispatch a second orchestrator while one is listed.
@@ -48,7 +48,7 @@ The orchestrator is one long subagent call; the launcher keeps it alive and owns
 - Completeness over shortcuts. Edge cases, error paths and tests are in scope. Only genuinely unrelated work is out.
 - Confusion protocol. Stop and write a question to `docs/QUESTIONS.md` only for: architecture choice, data model, destructive scope, missing company context. Everything else: make a ruling, log it, keep moving.
 - Confusion protocol never blocks. Write the question to `docs/QUESTIONS.md`, take the most conservative option that keeps the company's data safe, log it in the ledger, continue. Roberto may overrule later; until then the ruling stands.
-- Hard stops only for: `git push --force`, deleting branches with unmerged work, writing credentials into the repo, or deploying to infrastructure the company owns. Nothing else stops the run.
+- Hard stops only for: `git push --force`, deleting branches with unmerged work, writing credentials into the repo, deploying to infrastructure the company owns, or a LEFTOVER RUN (fresh start finding a previous run's `integration`/`task/*` on origin). Nothing else stops the run.
 
 ## Autonomy (pre-authorised by Roberto, do not ask again)
 - Merging task worktrees into `integration`, and `integration` into `main` once the full suite and QA happy path pass.
@@ -69,7 +69,8 @@ The orchestrator is one long subagent call; the launcher keeps it alive and owns
 - Ideas go to `docs/IDEAS.md`, never into code. A builder who wants to add something writes one line there and continues the task as briefed.
 - Order of work: MUST ACs first, in dependency order. SHOULD ACs only when every MUST has passed QA. Demo requirements are MUST.
 - Clock: `docs/CONTEXT.md` holds the upload deadline on its `DEADLINE:` line; `python3 scripts/run_status.py` turns it into `PHASE`, and the orchestrator runs it before every task dispatch. FREEZE (T-6h): only failing-test fixes, README, demo data and deploy. SHUTDOWN (T-2h): deploy, verify the URL on a clean session, final ledger summary, `RUN COMPLETE`, stop.
-- Status heartbeat: `scripts/heartbeat.sh` (ledger + `sync.sh` + email to `HEARTBEAT_EMAIL` through Resend). The launcher sends it whenever `run_status.py` says `HEARTBEAT_DUE yes` (every 5 hours); the orchestrator sends it immediately on PREFLIGHT FAILED, any hard stop, the first FREEZE and the first SHUTDOWN. Five lines: done / in progress / blocked / rulings / next. This is what Roberto reads from his phone.
+- Status heartbeat: `scripts/heartbeat.sh` (ledger + `sync.sh` + email to `HEARTBEAT_EMAIL` through Resend). The launcher sends it whenever `run_status.py` says `HEARTBEAT_DUE yes` (every 5 hours); the orchestrator sends it right after preflight passes and immediately on PREFLIGHT FAILED, any hard stop, the first FREEZE and the first SHUTDOWN. Five lines: done / in progress / blocked / rulings / next. This is what Roberto reads from his phone.
+- Waiting: every agent waits on tool results and completion notices, never on `sleep` loops or by polling files.
 - Resume: any session started with "RESUME" follows "Launcher session"; the orchestrator fetches origin first and continues from the ledger. `scripts/sync.sh` runs after every merge and every heartbeat, so nothing lives only in the container.
 
 ## Code rules (Ponytail ULTRA mode is on for every agent that writes code)

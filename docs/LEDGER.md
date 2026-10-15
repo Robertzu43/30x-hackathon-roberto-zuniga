@@ -117,3 +117,9 @@ done: Tasks 1-4 merged | in progress: Task 5 delivery API (RESUMED at Task 5) | 
 - Worktree .worktrees/task9, branch task/9-search, BASE edf6e47.
 - Builder (1 attempt): cb4e00e, byPedido helper + date input, 92 tests, Playwright check by builder. Reviewer (1 pass): PASS. QA (1 run): PASS AC-15, AC-21, no regression AC-12/AC-20. Minor (deferred): redundant /deliveries refetch on date change; blank courier cell for unassigned failed rows in historical view.
 - Merged task/9-search into integration (cb4e00e).
+
+## Task 10 (SHOULD): 6pm end-of-day email (junior-builder)
+- Worktree .worktrees/task10, branch task/10-email, BASE 94a0cab. Note preflight WARN: RESEND_FROM is @resend.dev so mail reaches only the Resend sign-up address; AC-28 is proven by mocked test plus cron trigger, real delivery to Carolina needs a verified domain (README).
+- RESUMED at Task 10. Preflight PASSED (rerun). Builder commit 6a79f7b (src/cron.ts, src/lib/email.ts, summary() extracted in deliveries.ts, cron 0 23 * * *, 93 tests). Reviewer (1 pass): PASS, none >= 95 (sub-threshold: getUserById error path throws TypeError, still fails loudly).
+- QA (1 run): CONDITIONAL. AC-28 automated evidence PASS (recipient, subject, counts, failed list); AC-12/AC-20 no regression. Not verifiable: live cron on deployed Worker, real email arrival (wrangler --test-scheduled hit the asset fallback; sender @resend.dev).
+- Ruling: accept Task 10 CONDITIONAL as done — AC-28 is SHOULD, tests assert every observable, live delivery needs a verified Resend domain which is outside the agents' reach — if wrong, Carolina's 18:00 email is not delivered until the domain is verified (documented in README not-done).

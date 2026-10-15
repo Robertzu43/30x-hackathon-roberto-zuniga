@@ -101,3 +101,8 @@ done: Tasks 1-4 merged | in progress: Task 5 delivery API (RESUMED at Task 5) | 
 - QA (1 run): FAIL only on AC-02 (courier at `/` sees "Esta pantalla es para despacho" instead of redirect to /mensajero); AC-01/07-13/20 PASS in real Chromium; AC-14 courier-list side and AC-20 4/3/5 untestable until /mensajero exists.
 - Ruling: AC-02 is assigned to Task 7 in PLAN and the Task 6 brief mandated the message-plus-link; accept CONDITIONAL for Task 6 and put the redirect (courier at `/` -> `/mensajero`, courier login lands on /mensajero, dispatcher at /mensajero -> `/`) in Task 7's brief — a Task 6 rework would touch the same App.tsx Task 7 rewrites — if wrong, caught at Task 7 QA. Not a budget-capped loop.
 - QA found `npm run seed` leaves CSV-imported rows; already ruled (Task 8 owner). Merged task/6-dispatcher into integration.
+
+## Task 7: courier screen (junior-builder)
+- Worktree .worktrees/task7, branch task/7-courier, BASE d1ca83e. Brief extended with AC-02 redirects (ruling above).
+- Builder (1 attempt): 9ae86eb; web/Courier.tsx, redirects in web/Login.tsx (outside list, per ruling), 89 tests, 360px Playwright check by builder. Reviewer (1 pass): PASS, none >= 95 (sub-threshold: no double-tap guard on save).
+- QA (1 run): PASS. AC-02/14/16/17/18/19/20 verified in Chromium 360x740 + curl; closes the Task 6 AC-02 and AC-14/AC-20 gaps. Merged task/7-courier into integration (9ae86eb).

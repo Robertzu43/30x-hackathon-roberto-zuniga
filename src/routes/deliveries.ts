@@ -1,4 +1,5 @@
 import { Hono, type Context } from 'hono'
+import type { Env } from '../app'
 import { requireRole, type AuthEnv } from '../lib/auth'
 import { adminClient } from '../lib/db'
 import { parseDeliveriesCsv } from '../lib/csv'
@@ -30,8 +31,8 @@ const dateParam = (c: C): string | null => {
 }
 const body = (c: C): Promise<Record<string, unknown>> =>
   c.req.json().then((b) => (b && typeof b === 'object' ? b : {}), () => ({}))
-const dayRows = async (c: C, date: string, courierId?: string) => {
-  let q = adminClient(c.env).from('deliveries').select(COLS).eq('delivery_date', date)
+const dayRows = async (env: Env, date: string, courierId?: string) => {
+  let q = adminClient(env).from('deliveries').select(COLS).eq('delivery_date', date)
   if (courierId) q = q.eq('courier_id', courierId)
   return (must(await q.order('pedido')) as Record<string, unknown>[]).map(toDelivery)
 }
@@ -86,7 +87,7 @@ deliveries.post('/import/confirm', dispatcher, async (c) => {
 
 deliveries.get('/deliveries', dispatcher, async (c) => {
   const date = dateParam(c)
-  return date ? c.json(await dayRows(c, date)) : bad(c, 'fecha inválida')
+  return date ? c.json(await dayRows(c.env, date)) : bad(c, 'fecha inválida')
 })
 
 deliveries.get('/couriers', dispatcher, async (c) =>
@@ -109,7 +110,7 @@ deliveries.patch('/deliveries/:id/assign', dispatcher, async (c) => {
 
 deliveries.get('/me/deliveries', courier, async (c) => {
   const date = dateParam(c)
-  return date ? c.json(await dayRows(c, date, c.get('user').id)) : bad(c, 'fecha inválida')
+  return date ? c.json(await dayRows(c.env, date, c.get('user').id)) : bad(c, 'fecha inválida')
 })
 
 deliveries.patch('/deliveries/:id/status', courier, async (c) => {
@@ -124,12 +125,11 @@ deliveries.patch('/deliveries/:id/status', courier, async (c) => {
   return updateDelivery(c, id, d.status, { status, failure_reason: status === 'fallido' ? reason : null })
 })
 
-deliveries.get('/summary', dispatcher, async (c) => {
-  const date = dateParam(c)
-  if (!date) return bad(c, 'fecha inválida')
-  const rows = await dayRows(c, date)
+// Shared with the 6pm email (src/cron.ts).
+export const summary = async (env: Env, date: string) => {
+  const rows = await dayRows(env, date)
   const count = (s: Status) => rows.filter((r) => r.status === s).length
-  return c.json({
+  return {
     date,
     entregado: count('entregado'),
     fallido: count('fallido'),
@@ -138,7 +138,13 @@ deliveries.get('/summary', dispatcher, async (c) => {
     failed: rows
       .filter((r) => r.status === 'fallido')
       .map(({ pedido, cliente, direccion, courier_name, failure_reason }) => ({ pedido, cliente, direccion, courier_name, failure_reason })),
-  })
+  }
+}
+
+deliveries.get('/summary', dispatcher, async (c) => {
+  const date = dateParam(c)
+  if (!date) return bad(c, 'fecha inválida')
+  return c.json(await summary(c.env, date))
 })
 
 // Public, no session (AC-23): counts only, never rows or PII. Pendiente = pendiente + asignado (R-05).

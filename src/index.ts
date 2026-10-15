@@ -1,3 +1,4 @@
 import { app } from './app'
+import { scheduled } from './cron'
 
-export default app
+export default { fetch: app.fetch, scheduled }

@@ -11,6 +11,9 @@ SUPABASE_URL = "https://dhjumvswohajnusdifim.supabase.co"  # public
 SUPABASE_ANON_KEY = "sb_publishable_qKF4nId7_l5TJ78gSEAgWQ_bfZiFx4K"     # public by design; RLS protects data
 WORKERS_AI_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"  # product LLM; change here, not in code
 
+[triggers]
+crons = ["0 23 * * *"]  # 18:00 America/Bogota
+
 [ai]
 binding = "AI"  # Workers AI: no key, authorised by the account
 

@@ -3,7 +3,8 @@
 # origin/integration when it exists). Usage: scripts/archive-run.sh <label> [--yes]
 # Without --yes: preview only. With --yes: push each origin integration and task/* branch to
 # archive/<label>/<name> (same commit), then delete the original. Never forces; main and other branches stay.
-# Deleting branches is a CLAUDE.md hard stop: only Roberto runs this with --yes.
+# Deleting branches is a CLAUDE.md hard stop: --yes only when Roberto asked. From a cloud session the copy works but the
+# delete is refused (git proxy 403); then Roberto deletes the originals on the GitHub branches page.
 set -u
 LABEL="${1:?usage: scripts/archive-run.sh <label> [--yes]}"; YES="${2:-}"
 # explicit refspec: a --single-branch clone would otherwise not see integration/task/*
@@ -19,4 +20,5 @@ for b in $branches; do
   git push -q origin "refs/remotes/origin/$b:refs/heads/archive/$LABEL/$b" \
     && git push -q origin --delete "$b" && echo "archived $b" || { echo "FAILED $b"; fails=$((fails+1)); }
 done
+[ "$fails" -gt 0 ] && echo "archive-run: copies are under archive/$LABEL/ where they succeeded; delete the originals on GitHub: $(git remote get-url origin | sed 's#\.git$##')/branches"
 exit $fails

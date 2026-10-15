@@ -81,6 +81,14 @@ The orchestrator's heartbeat runs every 5 hours of work and is emailed through R
 ## CI
 `.github/workflows/ci.yml` runs lint, typecheck and unit tests on every push. It gives judges green checks on the public repo and gives the orchestrator a second opinion when the local run is flaky. Deploy stays manual (`wrangler deploy` by the orchestrator), not CI, so a red CI never blocks a demo fix.
 
+## Cloud environment (claude.ai/code): where the real run happens
+The orchestrator must outlive Roberto's laptop, so the hackathon runs in a Claude Code cloud session. One-time setup in the web UI (Roberto, before kickoff):
+1. Connect GitHub to the Claude account at https://claude.ai/connect-github. The cloud clones the repo from GitHub; without this nothing starts.
+2. Environment at https://claude.ai/code (Environments): name `30x-hackathon`. Environment variables: the contents of `.env` without comments (on the laptop: `grep -vE '^#|^$' .env | pbcopy`, then paste). Network: full access (agents deploy, email, read docs). Setup script: `bash scripts/cloud-setup.sh`.
+3. Launch from the laptop with `claude --cloud "<launch prompt from docs/DRY-RUN.md>"`, or start the session on the web. Then close the laptop; the session keeps running.
+4. Every cloud session is a fresh container. AWS therefore needs one `aws login --profile 30x --remote` per session (URL opened on the phone); everything else comes from the environment variables. `.mcp.json` in the repo registers the AWS MCP server for every session.
+5. A dead session is resumed by starting a new cloud session with the word RESUME (below). A scheduled recovery routine that does this automatically is possible once the heartbeat pushes the ledger to GitHub; not configured yet.
+
 ## Session resilience
 Cloud sessions can time out or hit limits. Everything that matters is on disk and in git: plan, spec, ledger, task branches. A new session resumes by reading `docs/LEDGER.md` and dispatching the orchestrator with "RESUME". Roberto's job when a session dies: start a new one with that one word.
 

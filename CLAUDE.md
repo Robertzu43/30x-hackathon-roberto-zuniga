@@ -10,7 +10,7 @@ The deliverable must be deployable by the company on Monday, not a demo that die
 This repo is the source of truth: agents (`.claude/agents/`), hooks (`.claude/hooks/`, `.githooks/`), skills (`.claude/skills/`), settings and scripts travel with the clone. Nothing is loaded from plugins or `~/.claude`.
 1. Clone. Set every variable in `.env.example` in the session environment, never in a file.
 2. `bash scripts/preflight.sh` must print PREFLIGHT PASSED.
-3. Launch with the command in `docs/DRY-RUN.md`, or open Claude Code at the repo root and follow the pipeline below. A dead session resumes with "RESUME".
+3. Launch with the command in `docs/DRY-RUN.md`: in the cloud (`claude --cloud`, environment `30x-hackathon`, see INFRA.md) so the run survives Roberto disconnecting, or locally at the repo root. A dead session resumes with "RESUME".
 
 ## Read first
 `docs/CONTEXT.md` (the event, dates, rules, rubric) then `docs/PROBLEM.md` then `docs/DECISIONS.md`, then any `docs/ANALYSIS-*.md`. Tools and when they switch on: `docs/RESOURCES.md`. Every acceptance criterion in `docs/SPEC.md` must trace to one of those three files. Anything that does not trace is out of scope, no matter who proposes it.

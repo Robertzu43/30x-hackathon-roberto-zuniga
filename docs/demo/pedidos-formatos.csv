@@ -1,0 +1,9 @@
+pedido;cliente;telefono;direccion;barrio;valor
+FM-01;Camila Rojas;3001234567;Cra 7 # 45-10;Chapinero;45000
+FM-02;Andrés Medina;573001234567;Cl 127 # 15-20;Usaquén;45.000
+FM-03;Luisa Prieto;+57 300 123 4567;Av Cra 68 # 24-50;Salitre;$45.000
+FM-04;Jorge Ballesteros;300-123-4567;Cl 80 # 69-45;Engativá;45.000,00
+FM-05;Paola Gutiérrez;601 234 5678;Cra 15 # 93-60;El Chicó;45000
+FM-06;Mauricio Cárdenas;12345;Cl 63 # 11-30;Teusaquillo;45000
+FM-07;Sandra Ortiz;3187776655;Cra 30 # 10-15;Kennedy;45.000,50
+FM-08;Diego Ramírez;3187776655;Cra 30 # 10-15;Kennedy;abc

@@ -1,0 +1,8 @@
+pedido,cliente,telefono,direccion,barrio,valor
+RN-1001,Camila Rojas,3001234567,Cra 7 # 45-10 apto 301,Chapinero,45000
+RN-1002,Andrés Medina,3109876543,Cl 127 # 15-20,Usaquén,38500
+RN-1003,Luisa Fernanda Prieto,3205551234,Av Cra 68 # 24-50,Salitre,72000
+RN-1004,Jorge Ballesteros,3014447788,Cl 80 # 69-45,Engativá,29900
+RN-1005,Paola Gutiérrez,3152223344,Cra 15 # 93-60 of 502,El Chicó,56000
+RN-1006,Mauricio Cárdenas,,Cl 63 # 11-30,Teusaquillo,41000
+RN-1007,Sandra Ortiz,3187776655,,Suba,33000

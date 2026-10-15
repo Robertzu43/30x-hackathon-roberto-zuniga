@@ -126,3 +126,9 @@ done: Tasks 1-4 merged | in progress: Task 5 delivery API (RESUMED at Task 5) | 
 
 ## Heartbeat 2026-10-15 22:21Z
 done: Tasks 1-10 merged into integration | in progress: final review + QA happy path | blocked: none (AWS not needed) | rulings since last: T10 CONDITIONAL accepted (live email needs verified Resend domain) | next: final review, QA, merge to dryrun/e2e
+
+## Final review (opus, whole branch 05cae62..79cf32d)
+- Finding (conf 100, AC-27/R-06/data safety): test/seed.test.ts ran the destructive live seed whenever SUPABASE_SERVICE_ROLE_KEY was set, so npm test and pre-commit wiped today's deliveries. Side effect: the reviewer's two runs reset the hackathon project's today to the 12-delivery seed.
+- Fix (1 dispatch, junior): 38aca08, live test opt-in via RUN_LIVE_SEED_TEST=1, README line; 93 tests (1 skipped), lint and typecheck green.
+- Ruling: scoped re-review skipped; orchestrator read the 2-line diff, it is exactly the finding — same reasoning as Task 6 — if wrong, a gate flag is mis-named (harmless).
+- Ruling: the QA happy path will run on the freshly reseeded state; reviewer-induced reset is harmless demo data.

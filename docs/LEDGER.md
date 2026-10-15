@@ -132,3 +132,8 @@ done: Tasks 1-10 merged into integration | in progress: final review + QA happy 
 - Fix (1 dispatch, junior): 38aca08, live test opt-in via RUN_LIVE_SEED_TEST=1, README line; 93 tests (1 skipped), lint and typecheck green.
 - Ruling: scoped re-review skipped; orchestrator read the 2-line diff, it is exactly the finding — same reasoning as Task 6 — if wrong, a gate flag is mis-named (harmless).
 - Ruling: the QA happy path will run on the freshly reseeded state; reviewer-induced reset is harmless demo data.
+
+## Final QA (deployed URL, version 574f1c1d)
+- QA full happy path: PASS. All 25 MUST ACs pass; AC-15 and AC-21 PASS; AC-28 CONDITIONAL (cron in wrangler.toml, test passing; live email never seen, needs verified Resend domain, in README). lint, typecheck, test green; e2e happy-path passed on the deployed URL; demo reseeded (4/2/6).
+- Ruling: QA's untracked e2e/qa-acs.spec.ts not committed (unreviewed, scratch) — if wrong, extra e2e coverage is missing. Ruling: happy-path.webm re-recorded by QA committed (AC-26 evidence). Observation not ruled: one unreproduced flash of "No tienes entregas" on courier load.
+- Merging integration into dryrun/e2e (dry run, never main).

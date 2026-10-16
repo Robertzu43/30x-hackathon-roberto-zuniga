@@ -41,6 +41,12 @@ One data layer. Builders do not create D1 databases or R2 buckets; a task that n
    - Spend limit pauses the project when exceeded: set it in AWS Settings > Billing (USD 20 is plenty) and expect Access Denied to mean "limit hit" first.
 5. Cleanup after Demo Day: the toolkit rules ask whether to keep or delete resources; product writes the list in the ledger, Roberto decides.
 
+## SES (done 16 Oct, product email)
+- Region us-east-2, account plan FREE, SES sandbox: sends only to verified identities, 200/day, 1/s. Production access requested 16 Oct (review PENDING, AWS answers within 24h); check with `aws sesv2 get-account --profile 30x --region us-east-2` when signed in.
+- Identity: `HEARTBEAT_EMAIL` (Roberto verifies it from the AWS mail). Sender for OTP and escalations = that address until a domain is verified.
+- IAM user `thesaurus-ses`, inline policy `ses-send-only` (ses:SendEmail, ses:SendRawEmail, us-east-2). Its access key is in Worker secrets (`AWS_SES_ACCESS_KEY_ID`, `AWS_SES_SECRET_ACCESS_KEY`, `SES_FROM_EMAIL`) and, as SMTP credentials (user = key id, password = SigV4-derived), in Supabase auth config: host `email-smtp.us-east-2.amazonaws.com`, port 587, OTP length 6, expiry 600s, rate limit 30/h, magic-link and confirmation templates carry `{{ .Token }}`. Set through the Management API `PATCH /v1/projects/<ref>/config/auth`.
+- Worker sends with SigV4 over HTTPS (`aws4fetch` or hand-signed), never the AWS SDK. Resend remains the harness heartbeat channel only.
+
 ## Reference: Cloudflare-first, AWS optional
 | Need | Default (Cloudflare) | Optional (AWS) | Pick AWS only if |
 |---|---|---|---|

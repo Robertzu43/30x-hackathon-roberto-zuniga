@@ -7,11 +7,13 @@ unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN  # sandbox place
 command -v aws >/dev/null || { echo "aws: cli missing (scripts/cloud-setup.sh installs it)"; exit 1; }
 aws sts get-caller-identity --profile "$P" >/dev/null 2>&1 && { echo "aws: signed in ($P)"; exit 0; }
 aws configure set region "${AWS_REGION:-us-east-2}" --profile "$P"
-nohup aws login --profile "$P" --remote > /tmp/aws-login.txt 2>&1 &
+rm -f /tmp/aws-login-in; mkfifo /tmp/aws-login-in  # `aws login --remote` reads the browser code from stdin: keep it open, feed it with `echo <code> > /tmp/aws-login-in`
+( exec 3<>/tmp/aws-login-in; setsid nohup aws login --profile "$P" --remote <&3 > /tmp/aws-login.txt 2>&1 & )
 for _ in $(seq 1 15); do sleep 1; grep -qE 'https://[^[:space:]]+' /tmp/aws-login.txt && break; done
 URL=$(grep -oE 'https://[^[:space:]]+' /tmp/aws-login.txt | head -1)
 [ -z "$URL" ] && { echo "aws: login printed no URL: $(head -c 200 /tmp/aws-login.txt)"; exit 1; }
 bash scripts/heartbeat.sh "AWS LOGIN NEEDED: open this on your phone within 10 minutes: $URL
+Then paste the code the browser shows into the cloud session; the session runs: echo '<code>' > /tmp/aws-login-in
 AWS tasks are parked until then; everything else continues."
 echo "aws: LOGIN NEEDED, sign-in URL emailed"
 exit 0

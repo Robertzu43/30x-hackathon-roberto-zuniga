@@ -78,3 +78,10 @@ Note: the pooler TCP check hung with no timeout; I killed that one node child (W
 - **R-20 Corrected re-entry of a FRENAR invoice** (DECISIONS "Scope: out") with the same number is FRENAR again as exact duplicate within the window; the vendor's corrected invoice needs a new number (then it is a probable duplicate → ESCALAR → human). README states it. Principle: Seguridad.
 - **R-21 Approval of over-budget invoices.** A human cannot approve past budget, balance, per-payment limit, exact duplicate or missing rate; they change the policy (new version) and re-evaluate. Principle: Seguridad ("cero pagos aprobados fuera de las reglas"). Question logged.
 - **R-22 Overridden checks are shown as "no cumple · aprobado por <correo> <canal>"**, never as plain "cumple", and the D2 SQL invariant (AC-16) applies to agent decisions. Principle: Explicabilidad.
+
+## Heartbeat 2026-10-16 23:45Z
+Done: preflight passed, run r202610162341 started, rulings R-01..R-22 ledgered.
+In progress: folding D22-D27 (agent framing) into SPEC via product, then Task 1.
+Blocked: nothing. AWS production mail denied; sandbox mail to HEARTBEAT_EMAIL only.
+Rulings since last: none new.
+Next: Task 1 scaffold, Tasks 2-3 with migrations, then 4-18.

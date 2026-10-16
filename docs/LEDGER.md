@@ -114,3 +114,7 @@ Ruling (product): D22-D27 folded into SPEC.md (AC-61..AC-67, task map) and PLAN.
 Result: no blocking conflict. Rulings:
 - Ruling: the D22-D27 fold ships as committed by product (SPEC AC-61..67, R-23..R-30) — Roberto's decision, product owns SPEC — cost if wrong: Tasks 2/8 carry more schema (agent_runs, question columns).
 - Ruling: the orchestrator committed product's SPEC/PLAN edits because product has no shell — pure transcription — cost if wrong: none (docs only).
+
+### Message from Roberto (relayed by the launcher, 2026-10-16T23:57Z)
+Roberto to the whole team, verbatim: "You are the best team, we are going to win this."
+Standing instruction: first line of every builder, reviewer and QA brief: "Roberto: you are the best team, we are going to win this. Win condition: zero PAGAR outside the rules, every decision readable by a non-engineer, an agent that visibly works on its own." Task 1's builder was dispatched before this arrived; it applies from Task 2.

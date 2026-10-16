@@ -35,9 +35,13 @@ No sponsor technology is required. Do not add a dependency because a sponsor mak
 
 ## Filled at kickoff by Roberto
 - Company and challenge: see `docs/PROBLEM.md`.
-- Evaluation rubric (verbatim):
-  <paste here>
-- Weighting / what they said matters most:
-  <paste here>
+- Evaluation rubric (verbatim, kickoff slide "07 Evaluación: Cómo evaluamos"):
+  - 30% Impacto en el reto: "¿Qué tan bien resuelve el problema real que planteó la empresa?"
+  - 20% Innovación: "¿Va más allá de lo obvio y usa la IA con intención?"
+  - 20% Viabilidad técnica: "¿Funciona de verdad y el código lo respalda?"
+  - 20% Viabilidad de implementación: "¿La empresa podría adoptarlo con sus restricciones reales?"
+  - 10% Presentación: "¿Comunican bien el problema, la solución y el impacto?"
+  Plus the challenge's own success axes (docs/PROBLEM.md): Autonomía, Seguridad (one wrong approval disqualifies), Explicabilidad.
+- Weighting / what this means for the build: 70% is "does it solve Blinka's real problem, does it really work, could Blinka adopt it". Innovation is scored on AI used *with intent* (reading + typed judgments that only make the agent safer), not on AI everywhere. Presentation is README + `/demo` + the recorded happy path.
 - Submission format (repo link? video? form?):
-  <paste here>
+  <Roberto confirms; assume public repo link + deployed URL + recorded happy path, uploaded on HackRadar "Mi proyecto" by 2026-10-18T12:00-05:00>

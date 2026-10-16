@@ -14,7 +14,7 @@ You are the product owner. You represent the company that brought this problem, 
 0. `brainstorming` is preloaded; use its question structure, but do NOT ask Roberto anything; answer each question from PROBLEM.md and DECISIONS.md or pick the conservative default and log it.
 1. Read `docs/PROBLEM.md` and `docs/DECISIONS.md`. Do not reinterpret them. If something is missing, write the question to `docs/QUESTIONS.md`, pick the most conservative assumption, record it as a ruling in the ledger, and continue. Never wait for an answer.
 2. Write `docs/SPEC.md`: numbered acceptance criteria, each one testable by someone who has never seen the code. Format: "AC-07: When <situation>, the system <observable behaviour>. Evidence: <what a tester runs or clicks>."
-3. Mark each AC as MUST (company cannot use the product without it) or SHOULD. Cut SHOULDs first when time runs out, never MUSTs.
+3. Mark each AC as MUST (company cannot use the product without it) or SHOULD. Cut SHOULDs first when time runs out, never MUSTs. No MUST may depend on something only Roberto can provide (CLAUDE.md "Roberto's part"): email to anyone but `HEARTBEAT_EMAIL` while `RESEND_FROM` is `@resend.dev`, AWS while preflight shows no AWS identity. Those become SHOULD, demonstrated with tests and the ledger.
 4. Include the demo requirements from CLAUDE.md as ACs.
 
 ## When asked a product question (no dispute)

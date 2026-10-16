@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Deterministic clock and run health for the launcher and orchestrator.
 
-Reads docs/CONTEXT.md (DEADLINE: line), docs/LEDGER.md and the task/* branches, prints:
-PHASE, DEADLINE, HOURS_LEFT, HEARTBEAT_DUE, RUN_COMPLETE, UNLEDGERED. Stdlib only.
+Reads docs/CONTEXT.md (DEADLINE: and RUN: lines), docs/LEDGER.md and this run's <RUN>/task/* branches, prints:
+PHASE, DEADLINE, HOURS_LEFT, HEARTBEAT_DUE, RUN_COMPLETE, UNLEDGERED, RUN. Stdlib only.
 """
 import re
 import subprocess
@@ -29,6 +29,11 @@ def parse_deadline(context_text: str) -> tuple[datetime, str]:
         return _iso(DEFAULT_DEADLINE), "invalid"
 
 
+def parse_run(context_text: str) -> str | None:
+    m = re.search(r"^RUN:\s*([A-Za-z0-9._-]+)", context_text, re.M)
+    return m.group(1) if m else None
+
+
 def last_heartbeat(ledger_text: str) -> datetime | None:
     stamps = re.findall(r"^## Heartbeat (\d{4}-\d{2}-\d{2} \d{2}:\d{2})Z", ledger_text, re.M)
     return datetime.fromisoformat(stamps[-1]).replace(tzinfo=timezone.utc) if stamps else None
@@ -50,8 +55,10 @@ def report(now: datetime, context_text: str, ledger_text: str, branches: list[st
     }
 
 
-def _branches() -> list[str]:
-    out = subprocess.run(["git", "for-each-ref", "--format=%(refname:short)", "refs/heads/task", "refs/remotes/origin/task"],
+def _branches(run: str | None) -> list[str]:
+    if not run:
+        return []
+    out = subprocess.run(["git", "for-each-ref", "--format=%(refname:short)", f"refs/heads/{run}/task", f"refs/remotes/origin/{run}/task"],
                          capture_output=True, text=True).stdout
     return [b.removeprefix("origin/") for b in out.split()]
 
@@ -60,7 +67,8 @@ def main() -> None:
     top = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True).stdout.strip()
     root = Path(top or ".")
     read = lambda p: (root / p).read_text() if (root / p).exists() else ""
-    r = report(datetime.now(timezone.utc), read("docs/CONTEXT.md"), read("docs/LEDGER.md"), _branches())
+    run = parse_run(read("docs/CONTEXT.md"))
+    r = report(datetime.now(timezone.utc), read("docs/CONTEXT.md"), read("docs/LEDGER.md"), _branches(run))
     yn = lambda b: "yes" if b else "no"
     print(f"PHASE {r['phase']}")
     print(f"DEADLINE {r['deadline']:%Y-%m-%dT%H:%MZ} ({r['deadline_source']})")
@@ -68,6 +76,7 @@ def main() -> None:
     print(f"HEARTBEAT_DUE {yn(r['heartbeat_due'])}")
     print(f"RUN_COMPLETE {yn(r['run_complete'])}")
     print(f"UNLEDGERED {' '.join(r['unledgered']) or 'none'}")
+    print(f"RUN {run or 'none'}")
 
 
 if __name__ == "__main__":

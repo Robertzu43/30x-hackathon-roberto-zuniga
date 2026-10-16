@@ -43,5 +43,7 @@ No sponsor technology is required. Do not add a dependency because a sponsor mak
   - 10% Presentación: "¿Comunican bien el problema, la solución y el impacto?"
   Plus the challenge's own success axes (docs/PROBLEM.md): Autonomía, Seguridad (one wrong approval disqualifies), Explicabilidad.
 - Weighting / what this means for the build: 70% is "does it solve Blinka's real problem, does it really work, could Blinka adopt it". Innovation is scored on AI used *with intent* (reading + typed judgments that only make the agent safer), not on AI everywhere. Presentation is README + `/demo` + the recorded happy path.
-- Submission format (repo link? video? form?):
-  <Roberto confirms; assume public repo link + deployed URL + recorded happy path, uploaded on HackRadar "Mi proyecto" by 2026-10-18T12:00-05:00>
+- Submission format (HackRadar "Mi proyecto" form, Roberto fills it from the phone before 2026-10-18T12:00-05:00):
+  - "Identidad del proyecto": Nombre del proyecto, Reto que resuelve (dropdown), Descripción (max 5000 characters) "que verá el jurado".
+  - "Entregables", three links, all OBLIGATORIO: "Repositorio público de GitHub" (README must explain the app, its flows and its architecture), "Video demo (URL)", "Demo (URL)".
+  - What the agents produce so Roberto only pastes: `docs/SUBMISSION.md` with the project name, the description text (<= 5000 chars, Spanish, written for the jury), the deployed URL, and the video: the recorded happy path is saved as a video file (Playwright recording) and published at a public URL the agents control (Supabase Storage public object or the Worker's static assets) so the "Video demo (URL)" field never depends on a YouTube upload. Roberto may re-upload it to YouTube/Loom if he prefers.

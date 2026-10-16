@@ -11,7 +11,7 @@
 - 16 Oct: kickoff. Challenges, evaluation criteria and itinerary are shared here, not before.
 - 18 Oct: deadline to upload the project. Roberto writes the exact time on the next line at kickoff; until then agents assume 2026-10-18T12:00-05:00.
 DEADLINE: 2026-10-18T12:00-05:00
-RUN: <set by the launcher on a fresh start, e.g. r202610161900; names this run's branch namespace>
+RUN: r202610162341
 - 19-20 Oct: Demo Day in front of the companies. The company decides.
 - 21 Oct: winners announced.
 

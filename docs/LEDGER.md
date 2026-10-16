@@ -96,3 +96,21 @@ Ruling (product): D22-D27 folded into SPEC.md (AC-61..AC-67, task map) and PLAN.
 - **R-28 Language and source of the question.** D25 says Spanish; D14 says emails are Spanish only and record sentences are bilingual (AC-28). Ruling: the question is generated once at decision time in es and en and stored with the decision; the email always uses the Spanish text; the dashboard card shows the text in the UI language, and in Spanish it is identical to the email's. Principle: completeness (bilingual record) and evidence ("the same text").
 - **R-29 "Lo que hice" is built only from what was recorded.** "Generated from the actual run" means the trace is rendered from the stored decision (`checks[].values`, `payment`, stored question), the invoice, the company's `is_demo` flag and the recorded send result, never from the current directory or policy (a later edit must not rewrite history). Therefore the checks store the snapshot the trace needs (agreement type/amount/periodicity, last 4 digits of the invoice's and the directory's account) and the send result is recorded once (`approval_tokens.email_sent`, `sent_to`, inserted after the send attempt); the trace never says "envié" for a failed send. Principle: evidence, Explicabilidad.
 - **R-30 The pitch line and JEV's real status (D27 vs "claims need evidence").** JEV is SHOULD (S2) behind `JEV_ENABLED`, off by default; it may never be built. Ruling: the pitch line appears verbatim as Roberto wrote it, and README and `/demo` state next to it, truthfully, JEV's status ("JEV, la intuición rápida, es una capa opcional; en esta demo está apagada" or "encendida"), from `JEV_ENABLED` and whether S2 shipped. Principle: evidence.
+
+### Pre-flight plan scan (after the D22-D27 fold, commit e606274)
+| Pair / task | Produces vs consumes | Finding |
+|---|---|---|
+| 1 -> all | `Env`, `t()`, `api()`, `src/index.ts` default export | Task 8 now exports `{ fetch, scheduled }` from `src/index.ts`; Task 1 test imports default `app` (Hono): Task 8 must keep `app` as a named/default export used by tests. Carried to Task 8 dispatch. |
+| 2 <-> 3 | `seed_company` stub vs real; decisions/agent_runs columns | Consistent. Task 3 seed must work with new Task 2 columns (`question_*`) null for seed-replayed decisions; seed decisions are computed by the engine at seed time. |
+| 2 <-> 8, 9 | `insert_decision(p_expected_seq)` + `ALREADY_DECIDED` | Task 8 and 9 both pass `p_expected_seq` (PLAN says so). OK. RLS count in schema test is 9 (updated by product). |
+| 4 <-> 5 | check `values` snapshot vs `agentTrace()` | Task 4 stores trace values (R-29); Task 5 reads them. OK. |
+| 5/6 <-> 8, 13 | `agentTrace`, `escalationQuestion` in `src/agent/` | Consumed by Task 8 detail endpoint and Task 13 UI. OK. |
+| 7 <-> 8 | `extractFields` consumed by invoices route | OK. |
+| 8 <-> 9 | `src/lib/admin.ts` created in 8, used in 9 | PLAN Task 9 says "uses admin.ts created in Task 8". OK (formerly a conflict, fixed by product). |
+| 8 <-> 10 | `runAgent` signature (companyId, trigger) | Task 10 calls `runAgent('pending')`; Task 8 changed the signature. Ruling: Task 10 builder follows the Task 8 signature (read src/agent/loop.ts). Carried to Task 10 dispatch. |
+| 11 <-> 12 <-> 13 | `data-tour` anchors | Task 11 steps need anchors from 12/13/14/15 that do not exist yet: tour test uses mocked DOM; anchors added by 12-15 (their text says so). OK. |
+| 17 <-> 10 | seed-demo-user after deploy | Orchestrator-run, per launcher facts. OK. |
+| Task texts self-consistent | each task | 1-18, S1-S6 checked: tests match files; no task contradicts Global Constraints. Global Constraints still says D1-D21 and `src/services`-era names in places: cosmetic, rulings R-01..R-30 win. |
+Result: no blocking conflict. Rulings:
+- Ruling: the D22-D27 fold ships as committed by product (SPEC AC-61..67, R-23..R-30) — Roberto's decision, product owns SPEC — cost if wrong: Tasks 2/8 carry more schema (agent_runs, question columns).
+- Ruling: the orchestrator committed product's SPEC/PLAN edits because product has no shell — pure transcription — cost if wrong: none (docs only).

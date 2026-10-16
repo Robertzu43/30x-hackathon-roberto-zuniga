@@ -53,6 +53,9 @@ Cost of the dry run so far: about 17.50 USD across the two launcher sessions.
 - RESUME is a ledger line `RESUMED at <task> <time>`, not a heartbeat line (heartbeats moved to the launcher).
 - Worktrees live in `.worktrees/` (gitignored) and are removed after merge (the run had used two locations).
 - Per-task QA runs against `wrangler dev` before the first deploy; the final happy path always against the deployed URL.
+- The ledger is shared across runs, so each run starts with a `## Run <RUN> started` line and `scripts/run_status.py` only counts what follows it (an earlier `RUN COMPLETE` would have deleted the new run's watchdog).
+- The launcher creates and pushes `<RUN>/integration` at the fresh start, so a lost `RUN:` pointer is recovered from the newest unfinished `r*/integration` on origin.
+- Seeds are upsert-only and nothing deletes rows or users; QA uses unique per-run emails and a gitignored work folder, and never retries a refused command.
 - Cloud sessions cannot delete GitHub branches (proxy 403) and the safety check refuses destructive SQL. So each run works under its own `<RUN>/` branch namespace, migrations are forward-only and additive, and a run never reuses a table name: no run ever needs a delete, and Roberto never has to clean up.
 - `scripts/run_status.py` works from any folder and reports a mistyped deadline as `(invalid)`.
 - Per-task QA tests the task's own worktree through `scripts/qa-server.sh` (gitignored mode-600 `.dev.vars`, bounded start, stop deletes it); the deployed URL is only for the final happy path.

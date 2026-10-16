@@ -1,3 +1,5 @@
+> **SUPERSEDED (16 Oct 2026).** Executed and then replaced by later changes: branches are now `<RUN>/integration` and `<RUN>/task/*`, nothing is ever deleted, LEFTOVER RUN and archive-run.sh are gone. CLAUDE.md, `.claude/agents/` and `docs/DRY-RUN.md` are the current rules; do not follow this file.
+
 # Harness Hardening Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

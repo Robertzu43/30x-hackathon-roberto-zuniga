@@ -41,6 +41,10 @@ def last_heartbeat(ledger_text: str) -> datetime | None:
 
 def report(now: datetime, context_text: str, ledger_text: str, branches: list[str]) -> dict:
     deadline, source = parse_deadline(context_text)
+    run = parse_run(context_text)
+    if run:  # only this run's part of the ledger counts: from its "## Run <RUN> started" marker on
+        starts = list(re.finditer(rf"^## Run {re.escape(run)} started.*$", ledger_text, re.M))
+        ledger_text = ledger_text[starts[-1].end():] if starts else ""
     left = (deadline - now).total_seconds() / 3600
     phase = "OVER" if left <= 0 else "SHUTDOWN" if left <= SHUTDOWN_H else "FREEZE" if left <= FREEZE_H else "BUILD"
     beat = last_heartbeat(ledger_text)

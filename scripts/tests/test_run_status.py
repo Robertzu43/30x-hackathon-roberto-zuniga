@@ -33,6 +33,15 @@ class RunStatus(unittest.TestCase):
             out = subprocess.run(["python3", str(script)], cwd=f"{d}/docs/sub", capture_output=True, text=True).stdout
         self.assertIn("DEADLINE 2030-01-01T05:00Z (set)", out)
 
+    def test_previous_runs_ledger_is_ignored(self):
+        ctx = CTX + "RUN: r2\n"
+        old = "## Heartbeat 2026-10-16 10:00Z\nRUN COMPLETE 2026-10-16T09:00Z\n"
+        r = report(Z("2026-10-16T11:00Z"), ctx, old + "## Run r2 started 2026-10-16T10:30Z\n", [])
+        self.assertFalse(r["run_complete"])
+        self.assertTrue(r["heartbeat_due"])
+        r = report(Z("2026-10-16T11:00Z"), ctx, old, [])  # marker not written yet: nothing of r2 has happened
+        self.assertFalse(r["run_complete"])
+
     def test_cli_scopes_branches_to_this_run(self):
         import subprocess, tempfile
         script = Path(__file__).resolve().parents[1] / "run_status.py"

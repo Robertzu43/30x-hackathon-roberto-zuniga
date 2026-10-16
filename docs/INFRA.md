@@ -20,12 +20,12 @@ One data layer. Builders do not create D1 databases or R2 buckets; a task that n
 5. Storage: bucket `files`, private, comes from migration `supabase/migrations/20261015000000_files_bucket.sql` (`bash scripts/db-push.sh`). Access via signed URLs from the Worker.
 
 ### How agents use it
-- Schema lives in `supabase/migrations/*.sql`, applied with `bash scripts/db-push.sh`: Supabase Management API over HTTPS, needs only the access token and project ref, works from the cloud sandbox where Postgres ports are closed, and records versions in `supabase_migrations.schema_migrations` so the CLI agrees. `supabase migration new <name>` still creates the files. Every migration ships with a `-- down` comment block. No schema changes through the dashboard.
+- Schema lives in `supabase/migrations/*.sql`, applied with `bash scripts/db-push.sh`: Supabase Management API over HTTPS, needs only the access token and project ref, works from the cloud sandbox where Postgres ports are closed, and records versions in `supabase_migrations.schema_migrations` so the CLI agrees. `supabase migration new <name>` still creates the files. Migrations are forward-only and additive; no down blocks, no destructive SQL (CLAUDE.md). No schema changes through the dashboard.
 - Row Level Security ON for every table from the first migration. The anon key is public by design (and the repo is public), so RLS is the only thing between the internet and the data. Reviewer treats a table without RLS as a finding at 100.
 - Worker talks to Supabase with `@supabase/supabase-js` using the service_role key from `wrangler secret`, applying its own authorization checks, or with the user's JWT forwarded from the client when RLS should decide. Pick one per endpoint and say which in the code.
 - Direct SQL from the Worker (if needed for reports): `postgres` package over the pooler URL. Not both ORMs; supabase-js first.
-- Tests: Vitest against a local `supabase start` (Docker) when available; otherwise against the hosted project with a `test_` schema that migrations create and QA truncates. Say which in the report.
-- Seed for `/demo`: `supabase/seed.sql`, idempotent, Spanish data, run by `scripts/seed.sh`.
+- Tests: Vitest against a local `supabase start` (Docker) when available; otherwise unit tests mock Supabase and live tests are opt-in, using unique ids and upserts, never deletes. Say which in the report.
+- Seed for `/demo`: upsert-only (`insert ... on conflict do update`), Spanish data, run with `npm run seed`; re-running it is the reset.
 
 ### Secrets
 `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`, `SUPABASE_ACCESS_TOKEN` are secrets: session env + `wrangler secret put`. `SUPABASE_URL` and `SUPABASE_ANON_KEY` are public config and may go in `wrangler.toml [vars]` and client code.
@@ -90,7 +90,7 @@ The orchestrator must outlive Roberto's laptop, so the hackathon runs in a Claud
 5. The launcher's hourly `30x-watchdog` Routine wakes the session (also in a fresh container) and restarts the orchestrator with RESUME; proven in the 15 Oct dry run. If the session itself is gone, start a new cloud session with the word RESUME (below).
 
 ## Session resilience
-Cloud sessions can time out or hit limits. Everything that matters is on disk and in git: plan, spec, ledger, task branches. A new session resumes by reading `docs/LEDGER.md` and dispatching the orchestrator with "RESUME". Roberto's job when a session dies: start a new one with that one word.
+Cloud sessions can time out or hit limits. Everything that matters is on disk and in git: plan, spec, ledger, task branches. A new session resumes by reading `docs/LEDGER.md` and dispatching the orchestrator with "RESUME". The launcher's watchdog revives a reclaimed container; only a session that is gone for good needs a new cloud session started with RESUME (CLAUDE.md "Roberto's part").
 
 ## Standby integrations (not installed; enable at kickoff only if the challenge needs them)
 - WhatsApp: LATAM operations run on it. Meta's API needs business verification (days). Twilio WhatsApp Sandbox works immediately for numbers that join the sandbox: good enough for a demo, say so in README. `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`.

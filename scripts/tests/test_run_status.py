@@ -33,6 +33,27 @@ class RunStatus(unittest.TestCase):
             out = subprocess.run(["python3", str(script)], cwd=f"{d}/docs/sub", capture_output=True, text=True).stdout
         self.assertIn("DEADLINE 2030-01-01T05:00Z (set)", out)
 
+    def test_previous_runs_ledger_is_ignored(self):
+        ctx = CTX + "RUN: r2\n"
+        old = "## Heartbeat 2026-10-16 10:00Z\nRUN COMPLETE 2026-10-16T09:00Z\n"
+        r = report(Z("2026-10-16T11:00Z"), ctx, old + "## Run r2 started 2026-10-16T10:30Z\n", [])
+        self.assertFalse(r["run_complete"])
+        self.assertTrue(r["heartbeat_due"])
+        r = report(Z("2026-10-16T11:00Z"), ctx, old, [])  # marker not written yet: nothing of r2 has happened
+        self.assertFalse(r["run_complete"])
+
+    def test_cli_scopes_branches_to_this_run(self):
+        import subprocess, tempfile
+        script = Path(__file__).resolve().parents[1] / "run_status.py"
+        with tempfile.TemporaryDirectory() as d:
+            g = lambda *a: subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", *a], cwd=d, check=True, capture_output=True)
+            g("init", "-q"); Path(f"{d}/docs").mkdir()
+            Path(f"{d}/docs/CONTEXT.md").write_text("RUN: r1\n"); Path(f"{d}/docs/LEDGER.md").write_text("")
+            g("add", "-A"); g("commit", "-qm", "x"); g("branch", "r1/task/1-a"); g("branch", "task/9-old"); g("branch", "r0/task/1-z")
+            out = subprocess.run(["python3", str(script)], cwd=d, capture_output=True, text=True).stdout
+        self.assertIn("UNLEDGERED r1/task/1-a\n", out)
+        self.assertIn("RUN r1", out)
+
     def test_naive_deadline_is_bogota(self):
         self.assertEqual(parse_deadline("DEADLINE: 2026-10-18 18:00"), (Z("2026-10-18T23:00Z"), "set"))
 

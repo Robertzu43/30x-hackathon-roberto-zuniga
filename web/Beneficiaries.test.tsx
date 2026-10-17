@@ -1,6 +1,7 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
-import Beneficiaries, { route } from './pages/Beneficiaries';
+import { routes } from './App';
+import Beneficiaries from './pages/Beneficiaries';
 import { mockApi, renderAt } from './test/utils';
 
 const laura = {
@@ -14,13 +15,14 @@ const submit = () => fireEvent.click(screen.getByRole('button', { name: 'Guardar
 const calls = (f: ReturnType<typeof mockApi>, method: string, path: string) => f.mock.calls.filter(([u, i]) => u === path && (i?.method ?? 'GET') === method);
 
 function setup(extra: Record<string, unknown> = {}) {
-  const f = mockApi({ 'GET /api/beneficiaries': [laura], ...extra });
+  const f = mockApi({ 'GET /api/screen/beneficiaries': { beneficiaries: [laura] }, ...extra }); // AC-98
   const view = renderAt(<Beneficiaries />);
   return { f, view };
 }
 
 test('/beneficiaries is in the nav after Política, with its tour anchor present before data loads', () => {
-  expect(route).toEqual({ path: '/beneficiaries', nav: { key: 'screen.beneficiaries', order: 30 } });
+  expect(routes.filter((r) => r.nav).map((r) => r.path)).toEqual(['/', '/policy', '/beneficiaries', '/period']);
+  expect(routes.find((r) => r.path === '/beneficiaries')?.nav).toBe('screen.beneficiaries');
   const { view } = setup();
   expect(view.container.querySelector('[data-tour="beneficiaries"]')).toBeTruthy();
 });
@@ -37,7 +39,7 @@ test('lists the directory with route and agreement, and offers the seven Blinka 
 test('the form creates a beneficiary: POST with the typed data, list reloaded, link to Reevaluar (AC-33)', async () => {
   let gets = 0;
   const { f } = setup({
-    'GET /api/beneficiaries': () => (++gets === 1 ? [laura] : [laura, { ...laura, id: 'b2', name: 'Pixel Lab' }]),
+    'GET /api/screen/beneficiaries': () => ({ beneficiaries: ++gets === 1 ? [laura] : [laura, { ...laura, id: 'b2', name: 'Pixel Lab' }] }),
     'POST /api/beneficiaries': (init: RequestInit) => ({ id: 'b2', ...body(init) }),
   });
   await screen.findByText('Laura Méndez');
@@ -98,8 +100,9 @@ test('Editar loads a row into the form, keeps a route outside the list, and save
 });
 
 test('an empty directory says what to do next, and the button takes you to the form (UX-14)', async () => {
-  setup({ 'GET /api/beneficiaries': [] });
+  setup({ 'GET /api/screen/beneficiaries': { beneficiaries: [] } });
   expect(await screen.findByText('Todavía no hay beneficiarios. Agrega el primero con el formulario de abajo.')).toBeTruthy();
+  expect(screen.queryByRole('table')).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Agregar beneficiario' }));
   expect(document.activeElement).toBe(screen.getByLabelText('Nombre'));
 });
@@ -139,4 +142,21 @@ test('the directory table scroll region is reachable by keyboard and named (UX-2
   const region = await screen.findByRole('region', { name: 'Directorio de beneficiarios' });
   expect(region.tabIndex).toBe(0);
   expect(within(region).getByRole('table')).toBeTruthy();
+});
+
+// AC-99 (R-109): while the directory loads, the table is drawn with placeholder rows in the loaded markup, hidden.
+test('while loading, the directory table is a skeleton with the loaded markup', () => {
+  const { view } = setup({ 'GET /api/screen/beneficiaries': () => new Promise(() => {}) });
+  const table = view.container.querySelector('.skeleton') as HTMLElement;
+  expect(table.tagName).toBe('TABLE');
+  expect(table.getAttribute('aria-hidden')).toBe('true');
+  expect(table.hasAttribute('inert')).toBe(true);
+  expect(table.querySelectorAll('tbody tr').length).toBeGreaterThan(0);
+  expect(screen.getByRole('status').textContent).toBe('Cargando…');
+});
+
+test('a failed load says so; the skeleton goes away', async () => {
+  const { view } = setup({ 'GET /api/screen/beneficiaries': json({ error: 'boom' }, 500) });
+  expect((await screen.findByRole('alert')).textContent).toBe('No pude cargar los beneficiarios. Recarga la página.');
+  expect(view.container.querySelector('.skeleton')).toBeNull();
 });

@@ -1,6 +1,6 @@
 // In-memory stand-in for the supabase-js client: only the calls src/agent makes. Never the real Supabase in unit tests.
 // `invoice_current`, `insert_decision` and `period_state` mirror migrations 000200/000250 (lock aside); the screen_* functions
-// mirror migration 001000 (AC-98), run as the caller's auth.uid() (rpc's third argument).
+// mirror migrations 001000 (AC-98) and 001100 (D39), run as the caller's auth.uid() (rpc's third argument).
 import { bogotaDay } from '../../engine/checks';
 import { round2 } from '../../lib/money';
 import type { Budget } from '../../lib/supabase';
@@ -31,7 +31,7 @@ export function fakeDb(seed: Record<string, Row[]> = {}) {
     return { ...i, decision_id: d?.id ?? null, seq: d?.seq ?? null, outcome: d?.outcome ?? null, amount_usd: d?.amount_usd ?? null, payment: d?.payment ?? null,
       // the view's remaining columns (migration 000200)
       actor: d?.actor ?? null, headline_es: d?.headline_es ?? null, headline_en: d?.headline_en ?? null,
-      question_es: d?.question_es ?? null, question_en: d?.question_en ?? null, policy_version: d?.policy_version ?? null };
+      question_es: d?.question_es ?? null, question_en: d?.question_en ?? null, policy_version: d?.policy_version ?? null, decided_at: d?.created_at ?? null };
   });
   const sums = (companyId: unknown, m: string, exclude: unknown) => {
     const rows = current().filter((c) => c.company_id === companyId && c.id !== exclude && c.outcome && month(c.received_at) === m);
@@ -51,6 +51,7 @@ export function fakeDb(seed: Record<string, Row[]> = {}) {
       sorted(tables.agent_runs!.filter((r) => r.company_id === c || (r.company_id ?? null) === null), '-created_at')[0]),
     portal_slug: tables.companies!.find((x) => x.id === c)?.portal_slug ?? null,
     beneficiaries: sorted(directory(c), 'name').map((b) => ({ id: b.id, name: b.name })),
+    period: period(c), // 001100: the rows AC-101's dashboard is computed from
   });
   const period = (c: unknown) => ({
     current: sorted(current().filter((r) => r.company_id === c), 'received_at', 'id')
@@ -59,12 +60,13 @@ export function fakeDb(seed: Record<string, Row[]> = {}) {
     policy: ((p) => (p ? { version: p.version, rules: p.rules } : null))(sorted(tables.policies!.filter((p) => p.company_id === c), '-version')[0]),
     seeded: tables.invoices!.filter((i) => i.company_id === c && !i.archived && i.expected_outcome != null).map((i) => ({ id: i.id, expected_outcome: i.expected_outcome })),
     decisions: sorted(tables.decisions!.filter((d) => d.company_id === c), 'seq')
-      .map((d) => ({ invoice_id: d.invoice_id, seq: d.seq, outcome: d.outcome, actor: d.actor, checks: d.checks ?? null })),
+      .map((d) => ({ invoice_id: d.invoice_id, seq: d.seq, outcome: d.outcome, actor: d.actor, checks: d.checks ?? null, created_at: d.created_at ?? null })),
   });
   const screens: Record<string, (a: Row, c: unknown) => unknown> = {
     screen_inbox: inbox,
     screen_period: (_a, c) => period(c),
     screen_beneficiaries: (_a, c) => ({ beneficiaries: sorted(directory(c), 'name') }),
+    screen_beneficiary: (a, c) => ((b) => (b ? { beneficiary: b, period: period(c) } : null))(directory(c).find((b) => b.id === a.p_id)),
     screen_policy: (_a, c) => ({
       versions: sorted(tables.policies!.filter((p) => p.company_id === c), '-version'),
       company: ((co) => co && Object.fromEntries(['id', 'name', 'approver_email', 'lang', 'is_demo', 'is_trial'].filter((k) => k in co).map((k) => [k, co[k]])))(

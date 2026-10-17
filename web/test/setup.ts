@@ -1,5 +1,6 @@
 import { cleanup, configure } from '@testing-library/react';
 import { afterEach, beforeEach, vi } from 'vitest';
+import { dropCache } from '../api';
 import { mockApi } from './utils';
 import { resetFakeAuth } from './supabase';
 
@@ -22,4 +23,5 @@ afterEach(() => {
   vi.restoreAllMocks(); // spies only (vi.spyOn)
   localStorage.clear();
   sessionStorage.clear();
+  dropCache(); // AC-100's per-tab cache would carry one test's answers into the next
 });

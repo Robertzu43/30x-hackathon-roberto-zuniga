@@ -25,10 +25,11 @@ test('Bandeja: payee option, sender and pending payee are marked; headline, orig
   signedInAs('ana@empresa.co');
   const row = (id: string, outcome: string | null, payee: string | null, headline: string | null, extra = {}) =>
     ({ id, outcome, headline, received_at: '2026-10-10T15:00:00Z', fields: { payee_name: payee }, ...extra });
-  mockApi({
-    'GET /api/invoices': [row('a1', 'PAGAR', 'Nubia Diseño', 'PAGAR · 1.200 USD a Nubia Diseño, dentro de reglas', { origin: 'email', sender: 'cobros@nubia.co' }),
+  mockApi({ // AC-98: one screen request
+    'GET /api/screen/inbox?lang=es': { invoices: [row('a1', 'PAGAR', 'Nubia Diseño', 'PAGAR · 1.200 USD a Nubia Diseño, dentro de reglas', { origin: 'email', sender: 'cobros@nubia.co' }),
       row('c3', null, 'Kodex Labs', null)],
-    'GET /api/agent/last-run': null, 'GET /api/portal-link': { portal_url: 'https://p.example/andina', email_address: 'in@andina.example' }, 'GET /api/agent/activity': { items: [] },
+    last_run: null, portal: { portal_url: 'https://p.example/andina', email_address: 'in@andina.example' }, beneficiaries: [], dashboard: null },
+    'GET /api/agent/activity': { items: [] },
   });
   const { container } = renderAt(<Inbox />);
   await screen.findByText(/dentro de reglas/);
@@ -88,9 +89,9 @@ test('Detalle: sender note, stored text, read values and snippets, payee and pol
 test('Política: version names are marked, version labels and market rates are not', async () => {
   const rules = { per_payment_limit_usd: 5000, approval_threshold_usd: 2500, period_budget_usd: 42000, account_balance_usd: 23000, duplicate_window_days: 30,
     agreement_tolerance_pct: 5, due_grace_days: 3, fx_rates: { COP: 0.000245 }, allowed_beneficiaries_only: true };
-  mockApi({ 'GET /api/company': { id: 'c1', name: 'Andina Labs Inc.', approver_email: 'ana@andina.co', lang: 'es', is_demo: false },
-    'GET /api/policy': [{ id: 'p2', version: 2, name: 'Política general', rules, created_at: '2026-10-17T10:00:00Z' }],
-    'GET /api/fx': { rates: [{ currency: 'COP', usd_per_unit: 0.00024876, units_per_usd: 4020.1, source: 'Yahoo Finance', fetched_at: '2026-10-17T15:00:00Z', stale: false }] } });
+  const versions = [{ id: 'p2', version: 2, name: 'Política general', rules, created_at: '2026-10-17T10:00:00Z' }];
+  mockApi({ 'GET /api/screen/policy': { policy: versions[0], versions, company: { id: 'c1', name: 'Andina Labs Inc.', approver_email: 'ana@andina.co', lang: 'es', is_demo: false },
+    fx: { rates: [{ currency: 'COP', usd_per_unit: 0.00024876, units_per_usd: 4020.1, source: 'Yahoo Finance', fetched_at: '2026-10-17T15:00:00Z', stale: false }] } } });
   const { container } = renderAt(<Policy />);
   const name = await screen.findByText('Política general', { selector: 'strong' });
   expect(marked(name)).toBe(true);
@@ -100,8 +101,8 @@ test('Política: version names are marked, version labels and market rates are n
 });
 
 test('Beneficiarios: name and category cells are marked, the agreement summary and headings are not; the edit title marks only the name', async () => {
-  mockApi({ 'GET /api/beneficiaries': [{ id: 'b1', name: 'Laura Méndez', country: 'CO', currency: 'USD', bank_account: null, route: 'ACH', category: 'Desarrollo',
-    agreement: { type: 'retainer', amount_usd: 2500, period: 'monthly' } }] });
+  mockApi({ 'GET /api/screen/beneficiaries': { beneficiaries: [{ id: 'b1', name: 'Laura Méndez', country: 'CO', currency: 'USD', bank_account: null, route: 'ACH', category: 'Desarrollo',
+    agreement: { type: 'retainer', amount_usd: 2500, period: 'monthly' } }] } });
   const { container } = renderAt(<Beneficiaries />);
   const row = (await screen.findByText('Laura Méndez')).closest('tr')!;
   expect(marked(within(row).getByText('Laura Méndez'))).toBe(true);
@@ -117,9 +118,9 @@ test('Beneficiarios: name and category cells are marked, the agreement summary a
 
 test('Periodo: the beneficiary name is marked, «sin leer», money and counts are not', async () => {
   const month = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }).slice(0, 7);
-  mockApi({ [`GET /api/period?month=${month}`]: { month, budget_usd: 10000, balance_usd: 20000, paid_usd: 1500.5, committed_usd: 5700.5, available_usd: 4299.5,
+  mockApi({ [`GET /api/screen/period?month=${month}`]: { charts: null, period: { month, budget_usd: 10000, balance_usd: 20000, paid_usd: 1500.5, committed_usd: 5700.5, available_usd: 4299.5,
     count_by_outcome: { PAGAR: 3, FRENAR: 2, ESCALAR: 1 }, autonomy: { n: 18, m: 24 }, autonomy_pct: 75, violations: 0, explained_pct: 100,
-    by_beneficiary: [{ beneficiary: 'Nube Sur LLC', paid_usd: 0, committed_usd: 4200, count: 1 }, { beneficiary: null, paid_usd: 1500.5, committed_usd: 1500.5, count: 2 }] } });
+    by_beneficiary: [{ beneficiary: 'Nube Sur LLC', paid_usd: 0, committed_usd: 4200, count: 1 }, { beneficiary: null, paid_usd: 1500.5, committed_usd: 1500.5, count: 2 }] } } });
   const { container } = renderAt(<Period />, { at: '/period' });
   const rows = (await screen.findByText('Nube Sur LLC')).closest('tbody')!.querySelectorAll('tr');
   expect(marked(within(rows[0]!).getByText('Nube Sur LLC'))).toBe(true);

@@ -38,6 +38,7 @@ form + [role='alert'], form [role='status'] { margin: 0; }
 .versions li { display: flex; gap: 1rem; align-items: baseline; padding: 0.625rem 0; border-bottom: 1px solid var(--line); }
 .versions li:last-child { border-bottom: 0; }
 .versions li strong { flex: 1; font-weight: 500; }
+.versions + button { margin-top: 1rem; } /* UX-24 «Mostrar todas (N)» */
 
 table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
 th { text-align: left; font-weight: 500; color: var(--ink-2); }
@@ -65,6 +66,10 @@ tr:last-child td { border-bottom: 0; }
   .fx-table td:nth-child(2) { flex: 1 0 calc(100% - 4rem); color: var(--ink); }
   .fx-table td:nth-child(3) { display: none; } /* the same figure as the 1 USD = line */
   .fx-table td:nth-child(6) { flex-basis: 100%; }
+}
+
+@media (max-width: 640px) {
+  .switch input { width: 44px; height: 44px; margin: 0; flex-shrink: 0; } /* AC-91 item 2: a 44 x 44 tap target */
 }
 
 @media (prefers-reduced-motion: no-preference) {

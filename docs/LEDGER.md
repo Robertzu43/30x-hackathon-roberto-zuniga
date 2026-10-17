@@ -126,3 +126,6 @@ Standing instruction: first line of every builder, reviewer and QA brief: "Rober
 - QA verdict: PASS (health 200, JSON 404, es/en switch without reload, no gradients/shadows, 8 routes no console errors). Note: English tagline is translated; accepted.
 - Ruling: QA's untracked e2e/*.mjs scratch scripts moved out of the repo — they fail lint (browser globals) and the final QA writes the committed e2e tests — cost if wrong: none.
 - Merged into r202610162341/integration with full suite green (lint, typecheck, test, build). Merge commit e5d8329.
+
+## Orchestrator hand-back 2026-10-17T00:03Z
+Harness required a hand-back while Task 2 (r202610162341/task/2-schema, senior-builder opus, worktree .worktrees/r202610162341/task/2-schema, base a10ac5c) was mid-build. Task 1 done and merged. RUN NOT COMPLETE: launcher must dispatch RESUME; Task 2 next step is review (UNLEDGERED reconcile), then db-push, QA, merge.

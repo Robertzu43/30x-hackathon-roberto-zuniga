@@ -384,6 +384,12 @@ Trace: D28 ("the expected outcomes of the seed must still hold with market rates
 - The D38 gate (AC-91) on `policy`.
 - `grep -n "FxProvider" README.md` (Task 35).
 
+Clarified (R-108..R-111, Task 22 UX pass 2):
+- The pin fieldset's inputs never touch its border. At 360, 390, 768, 1024 and 1440 px, in es and en, and in the loaded, empty and error states, each pin input's right gap to the fieldset's inner border equals its left gap within 2 px (R-108).
+- While `/api/fx` loads, the market slot shows one placeholder row (≤ 768 px: one placeholder card) per currency the pin section lists. It uses the same row or card markup as the loaded table, so its height equals the loaded height by construction. It has no fixed `height` or `min-height`. The empty and error states take only their own height: the message, its next step and the «Reintentar» control. In all three states, the gap from the market slot's last element to the pin fieldset is the page's 40 px section gap (± 8 px), at 360 and 1440 (R-109).
+- The pin section lists currencies in the same order as the market table: alphabetical by code (ARS, BRL, COP, EUR, MXN, then any other policy currency in code order) (R-110).
+- The source sentence keeps its fixed wording in both languages, including the English «see README, section "Tasas de cambio"». The README is in Spanish, and that is its real heading (R-111).
+
 Trace: D28 ("the README and the Política screen say plainly…"). Rubric: V. implementación, Impacto. Tasks: 22, 35.
 
 ### D29 The AI is visible
@@ -916,6 +922,30 @@ Re-scope of Task 24's screens after UX pass 2 failed (product, 17 Oct; R-93 item
   - For a known value, 100 % confidence beside «No encontré…» is not a contradiction. It is the exact case AC-77 exists to expose: the model is sure and code cannot find the value in the text. Both stay, and the confidence is labelled «confianza de la IA» so the two sources read as two voices.
   - API, `snippet.ts` and their tests are untouched.
   - Principle: evidence (keep every true statement, drop the empty ones) and the company's actual user (an «ilegible» invoice reads in one line, not sixteen). Best argument for hiding the warning on known values (the brief's question): "100 % confianza with «No encontré…» right under it reads as contradictory".
+
+Re-scope of Task 22's `policy` screen after UX pass 2 failed (product, 17 Oct; R-93 item 3: simplify the screen, never lower the bar; MUST, no AC is cut):
+- **R-108 Pin inputs keep symmetric padding inside their fieldset at every width (AC-76 Clarified, AC-91 item 1).** This is a CSS defect, not a design question, and the rule is confirmed. The fix applies at any width, not just at the gate's widths:
+  - the grid column is `minmax(0, 1fr)`;
+  - the fieldset has `min-width: 0`, overriding the browser's `min-content` default, which is the cause;
+  - inputs are `width: 100%` with `box-sizing: border-box`.
+  The UX reviewer checks 360 es and en and the fx-empty and fx-error screens at 360. Principle: company's actual user (a field glued to its border reads as broken on the phone).
+- **R-109 The market slot reserves space by rendering placeholder rows, not a fixed height. Empty and error collapse to their content (AC-76 Clarified, AC-91 item 4).**
+  - D38 item 4 asks for "no layout jump when data arrives (reserved space)". A fixed pixel height guesses the populated size, and it guessed wrong at every width: 90 to 180 px of dead space on the happy path, 350 px in empty and error.
+  - Instead, while loading, render the real table or cards with one placeholder row per currency the pin section lists. The row count is known before the fetch, so the reserved height is the loaded height at every breakpoint and in both languages, with no constants to keep in sync.
+  - In empty and error no data arrives, so item 4's no-jump clause does not apply. The slot shrinks to the message, its next step and «Reintentar», and the pin section follows at the 40 px section gap. A void there tells the finance user the page is broken, which is worse than a one-time shift on a rare path.
+  - Option (b) was rejected. With the pin section above the table, the async table still pushes down the source sentence, «Guardar como versión», «Reevaluar pendientes» and «Versiones», so the shift moves instead of going away. It would also reverse AC-76's fixed order and put the editable section before the reference data it is read against.
+  - `policy`'s CLS ≤ 0.01 still has to pass on the default load.
+  Principle: company's actual user and evidence (height by construction, not by a measured guess). Loser's best argument (option b): "put the pin section above the market table so nothing moves".
+- **R-110 Pin order matches the market table: alphabetical by currency code (AC-76 Clarified).**
+  - The API already sorts by currency (AC-76 contract). The finance user reads a market rate and then pins the same currency, so both lists in the same order means no hunting.
+  - It also makes R-109's placeholder rows line up one-to-one with the loaded rows.
+  - `fx_rates` is an object, so the stored data is unaffected.
+  Principle: company's actual user. Loser's best argument (D28's listing): "COP, MXN, BRL, ARS, EUR is the order D28 names, with the company's home currency first".
+- **R-111 The English source sentence keeps «section "Tasas de cambio"» (AC-76 Clarified; no change).**
+  - The README is written in Spanish (every heading, for example «Cómo desplegarlo»), and Task 35 adds the heading «Tasas de cambio». A translated "Exchange rates" would point the reader to a heading that does not exist.
+  - The quoted name is a reference to a document title, not UI copy in the wrong language.
+  - The sentence is one text node, so AC-91 item 5's whole-node check is not triggered. If the gate flags it anyway, that is a gate false positive for the orchestrator to ledger. The copy does not change, and no exemption is added to the gate.
+  Principle: evidence (the pointer must resolve). Loser's best argument (the reviewer's nit): "an English screen quoting a Spanish section name mixes languages".
 
 ---
 

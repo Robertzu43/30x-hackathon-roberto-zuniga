@@ -590,3 +590,25 @@ DONE: MUST tasks 1-19 merged, deployed (1043 tests). IN PROGRESS: resumed; produ
 DONE: Tasks 20-27d merged (Bedrock primary live, market FX live, ask backend + reading_status, vendor portal facturas live, logo, UX gate harness, 22/24/26 UI). Deployed main 60f085be + portal 8ba27e4d. IN PROGRESS: Task 31 UX fixes, Task 29 Bandeja card/activity, Task 27d gate rules; email intake merged (inert until Roberto adds a domain). BLOCKED: nothing. RULINGS since last: R-96..R-114 from product (FX seed currencies, reading_status, English records, palette #6d6c69 + amber status, portal no language detection + Copiar enlace, tour/ask/panel simplification, gate semantics). NEXT: Task 32 UX B, gates 33/34, README (35), final review, video after 00:00Z, merge to main.
 - Task 31 builder attempt 2/2 (2ca7f91): withField.send sends X-Lang (the two other fetch sites, /api/demo/overview (public, 60 s cache, would be poisoned by a language header) and /api/config (no localized text), correctly left alone). Ruling: no second reviewer pass for Task 31's one-line fix — it is the reviewer-prescribed fix, covered by a test that failed first, and the full suite is green (1702) — cost if wrong: a header gap on a rarely used call, caught by the final review. Merged into integration with Task 35 (README + SUBMISSION delta, f3314e2: README sections «Dónde actúa la IA y dónde decide el código», «Tasas de cambio», «Portal de proveedores», «Facturas por correo», R-97 sentence, SES denial; SUBMISSION 4.649 characters; the builder's throw-away check passes; the GitHub repo URL still returns 404 because the repo is private: Roberto's submission step, AC-51). Integration suite 1702 passed, eslint and tsc clean.
 - Known README follow-up: the README says the Bandeja portal card, origin labels and activity panel (Task 29) are not in the code yet (`grep -rn "Comparte este enlace" web src`): it must be corrected when Task 29 merges. `scripts/worker-secrets.sh` does not push AWS_BEDROCK_* (the keys are already Worker secrets; the README tells the reader to `wrangler secret put` them): left as is.
+
+## Branch index (PLAN-D28 wave, full names; merged = merged into r202610162341/integration)
+- r202610162341/task/20-bedrock: merged (Task 20, reviewer PASS, QA CONDITIONAL closed, deployed D1)
+- r202610162341/task/21-fx: merged (Task 21, reviewer 2/2 PASS, QA PASS, deployed D2)
+- r202610162341/task/22-policy-fx: merged (Task 22, code review PASS, UX rounds 1-3 incl. product re-scope R-108..R-111)
+- r202610162341/task/23-ask-backend: merged (Task 23, reviewer PASS, deployed D4)
+- r202610162341/task/23b-reading-status: merged (Task 23b, R-97 API, reviewer PASS; merged with 23c)
+- r202610162341/task/23c-ask-fixes: merged (Task 23c, AC-67 Bandeja context + R-97 gaps, reviewer PASS)
+- r202610162341/task/24-ai-ui: merged (Task 24 + 24b, code review PASS, UX rounds 1-3 incl. product re-scope R-105..R-107)
+- r202610162341/task/25-portal: merged (Task 25, reviewer 2/2 PASS, deployed D5, QA run 1 FAIL on vendor UX/AC-63 display: see 25b, 29)
+- r202610162341/task/25b-portal-ux: merged (Task 25b, reviewer 2/2 PASS, deployed)
+- r202610162341/task/26-logo: merged (Task 26, code review PASS, UX pass 2 PASS)
+- r202610162341/task/27-ux-gate: merged (Task 27, reviewer 2/2 PASS)
+- r202610162341/task/27b-gate-fixes: merged (Task 27b, reviewer PASS)
+- r202610162341/task/27c-gate-portal: merged (Task 27c, reviewer PASS)
+- r202610162341/task/27d-gate-semantics: DONE 45b5207, reviewer pending (R-112..R-114 and vendor forced states)
+- r202610162341/task/28-uxqa: merged (Task 28 run 1, docs/UX-QA.md + docs/ux/qa)
+- r202610162341/task/29-inbox-activity: DONE 478aa36, reviewer pending (AC-86 card, origin labels, AC-63 via, AC-78 activity panel)
+- r202610162341/task/30-email: merged (Task 30, reviewer 2/2 PASS)
+- r202610162341/task/31-ux-a: merged (Task 31, reviewer 1/2 + one-line fix accepted by ruling)
+- r202610162341/task/35-readme: merged (Task 35, README + SUBMISSION delta; follow-up after Task 29)
+- Not task branches: r202610162341/gate-staging (throw-away staging for the D38 gate, merges of integration and UI branches), r202610162341/qa-25-scratch (QA checkout for the portal gate). Earlier branches of this run (7b..8i, 11c, 11d, 12, 16..19, test-stability, 1-scaffold ... 19-final-fixes) are merged per the entries above this wave.

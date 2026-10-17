@@ -408,3 +408,84 @@ AWS tasks are parked until then; everything else continues.
 
 ## Heartbeat 2026-10-17 12:40Z
 DONE: MUST tasks 1-19 merged and deployed (1043 tests), final review fixes in. IN PROGRESS: folding Roberto's D28-D35 (market FX, visible AI, vendor portal, brand, UX, email intake) into SPEC via product. BLOCKED: AWS login needed (only D35 live SES reply); Workers AI quota empty until 00:00Z. RULINGS: order D28/D29/D34 first, cut order D35 live > D30 polish > D29(c). NEXT: build D28/D29/D34 in parallel, UX QA, video after quota reset.
+
+## Resume 2026-10-17T13:07Z (orchestrator, D28-D38 execution)
+- Step 0 proof: subagent-driven-development heading "The Task Loop"; finishing-a-development-branch heading "Step 6: Cleanup Workspace".
+- RESUMED at D28-D38 (PLAN-D28) 2026-10-17T13:07Z. run_status: PHASE BUILD, HOURS_LEFT 27.9, UNLEDGERED none, RUN_COMPLETE no.
+- product folded D28-D38 (5cfaa7f): AC-73..AC-91, R-85..R-95, Q11..Q14, plan docs/PLAN-D28.md (Tasks 20-38). D36 Bedrock Nova Lite primary (keys in Worker secrets, tested by launcher 13:00Z), D37 brand, D38 UX gate.
+- R-85..R-95 copied verbatim from docs/SPEC.md (product rulings, Ruling (product)):
+  - **R-85 FX mechanics (AC-73, AC-74, AC-30, AC-18).**
+    1. The pin table is the existing `rules.fx_rates`, so no data is rewritten. Old workspaces keep their v1 table as pins, and their records truthfully say «tasa fijada por la política». The seed and "Reiniciar demo" write `{}`, so the demo uses market rates.
+    2. `usd_per_unit` = 1 / quote, rounded to 8 significant digits and printed in full. The conversion uses exactly the stored value, so the printed arithmetic always reproduces.
+    3. "Today" is the UTC day. Staleness is measured on `fetched_at`, not on Yahoo's market time. On a Monday morning COP's market time is Friday's close, about 67 h earlier, so measuring on market time would escalate every COP invoice on Demo Day although the rate is the market's latest.
+    4. The 25 % sanity band. A provider glitch that inflates units-per-USD 1000× would turn a 25.000.000 COP invoice into about 6 USD and pay it: a disqualifying PAGAR. The band's cost is an escalation after 48 h when a real move above 25 % happens (for example ARS).
+    5. The only writer is `record.ts` (AC-38), with provider output only. A member-callable writer would let the public demo password set the rate.
+    6. Reevaluar, the preview and approvals never fetch, so R-61's "the preview equals Reevaluar" still holds.
+    7. The cron is `0 11 * * *`. It covers the five currencies plus pinned ones.
+    8. An unknown `FX_PROVIDER` falls back to the default chain: the provider config is not the rate, and a typo must not stop FX on Monday.
+    Principle: Seguridad (a wrong rate is a wrong PAGAR) and company-can-deploy-Monday. Q11.
+  - **R-86 Seed robustness band ±20 % (AC-75).** Market rates move between today and Demo Day (19-20 Oct). The seed's outcomes and the R-35 margin (22.702,21 against 23.000) must not flip on stage. Testing the 32 corners of a ±20 % box per currency covers every threshold comparison, because committed and paid are monotone in each rate. Task 38's live seed check catches an ARS move outside the band before the merge. Re-running the seed with adjusted amounts is a demo-data change, which FREEZE allows. Principle: evidence.
+  - **R-87 Question caps (AC-67).** D36 keeps a per-user cap as cost hygiene; the numbers are product's.
+    - Per user: 10 a day. A finance person asks a handful of questions, and a judge needs 2-3.
+    - Shared demo user: per (user, IP). Otherwise the first judge would spend every later judge's questions, the same reason R-78 made the demo language per tab.
+    - Global: 500 a day. At Nova Lite prices (about USD 0.0002 an answer with a record of about 2.500 tokens), that is about USD 0.10 a day of Roberto's credits at most. The old 50 was sized for the Workers AI free allocation, which D36 retires as primary.
+    - Counting happens in the database through `record.ts` (service role). A member-callable counter would let anyone holding the public demo password burn the day's global cap with curl.
+    - Non-answers are 200 with a reason. A chat that answers 500 on Demo Day looks broken; a clear message does not.
+    - No stored conversation (scope).
+    Q12.
+  - **R-88 "Leído por IA" provenance (AC-77).** Snippets are located by code, not returned by the model. The model's output is not deterministic (QA showed it in R-80), and a schema change would alter every live read. Code-located snippets are always true, and «No encontré este valor literal en el texto» is itself useful honesty. The provider is recorded at read time, never read from the current var. Preloaded invoices say so instead of claiming an AI read. `raw_text` now holds file text, capped at 20.000 characters, which stays inside R-12's immutability. Principle: evidence, Explicabilidad.
+  - **R-89 The activity panel replays the record (AC-78).** Writing a progress row per step during a run would cost one subrequest per step under R-56's 40, about halving the invoices per call. Replaying the recorded trace right after each call, and polling every 10 s while the tab is visible, shows the same steps truthfully at zero write cost. The label says the steps come from the record. Principle: evidence and company-can-deploy-Monday.
+  - **R-90 Vendor portal (AC-83..AC-86).**
+    1. A second Worker, `facturas`, with no secrets, calls a `PortalApi` `WorkerEntrypoint` over a service binding. The intake has no public HTTP route, and the IP key cannot be forged from outside.
+    2. `invoices.origin` and `agent_runs.via` are new additive columns (AC-07 Clarified).
+    3. The vendor sees fixed status words. The only reason ever shown is «duplicada». Telling an impostor «cuenta cambiada» or «beneficiario nuevo» would teach them what to fix; showing limits or budget leaks company data.
+    4. The demo slug is `andina-labs`. Other companies get a random `p-<12 hex>` default. A guessable name slug invites spam to every company, and the URL is shared by the company anyway. Q13.
+    5. With a file plus text, the file is the invoice and the text is `sender_note`, never read. A vendor-typed account must not reach the reader.
+    6. One file per message.
+    7. The status token does not expire. The page shows minimal data, and vendors reopen it weeks later.
+    8. Limits: 10 invoices per IP per hour, 100 per company per UTC day (shared with email), 60 status views per IP per minute. They are counted in the database, because the Workers ratelimit binding refused nothing live (R-72).
+    9. Demo company portal invoices land in the shared demo inbox, and "Reiniciar demo" archives them like any other.
+    10. No AI-written vendor text (D36's "where AI text is used" is satisfied by the reading). Vendor-facing words must never state a status or promise the record does not hold.
+    Principle: Seguridad (D4: "an impostor cannot redirect money") and the company's actual user. Q14.
+  - **R-91 Email intake (AC-87, AC-88).**
+    - Address forms: `facturas+<slug>@` or `<slug>@`.
+    - One invoice per PDF, PNG or JPEG attachment, at most 3; otherwise the body. Three caps a single email's reads and subrequests.
+    - The loop guard and "no reply over the limit" avoid mail loops and backscatter to spoofed senders.
+    - The vendor reply also goes out for the demo company: it carries no token, and R-15 concerns approval mail.
+    - `postal-mime` is the one new runtime dependency; MIME is not to be hand-rolled.
+    - The live part is SHOULD, because only Roberto can add a domain. SES sandbox replies reach verified addresses only (AC-55).
+    Principle: scope and company-can-deploy-Monday.
+  - **R-92 Bedrock (AC-89).**
+    - Bedrock first, Workers AI as fallback with one attempt, then ESCALAR.
+    - Image-only PDFs go to Nova as page images or a Converse document block, whichever the builder proves live. Rendering pages inside a Worker is not assumed.
+    - The model label is «Amazon Nova Lite (AWS Bedrock)».
+    - The payee rule stays in the prompt, because the launcher's raw test returned the customer as payee without it.
+    - The key is the Worker's own IAM secret, set and tested by the launcher. No MUST depends on Roberto's 12 h AWS login, and the fallback chain keeps every MUST working if Bedrock fails.
+    - The AC-12 and AC-39 greps are widened to `llm.ts`.
+    - Live AI checks no longer wait for the Workers AI reset. Only the fallback's live success does.
+    Principle: company-can-deploy-Monday and evidence.
+  - **R-93 The D38 gate and D31 UX QA (AC-91, AC-82, AC-90).**
+    1. Every gate item is made measurable by `scripts/ux-gate.mjs` where it can be measured: CLS ≤ 0.01 for "no layout jump", a busy or disabled state within 100 ms for "response within 100 ms", heading plus enabled primary action for "usable", and the long-task limit of 300 ms. The rest (one primary button, spacing, copy meaning) is judged by the UX reviewer from the screenshots.
+    2. The UX reviewer is a fresh `reviewer` dispatch with `design-taste-frontend` and `minimalist-ui`. It reviews screenshots and gate output, not the diff. So it is D38's dedicated check, not "a second reviewer on the same diff", and its failed items block whatever their confidence.
+    3. Every UI task ends with the gate on its screens: UX passes count like reviewer passes, 2 per task. A screen that fails two rounds goes to product to simplify the screen (fewer elements, one action), never to lower the bar.
+    4. D31's pass runs first as Task 28 on the current product, as soon as the harness exists. Task 31 fixes its items in files no open task owns. Task 32 fixes the rest after the feature tasks merge. Tasks 33 and 34 are the final whole-experience gates.
+    5. The approved palette is the colour set of `web/styles.css` at 6d34830.
+    Principle: Roberto's bar ("súper estricto"), with evidence.
+  - **R-94 Live AI use (extends R-76; AC-89, AC-67, AC-77, AC-83, AC-50).** Bedrock is paid from credits at about USD 0.0002 a call, so live checks can run now. Ration per QA run: AC-89 2 reads (an email and `03.png`), reused by AC-77; AC-83 1 portal read; AC-67 at most 5 questions; the video at most 2 reads and 2 questions per take, at most 3 takes, plus one warm-up. The Workers AI fallback is checked live only after 2026-10-18 00:00 UTC, with one read on the qa-server with `BEDROCK_MODEL_ID` pointing to a non-existent id. No unit or route test calls a real model. The video still records after 00:00 UTC (D32), so both providers are up. Principle: evidence, and cost hygiene (D36).
+  - **R-95 Cut rule and clock (replaces nothing; applies Roberto's cut order to D28-D38).**
+    - The cut order is: D35 live (AC-88, already SHOULD), then the D30/D37 taste polish beyond the gate (AC-81), then the D29(c) activity panel (AC-78).
+    - Checkpoint 1, at 2026-10-18T00:00Z: if any of Tasks 20-26 is not merged, AC-81 becomes SHOULD and Task 32 does gate and UX-QA fixes only.
+    - Checkpoint 2, at 2026-10-18T02:00Z: if Tasks 33 and 34 have not started, AC-78 becomes SHOULD. If the panel is already merged and passes the gate it stays; if not, it is left out of the build and out of the video.
+    - Never cut: AC-73..AC-77, AC-67, AC-79, AC-80, AC-82..AC-87, AC-89..AC-91, AC-50.
+    - If a never-cut MUST is still open at FREEZE (2026-10-18T11:00Z), the orchestrator sends it to product for re-scope at that moment, not before.
+    - The orchestrator ledgers each checkpoint result.
+    Principle: scope, Roberto's stated order.
+  
+- Preflight (resume 13:15Z) PASSED: Cloudflare, git push, Supabase, Resend, AWS identity, deadline 2026-10-18T17:00Z, Playwright/Chromium. WARN: RESEND_FROM @resend.dev, Workers AI daily allocation used up until 00:00Z (D36 Bedrock removes this dependency).
+- Ruling: do not run scripts/aws-login-remote.sh — the launcher's AWS login is live until ~01:00Z and no PLAN-D28 task needs the AWS CLI (Bedrock keys are in Worker secrets) — cost if wrong: none for MUST ACs.
+- Ruling: Wave 1 runs seven builders as one foreground group (20, 21, 25, 24 senior; 26, 27, 22 junior), not the plan's six, because 24 builds on mocks and is the slowest path to 29 and D6; 24 merges after 23 is merged OR, if 23 is not ready, merges to integration without a deploy (integration is not deployed until 23 merges, D4 precedes D6) — cost if wrong: integration briefly holds web code that calls an API not yet built; nothing deploys in between.
+- Ruling: the D38 gate for Wave 1 UI tasks (22, 24, 25, 26) is run by the orchestrator (a script, not product code) on the qa-server after 27 merges, then the fresh UX reviewer reads its output; a failed item goes back to a fresh builder on the same task (builder attempt 2). — why: 27 and the UI tasks are parallel by plan, so the harness does not exist when the builders finish — cost if wrong: one extra builder round on a UI task.
+- Ruling: model seats — senior builders opus, junior builders sonnet, task reviewers sonnet, final delta review opus — why: turn count beats token price for judgment tasks — cost if wrong: higher spend or an extra fix round.
+
+## Heartbeat 2026-10-17 13:06Z
+DONE: MUST tasks 1-19 merged, deployed (1043 tests). IN PROGRESS: resumed; product folded D28-D38 (AC-73..91); starting Wave 1 of PLAN-D28 (Bedrock primary, market FX, vendor portal, logo, UX gate harness). BLOCKED: nothing (AWS login not needed; Bedrock keys in Worker secrets). RULINGS: R-85..R-95 from product copied to ledger; 5 process rulings (wave order, UX gate run by orchestrator, model seats). NEXT: Task 20 Bedrock first, then FX, portal, brand; merge to main ~07:30Z 18 Oct.

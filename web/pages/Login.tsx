@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type { PageRoute } from '../App';
 import { supabase } from '../api';
+import Logo from '../components/Logo';
 import { useT } from '../i18n';
 import { runUntilDone, type Progress } from '../runAgent';
 import type { Lang } from '../../src/i18n';
@@ -58,6 +59,7 @@ export default function Login() {
   return (
     <div className="login">
       <section className="login-intro">
+        <Logo />
         <h1>{t('login.title')}</h1>
         <p className="login-lead">{t('login.lead')}</p>
       </section>

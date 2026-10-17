@@ -195,10 +195,16 @@ out=$(printf "set role anon;\nselect public.reset_demo_company();\n" | sql -f -)
 is "select count(*) from public.invoices where archived" 0 "a refused reset archived something"
 sql -c "update public.companies set is_demo = true where id = '$CB'" >/dev/null || fail "mark B demo"
 as "$UA" "insert into public.beneficiaries (company_id, name, bank_account) values ('$CA', 'Pixel Lab', 'x'); update public.beneficiaries set bank_account = 'otra' where name = 'Laura Méndez'; insert into public.policies (company_id, version, name, rules) values ('$CA', 2, 'Juez', '{\"per_payment_limit_usd\": 1000}')" >/dev/null || fail "judge edits"
+# R-69: decisions present (PAGAR, ESCALAR, FRENAR); the reset (security definer) still archives every one of them
+OK=$(printf '{"id":"c%s","verdict":"cumple"},' $(seq 1 13)); OK="[${OK%,}]"
+for o in "01 PAGAR $OK" "02 ESCALAR []" "03 FRENAR []"; do set -- $o
+  sql -c "select public.insert_decision(md5('$CA' || '$1')::uuid, (public.period_state('$CA', current_date, md5('$CA' || '$1')::uuid) ->> 'committed_usd')::numeric, '{\"outcome\":\"$2\",\"actor\":\"agent\",\"amount_usd\":0,\"checks\":$3}', 0)" >/dev/null || fail "seed decision $2"; done
+is "select count(distinct invoice_id) from public.decisions where company_id = '$CA'" 3 "three decided seed invoices"
 expect "$UA" "select public.reset_demo_company()" "^$CA$" "first reset returns the company"
 expect "$UA" "select public.reset_demo_company()" "^$CA$" "second reset"
 is "select count(*) filter (where archived) || ' ' || count(*) filter (where not archived) from public.invoices where company_id = '$CA'" "58 29" "reset archives old invoices and re-inserts 29 (AC-47)"
 is "select count(*) from public.invoices where company_id = '$CA' and not archived and id = md5('$CA' || '01')::uuid" 0 "re-inserted invoices get new ids"
+is "select count(*) from public.invoices i where company_id = '$CA' and archived and exists (select 1 from public.decisions d where d.invoice_id = i.id)" 3 "reset archives decided invoices (R-69, AC-47)"
 is "select string_agg(version::text, ',' order by version) from public.policies where company_id = '$CA'" "1,2,3,4" "reset appends policy max+1 each time (AC-47)"
 is "select (select rules from public.policies where company_id = '$CA' order by version desc limit 1) = (select rules from public.policies where company_id = '$CA' and version = 1)" t "latest policy = seed rules"
 is "select count(*) || ' ' || count(*) filter (where archived) from public.beneficiaries where company_id = '$CA'" "9 1" "8 seed beneficiaries, judge's Pixel Lab archived, none duplicated"

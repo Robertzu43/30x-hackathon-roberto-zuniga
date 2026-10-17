@@ -164,9 +164,10 @@ describe('actua (AC-24, AC-25, AC-39, R-15, R-16, R-25, R-29)', () => {
     expect(db.tables.agent_runs).toEqual([{ company_id: 'A', trigger: 'manual', decided: { PAGAR: 0, FRENAR: 0, ESCALAR: 0 }, errors: 1 }]);
   });
 
-  it('ALREADY_DECIDED -> skipped silently: no tokens, no mail, not counted', async () => {
+  // R-69: ARCHIVED = a member archived the pending invoice while the agent decided it.
+  it.each(['ALREADY_DECIDED', 'ARCHIVED'])('%s -> skipped silently: no tokens, no mail, not counted', async (refusal) => {
     db = fakeDb(workspace('A', { only: ['11'] }));
-    db.fail.insert_decision = () => 'ALREADY_DECIDED';
+    db.fail.insert_decision = () => refusal;
     expect(await runAgent(deps(), 'A', 'pending', 'manual')).toEqual({ PAGAR: 0, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null });
     expect(send).not.toHaveBeenCalled();
     expect(db.tables.approval_tokens).toEqual([]);

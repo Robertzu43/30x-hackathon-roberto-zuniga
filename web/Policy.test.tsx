@@ -306,11 +306,21 @@ test('the date column header does not repeat the word in its cells (AC-76)', asy
   expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Moneda', 'Tasa', 'USD por unidad', 'Fuente', 'Fecha', 'Estado']);
 });
 
-test('the pin list has COP, MXN, BRL, ARS and EUR, never «1 USD en USD» (AC-30 Clarified)', async () => {
+const pinLabels = () => screen.getAllByLabelText(/^1 \w{3} en USD$/).map((l) => l.closest('label')!.textContent);
+
+test('the pin list is ARS, BRL, COP, EUR, MXN in code order, never «1 USD en USD» (AC-30 Clarified, R-110)', async () => {
   setup();
   renderAt(<Policy />);
   await limit();
-  expect(screen.getAllByLabelText(/^1 \w{3} en USD$/).map((l) => l.closest('label')!.textContent)).toEqual(['1 COP en USD', '1 MXN en USD', '1 BRL en USD', '1 ARS en USD', '1 EUR en USD']);
+  expect(pinLabels()).toEqual(['1 ARS en USD', '1 BRL en USD', '1 COP en USD', '1 EUR en USD', '1 MXN en USD']);
+});
+
+test('another policy currency follows the five, in code order (R-110)', async () => {
+  const v = [{ ...versions[0], rules: { ...rules, fx_rates: { ...rules.fx_rates, PEN: 0.27, CLP: 0.001 } } }];
+  setup({ 'GET /api/policy': v });
+  renderAt(<Policy />);
+  await limit();
+  expect(pinLabels()).toEqual(['1 ARS en USD', '1 BRL en USD', '1 COP en USD', '1 EUR en USD', '1 MXN en USD', '1 CLP en USD', '1 PEN en USD']);
 });
 
 test('a stale row says «vencida: el agente escalará las facturas en esta moneda», a fresh one «vigente» (AC-76)', async () => {
@@ -389,12 +399,35 @@ test('/api/fx fails: a designed message with a «Reintentar» next step that ref
   expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
 });
 
-test('while /api/fx loads the section shows a message and a five-row skeleton, so the page does not jump (AC-91 item 4)', async () => {
+test('while /api/fx loads the real table shows one placeholder row per pin currency, no fixed-height block (R-109)', async () => {
   setup({ 'GET /api/fx': () => new Promise(() => {}) });
   const { container } = renderAt(<Policy />);
   await limit();
   expect(screen.getAllByText('Cargando…').length).toBeGreaterThan(0);
-  expect(container.querySelectorAll('.fx-slot .fx-skel')).toHaveLength(5);
+  expect(container.querySelector('.fx-skel')).toBeNull();
+  const rows = container.querySelectorAll('.fx-slot table.fx-table tbody tr');
+  expect([...rows].map((r) => r.firstElementChild!.textContent)).toEqual(['ARS', 'BRL', 'COP', 'EUR', 'MXN']);
+  expect([...rows].every((r) => r.children.length === 6)).toBe(true);
+});
+
+test('the placeholder rows follow the pin list when the policy has another currency (R-109, R-110)', async () => {
+  const v = [{ ...versions[0], rules: { ...rules, fx_rates: { ...rules.fx_rates, CLP: 0.001 } } }];
+  setup({ 'GET /api/policy': v, 'GET /api/fx': () => new Promise(() => {}) });
+  const { container } = renderAt(<Policy />);
+  await limit();
+  expect(container.querySelectorAll('.fx-slot tbody tr')).toHaveLength(6);
+});
+
+test('empty and error render no table and no placeholder rows: the slot is its own content (R-109)', async () => {
+  setup({ 'GET /api/fx': { provider: 'yahoo', rates: [] } });
+  const { container } = renderAt(<Policy />);
+  await screen.findByText(/Todavía no hay tasas de mercado/);
+  expect(container.querySelector('.fx-slot tr')).toBeNull();
+  cleanup();
+  setup({ 'GET /api/fx': json({ error: 'boom' }, 500) });
+  const e = renderAt(<Policy />);
+  await screen.findByText('No pude cargar las tasas de mercado.');
+  expect(e.container.querySelector('.fx-slot tr')).toBeNull();
 });
 
 test('the market table scrolls inside its own container (AC-91 item 1)', async () => {
@@ -420,7 +453,20 @@ test('CSS: at 768 px and below the pin inputs are 16 px and the rate rows become
   const m = css.split('@media (max-width: 768px) {')[1]?.split('\n}\n')[0] ?? '';
   expect(m).toMatch(/fieldset input \{[^}]*font-size: 1rem/);
   expect(m).toMatch(/\.fx-table tr \{[^}]*display: flex/);
-  expect(rule('.fx-slot')).toMatch(/min-height/);
+});
+
+test('CSS: the market slot has no height of its own, at any width, and no pixel constants (R-109)', () => {
+  expect(css).not.toMatch(/\.fx-slot \{[^}]*height/);
+  expect(css).not.toMatch(/\.fx-skel/);
+  expect(rule('.fx-slot p')).toMatch(/margin: 0/); // empty: the message is the last element, the 2.5rem gap to the pins is the section gap alone
+  expect(rule('.fx-market')).toMatch(/margin-bottom: 1\.25rem/);
+});
+
+test('CSS: the pin grid column may shrink, the fieldset has min-width 0 and the inputs fill it, so both side gaps match (R-108)', () => {
+  expect(rule('fieldset')).toMatch(/min-width: 0/);
+  expect(rule('fieldset input')).toMatch(/width: 100%/);
+  expect(rule('fieldset input')).toMatch(/box-sizing: border-box/);
+  expect(rule('.grid.fx')).toMatch(/grid-template-columns: minmax\(0, 1fr\)/);
 });
 
 test('CSS: the rate header hidden on phones uses the standard sr-only pattern (AC-91 item 1)', () => {

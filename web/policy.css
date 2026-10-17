@@ -21,7 +21,8 @@ select, textarea {
 }
 input:disabled, select:disabled { background: var(--canvas); color: var(--ink-2); }
 input[aria-invalid='true'], select[aria-invalid='true'] { border-color: #9f2f2d; background: #fdebec; }
-fieldset { border: 1px solid var(--line); border-radius: var(--radius); padding: 1rem 1.25rem 1.25rem; width: 100%; margin: 0; }
+fieldset { border: 1px solid var(--line); border-radius: var(--radius); padding: 1rem 1.25rem 1.25rem; width: 100%; min-width: 0; margin: 0; } /* the browser default min-width: min-content let the pins overflow it (R-108) */
+fieldset input { width: 100%; box-sizing: border-box; }
 fieldset > .hint { margin-bottom: 1.25rem; }
 legend { padding: 0 0.5rem; color: var(--ink-2); font-size: var(--text-sm); }
 .switch { display: flex; align-items: center; gap: 0.75rem; color: var(--ink); font-size: var(--text-base); }
@@ -43,17 +44,18 @@ th { text-align: left; font-weight: 500; color: var(--ink-2); }
 th, td { padding: 0.625rem 0.75rem 0.625rem 0; border-bottom: 1px solid var(--line); vertical-align: baseline; }
 tr:last-child td { border-bottom: 0; }
 
-/* AC-76: «Tasas de mercado». The slot keeps one height in every state (skeleton, table, empty, error). */
-.fx-slot { min-height: 25rem; } /* measured: five rows at 1440 px are 394 px */
+/* AC-76: «Tasas de mercado». The slot has no height of its own: loading draws the real rows, empty and error shrink to their content (R-109). */
+.fx-market { margin-bottom: 1.25rem; } /* with the form's 1.25rem gap: the page's 2.5rem before the pins */
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.grid.fx { grid-template-columns: minmax(0, 1fr); } /* one column at every width: each pin's side gaps are then equal (R-108) */
+.fx-slot p { margin: 0; }
 .fx-slot button { min-height: 44px; margin-top: 0.75rem; }
 .fx-scroll { overflow-x: auto; max-width: 100%; }
-.fx-skel { height: 2.5rem; margin-top: 0.25rem; background: #f1efe9; border-radius: 4px; }
+.fx-table.loading td { color: transparent; background: #f1efe9; user-select: none; }
 .fx-table tr.stale td:last-child { color: #9f2f2d; }
 
 @media (max-width: 768px) {
   fieldset input { font-size: 1rem; } /* AC-91 item 2: the pins only; the other inputs belong to Tasks 31 and 32 */
-  .fx-slot { min-height: 29rem; }
-  .fx-skel { height: 5rem; }
   .fx-table thead { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; font-size: 0; } /* sr-only, still read by screen readers; font-size 0 so the hidden text owns no box that can sit over a card */
   .fx-table, .fx-table tbody { display: block; }
   .fx-table tr { display: flex; flex-wrap: wrap; gap: 0 0.5rem; padding: 0.75rem 0; border-bottom: 1px solid var(--line); }
@@ -63,10 +65,6 @@ tr:last-child td { border-bottom: 0; }
   .fx-table td:nth-child(2) { flex: 1 0 calc(100% - 4rem); color: var(--ink); }
   .fx-table td:nth-child(3) { display: none; } /* the same figure as the 1 USD = line */
   .fx-table td:nth-child(6) { flex-basis: 100%; }
-}
-
-@media (max-width: 640px) {
-  .fx-slot { min-height: 38rem; } /* measured: five cards at 360 and 390 px are 594 px */
 }
 
 @media (prefers-reduced-motion: no-preference) {

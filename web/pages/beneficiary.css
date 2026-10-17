@@ -1,0 +1,12 @@
+.beneficiary { max-width: 64rem; display: grid; gap: 1.5rem; }
+.beneficiary a { display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; } /* AC-91 item 2 */
+.beneficiary h1, .beneficiary p { margin: 0; }
+.beneficiary-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 1rem; margin: 0; }
+.beneficiary-facts dt { font-size: var(--text-sm); color: var(--ink-2); }
+.beneficiary-facts dd { margin: 0; overflow-wrap: anywhere; }
+.beneficiary-totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 1rem; }
+.beneficiary table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+.beneficiary th, .beneficiary td { text-align: left; padding: 0.25rem 0.75rem 0.25rem 0; border-bottom: 1px solid var(--line); }
+.beneficiary th { font-weight: 500; color: var(--ink-2); }
+.beneficiary .num { font-family: var(--font-mono); white-space: nowrap; }
+.beneficiary-state { display: grid; gap: 0.5rem; justify-items: start; }

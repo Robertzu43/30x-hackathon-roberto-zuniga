@@ -18,7 +18,7 @@ beforeEach(() => mockApi({ 'GET /api/invoices': [], 'GET /api/agent/last-run': n
 
 test('routes come from web/pages/*.tsx: one page per screen, each with a path and a component', () => {
   expect(pages.map((p) => p.route.path).sort()).toEqual(
-    ['/', '/approve/:token', '/beneficiaries', '/demo', '/invoices/:id', '/login', '/period', '/policy'].sort(),
+    ['/', '/approve/:token', '/beneficiaries', '/beneficiaries/:id', '/demo', '/invoices/:id', '/login', '/period', '/policy'].sort(),
   );
   for (const p of pages) expect(typeof p.default).toBe('function');
 });

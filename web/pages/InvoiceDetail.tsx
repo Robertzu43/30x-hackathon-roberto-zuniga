@@ -169,10 +169,10 @@ export default function InvoiceDetail() {
           {data.policy && (
             <p className="muted">{t('detail.policy', { name: data.policy.name, version: data.policy.version, date: date(data.policy.created_at, 'America/Bogota') })}</p>
           )}
+          <AskThesaurus invoiceId={id} /> {/* R-106: directly above «Historial», after the decision content it answers about */}
           <Timeline decisions={data.decisions} />
         </div>
       </div>
-      <AskThesaurus invoiceId={id} />
     </section>
   );
 }

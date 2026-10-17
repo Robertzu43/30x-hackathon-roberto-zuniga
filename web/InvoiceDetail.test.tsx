@@ -282,17 +282,16 @@ test('a model-read invoice heads «Lo que leí» with the provider, and shows ea
   const badge = await screen.findByText(`Leído por IA · ${NOVA}`);
   expect(screen.getByRole('heading', { name: 'Lo que leí' }).compareDocumentPosition(badge) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   const payee = fieldRow('Beneficiario');
-  expect(payee.textContent).toMatch(/Nube Sur LLC.*confianza 97\s%/);
+  expect(payee.textContent).toMatch(/Nube Sur LLC.*confianza de la IA: 97\s%/);
   expect(payee.querySelector('mark')?.textContent).toBe('Nube Sur LLC');
   expect(payee.textContent).toContain('Emisor: Nube Sur LLC, NIT 900.123');
   const amount = fieldRow('Monto');
-  expect(amount.textContent).toMatch(/^Monto4\.200confianza 92\s%/);
+  expect(amount.textContent).toMatch(/^Monto4\.200confianza de la IA: 92\s%/);
   expect(amount.querySelector('mark')?.textContent).toBe('4,200.00');
   expect(fieldRow('Número de factura').querySelector('mark')?.textContent).toBe('2044');
   expect(fieldRow('Vencimiento').textContent).toContain(NOT_FOUND_ES);
-  const account = fieldRow('Cuenta bancaria');
-  expect(account.textContent).toContain('desconocido');
-  expect(account.textContent).not.toContain('confianza');
+  expect(screen.queryByText('Cuenta bancaria', { selector: 'dt' })).toBeNull(); // R-107: an unknown field gets no row
+  expect(screen.getByText('La IA no pudo leer 1 campo: Cuenta bancaria.')).toBeTruthy();
   expect(screen.queryByText(PRELOADED_ES)).toBeNull();
   expect(document.body.textContent).not.toMatch(/null|undefined|NaN/);
 });
@@ -341,7 +340,8 @@ test('«Leído por IA» in English (AC-77)', async () => {
   open();
   expect(await screen.findByText(`Read by AI · ${NOVA}`)).toBeTruthy();
   expect(fieldRow('Due date').textContent).toContain('I did not find this value verbatim in the text');
-  expect(fieldRow('Beneficiary').textContent).toMatch(/97% confidence/);
+  expect(fieldRow('Beneficiary').textContent).toMatch(/AI confidence: 97%/);
+  expect(screen.getByText('The AI could not read 1 field: Bank account.')).toBeTruthy();
 });
 
 test('the preloaded notice in English (AC-77)', async () => {
@@ -387,4 +387,74 @@ test('no <mark> when match is null or missing, even if the value appears in the 
   await screen.findByText(`Leído por IA · ${NOVA}`);
   expect(fieldRow('Número de factura').textContent).toContain('Factura No. 2044');
   expect(document.querySelector('mark')).toBeNull();
+});
+
+// R-107: a row only for what the AI read; unknown fields are named once, in one muted line after the rows.
+const LABELS_ES = 'Beneficiario, Monto, Moneda, Número de factura, Fecha de emisión, Vencimiento, Concepto, Cuenta bancaria';
+const NAMES = ['payee_name', 'amount', 'currency', 'invoice_number', 'issue_date', 'due_date', 'concept', 'bank_account'];
+const allUnknown = NAMES.map((name, i) => ({ name, value: [null, '', ' desconocido ', 'unknown'][i % 4], confidence: i % 2 ? 0.4 : null, snippet: null, match: null }));
+
+test('ESCALAR with 8 unknown fields: no rows, no «No encontré», no «desconocido», one line naming the 8 (R-107)', async () => {
+  mockApi({ [GET]: { ...escalated, reading: { provider: NOVA, fields: allUnknown }, reading_status: 'ai' } });
+  open();
+  await screen.findByText(`Leído por IA · ${NOVA}`);
+  expect(screen.getByText(`La IA no pudo leer 8 campos: ${LABELS_ES}.`).className).toContain('muted');
+  expect(screen.queryByText(NOT_FOUND_ES)).toBeNull();
+  expect(screen.queryByText(/desconocido/)).toBeNull();
+  expect(screen.queryByText(/confianza/)).toBeNull();
+  expect(document.querySelector('.detail-fields')).toBeNull();
+  expect(screen.getByTitle('Documento de la factura')).toBeTruthy(); // the badge, the document and the line
+});
+
+test('FRENAR, a known value code could not find: the value, «confianza de la IA: 100 %» and «No encontré…» (R-107)', async () => {
+  const fields = [{ name: 'due_date', value: '2026-10-31', confidence: 1, snippet: null, match: null }];
+  mockApi({ [GET]: { ...stopped, reading: { provider: NOVA, fields }, reading_status: 'ai' } });
+  open();
+  await screen.findByText(`Leído por IA · ${NOVA}`);
+  const row = fieldRow('Vencimiento');
+  expect(row.textContent).toContain('31 de octubre de 2026');
+  expect(row.textContent).toMatch(/confianza de la IA: 100\s%/);
+  expect(row.textContent).toContain(NOT_FOUND_ES);
+  expect(screen.queryByText(/La IA no pudo leer/)).toBeNull(); // nothing unknown, no line
+});
+
+test('a known field with no usable confidence shows no percentage and never null or NaN (R-107)', async () => {
+  const fields = [
+    { name: 'payee_name', value: 'Nube Sur LLC', confidence: null, snippet: 'Emisor: Nube Sur LLC', match: [8, 20] },
+    { name: 'amount', value: 4200, confidence: 1.5, snippet: null, match: null },
+  ];
+  mockApi({ [GET]: { ...escalated, reading: { provider: NOVA, fields }, reading_status: 'ai' } });
+  open();
+  await screen.findByText(`Leído por IA · ${NOVA}`);
+  expect(fieldRow('Beneficiario').textContent).toBe('BeneficiarioNube Sur LLCEmisor: Nube Sur LLC');
+  expect(fieldRow('Monto').textContent).not.toMatch(/confianza|%/);
+  expect(document.body.textContent).not.toMatch(/null|undefined|NaN/);
+});
+
+test('the unknown-fields line in English, plural (R-107)', async () => {
+  localStorage.setItem('lang', 'en');
+  mockApi({ [GET]: { ...escalated, reading: { provider: NOVA, fields: allUnknown }, reading_status: 'ai' } });
+  open();
+  expect(await screen.findByText('The AI could not read 8 fields: Beneficiary, Amount, Currency, Invoice number, Issue date, Due date, Concept, Bank account.')).toBeTruthy();
+  expect(screen.queryByText(/unknown/)).toBeNull();
+});
+
+// R-106: the ask box sits directly above «Historial», after the escalation card and the policy line, in Historial's column.
+test('«Pregúntale a Thesaurus» comes after the escalation card and the policy line, directly before «Historial» (R-106)', async () => {
+  mockApi({ [GET]: escalated });
+  open();
+  const ask = (await screen.findByRole('heading', { name: 'Pregúntale a Thesaurus' })).closest('section')!;
+  const history = screen.getByRole('heading', { name: 'Historial' }).closest('section')!;
+  const before = (a: Node, b: Node) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+  expect(before(screen.getByRole('region', { name: 'Necesito tu respuesta' }), ask)).toBe(true);
+  expect(before(screen.getByText(/Política general/), ask)).toBe(true);
+  expect(ask.nextElementSibling).toBe(history);
+});
+
+test('every top-level detail section sits 2.5 rem below what precedes it (R-106)', async () => {
+  const { readFileSync } = (await import('node:fs' as string)) as { readFileSync(p: string, enc: string): string };
+  const css = readFileSync('web/pages/detail.css', 'utf8');
+  expect(css).toMatch(/\.detail \.ask \{[^}]*margin: 2\.5rem 0 0/);
+  expect(css).toMatch(/\.detail-card \{[^}]*margin-top: 2\.5rem/);
+  expect(css).toMatch(/\.detail h2 \{[^}]*margin: 2\.5rem 0 1rem/);
 });

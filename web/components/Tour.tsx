@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useT } from '../i18n';
 import { tourSteps } from '../tour-steps';
@@ -9,12 +9,20 @@ const PAD = 8;
 
 /** AC-42 guided tour, no library: a positioned box whose huge box-shadow dims everything but the target. */
 export default function Tour({ onDone }: { onDone: () => void }) {
-  const { t } = useT();
+  const { t, lang } = useT();
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [i, setI] = useState(0);
   const [dir, setDir] = useState<1 | -1>(1);
   const [rect, setRect] = useState<DOMRect | null>(null);
+  const body = useRef<HTMLDivElement>(null);
+  const [more, setMore] = useState(false);
+  // R-105: the cue shows only while the body overflows and is not scrolled to its end.
+  const cue = () => {
+    const b = body.current;
+    setMore(!!b && b.scrollHeight > b.clientHeight && b.scrollTop + b.clientHeight < b.scrollHeight - 1);
+  };
+  useLayoutEffect(cue, [rect, i, lang]);
   const step = tourSteps[i]!;
   const last = i === tourSteps.length - 1;
 
@@ -82,9 +90,14 @@ export default function Tour({ onDone }: { onDone: () => void }) {
             className="tour-card"
             style={{ '--tour-top': `${document.querySelector('.topbar')?.getBoundingClientRect().bottom ?? 0}px` } as CSSProperties}
             role="dialog" aria-modal="true" aria-labelledby="tour-title" aria-label={t('tour.label')}>
-            <p className="muted">{t('tour.count', { n: i + 1, total: tourSteps.length })}</p>
-            <h2 id="tour-title">{t(`tour.${step.id}.title`)}</h2>
-            <p tabIndex={0}>{t(`tour.${step.id}.body`)}</p>
+            <header>
+              <p className="muted">{t('tour.count', { n: i + 1, total: tourSteps.length })}</p>
+              <h2 id="tour-title">{t(`tour.${step.id}.title`)}</h2>
+            </header>
+            <div className="tour-body" tabIndex={0} ref={body} onScroll={cue}>
+              {['body', 'loop'].map((k) => `tour.${step.id}.${k}`).filter((k) => t(k) !== k).map((k) => <p key={k}>{t(k)}</p>)}
+              {more && <span className="tour-more muted">{t('tour.more')}</span>}
+            </div>
             <div className="tour-actions">
               <button type="button" className="link" onClick={onDone}>{t('tour.skip')}</button>
               <span />

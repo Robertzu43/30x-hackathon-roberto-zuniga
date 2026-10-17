@@ -78,7 +78,7 @@ describe('escalationEmail (AC-39, AC-65, R-28)', () => {
     const m = mail();
     expect(m.subject).toBe(QUESTION);
     expect(m.text.split('\n')[0]).toBe(QUESTION);
-    expect(m.html).toMatch(/<body[^>]*>\s*<p[^>]*>Juan, la factura #2044 de Nube Sur LLC por 4\.200 USD supera tu umbral de aprobación de 2\.500 USD\. ¿La pago\?<\/p>/);
+    expect(m.html).toMatch(/<body[^>]*>\s*<p[^>]*><img[^>]*><\/p>\s*<p[^>]*>Juan, la factura #2044 de Nube Sur LLC por 4\.200 USD supera tu umbral de aprobación de 2\.500 USD\. ¿La pago\?<\/p>/);
   });
   it('text: headline, "Lo que leí", only the broken rules, Aprobar and Rechazar links', () => {
     expect(mail().text).toBe([
@@ -99,6 +99,11 @@ describe('escalationEmail (AC-39, AC-65, R-28)', () => {
     expect(html).toMatch(/>Aprobar<\/a>/);
     expect(html).toMatch(/>Rechazar<\/a>/);
   });
+  it('html opens with the Thesaurus PNG logo by absolute URL on the app host (AC-80)', () => {
+    const { html } = mail();
+    expect(html).toMatch(/<img src="https:\/\/app\.example\/brand\/thesaurus-logo\.png" alt="Thesaurus" width="160" height="32"/);
+    expect(html.indexOf('<img')).toBeLessThan(html.indexOf(QUESTION.slice(0, 20)));
+  });
   it('unread fields print "desconocido"', () => {
     const { text } = mail({ invoice: { ...invoice, fields: { ...invoice.fields, amount: null, concept: null } } });
     expect(text).toContain('Monto: desconocido');
@@ -107,7 +112,7 @@ describe('escalationEmail (AC-39, AC-65, R-28)', () => {
   it('html escapes every value read from the document', () => {
     const evil = '<img src=x onerror=alert(1)> & "Co"';
     const { html } = mail({ question: `Juan, ${evil}`, invoice: { ...invoice, fields: { ...invoice.fields, payee_name: evil, concept: '<script>x</script>' } } });
-    expect(html).not.toContain('<img');
+    expect(html).not.toContain('<img src=x');
     expect(html).not.toContain('<script>');
     expect(html).toContain('&lt;img src=x onerror=alert(1)&gt; &amp; &quot;Co&quot;');
   });

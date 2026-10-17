@@ -140,7 +140,8 @@ test('ESCALAR shows the stored question above Aprobar and Rechazar; Aprobar post
 test('Rechazar posts the seq with the optional note', async () => {
   const fetchMock = mockApi({ [GET]: escalated, 'POST /api/invoices/inv-1/reject': { decision: {} } });
   open();
-  fireEvent.change(await screen.findByLabelText('Nota (opcional)'), { target: { value: 'No reconozco este cobro' } });
+  await screen.findByRole('heading', { level: 1, name: escalated.headline }); // the skeleton's card is inert until then
+  fireEvent.change(screen.getByLabelText('Nota (opcional)'), { target: { value: 'No reconozco este cobro' } });
   fireEvent.click(screen.getByRole('button', { name: 'Rechazar' }));
   await waitFor(() => expect(fetchMock.mock.calls.some(([u]) => u === '/api/invoices/inv-1/reject')).toBe(true));
   const post = fetchMock.mock.calls.find(([u]) => u === '/api/invoices/inv-1/reject')!;
@@ -604,6 +605,33 @@ test('while loading, the detail is a skeleton with the loaded markup and the bac
   expect(skeleton.querySelector('.detail-cols')).toBeTruthy();
   expect(screen.getByRole('link', { name: 'Volver a la bandeja' })).toBeTruthy();
   expect(screen.getByRole('status').textContent).toBe('Cargando la factura…');
+});
+
+// AC-99, AC-91 item 4 (CLS <= 0.01): the placeholder is a full typical record, so nothing above the columns grows when it arrives.
+test('the skeleton is a typical record: 5 steps, 13 checks, filled fields, a fix and the «Necesito tu respuesta» card', () => {
+  mockApi({ [GET]: () => new Promise(() => {}) });
+  const { container } = open();
+  const skeleton = container.querySelector('.detail .skeleton') as HTMLElement;
+  expect(skeleton.querySelectorAll('.detail-trace li')).toHaveLength(trace.length);
+  expect(skeleton.querySelectorAll('.checks li')).toHaveLength(13);
+  expect(skeleton.querySelectorAll('.detail-fields dd.muted')).toHaveLength(0);
+  expect(skeleton.querySelectorAll('.detail-fixes li')).toHaveLength(1);
+  expect(skeleton.querySelector('.detail-card .detail-question')).toBeTruthy();
+});
+
+// AC-99, AC-91 item 4: a headline is 3 to 6 lines at 390 px, so no placeholder matches every record. The record replaces the
+// skeleton's nodes instead of moving them: CLS counts only nodes that were already painted and moved.
+test('the arriving record replaces the skeleton nodes, never moves them', async () => {
+  let release: (r: Response) => void = () => {};
+  const fetchMock = mockApi({ [GET]: () => new Promise<Response>((r) => (release = r)) });
+  const { container } = open();
+  await waitFor(() => expect(gets(fetchMock)).toBe(1));
+  const placeholder = container.querySelector('.detail .skeleton h1');
+  expect(placeholder).toBeTruthy();
+  release(json(escalated, 200));
+  const h1 = await screen.findByRole('heading', { level: 1, name: escalated.headline });
+  expect(h1).not.toBe(placeholder);
+  expect(placeholder!.isConnected).toBe(false);
 });
 
 test('the skeleton is gone once the invoice arrives', async () => {

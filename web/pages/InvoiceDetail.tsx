@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import type { StoredDecision, TraceStep } from '../../src/agent/trace';
 import { money } from '../../src/engine/explain';
-import type { InvoiceFields } from '../../src/engine/types';
+import { CHECK_IDS, type InvoiceFields } from '../../src/engine/types';
 import { api, ApiError, useScreen } from '../api';
 import AgentTrace from '../components/AgentTrace';
 import AskThesaurus from '../components/AskThesaurus';
@@ -36,12 +36,22 @@ type Detail = {
 };
 
 const FIELDS = ['payee_name', 'amount', 'currency', 'invoice_number', 'issue_date', 'due_date', 'concept', 'bank_account'] as const;
-// AC-99 (R-109): the loading page is the loaded markup with this made-up record, hidden by .skeleton.
-const SKELETON = {
-  invoice: { source: 'email', raw_text: 'Factura de octubre', fields: null }, headline: 'PAGAR · 1.200 USD a Nubia Diseño, dentro de reglas',
-  decisions: [{ seq: 1, outcome: 'FRENAR', checks: [], created_at: '2026-10-10T15:00:00Z', actor: 'agent' }],
-  explanations: [], fixes: [], policy: null, trace: [], question: null, file_url: null,
-} as unknown as Detail;
+// AC-99 (R-109), AC-91 item 4: the loading page is the loaded markup with this made-up typical record, hidden by .skeleton. It is
+// full size (5 steps, the 13 checks, every field, a fix, the «Necesito tu respuesta» card) so the real one arriving moves nothing.
+const SKELETON: Detail = {
+  invoice: { source: 'email', raw_text: 'Hola,\nadjunto la factura de octubre.\nConcepto: servicios del mes.\nGracias',
+    fields: { payee_name: 'Estudio Kairos', amount: 1800, currency: 'USD', invoice_number: 'K-311', issue_date: '2026-10-01',
+      due_date: '2026-10-31', concept: 'Servicios de octubre', bank_account: 'Cuenta terminada en 7781', confidence: {} } },
+  headline: 'ESCALAR · 1.800 USD a Estudio Kairos: supera el umbral de aprobación',
+  decisions: [{ id: 's', seq: 1, outcome: 'ESCALAR', actor: 'agent', actor_email: null, channel: null, headline_es: null, headline_en: null,
+    question_es: null, question_en: null, policy_version: 1, amount_usd: 1800, payment: null, note: null, created_at: '2026-10-10T15:00:00Z',
+    checks: CHECK_IDS.map((id) => ({ id, verdict: 'cumple', actual: '', threshold: '', values: {} })) }],
+  explanations: CHECK_IDS.map(() => 'Regla: la frase que explica esta regla → cumple'),
+  fixes: ['Que una persona apruebe el monto'],
+  policy: { name: 'Política general', version: 1, created_at: '2026-10-01T12:00:00Z' },
+  trace: (['lee', 'consulta', 'consulta', 'decide', 'actua'] as const).map((stage) => ({ stage, text: 'Un paso de lo que hizo el agente con esta factura.' })),
+  question: '¿La pago?', file_url: null,
+};
 
 export default function InvoiceDetail() {
   const { t, lang, locale } = useT();
@@ -97,7 +107,8 @@ export default function InvoiceDetail() {
     <section className="detail">
       {back}
       {!loaded && <p role="status" className="sr-only">{t('detail.loading')}</p>}
-      <div className={loaded ? undefined : 'skeleton'} aria-hidden={loaded ? undefined : true} inert={!loaded}>
+      {/* A headline is 3 to 6 lines at 390 px: the record replaces these nodes (new key) rather than moving them (AC-91 item 4 CLS). */}
+      <div key={loaded ? 'record' : 'skeleton'} className={loaded ? undefined : 'skeleton'} aria-hidden={loaded ? undefined : true} inert={!loaded}>
         <h1>{data.headline}</h1>
         {originLabel(t, invoice) && <p className="muted detail-origin">{originLabel(t, invoice)}</p>}
         {invoice.sender_note && (

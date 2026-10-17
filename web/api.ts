@@ -43,8 +43,9 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     headers.set('Content-Type', 'application/json');
     payload = JSON.stringify(body);
   }
-  if (method !== 'GET') dropCache(); // AC-100: any write from this tab
-  const res = await fetch(path, { method, headers, body: payload });
+  const write = method !== 'GET';
+  if (write) dropCache(); // AC-100: any write from this tab; again once it settles, so a GET that left during it is not kept
+  const res = await fetch(path, { method, headers, body: payload }).finally(() => write && dropCache());
   const json = (await res.json().catch(() => ({}))) as { error?: string };
   if (!res.ok) throw new ApiError(json.error ?? res.statusText, res.status);
   return json as T;
@@ -130,9 +131,16 @@ export function useScreen<T>(path: string) {
   return { data: shown.data, error: shown.error, reload };
 }
 
-/** AC-99: a deploy removes the page chunks an open tab may still ask for; reload once to get the new index.html, never in a loop. */
-export const reloadOnce = (reload = () => window.location.reload()) => {
-  if (Date.now() - Number(sessionStorage.getItem('chunk-reload')) < 10_000) return;
+/** The tab's reload, one place so tests can watch it. */
+export const tab = { reload: () => window.location.reload() };
+/** Whether the Worker answers now. navigator.onLine alone misses a network that drops while the browser still says online. */
+export const reachable = () => fetch('/', { method: 'HEAD', cache: 'no-store' }).then((r) => r.ok, () => false);
+/**
+ * AC-99: a deploy removes the page chunks an open tab may still ask for; reload once to get the new index.html, never in a loop.
+ * With the server out of reach a reload only lands on the browser's error page, so the page's designed message stays (AC-91 item 4).
+ */
+export const reloadOnce = async (reload = () => tab.reload()) => {
+  if (Date.now() - Number(sessionStorage.getItem('chunk-reload')) < 10_000 || !(await reachable())) return;
   sessionStorage.setItem('chunk-reload', String(Date.now()));
   reload();
 };

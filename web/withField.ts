@@ -11,8 +11,8 @@ export async function send<T>(method: 'POST' | 'PUT', path: string, body: unknow
   const { data } = await (await supabase()).auth.getSession();
   const headers: Record<string, string> = { 'Content-Type': 'application/json', 'X-Lang': storedLang() }; // R-98
   if (data.session) headers.Authorization = `Bearer ${data.session.access_token}`;
-  dropCache(); // AC-100: a write from this tab
-  const res = await fetch(path, { method, headers, body: JSON.stringify(body) });
+  dropCache(); // AC-100: a write from this tab; again once it settles, so a GET that left during it is not kept
+  const res = await fetch(path, { method, headers, body: JSON.stringify(body) }).finally(dropCache);
   const json = (await res.json().catch(() => ({}))) as { error?: string; field?: string };
   if (!res.ok) throw Object.assign(new FieldError(json.error ?? res.statusText, res.status), { field: json.field });
   return json as T;

@@ -122,13 +122,51 @@ test('the cache is per language: an answer in es is not shown to an en tab', asy
 });
 
 // AC-99: a deploy removes the page chunks an open tab may still ask for; the tab reloads once to get the new ones, never in a loop.
-test('a missing chunk reloads the tab once; a second miss within 10 s does not reload again', () => {
+test('a missing chunk reloads the tab once; a second miss within 10 s does not reload again', async () => {
+  mockApi({ 'HEAD /': {} });
   const reload = vi.fn();
-  reloadOnce(reload);
+  await reloadOnce(reload);
   expect(reload).toHaveBeenCalledTimes(1);
-  reloadOnce(reload);
+  await reloadOnce(reload);
   expect(reload).toHaveBeenCalledTimes(1);
   sessionStorage.setItem('chunk-reload', String(Date.now() - 11_000));
-  reloadOnce(reload);
+  await reloadOnce(reload);
   expect(reload).toHaveBeenCalledTimes(2);
+});
+
+// AC-91 item 4: with no network a reload lands on the browser's own error page; the page keeps its designed message instead.
+// Offline (navigator.onLine false) and a network that drops while the browser still says online both fail the probe.
+test('a missing chunk with the server out of reach never reloads the tab; once it answers, the first miss gets its reload', async () => {
+  mockApi({ 'HEAD /': () => { throw new TypeError('Failed to fetch'); } });
+  const reload = vi.fn();
+  await reloadOnce(reload);
+  expect(reload).not.toHaveBeenCalled();
+  mockApi({ 'HEAD /': {} });
+  await reloadOnce(reload);
+  expect(reload).toHaveBeenCalledTimes(1);
+});
+
+// AC-100 «dropped after any write»: a screen GET that leaves while a write is in flight may carry the pre-write data.
+test.each([
+  ['api.post', () => api.post('/api/invoices/run')],
+  ['withField send', () => send('POST', '/api/beneficiaries', {})],
+])('a screen GET started during a %s is not kept once the write settles, whichever answers first', async (_, write) => {
+  for (const getFirst of [true, false]) {
+    let finishWrite: ((r: Response) => void) | undefined;
+    let finishGet: ((r: Response) => void) | undefined;
+    const writeReply = () => new Promise<Response>((r) => (finishWrite = r));
+    mockApi({ 'GET /api/screen/period?month=2026-10': () => new Promise<Response>((r) => (finishGet = r)), 'POST /api/invoices/run': writeReply, 'POST /api/beneficiaries': writeReply });
+    const writing = write();
+    await vi.waitFor(() => expect(finishWrite).toBeDefined());
+    prefetch('/api/screen/period?month=2026-10'); // the hover on «Periodo» while the write runs
+    await vi.waitFor(() => expect(finishGet).toBeDefined());
+    const old = () => finishGet!(new Response(JSON.stringify({ period: 'before the write' })));
+    const done = () => finishWrite!(new Response('{}'));
+    if (getFirst) old();
+    done();
+    if (!getFirst) old();
+    await writing;
+    await new Promise((r) => setTimeout(r, 0));
+    expect(cached('/api/screen/period?month=2026-10'), getFirst ? 'GET answered first' : 'write answered first').toBeUndefined();
+  }
 });

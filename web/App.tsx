@@ -1,7 +1,7 @@
-import { lazy, Suspense, useEffect, useState, type ComponentType, type ReactNode } from 'react';
+import { Component, lazy, Suspense, useEffect, useState, type ComponentType, type ReactNode } from 'react';
 import { matchPath, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import type { Lang } from '../src/i18n';
-import { cacheOwner, prefetch, screens, supabase } from './api';
+import { cacheOwner, prefetch, reachable, screens, supabase, tab } from './api';
 import { isDemoUser, RequireAuth, shouldStartTour, takeDemoTour, useSession } from './auth';
 import { useLeaveGuard } from './components/LeaveTrialWarning';
 import Logo from './components/Logo';
@@ -33,9 +33,26 @@ const warm = (r: PageRoute) => {
   if (r.data) prefetch(r.data());
 };
 
+// sr-only: a visible <p> here has a margin that collapses through <body>, so the page arriving moved everything (AC-91 CLS).
 function Loading() {
   const { t } = useT();
-  return <p role="status" className="muted">{t('app.loading')}</p>;
+  return <p role="status" className="sr-only">{t('app.loading')}</p>;
+}
+
+// A page chunk that never came (offline, or a deploy removed it): the designed message inside the shell, never a blank page.
+function ChunkError() {
+  const { t } = useT();
+  return (
+    <section>
+      <p role="alert" className="error">{t('app.chunk_error')}</p>
+      <button type="button" onClick={() => void reachable().then((up) => up && tab.reload())}>{t('app.retry')}</button>
+    </section>
+  );
+}
+class PageBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError = () => ({ failed: true });
+  render = () => (this.state.failed ? <ChunkError /> : this.props.children);
 }
 
 function TopBar({ onTour }: { onTour: () => void }) {
@@ -123,7 +140,7 @@ export default function App() {
     <>
       <Routes>
         {pages.map(({ route, Page }) => {
-          const loaded = <Suspense fallback={<Loading />}><Page /></Suspense>;
+          const loaded = <PageBoundary key={route.path}><Suspense fallback={<Loading />}><Page /></Suspense></PageBoundary>;
           const page = route.fullBleed ? loaded : <Shell onTour={startTour}>{loaded}</Shell>;
           return <Route key={route.path} path={route.path} element={route.public ? page : <RequireAuth>{page}</RequireAuth>} />;
         })}

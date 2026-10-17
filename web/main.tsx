@@ -9,7 +9,7 @@ import { LangProvider, storedLang } from './i18n';
 import './styles.css';
 
 document.documentElement.lang = storedLang();
-window.addEventListener('vite:preloadError', () => reloadOnce()); // AC-99: a page chunk gone after a deploy
+window.addEventListener('vite:preloadError', () => void reloadOnce()); // AC-99: a page chunk gone after a deploy
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

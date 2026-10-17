@@ -911,7 +911,7 @@ Trace: D40. Rubric: V. técnica, Presentación. Tasks: 44 (script and baseline),
 
 **AC-98 (MUST; never cut)** When a screen loads, the system fetches its data with at most one API request on the critical path. That request makes at most one database round trip for data: one PostgREST RPC to that screen's function, plus the authentication check.
 - Endpoints. This contract is fixed now, so web tasks build on mocks:
-  - `GET /api/screen/inbox?lang=` → `{ invoices, last_run, portal, dashboard }`. `invoices` has the same rows as `GET /api/invoices`, `last_run` the same as `GET /api/agent/last-run`, and `portal` the same as `GET /api/portal-link`. `dashboard` is `null` until Task 45, then AC-101's shape.
+  - `GET /api/screen/inbox?lang=` → `{ invoices, last_run, portal, beneficiaries, dashboard }`. `invoices` has the same rows as `GET /api/invoices`, `last_run` the same as `GET /api/agent/last-run`, and `portal` the same as `GET /api/portal-link`. `beneficiaries` is `Array<{ id, name }>`: the same non-archived directory rows `GET /api/beneficiaries` returns, only those two fields, ordered by `name`; it is filled by `screen_inbox` from Task 42 on, never `null`, and Task 45's `create or replace` keeps it (R-132). `dashboard` is `null` until Task 45, then AC-101's shape.
   - `GET /api/screen/period` → `{ period, charts }`. `period` is the same as `GET /api/period`; `charts` is `null` until Task 45, then AC-103's shape.
   - `GET /api/screen/beneficiaries` → `{ beneficiaries }`.
   - `GET /api/screen/beneficiary/:id` (AC-104).
@@ -981,7 +981,8 @@ Same palette, type and logo as before (D37, AC-53 Clarified). Every number is co
 - The table comes last:
   - Search over beneficiary, number and concept, ignoring case and accents.
   - Sort by date, beneficiary, USD amount and outcome. A header click toggles the direction, with `aria-sort`.
-  - Filters by outcome (pendiente included) and by origin.
+  - Filters by outcome (pendiente included) and by origin. AC-29's beneficiary filter stays, grouped exactly as AC-29 Clarified (R-79) says, from the response's top-level `beneficiaries` (AC-98), not from `dashboard` (R-132).
+  - Search matches the beneficiary name the row shows; it needs no directory id.
   - Search, sort and filters run in the browser over the loaded rows.
 - The one primary action is unchanged.
 
@@ -1511,6 +1512,23 @@ Gate-semantics ruling (product, 17 Oct; product question, not a dispute; MUST; A
     - a selector list kept in the harness.
   - Principle: evidence (measure what the item means, and show every exclusion), with the company's actual user (data is shown as it was typed).
   - Loser's best argument (the harness-side selector list): "keep the exemption in the harness as a list of CSS selectors per screen, so no web file changes the night before the deadline". It is rejected because Tasks 47 to 51 rewrite those screens. The selectors would break, or would silently exempt whatever moves into them.
+
+Contract ruling (product, 17 Oct; product question from Task 42, not a dispute; MUST; AC-98 and AC-101 Clarified):
+- **R-132 Bandeja's beneficiary directory rides in `screen_inbox`, and the duplicated period, fx and portal calculations get one source now (AC-98, AC-101, AC-29 Clarified).**
+  - (a) The inbox response gains a top-level `beneficiaries: Array<{ id, name }>`: the non-archived directory, ordered by `name`. The web stops calling `/api/beneficiaries` on Bandeja. That leaves one data request on load, plus the off-path activity poll (AC-78).
+  - It belongs in `screen_inbox`'s base object, not in `dashboard`. AC-29's beneficiary filter is an older MUST. It must work while `dashboard` is `null`, and also if AC-101 is cut (R-126).
+  - Task 45's `create or replace screen_inbox` keeps the key unchanged.
+  - Task 47 reads `beneficiaries` from the top level. The `dashboard` shape in AC-101 does not change.
+  - Rejected, option (b): grouping by the payee names present in `invoices`. R-79 lists a matched payee under the directory name. Without the directory, «Contadores Andinos SAS» would be labelled as read, not as Periodo labels it, so the screen would disagree with itself.
+  - The filter's entries and labels stay exactly as AC-29 Clarified defines them today. Only the data source changes.
+  - AC-101's search needs only the name the row shows. The beneficiary filter needs `id` and `name`, because AC-19's rule matches on name only.
+  - (b) Task 42's fix round moves the period, fx and portal-link calculations to one place. `src/routes/period.ts`, `src/routes/fx.ts` and `src/routes/portal-link.ts` import `periodOf`, `fxOf` and `portalOf` and drop their own copies. This adds those three files to Task 42's list, for that change only.
+  - Evidence: the old endpoints' existing tests pass unedited, and the AC-98 equality tests still pass.
+  - If an unmerged task owns any of the three files, R-125 applies, and that file's switch waits for that task's merge.
+  - Why now: AC-98 promises that the screen and the old endpoint return the same numbers. Two copies "held equal by tests" are only equal until Monday's first fix lands in one of them. Then Periodo shows one figure and `/api/period` another.
+  - Principle: evidence (the screen agrees with itself and with Periodo), then company-can-deploy-Monday (one place to fix a number).
+  - Loser's best argument, for (a) option (b): "group by the payee names in `invoices`; no directory is needed, and a beneficiary with no invoices is not filterable, which is fine". This fails R-79's directory-name label.
+  - Loser's best argument, for (b) leaving the copies: "cost: two copies held equal by tests".
 
 ---
 

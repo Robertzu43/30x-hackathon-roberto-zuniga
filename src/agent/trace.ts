@@ -1,6 +1,6 @@
 // "Lo que hice" (AC-64, D24): the agent's steps, rendered only from what was recorded (R-29): the stored decisions,
 // the invoice, the company's demo flag and the recorded send result. Templates only, no model.
-import { agreementText, asRead, fieldList, fill, list, money, motives, readReason, reasonText } from '../engine/explain';
+import { actorName, agreementText, asRead, fieldList, fill, list, money, motives, readReason, reasonText } from '../engine/explain';
 import { validFields } from '../engine/checks';
 import { outcomeOf } from '../engine/decide';
 import type { Check, CheckId, Decision, Invoice, InvoiceFields, Outcome } from '../engine/types';
@@ -68,9 +68,6 @@ const READ = ['payee_name', 'amount', 'currency', 'invoice_number'] as const;
 
 const portal = { es: portalEs, en: portalEn };
 const trial = { es: trialEs, en: trialEn };
-// R-116: a guest's answer is stored as invitado:<8 hex> and named «Invitado <8 hex>».
-const actorName = (email: string | null, lang: Lang) =>
-  email?.startsWith('invitado:') ? format(trial[lang], 'trial_record.guest', { id: email.slice(9) }) : email;
 
 // "el PDF", or with its channel: "el PDF que llegó por el portal de proveedores", "el correo que envió <remitente>".
 function sourceText({ source, origin, sender }: TraceInvoice, lang: Lang): string {

@@ -242,3 +242,15 @@ test('during a tour step the top-bar language switch keeps the step; Escape does
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   await waitFor(() => expect(fakeAuth.updateUser).toHaveBeenCalledWith({ data: { tour_seen: true } }));
 });
+
+// R-98 (AC-28 Clarified): a language switch re-fetches the screen on view, so the record comes back in that language.
+test('switching the language re-fetches the screen on view with the new X-Lang', async () => {
+  signedInAs('ana@empresa.co', SEEN);
+  const fetchMock = mockApi({ 'GET /api/invoices': [], 'GET /api/agent/last-run': null, 'GET /api/beneficiaries': [] });
+  renderAt(<App />);
+  await signedInTopBar();
+  const langsOf = () => fetchMock.mock.calls.filter(([u]) => String(u) === '/api/invoices').map(([, i]) => new Headers(i!.headers).get('X-Lang'));
+  await waitFor(() => expect(langsOf()).toEqual(['es']));
+  fireEvent.click(screen.getByRole('button', { name: 'en' }));
+  await waitFor(() => expect(langsOf()).toEqual(['es', 'en']));
+});

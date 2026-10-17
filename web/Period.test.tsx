@@ -101,12 +101,56 @@ test('English renders English', async () => {
   expect(screen.getByText(/10,000/)).toBeTruthy();
 });
 
-test('shows loading with the anchor present, then an error', async () => {
-  mockApi({ [`GET /api/period?month=${month}`]: new Response(JSON.stringify({ error: 'Mes no válido' }), { status: 400 }) });
+test('shows loading with the anchor present, then a designed error with a retry, never the raw API text (UX-13)', async () => {
+  let fail = true;
+  mockApi({ [`GET /api/period?month=${month}`]: () => (fail ? new Response(JSON.stringify({ error: 'gate' }), { status: 500 }) : body) });
   const { container } = show();
   expect(container.querySelector('[data-tour="period"]')).toBeTruthy();
   expect(screen.getByRole('status').textContent).toBe('Cargando…');
-  expect((await screen.findByRole('alert')).textContent).toContain('Mes no válido');
+  expect((await screen.findByRole('alert')).textContent).toBe('No pude cargar el periodo. Revisa tu conexión e intenta de nuevo.');
+  expect(container.textContent).not.toContain('gate');
+  fail = false;
+  fireEvent.click(screen.getByRole('button', { name: 'Intentar de nuevo' }));
+  expect(await screen.findByText('Autonomía 75 %')).toBeTruthy();
+});
+
+test('offline shows the designed message in the screen language, never «Failed to fetch» (UX-13)', async () => {
+  localStorage.setItem('lang', 'en');
+  mockApi({ [`GET /api/period?month=${month}`]: () => Promise.reject(new TypeError('Failed to fetch')) });
+  const { container } = show();
+  expect((await screen.findByRole('alert')).textContent).toBe('I could not load the period. Check your connection and try again.');
+  expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+  expect(container.textContent).not.toMatch(/Failed to fetch/);
+});
+
+test('a month with no payments says what to do next: another month or the Bandeja (UX-14)', async () => {
+  mockApi({ [`GET /api/period?month=${month}`]: empty });
+  show();
+  expect(await screen.findByText('Elige otro mes arriba o sube una factura desde la Bandeja.')).toBeTruthy();
+  expect(screen.getByRole('link', { name: 'Ir a la Bandeja' }).getAttribute('href')).toBe('/');
+});
+
+test('the empty-state link is a 44 px tap target (UX-05)', async () => {
+  const { readFileSync } = (await import('node:fs' as string)) as { readFileSync(p: string, enc: string): string };
+  expect(readFileSync('web/pages/period.css', 'utf8')).toMatch(/\.period-state a \{[^}]*min-height: 44px/);
+});
+
+test('the per-beneficiary table scroll region is reachable by keyboard and named (UX-22)', async () => {
+  mockApi({ [`GET /api/period?month=${month}`]: body });
+  show();
+  const region = await screen.findByRole('region', { name: 'Por beneficiario' });
+  expect(region.tabIndex).toBe(0);
+  expect(within(region).getByRole('table')).toBeTruthy();
+});
+
+test('the month picker speaks the app language, not the browser one (UX-19)', async () => {
+  mockApi({ [`GET /api/period?month=${month}`]: body });
+  show();
+  await screen.findByText('Autonomía 75 %');
+  const picker = screen.getByLabelText('Mes');
+  expect(picker.tagName).toBe('SELECT');
+  expect((picker as HTMLInputElement).value).toBe(month);
+  expect(within(picker).getByRole('option', { selected: true }).textContent).toMatch(/^(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre) de \d{4}$/);
 });
 
 // R-79: two amounts never touch («USD 42.000,00USD 4.497,79»). jsdom has no layout; Chromium was measured at 1280 and 390 px

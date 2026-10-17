@@ -1,5 +1,5 @@
 import { fireEvent, screen, within } from '@testing-library/react';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import Beneficiaries, { route } from './pages/Beneficiaries';
 import { mockApi, renderAt } from './test/utils';
 
@@ -95,4 +95,48 @@ test('Editar loads a row into the form, keeps a route outside the list, and save
     name: 'Laura Méndez', country: 'CO', currency: 'USD', bank_account: 'Bancolombia ahorros 0012-3456-4821', route: 'COP · transferencia',
     category: 'Desarrollo', agreement: { type: 'retainer', amount_usd: 2600, period: 'monthly' },
   });
+});
+
+test('an empty directory says what to do next, and the button takes you to the form (UX-14)', async () => {
+  setup({ 'GET /api/beneficiaries': [] });
+  expect(await screen.findByText('Todavía no hay beneficiarios. Agrega el primero con el formulario de abajo.')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Agregar beneficiario' }));
+  expect(document.activeElement).toBe(screen.getByLabelText('Nombre'));
+});
+
+test('Editar brings the form into view and puts the cursor in it (UX-15)', async () => {
+  setup();
+  const scrolled: Element[] = [];
+  vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(function (this: Element) { scrolled.push(this); });
+  fireEvent.click(await screen.findByRole('button', { name: 'Editar Laura Méndez' }));
+  expect(scrolled.some((el) => el.contains(screen.getByRole('heading', { name: 'Editar Laura Méndez' })))).toBe(true);
+  expect(document.activeElement).toBe(screen.getByLabelText('Nombre'));
+});
+
+test('Save is busy at once while the request runs (UX-16)', async () => {
+  let answer: (r: Response) => void = () => {};
+  setup({ 'POST /api/beneficiaries': () => new Promise<Response>((r) => { answer = r; }) });
+  await screen.findByText('Laura Méndez');
+  type('Nombre', 'Pixel Lab');
+  submit();
+  const button = await screen.findByRole('button', { name: 'Guardando…' });
+  expect(button.hasAttribute('disabled')).toBe(true);
+  expect(button.getAttribute('aria-busy')).toBe('true');
+  answer(new Response(JSON.stringify({ id: 'b2' }), { status: 201 }));
+  expect(await screen.findByRole('button', { name: 'Guardar beneficiario' })).toBeTruthy();
+});
+
+test('the date of an agreement is typed in a field labelled in the app language, not the browser date widget (UX-19)', async () => {
+  setup();
+  fireEvent.click(await screen.findByRole('button', { name: 'Editar Laura Méndez' }));
+  const date = screen.getByLabelText('Vigente hasta') as HTMLInputElement;
+  expect(date.type).toBe('text');
+  expect(date.placeholder).toBe('AAAA-MM-DD');
+});
+
+test('the directory table scroll region is reachable by keyboard and named (UX-22)', async () => {
+  setup();
+  const region = await screen.findByRole('region', { name: 'Directorio de beneficiarios' });
+  expect(region.tabIndex).toBe(0);
+  expect(within(region).getByRole('table')).toBeTruthy();
 });

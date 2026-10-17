@@ -21,7 +21,9 @@ export const requireUser = createMiddleware<AppEnv>(async (c, next) => {
   if (!member) return deny();
   c.set('user', data.user);
   c.set('companyId', member.company_id);
-  c.set('lang', data.user.user_metadata?.lang === 'en' ? 'en' : 'es');
+  // R-98: the tab's language (X-Lang, sent by web/api.ts) first, then the user's stored one, then Spanish.
+  const asked = c.req.header('X-Lang');
+  c.set('lang', asked === 'es' || asked === 'en' ? asked : data.user.user_metadata?.lang === 'en' ? 'en' : 'es');
   c.set('db', db);
   c.set('budget', budget);
   await next();

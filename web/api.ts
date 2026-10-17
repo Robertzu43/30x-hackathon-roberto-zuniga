@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { storedLang } from './i18n';
 
 export type Config = { supabaseUrl: string; supabaseAnonKey: string; demo_email: string };
 
@@ -34,6 +35,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   const { data } = await (await supabase()).auth.getSession();
   const headers = new Headers();
   if (data.session) headers.set('Authorization', `Bearer ${data.session.access_token}`);
+  headers.set('X-Lang', storedLang()); // R-98: the API renders the record in this tab's language
   let payload: BodyInit | undefined;
   if (body instanceof FormData) payload = body;
   else if (body !== undefined) {
@@ -46,7 +48,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return json as T;
 }
 
-/** Every call to the Worker API. Adds the session JWT; throws ApiError (message = the API's `error`) on non-2xx. */
+/** Every call to the Worker API. Adds the session JWT and the tab's language (X-Lang); throws ApiError (message = the API's `error`) on non-2xx. */
 export const api = {
   get: <T = unknown>(path: string) => request<T>('GET', path),
   post: <T = unknown>(path: string, body?: unknown) => request<T>('POST', path, body),

@@ -2,7 +2,7 @@
   --canvas: #fbfbfa;
   --surface: #ffffff;
   --ink: #111111;
-  --ink-2: #787774;
+  --ink-2: #6d6c69;
   --line: #eaeaea;
   --accent: #346538;
   --accent-bg: #edf3ec;
@@ -32,6 +32,7 @@ h1 {
 }
 
 .muted { color: var(--ink-2); }
+a { color: var(--ink); text-underline-offset: 3px; } /* UX-11: never the browser's #0000ee */
 .logo { display: block; height: 1.75rem; width: auto; align-self: flex-start; }
 
 .topbar {
@@ -90,8 +91,13 @@ main { max-width: 64rem; margin: 0 auto; padding: 6rem 2rem; }
 @media (max-width: 640px) {
   .topbar, .screens { padding-left: 1rem; padding-right: 1rem; }
   .topbar-actions { margin-left: 0; }
-  .topbar button { min-height: 44px; } /* AC-72 (R-79): tap target */
+  .screens a { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; }
+  button, select { min-height: 44px; min-width: 44px; } /* AC-72 (R-79), AC-91 item 2 (UX-05): tap targets */
   main { padding: 3rem 1rem; }
+}
+/* AC-91 item 2 (UX-06): 16 px fields stop iOS zooming in; !important so page styles (`font: inherit` under a 14 px label) cannot undo it. */
+@media (max-width: 768px) {
+  input, select, textarea { font-size: 16px !important; }
 }
 
 /* Login (D21, design-taste-frontend): one very large wordmark on a flat tone field, the form beside it. */

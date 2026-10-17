@@ -8,7 +8,8 @@
 -- Each non-PAGAR invoice names the one check its trap fails ("check") and the checks that fail with it by construction
 -- ("also": amounts above the per-payment limit are also above the threshold; a new or unread payee leaves the
 -- directory checks unverifiable). Policy values make the budget and balance traps reachable on their own (R-08):
--- balance 20.000 < budget 40.000; #28 fails the balance on paid amounts, #29 (last) fails the budget on commitments.
+-- balance 23.000 < budget 42.000 (R-35); #28 fails the balance on paid amounts, #29 (last) fails the budget on commitments,
+-- and rejecting #15 then approving Nube Sur #2044 ends in PAGAR (the video's happy path, see docs/demo/DATASET.md).
 
 -- AC-47: a reset hides the beneficiaries a judge added (never deletes them). Directory reads filter `not archived`.
 alter table public.beneficiaries add column archived boolean not null default false;
@@ -20,7 +21,7 @@ declare
   v constant jsonb := $seed$
 {
   "rules": {
-    "per_payment_limit_usd": 5000, "approval_threshold_usd": 2500, "period_budget_usd": 40000, "account_balance_usd": 20000,
+    "per_payment_limit_usd": 5000, "approval_threshold_usd": 2500, "period_budget_usd": 42000, "account_balance_usd": 23000,
     "duplicate_window_days": 30, "agreement_tolerance_pct": 1, "due_grace_days": 0,
     "fx_rates": { "COP": 0.000245, "MXN": 0.054, "BRL": 0.18, "ARS": 0.00095, "EUR": 1.08, "USD": 1 },
     "allowed_beneficiaries_only": true
@@ -38,14 +39,14 @@ declare
   "invoices": [
     { "nn": "01", "source": "pdf", "expected_outcome": "PAGAR", "trap": "normal", "check": null, "also": [], "issue": 0, "due": 45, "raw_text": null,
       "fields": { "payee_name": "Laura Méndez", "amount": 2500, "currency": "USD", "invoice_number": "1042", "concept": "Retainer mensual de desarrollo", "bank_account": "Bancolombia ahorros 0012-3456-4821" },
-      "reason": "Retainer de 2.500 USD igual al acuerdo, cuenta registrada, 2.500 ≤ umbral 2.500. Presupuesto 0 + 2.500 ≤ 40.000; saldo 0 + 2.500 ≤ 20.000." },
+      "reason": "Retainer de 2.500 USD igual al acuerdo, cuenta registrada, 2.500 ≤ umbral 2.500. Presupuesto 0 + 2.500 ≤ 42.000; saldo 0 + 2.500 ≤ 23.000." },
     { "nn": "02", "source": "email", "expected_outcome": "ESCALAR", "trap": "fuera del periodo", "check": "periodo", "also": [], "prev_month": true, "issue": -1, "due": 45,
       "raw_text": "De: Northstar Group <billing@northstar.example>\nAsunto: Factura NS-2188\n\nHola equipo de Andina Labs,\nles enviamos la factura NS-2188 por la auditoría de accesos del mes pasado (2,5 horas a USD 80).\nTotal: USD 200.00\nPago por ACH: routing 121000358 cuenta 990112468.\nVence en 45 días.\n\nSaludos,\nNorthstar Group",
       "fields": { "payee_name": "Northstar Group", "amount": 200, "currency": "USD", "invoice_number": "NS-2188", "concept": "Auditoría de accesos", "bank_account": "ACH routing 121000358 cuenta 990112468" },
       "reason": "Llegó el mes anterior (recibida = inicio del mes − 5 días): solo falla Periodo. Es la más antigua, así que se decide primero, con el mes en 0 USD." },
     { "nn": "03", "source": "image", "expected_outcome": "PAGAR", "trap": "normal", "check": null, "also": [], "issue": 0, "due": 45, "raw_text": null,
       "fields": { "payee_name": "Ana Souza", "amount": 10000, "currency": "BRL", "invoice_number": "AS-0087", "concept": "Diseño de producto, retainer mensual", "bank_account": "Pix chave 11 98765-4302" },
-      "reason": "10.000 BRL × 0,18 = 1.800 USD = retainer de 1.800. Presupuesto 2.500 + 1.800 ≤ 40.000; saldo 2.500 + 1.800 ≤ 20.000." },
+      "reason": "10.000 BRL × 0,18 = 1.800 USD = retainer de 1.800. Presupuesto 2.500 + 1.800 ≤ 42.000; saldo 2.500 + 1.800 ≤ 23.000." },
     { "nn": "04", "source": "pdf", "expected_outcome": "FRENAR", "trap": "sobre el límite por pago", "check": "limite_pago", "also": ["umbral_aprobacion", "acuerdo"], "issue": 0, "due": 45, "raw_text": null,
       "fields": { "payee_name": "Nube Sur LLC", "amount": 9800, "currency": "USD", "invoice_number": "2045", "concept": "Licencia anual plan Enterprise", "bank_account": "ACH routing 026009593 cuenta 483920175" },
       "reason": "9.800 USD > límite por pago 5.000: FRENAR. También supera el umbral 2.500 y no es la suscripción de 4.200 (inevitable con ese monto). Presupuesto 4.300 + 9.800 y saldo 4.300 + 9.800 cumplen." },
@@ -68,7 +69,7 @@ declare
     { "nn": "10", "source": "email", "expected_outcome": "FRENAR", "trap": "duplicado exacto", "check": "duplicado_exacto", "also": [], "issue": 0, "due": 45,
       "raw_text": "De: Ana Souza <ana@souza.example>\nAsunto: Factura AS-0087\n\nOi! Reenvío la factura AS-0087 del retainer de diseño de producto, por si no les llegó.\nValor: BRL 10.000,00\nPix chave 11 98765-4302\nVence en 45 días.\n\nAbraço,\nAna",
       "fields": { "payee_name": "Ana Souza", "amount": 10000, "currency": "BRL", "invoice_number": "AS-0087", "concept": "Diseño de producto, retainer mensual", "bank_account": "Pix chave 11 98765-4302" },
-      "reason": "Mismo beneficiario y mismo número AS-0087 que la #03, dentro de la ventana de 30 días: FRENAR. Todo lo demás cumple (saldo 10.046,21 + 1.800 ≤ 20.000)." },
+      "reason": "Mismo beneficiario y mismo número AS-0087 que la #03, dentro de la ventana de 30 días: FRENAR. Todo lo demás cumple (saldo 10.046,21 + 1.800 ≤ 23.000)." },
     { "nn": "11", "source": "pdf", "expected_outcome": "ESCALAR", "trap": "sobre el umbral de aprobación", "check": "umbral_aprobacion", "also": [], "issue": 0, "due": 45, "raw_text": null,
       "fields": { "payee_name": "Nube Sur LLC", "amount": 4200, "currency": "USD", "invoice_number": "2044", "concept": "Suscripción mensual plataforma de datos", "bank_account": "ACH routing 026009593 cuenta 483920175" },
       "reason": "La del video (D25): 4.200 USD > umbral 2.500 y ≤ límite 5.000; es la suscripción acordada. Presupuesto 10.046,21 + 4.200; saldo 10.046,21 + 4.200: cumplen." },
@@ -111,7 +112,7 @@ declare
       "reason": "1.500 EUR × 1,08 = 1.620 USD. Presupuesto 28.670,41 + 1.620; saldo 14.270,21 + 1.620: cumplen." },
     { "nn": "22", "source": "pdf", "expected_outcome": "ESCALAR", "trap": "COP sobre el umbral de aprobación", "check": "umbral_aprobacion", "also": [], "issue": 0, "due": 45, "raw_text": null,
       "fields": { "payee_name": "Forma Studio", "amount": 13000000, "currency": "COP", "invoice_number": "FS-126", "concept": "Stand para feria en Bogotá", "bank_account": "IBAN ES91 2100 0418 4502 0005 1332" },
-      "reason": "13.000.000 COP × 0,000245 = 3.185 USD > umbral 2.500 y ≤ límite 5.000 (el caso extra de R-07). Acuerdo único. Saldo 15.890,21 + 3.185 = 19.075,21 ≤ 20.000." },
+      "reason": "13.000.000 COP × 0,000245 = 3.185 USD > umbral 2.500 y ≤ límite 5.000 (el caso extra de R-07). Acuerdo único. Saldo 15.890,21 + 3.185 = 19.075,21 ≤ 23.000." },
     { "nn": "23", "source": "chat", "expected_outcome": "PAGAR", "trap": "normal", "check": null, "also": [], "issue": 0, "due": 45,
       "raw_text": "[Slack] Northstar Group: Factura NS-2214, revisión de infraestructura, 5 h.\nNorthstar Group: USD 400.00 por ACH routing 121000358 cuenta 990112468. Vence en 45 días.",
       "fields": { "payee_name": "Northstar Group", "amount": 400, "currency": "USD", "invoice_number": "NS-2214", "concept": "Revisión de infraestructura", "bank_account": "ACH routing 121000358 cuenta 990112468" },
@@ -131,13 +132,13 @@ declare
       "raw_text": "[Slack] Northstar Group: Última del mes: NS-2219, soporte de incidentes, 2 h.\nNorthstar Group: USD 160.00, ACH routing 121000358 cuenta 990112468. Vence en 45 días.",
       "fields": { "payee_name": "Northstar Group", "amount": 160, "currency": "USD", "invoice_number": "NS-2219", "concept": "Soporte de incidentes", "bank_account": "ACH routing 121000358 cuenta 990112468" },
       "reason": "160 USD; horas del mes 1.760 ≤ 2.000. Presupuesto 36.827,42 + 160 = 36.987,42; saldo 18.342,21 + 160 = 18.502,21: cumplen." },
-    { "nn": "28", "source": "pdf", "expected_outcome": "ESCALAR", "trap": "supera el saldo de la cuenta", "check": "saldo_cuenta", "also": [], "issue": 0, "due": 45, "raw_text": null,
-      "fields": { "payee_name": "Forma Studio", "amount": 2200, "currency": "EUR", "invoice_number": "FS-129", "concept": "Rediseño del sitio web", "bank_account": "IBAN ES91 2100 0418 4502 0005 1332" },
-      "reason": "2.200 EUR × 1,08 = 2.376 USD. Pagado 18.502,21 + 2.376 = 20.878,21 > saldo 20.000: saldo insuficiente. Comprometido 36.987,42 + 2.376 = 39.363,42 ≤ presupuesto 40.000 (cumple)." },
+    { "nn": "28", "source": "pdf", "expected_outcome": "ESCALAR", "trap": "supera el saldo de la cuenta", "check": "saldo_cuenta", "also": ["umbral_aprobacion"], "issue": 0, "due": 45, "raw_text": null,
+      "fields": { "payee_name": "Forma Studio", "amount": 4300, "currency": "EUR", "invoice_number": "FS-129", "concept": "Rediseño del sitio web", "bank_account": "IBAN ES91 2100 0418 4502 0005 1332" },
+      "reason": "4.300 EUR × 1,08 = 4.644 USD. Pagado 18.502,21 + 4.644 = 23.146,21 > saldo 23.000: saldo insuficiente. Comprometido 36.987,42 + 4.644 = 41.631,42 ≤ presupuesto 42.000 (cumple). 4.644 también supera el umbral 2.500 y no el límite 5.000; acuerdo único (R-35)." },
     { "nn": "29", "source": "chat", "expected_outcome": "ESCALAR", "trap": "agota el presupuesto del mes", "check": "presupuesto_periodo", "also": [], "issue": 0, "due": 45,
       "raw_text": "[WhatsApp] Diego Ruiz: Última del mes, DR-035: integración con la pasarela de pagos.\nDiego Ruiz: MXN 15.000,00 a la CLABE 012180001534779908. Vence en 45 días.",
       "fields": { "payee_name": "Diego Ruiz", "amount": 15000, "currency": "MXN", "invoice_number": "DR-035", "concept": "Integración con la pasarela de pagos", "bank_account": "BBVA México CLABE 012180001534779908" },
-      "reason": "15.000 MXN × 0,054 = 810 USD. Comprometido (pagado + escalado pendiente) 39.363,42 + 810 = 40.173,42 > presupuesto 40.000. Pagado 18.502,21 + 810 = 19.312,21 ≤ saldo (cumple); horas 2.916 ≤ 3.000." }
+      "reason": "15.000 MXN × 0,054 = 810 USD. Comprometido (pagado + escalado pendiente) 41.631,42 + 810 = 42.441,42 > presupuesto 42.000. Pagado 18.502,21 + 810 = 19.312,21 ≤ saldo 23.000 (cumple); horas 2.916 ≤ 3.000." }
   ]
 }
 $seed$;

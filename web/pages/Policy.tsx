@@ -25,7 +25,7 @@ type Screen = { versions: Version[]; company: Company; fx: { rates: Rate[] } };
 // AC-99 (R-109): the loading page is the loaded markup with this made-up answer, hidden by .skeleton; the market slot draws
 // its own placeholder rows, one per pin currency.
 const SKELETON = {
-  versions: [{ id: 's', version: 1, name: 'Política general', rules: {} as PolicyRules, created_at: '2026-10-17T10:00:00Z' }],
+  versions: [{ id: 's', version: 1, name: 'Andina Labs', rules: {} as PolicyRules, created_at: '2026-10-17T10:00:00Z' }],
   company: { id: 's', name: 'Andina Labs Inc.', approver_email: 'ana@andina.co', lang: 'es', is_demo: false },
 } as const;
 const hidden = { 'aria-hidden': true, inert: true } as const;
@@ -275,7 +275,7 @@ export default function Policy() {
           <ol className="versions" aria-labelledby="versions-h">
             {(allVersions ? versions : versions.slice(0, 10)).map((v) => (
               <li key={v.id}>
-                <strong>{v.name}</strong>
+                <strong data-user="">{v.name}</strong>
                 <span className="mono">{t('policy.version', { n: v.version })}</span>
                 <span className="muted">{date(v.created_at)}</span>
               </li>

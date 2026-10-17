@@ -12,6 +12,7 @@ import ChecksTable from '../components/ChecksTable';
 import { originLabel } from '../components/PortalLinkCard';
 import ReadingPanel, { type Reading } from '../components/ReadingPanel';
 import Timeline from '../components/Timeline';
+import { printedAsRead, tu } from '../components/User';
 import { useT } from '../i18n';
 import './detail.css';
 
@@ -104,7 +105,7 @@ export default function InvoiceDetail() {
         {invoice.sender_note && (
           <section aria-labelledby="sender-note">
             <h2 id="sender-note">{t('inbox.sender_note')}</h2>
-            <p style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{invoice.sender_note}</p>
+            <p data-user="" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{invoice.sender_note}</p>
           </section>
         )}
         <AgentTrace steps={data.trace} />
@@ -115,7 +116,7 @@ export default function InvoiceDetail() {
             {unreached && <p className="detail-notice">{t('detail.reader_unavailable')}</p>}
             {status === 'preloaded' && <p className="muted">{t('detail.preloaded')}</p>}
             {invoice.source === 'email' || invoice.source === 'chat' ? (
-              invoice.raw_text ? <pre className="detail-doc">{invoice.raw_text}</pre> : <p className="muted">{t('detail.file.none')}</p>
+              invoice.raw_text ? <pre className="detail-doc" data-user="">{invoice.raw_text}</pre> : <p className="muted">{t('detail.file.none')}</p>
             ) : !url ? (
               <p className="muted">{t('detail.file.none')}</p>
             ) : (
@@ -133,7 +134,7 @@ export default function InvoiceDetail() {
                 return (
                   <div key={k}>
                     <dt>{t(`detail.field.${k}`)}</dt>
-                    <dd className={v === null ? 'muted' : undefined}>{v === null ? t(unreached ? 'value.unknown' : 'detail.unread') : shown(k, v)}</dd>
+                    <dd className={v === null ? 'muted' : undefined} data-user={v !== null && printedAsRead(k, v) ? '' : undefined}>{v === null ? t(unreached ? 'value.unknown' : 'detail.unread') : shown(k, v)}</dd>
                     {v !== null && c != null && <dd className="muted">{t('detail.confidence', { pct: pct.format(c) })}</dd>}
                   </div>
                 );
@@ -152,7 +153,7 @@ export default function InvoiceDetail() {
               <section className="detail-card" aria-label={t('detail.payment')}>
                 <h2>{t('detail.payment')}</h2>
                 <dl className="detail-fields">
-                  <div><dt>{t('detail.payment.beneficiary')}</dt><dd>{payment.beneficiary}</dd></div>
+                  <div><dt>{t('detail.payment.beneficiary')}</dt><dd data-user="">{payment.beneficiary}</dd></div>
                   <div><dt>{t('detail.payment.route')}</dt><dd>{payment.route ?? t('value.unknown')}</dd></div>
                   <div><dt>{t('detail.payment.currency')}</dt><dd>{payment.currency}</dd></div>
                   <div><dt>{t('detail.payment.amount')}</dt><dd>{money(payment.amount, lang)}</dd></div>
@@ -177,7 +178,7 @@ export default function InvoiceDetail() {
               </section>
             )}
             {data.policy && (
-              <p className="muted">{t('detail.policy', { name: data.policy.name, version: data.policy.version, date: date(data.policy.created_at, 'America/Bogota') })}</p>
+              <p className="muted">{tu(t('detail.policy', { version: data.policy.version, date: date(data.policy.created_at, 'America/Bogota') }), { name: data.policy.name })}</p>
             )}
             <AskThesaurus invoiceId={id} /> {/* R-106: directly above «Historial», after the decision content it answers about */}
             <Timeline decisions={data.decisions} />

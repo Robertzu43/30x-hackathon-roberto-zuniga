@@ -18,7 +18,7 @@ type Period = {
 // AC-99 (R-109): the loading screen is the loaded markup with this made-up period, hidden by .skeleton.
 const SKELETON: Period = {
   budget_usd: 10000, balance_usd: 10000, paid_usd: 4200, committed_usd: 4200, available_usd: 5800, count_by_outcome: { PAGAR: 1, FRENAR: 1, ESCALAR: 1 },
-  by_beneficiary: ['Nube Sur LLC', 'Pixel Lab', 'Laura Méndez'].map((beneficiary) => ({ beneficiary, paid_usd: 4200, committed_usd: 4200, count: 1 })),
+  by_beneficiary: ['Andina Labs', 'Estudio Kairos', 'Contadores Andinos'].map((beneficiary) => ({ beneficiary, paid_usd: 4200, committed_usd: 4200, count: 1 })),
    autonomy: { n: 1, m: 1 }, autonomy_pct: 100, violations: 0, explained_pct: 100,
 };
 
@@ -111,7 +111,7 @@ export default function Period() {
                 <tbody>
                   {shown.by_beneficiary.map((b, i) => (
                     <tr key={b.beneficiary ?? i}>
-                      <td>{!b.beneficiary ? t('period.unread') : b.beneficiary}</td>
+                      <td data-user={b.beneficiary ? '' : undefined}>{b.beneficiary || t('period.unread')}</td>
                       <td className="num">{b.count}</td>
                       <td className="num">{usd(b.paid_usd)}</td>
                       <td className="num">{usd(b.committed_usd)}</td>

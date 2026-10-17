@@ -14,6 +14,7 @@ import NewInvoice from '../components/NewInvoice';
 import { OutcomeChip, type Outcome } from '../components/OutcomeChip';
 import PortalLinkCard, { originLabel, type PortalLink } from '../components/PortalLinkCard';
 import { RunProgress, useRunAgent } from '../components/RunProgress';
+import { tu } from '../components/User';
 import { useT } from '../i18n';
 import './inbox.css';
 
@@ -64,7 +65,7 @@ export default function Inbox() {
       <Link to={`/invoices/${r.id}`}>
         <OutcomeChip outcome={r.outcome} />
         <span>
-          {r.headline ?? t('inbox.pending_headline', { payee: r.fields?.payee_name ?? t('value.unknown_payee') })}
+          {r.headline ?? (r.fields?.payee_name ? tu(t('inbox.pending_headline'), { payee: r.fields.payee_name }) : t('inbox.pending_headline', { payee: t('value.unknown_payee') }))}
           {originLabel(t, r) && <small className="muted inbox-origin">{originLabel(t, r)}</small>}
         </span>
         <time className="muted" dateTime={r.received_at}>{date.format(new Date(r.received_at))}</time>
@@ -110,7 +111,7 @@ export default function Inbox() {
           {t('inbox.filter.payee')}
           <select value={payee} onChange={(e) => setPayee(e.target.value)}>
             <option value="">{t('inbox.filter.all')}</option>
-            {payees.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+            {payees.map(([k, label]) => <option key={k} value={k} data-user={k === UNREAD ? undefined : ''}>{label}</option>)}
           </select>
         </label>
       </div>

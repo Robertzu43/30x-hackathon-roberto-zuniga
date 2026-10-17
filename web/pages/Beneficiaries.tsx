@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import type { PageRoute } from '../App';
 import type { Beneficiary } from '../../src/engine/types';
 import { screens, useScreen } from '../api';
+import { tu } from '../components/User';
 import { useT } from '../i18n';
 import '../policy.css';
 import { failure, send } from '../withField';
@@ -102,11 +103,11 @@ export default function Beneficiaries() {
             <tbody>
               {(rows ?? SKELETON).map((b) => (
                 <tr key={b.id}>
-                  <td>{b.name}</td>
+                  <td data-user="">{b.name}</td>
                   <td>{b.country ?? '—'}</td>
                   <td>{b.currency ?? '—'}</td>
                   <td>{b.route ?? '—'}</td>
-                  <td>{b.category ?? '—'}</td>
+                  <td data-user={b.category ? '' : undefined}>{b.category ?? '—'}</td>
                   <td>{agreement(b.agreement)}</td>
                   <td><button type="button" aria-label={`${t('ben.edit')} ${b.name}`} onClick={() => openForm(b)}>{t('ben.edit')}</button></td>
                 </tr>
@@ -117,7 +118,7 @@ export default function Beneficiaries() {
       </section>
 
       <section className="card" aria-labelledby="ben-form-h" ref={formRef}>
-        <h2 id="ben-form-h">{editing ? t('ben.edit_title', { name: editing.name }) : t('ben.new_title')}</h2>
+        <h2 id="ben-form-h">{editing ? tu(t('ben.edit_title'), { name: editing.name }) : t('ben.new_title')}</h2>
         <form onSubmit={submit} noValidate>
           <div className="grid">
             {TEXT.map((k) => (

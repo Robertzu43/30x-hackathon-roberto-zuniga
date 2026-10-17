@@ -1,45 +1,50 @@
 // The demo company (D8, AC-45, AC-47, R-15). No service-role client here (AC-38): the public overview signs in as the
-// shared demo user and reads through RLS with that user's JWT, reusing the Bandeja and Periodo routes as they are.
+// shared demo user and reads through RLS with that user's JWT, in one function call (AC-98).
 import { Hono } from 'hono';
 import { runAgent } from '../agent/loop';
 import type { Env } from '../env';
+import type { Lang } from '../i18n';
 import { must, userClient, type Db } from '../lib/supabase';
 import { memberRoutes } from './agent';
-import { invoices } from './invoices';
-import { period } from './period';
+import { periodOf, thisMonth, type PeriodRows } from './screen';
 
 export const DEMO_PASSWORD = 'andina-demo-2026'; // public by design (D8, AC-46); scripts/seed-demo-user.mjs restores it (R-18)
 const UNAVAILABLE = 'La demo no está disponible en este momento. Intenta de nuevo en unos minutos.';
 const isDemo = async (db: Db, companyId: string) =>
   must(await db.from('companies').select('is_demo').eq('id', companyId).single<{ is_demo: boolean }>()).is_demo;
 
-// One sign-in per isolate until a minute before the token expires: Supabase rate-limits sign-ins per IP.
-let cached: { token: string; until: number } | undefined;
-async function demoToken(env: Env): Promise<string | null> {
-  if (cached && cached.until > Date.now()) return cached.token;
+// One sign-in per isolate until a minute before the token expires: Supabase rate-limits sign-ins per IP. The token comes
+// straight from Supabase Auth, so it is used as is; the headlines follow the demo user's stored language, as before.
+let cached: { token: string; lang: Lang; until: number } | undefined;
+async function demoSession(env: Env) {
+  if (cached && cached.until > Date.now()) return cached;
   const { data } = await userClient(env, env.SUPABASE_ANON_KEY).auth
     .signInWithPassword({ email: env.DEMO_EMAIL, password: DEMO_PASSWORD }).catch(() => ({ data: { session: null } }));
   if (!data.session) return null;
-  cached = { token: data.session.access_token, until: Date.now() + (data.session.expires_in - 60) * 1000 };
-  return cached.token;
+  const lang: Lang = data.session.user?.user_metadata?.lang === 'en' ? 'en' : 'es';
+  cached = { token: data.session.access_token, lang, until: Date.now() + (data.session.expires_in - 60) * 1000 };
+  return cached;
 }
 
-// Runs as the demo user: its company must be the demo company, or nothing is shown (never another company's data).
-const view = memberRoutes().get('/', async (c) => {
-  if (!(await isDemo(c.var.db, c.var.companyId))) return c.json({ error: UNAVAILABLE }, 503);
-  const as = { headers: { Authorization: c.req.header('Authorization')! } };
-  const [inv, per] = await Promise.all([invoices.request('/', as, c.env), period.request('/', as, c.env)]);
-  if (!inv.ok || !per.ok) throw new Error(`demo overview: invoices ${inv.status}, period ${per.status}`);
-  return c.json({ invoices: await inv.json(), period: await per.json() });
-});
-
 export const demo = new Hono<{ Bindings: Env }>()
+  // AC-98, R-122: one function as the demo user (null unless its company is the demo company, so never another company's
+  // data), cached at the edge for 60 s. The only cached API answer with company data, and that data is public (D8, AC-45).
   .get('/overview', async (c) => {
-    const token = await demoToken(c.env);
-    const res = token ? await view.request('/', { headers: { Authorization: `Bearer ${token}` } }, c.env) : null;
-    if (res?.status === 401) cached = undefined; // a revoked token: sign in again on the next visit
-    if (!res?.ok) return c.json({ error: UNAVAILABLE }, 503, { 'Cache-Control': 'no-store' });
-    return c.json(await res.json(), 200, { 'Cache-Control': 'public, max-age=60' });
+    const edge = (caches as unknown as { default: Cache }).default; // workers-types' caches.default; the DOM lib in tsconfig hides it
+    const key = new Request(new URL('/api/demo/overview', c.req.url));
+    const hit = await edge.match(key);
+    if (hit) return hit;
+    const s = await demoSession(c.env);
+    const r = s && await userClient(c.env, s.token).rpc('screen_demo_overview', { p_lang: s.lang });
+    if (r?.error) {
+      cached = undefined; // a revoked or expired token: sign in again on the next visit
+      console.error('demo: overview not read', r.error.message);
+    }
+    const d = r?.data as { invoices: unknown[]; period: PeriodRows } | null | undefined;
+    if (!d) return c.json({ error: UNAVAILABLE }, 503, { 'Cache-Control': 'no-store' });
+    const res = c.json({ invoices: d.invoices, period: periodOf(thisMonth(), d.period) }, 200, { 'Cache-Control': 'public, max-age=60' });
+    await edge.put(key, res.clone());
+    return res;
   })
   // "Reiniciar demo": only a member of the demo company; the RPC re-checks it in the database (42501 NOT_DEMO).
   .route('/reset', memberRoutes().post('/', async (c) => {

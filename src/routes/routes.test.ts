@@ -26,6 +26,7 @@ const USERS: Record<string, { id: string; user_metadata: Row }> = {
   'tok-a': { id: 'user-a', user_metadata: {} }, 'tok-en': { id: 'user-en', user_metadata: { lang: 'en' } }, 'tok-d': { id: 'user-d', user_metadata: {} },
   // D41: anonymous users of the trial company T
   'tok-t': { id: 'user-t', user_metadata: {}, is_anonymous: true }, 'tok-t-en': { id: 'user-t-en', user_metadata: { lang: 'en' }, is_anonymous: true },
+  'tok-none': { id: 'user-none', user_metadata: {} }, // signed in, member of no company
 } as Record<string, { id: string; user_metadata: Row }>;
 
 // What the reader's model "reads" from any uploaded or pasted document: a Laura Méndez retainer that passes all 13 checks.
@@ -64,7 +65,7 @@ function testDb(seed: Record<string, Row[]> = {}) {
       taken.set(String(args.p_key), n + 1);
       return { data: { remaining: 29 - n }, error: null };
     }
-    if (name !== 'rate_limit_hit') return base.rpc(name, args);
+    if (name !== 'rate_limit_hit') return base.rpc(name, args, USERS[jwt ?? '']?.id); // the screen functions run as auth.uid()
     base.meter.hit();
     base.rpcs.push({ name, args });
     if (rateLimit.fail === 'throw') throw new TypeError('fetch failed');
@@ -828,6 +829,97 @@ describe('GET /api/period (AC-44, R-01)', () => {
     const r = await call('GET', '/api/period?month=octubre');
     expect(r.status).toBe(400);
     expect(await r.json()).toEqual({ error: 'Mes no válido: usa AAAA-MM' });
+  });
+});
+
+// AC-98: each screen loads with one request, and that request makes one database round trip: the screen function's RPC.
+// The auth check here is the fake's getUser (an opaque test token); a real ES256 token needs no call (src/lib/auth.test.ts).
+describe('GET /api/screen/* and Detalle: one RPC per screen, the same data as the old endpoints (AC-98)', () => {
+  const measure = async (path: string, token = 'tok-a') => {
+    const [calls, rpcs, queries] = [db.meter.calls, db.rpcs.length, db.queries.length];
+    const res = await call('GET', path, undefined, token);
+    return { res, body: await json(res.clone()), calls: db.meter.calls - calls, rpcs: db.rpcs.slice(rpcs).map((r) => r.name), queries: db.queries.length - queries };
+  };
+  const old = async (path: string, token = 'tok-a') => json(await call('GET', path, undefined, token));
+
+  it('inbox: { invoices, last_run, portal, beneficiaries, dashboard } equal to /api/invoices, /api/agent/last-run, /api/portal-link and /api/beneficiaries (R-132)', async () => {
+    db = testDb({ ...workspace(['01', '04', '11']), agent_runs: [{ company_id: null, trigger: 'cron', created_at: '2026-10-17T14:58:00Z' },
+      { company_id: 'B', trigger: 'manual', created_at: '2026-10-17T14:59:00Z' }] });
+    db.tables.companies!.find((c) => c.id === 'A')!.portal_slug = 'andina-labs';
+    db.tables.beneficiaries!.push({ id: 'old', company_id: 'A', name: 'Antiguo', archived: true }, { id: 'b', company_id: 'B', name: 'De otra' },
+      { id: 'a0', company_id: 'A', name: 'Aaa Primero', archived: false });
+    await call('POST', '/api/invoices/run');
+    const m = await measure('/api/screen/inbox?lang=es');
+    expect(m).toMatchObject({ calls: 2, rpcs: ['screen_inbox'], queries: 0 });
+    const beneficiaries = (await old('/api/beneficiaries') as Row[]).map(({ id, name }) => ({ id, name }));
+    expect(beneficiaries.length).toBeGreaterThan(1);
+    expect(m.body).toEqual({ invoices: await old('/api/invoices'), last_run: await old('/api/agent/last-run'), portal: await old('/api/portal-link'),
+      beneficiaries, dashboard: null });
+    expect((m.body.beneficiaries as Row[])[0]).toEqual({ id: 'a0', name: 'Aaa Primero' });
+    expect((m.body.invoices as Row[]).map((r) => r.company_id)).toEqual(['A', 'A', 'A']);
+    expect(db.rpcs.filter((r) => r.name === 'screen_inbox').at(-1)!.args).toEqual({ p_lang: 'es' });
+  });
+
+  it('inbox: ?lang= picks the headline language; without it the tab or stored language does; the portal URL uses PORTAL_URL', async () => {
+    db = testDb(workspace(['11']));
+    db.tables.companies!.find((c) => c.id === 'A')!.portal_slug = 'andina-labs';
+    await call('POST', '/api/invoices/run');
+    const e = { ...env, PORTAL_URL: 'https://facturas.test', INBOUND_EMAIL_DOMAIN: 'correo.example' } as Env;
+    const get = async (path: string, token = 'tok-a') => json<{ invoices: Row[]; portal: Row }>(await call('GET', path, undefined, token, e));
+    expect((await get('/api/screen/inbox?lang=en')).invoices[0]!.headline).toMatch(/^ESCALATE/);
+    expect((await get('/api/screen/inbox', 'tok-en')).invoices[0]!.headline).toMatch(/^ESCALATE/);
+    expect((await get('/api/screen/inbox?lang=fr')).invoices[0]!.headline).toMatch(/^ESCALAR/);
+    expect((await get('/api/screen/inbox')).portal).toEqual(await get('/api/portal-link'));
+  });
+
+  it('period: { period, charts } equal to /api/period, also for ?month=; a bad month is the same 400 without an RPC', async () => {
+    db = testDb(workspace());
+    await runAll();
+    const m = await measure('/api/screen/period');
+    expect(m).toMatchObject({ calls: 2, rpcs: ['screen_period'], queries: 0 });
+    expect(m.body).toEqual({ period: await old('/api/period'), charts: null });
+    expect((await old('/api/screen/period?month=2026-09')).period).toEqual(await old('/api/period?month=2026-09'));
+    const bad = await measure('/api/screen/period?month=octubre');
+    expect([bad.res.status, bad.body, bad.rpcs]).toEqual([400, { error: 'Mes no válido: usa AAAA-MM' }, []]);
+  });
+
+  it('beneficiaries: { beneficiaries } equal to /api/beneficiaries', async () => {
+    db = testDb(workspace([]));
+    db.tables.beneficiaries!.push({ id: 'old', company_id: 'A', name: 'Antiguo', archived: true }, { id: 'b', company_id: 'B', name: 'De otra' });
+    const m = await measure('/api/screen/beneficiaries');
+    expect(m).toMatchObject({ calls: 2, rpcs: ['screen_beneficiaries'], queries: 0 });
+    expect(m.body).toEqual({ beneficiaries: await old('/api/beneficiaries') });
+  });
+
+  it('policy: { policy, versions, company, fx } equal to /api/policy (newest first), /api/company and /api/fx', async () => {
+    db = testDb({ ...workspace([]), fx_latest: [{ day: '2026-10-17', currency: 'MXN', usd_per_unit: 0.054115482, source: 'Yahoo Finance', fetched_at: '2026-10-17T11:00:00Z' },
+      { day: '2026-10-14', currency: 'COP', usd_per_unit: 0.00031538976, source: 'open.er-api.com', fetched_at: '2026-10-14T11:00:00Z' }] });
+    db.tables.policies!.push({ id: 'p2', company_id: 'A', version: 2, name: 'Política general', rules: { ...SEED.rules, per_payment_limit_usd: 1 }, created_at: '2026-10-02T00:00:00Z' },
+      { id: 'pb', company_id: 'B', version: 3, name: 'De otra', rules: {}, created_at: '2026-10-02T00:00:00Z' });
+    const m = await measure('/api/screen/policy');
+    expect(m).toMatchObject({ calls: 2, rpcs: ['screen_policy'], queries: 0 });
+    const versions = await old('/api/policy');
+    expect(m.body).toEqual({ policy: versions[0], versions, company: await old('/api/company'), fx: await old('/api/fx') });
+    expect((m.body.policy as Row).version).toBe(2);
+  });
+
+  it('Detalle: GET /api/invoices/:id is one screen_detail RPC, no table read and no membership read', async () => {
+    db = testDb(workspace(['11']));
+    await call('POST', '/api/invoices/run');
+    const m = await measure(`/api/invoices/${uid('A-11')}`);
+    expect(m).toMatchObject({ calls: 2, rpcs: ['screen_detail'], queries: 0 });
+    expect(db.rpcs.at(-1)!.args).toEqual({ p_id: uid('A-11') });
+    expect((await measure(`/api/invoices/${uid('B-01')}`)).res.status).toBe(404); // another company's invoice: not found
+  });
+
+  it('401 without a session, and for a signed-in user of no company; no screen reads another company', async () => {
+    db = testDb(workspace(['01']));
+    for (const path of ['/api/screen/inbox', '/api/screen/period', '/api/screen/beneficiaries', '/api/screen/policy']) {
+      expect((await call('GET', path, undefined, null)).status).toBe(401);
+      const none = await call('GET', path, undefined, 'tok-none');
+      expect([none.status, await none.json()]).toEqual([401, { error: 'No autorizado' }]);
+    }
+    expect((await call('GET', `/api/invoices/${uid('A-01')}`, undefined, 'tok-none')).status).toBe(404);
   });
 });
 

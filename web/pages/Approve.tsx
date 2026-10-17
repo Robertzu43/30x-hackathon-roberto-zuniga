@@ -65,12 +65,12 @@ export default function Approve() {
           <h2>{t('approve.read')}</h2>
           <dl className="approve-read">
             <dt>{t('approve.payee')}</dt>
-            <dd>{f.payee_name ?? t('value.unknown_payee')}</dd>
+            <dd data-user={f.payee_name ? '' : undefined}>{f.payee_name ?? t('value.unknown_payee')}</dd>
             <dt>{t('approve.amount')}</dt>
             <dd>{f.amount === null ? t('value.unknown_amount') : `${money(f.amount, lang)} ${f.currency ?? ''}`.trim()}
               {f.currency !== 'USD' && d.amount_usd !== null && ` (${money(d.amount_usd, lang)} USD)`}</dd>
             <dt>{t('approve.number')}</dt>
-            <dd>{f.invoice_number ?? t('value.unknown')}</dd>
+            <dd data-user={f.invoice_number ? '' : undefined}>{f.invoice_number ?? t('value.unknown')}</dd>
           </dl>
           <h2>{t('approve.broken')}</h2>
           <ul className="approve-broken">

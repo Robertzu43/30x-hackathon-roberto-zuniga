@@ -7,8 +7,9 @@ import type { Env } from '../env';
 type Row = Record<string, unknown>;
 const { runAgent } = vi.hoisted(() => ({ runAgent: vi.fn(async (...args: unknown[]) => args && ({ PAGAR: 1, FRENAR: 0, ESCALAR: 0, errors: 0 })) }));
 let db: ReturnType<typeof testDb>;
-// userClient(env, anonKey) is the sign-in client; userClient(env, jwt) the user's RLS client.
-vi.mock('../lib/supabase', async (orig) => ({ ...(await orig<typeof import('../lib/supabase')>()), userClient: () => db }));
+// userClient(env, anonKey) is the sign-in client; userClient(env, jwt) the user's RLS client, whose RPCs run as that user.
+vi.mock('../lib/supabase', async (orig) => ({ ...(await orig<typeof import('../lib/supabase')>()),
+  userClient: (_e: Env, jwt: string) => ({ ...db, rpc: (name: string, args?: Row) => db.rpc(name, args, USERS[jwt]) }) }));
 vi.mock('../agent/loop', () => ({ runAgent }));
 
 const PASSWORD = 'andina-demo-2026';
@@ -30,8 +31,10 @@ function testDb() {
   return {
     ...base, calls, signIns,
     resetFails: false,
-    rpc: async (name: string, args: Row = {}) => {
-      if (name !== 'reset_demo_company') return base.rpc(name, args);
+    refused: false, // PostgREST refuses the demo token (revoked or expired)
+    rpc: async (name: string, args: Row = {}, uid?: string) => {
+      if (db.refused) return { data: null, error: { message: 'JWT expired' } };
+      if (name !== 'reset_demo_company') return base.rpc(name, args, uid);
       calls.push('reset_demo_company');
       return db.resetFails ? { data: null, error: { message: 'NOT_DEMO' } } : { data: 'D', error: null };
     },
@@ -47,15 +50,22 @@ function testDb() {
   };
 }
 
+// The Workers Cache API (caches.default), keyed by URL. Expiry is the stored response's own Cache-Control, as at the edge.
+const edge = new Map<string, Response>();
+const cache = { match: vi.fn(async (k: Request) => edge.get(k.url)?.clone()), put: vi.fn(async (k: Request, r: Response) => { edge.set(k.url, r.clone()); }) };
+vi.stubGlobal('caches', { default: cache });
+
 let app: (typeof import('../index'))['app'];
 beforeEach(async () => {
+  edge.clear();
+  cache.put.mockClear();
   vi.resetModules(); // a fresh isolate: the demo token cache starts empty
   ({ app } = await import('../index'));
   db = testDb();
   runAgent.mockClear();
   runAgent.mockImplementation(async () => { db.calls.push('runAgent'); return { PAGAR: 1, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 20, cursor: 'c1' }; });
 });
-const get = (e: Env = env) => app.request('/api/demo/overview', {}, e);
+const get = (e: Env | string = env) => typeof e === 'string' ? app.request(`http://localhost${e}`, {}, env) : app.request('/api/demo/overview', {}, e);
 const reset = (token?: string) => app.request('/api/demo/reset', { method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {} }, env);
 
 describe('GET /api/demo/overview (AC-45)', () => {
@@ -72,8 +82,35 @@ describe('GET /api/demo/overview (AC-45)', () => {
 
   it('signs the demo user in once per isolate, not once per visit', async () => {
     await get();
+    edge.clear(); // past the 60 s edge cache
     await get();
     expect(db.signIns).toHaveLength(1);
+  });
+
+  it('reads through one function as the demo user: one RPC, no table read, no Auth user check (AC-98)', async () => {
+    await get();
+    expect(db.rpcs).toEqual([{ name: 'screen_demo_overview', args: { p_lang: 'es' } }]);
+    expect(db.queries).toEqual([]);
+  });
+
+  it('is cached at the edge for 60 s: the next visit is the cached answer, with no sign-in and no RPC (AC-98, R-122)', async () => {
+    const first = await (await get()).json();
+    const again = await get('/api/demo/overview?x=1');
+    expect(await again.json()).toEqual(first);
+    expect(again.headers.get('Cache-Control')).toBe('public, max-age=60');
+    expect(db.signIns).toHaveLength(1);
+    expect(db.rpcs).toHaveLength(1);
+    expect(cache.put).toHaveBeenCalledTimes(1);
+    expect(new URL(cache.put.mock.calls[0]![0].url).pathname + new URL(cache.put.mock.calls[0]![0].url).search).toBe('/api/demo/overview');
+  });
+
+  it('never caches a 503; a token the database refuses is dropped, so the next visit signs in again', async () => {
+    db.refused = true;
+    expect((await get()).status).toBe(503);
+    db.refused = false;
+    expect((await get()).status).toBe(200);
+    expect(db.signIns).toHaveLength(2);
+    expect(cache.put).toHaveBeenCalledTimes(1);
   });
 
   it('answers 503 in Spanish, never cached, when the demo user cannot sign in', async () => {
@@ -108,7 +145,7 @@ describe('POST /api/demo/reset (AC-47, R-15)', () => {
     expect(r.status).toBe(200);
     expect(await r.json()).toEqual({ PAGAR: 1, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 20, cursor: 'c1' });
     expect(db.calls).toEqual(['reset_demo_company', 'runAgent']);
-    expect(runAgent).toHaveBeenCalledWith(expect.objectContaining({ db, env, budget: expect.objectContaining({ used: expect.any(Number) }) }), 'D', 'pending', 'reset');
+    expect(runAgent).toHaveBeenCalledWith(expect.objectContaining({ db: expect.objectContaining({ tables: db.tables }), env, budget: expect.objectContaining({ used: expect.any(Number) }) }), 'D', 'pending', 'reset');
   });
 
   it('a failed reset answers 503 "No pude reiniciar la demo; intenta de nuevo." and runs nothing (R-57)', async () => {

@@ -4,6 +4,7 @@ import { Route, Routes } from 'react-router-dom';
 import { expect, test, vi } from 'vitest';
 import OutcomeChip from './components/OutcomeChip';
 import Inbox, { route } from './pages/Inbox';
+import { sentence } from './test/text';
 import { mockApi, renderAt, signedInAs } from './test/utils';
 
 const FORMAT = 'Formato no admitido: sube un PDF, PNG o JPG de hasta 10 MB';
@@ -78,7 +79,7 @@ test('a pending row shows the Pendiente chip and a pending line', async () => {
   setup();
   await screen.findByText(/supera el umbral/);
   expect(within(items()[2]!).getByText('Pendiente')).toBeTruthy();
-  expect(within(items()[2]!).getByText('Nubia Diseño · el agente aún no la ha decidido')).toBeTruthy();
+  expect(within(items()[2]!).getByText(sentence('Nubia Diseño · el agente aún no la ha decidido'))).toBeTruthy();
 });
 
 test('filter by ESCALAR leaves 1, filter by beneficiary narrows too', async () => {
@@ -359,7 +360,7 @@ test('rows show where a portal or email invoice came from (AC-86)', async () => 
   ] });
   await screen.findByText('PAGAR · portal');
   expect(within(items()[0]!).getByText('Portal de proveedores')).toBeTruthy();
-  expect(within(items()[1]!).getByText('Correo de cobros@kodex.example')).toBeTruthy();
+  expect(within(items()[1]!).getByText(sentence('Correo de cobros@kodex.example'))).toBeTruthy();
   expect(items()[2]!.textContent).not.toMatch(/Portal de proveedores|Correo/);
 });
 

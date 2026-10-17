@@ -118,6 +118,23 @@ describe('headline (AC-27, AC-13)', () => {
     const a = decideWithOverrides(['umbral_aprobacion'], { email: 'roberto@hacketix.com', channel: 'link' }, i, b, RULES, EMPTY, NOW);
     expect(headline(a, i, b, 'es')).toBe('PAGAR · 4.200 USD a Nube Sur LLC, suscripción de octubre, aprobado por roberto@hacketix.com');
   });
+  it('PAGAR approved for a payee with no agreement reads "sin acuerdo registrado" (R-52, AC-27)', () => {
+    const i = inv({ payee_name: 'Pixel Lab', amount: 900, bank_account: 'Banco de Bogotá ahorros 112-45009-8' }), b = findBeneficiary('Pixel Lab', DIRECTORY);
+    const a = decideWithOverrides(['beneficiario_permitido', 'beneficiario_cuenta', 'acuerdo'], { email: 'roberto@hacketix.com', channel: 'dashboard' }, i, b, RULES, EMPTY, NOW);
+    expect(a.outcome).toBe('PAGAR');
+    expect(headline(a, i, b, 'es')).toBe('PAGAR · 900 USD a Pixel Lab, sin acuerdo registrado, aprobado por roberto@hacketix.com');
+    expect(headline(a, i, b, 'en')).toBe('PAY · 900 USD to Pixel Lab, no agreement on file, approved by roberto@hacketix.com');
+  });
+  it('no headline leaks a key, null or undefined, for every outcome, language and agreement type (R-52)', () => {
+    const i = inv({}), b = findBeneficiary('Laura Méndez', DIRECTORY);
+    const base = run({}).d;
+    for (const outcome of ['PAGAR', 'ESCALAR', 'FRENAR'] as const) for (const type of [null, 'weird', 'retainer', 'subscription', 'hourly', 'one_off'])
+      for (const lang of ['es', 'en'] as const) for (const by of [undefined, 'ana@x.co']) {
+        const checks = base.checks.map((c) => (c.id === 'acuerdo' ? { ...c, values: { ...c.values, agreement_type: type }, verdict: outcome === 'PAGAR' ? c.verdict : 'no_cumple' as const } : c))
+          .map((c) => (by && c.id === 'umbral_aprobacion' ? { ...c, overridden: { by, channel: 'link' as const } } : c));
+        expect(headline({ outcome, checks }, i, b, lang), `${outcome} ${type} ${lang}`).not.toMatch(/headline\.|null|undefined/);
+      }
+  });
   it('an unreadable invoice says "ilegible" (AC-13)', () => {
     const { d, i, b } = run({ payee_name: null, amount: null, currency: null, invoice_number: null });
     expect(headline(d, i, b, 'es')).toMatch(/^ESCALAR · monto desconocido a beneficiario desconocido: ilegible/);

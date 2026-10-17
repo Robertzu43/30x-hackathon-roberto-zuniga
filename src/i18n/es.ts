@@ -46,6 +46,7 @@ const es: Record<string, string> = {
   'headline.agreement.subscription': 'suscripción de {month}',
   'headline.agreement.hourly': 'horas de {month}',
   'headline.agreement.one_off': 'pago único',
+  'headline.agreement.none': 'sin acuerdo registrado',
   'check.lectura.name': 'Lectura',
   'check.lectura.cumple': 'leí beneficiario, monto, moneda y número de factura',
   'check.lectura.no_cumple': 'la lectura no es confiable',

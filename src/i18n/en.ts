@@ -46,6 +46,7 @@ const en: Record<string, string> = {
   'headline.agreement.subscription': '{month} subscription',
   'headline.agreement.hourly': '{month} hours',
   'headline.agreement.one_off': 'one-off payment',
+  'headline.agreement.none': 'no agreement on file',
   'check.lectura.name': 'Reading',
   'check.lectura.cumple': 'I read payee, amount, currency and invoice number',
   'check.lectura.no_cumple': 'the reading is not reliable',

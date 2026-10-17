@@ -89,7 +89,8 @@ export function headline(decision: Pick<Decision, 'outcome' | 'checks'>, invoice
   };
   if (decision.outcome === 'PAGAR') {
     const type = decision.checks.find((c) => c.id === 'acuerdo')?.values.agreement_type;
-    const agreement = fill(lang, `headline.agreement.${type}`, { month: monthName(lang, invoice.received_at) });
+    const known = `headline.agreement.${type}`; // t returns the key itself when it has no entry: null or unknown types read "sin acuerdo registrado" (R-52)
+    const agreement = fill(lang, t(lang, known) === known ? 'headline.agreement.none' : known, { month: monthName(lang, invoice.received_at) });
     const by = decision.checks.find((c) => c.overridden)?.overridden?.by;
     return fill(lang, by ? 'headline.pay_approved' : 'headline.pay', { ...base, agreement, by });
   }

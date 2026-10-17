@@ -1,0 +1,21 @@
+{
+  "output": {
+    "message": {
+      "role": "assistant",
+      "content": [
+        {
+          "text": "Laura Méndez\nFactura N.º 1042\nFacturar a\nAndina Labs Inc.\nFecha de emisión 16 de octubre de 2026\nVence 30 de noviembre de 2026\nRetainer mensual de desarrollo 2.500,00\nTotal a pagar USD 2.500,00\nDatos de pago\nBancolombia ahorros 0012-3456-4821"
+        }
+      ]
+    }
+  },
+  "stopReason": "end_turn",
+  "usage": {
+    "inputTokens": 1630,
+    "outputTokens": 96,
+    "totalTokens": 1726
+  },
+  "metrics": {
+    "latencyMs": 812
+  }
+}

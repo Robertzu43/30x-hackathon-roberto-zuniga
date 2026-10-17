@@ -2,7 +2,7 @@
 // per language at decision time and stored (R-28); the Spanish text is the email subject and first line (AC-39).
 import { validFields } from '../engine/checks';
 import { HUMAN_OVERRIDABLE } from '../engine/decide';
-import { asRead, fill, list, money, reasonText, whatWouldPay } from '../engine/explain';
+import { asRead, blocking, fill, list, money, noRate, reasonText, whatWouldPay } from '../engine/explain';
 import type { Decision, Invoice } from '../engine/types';
 import { t, type Lang } from '../i18n';
 
@@ -14,12 +14,12 @@ const nameOf = (email: string) => {
 
 export function escalationQuestion(args: { approverEmail: string; invoice: Invoice; decision: Pick<Decision, 'checks'> }, lang: Lang): string {
   const f = validFields(args.invoice.fields); // R-71
-  const failing = args.decision.checks.filter((c) => c.verdict !== 'cumple' && !c.overridden);
-  const motives = failing.map((c) => fill(lang, `question.motive.${c.id}.${c.verdict}${asRead(c)}`,
+  const failing = blocking(args.decision.checks); // AC-74: a missing rate is the reason, not the USD checks it left unverifiable
+  const motives = failing.map((c) => fill(lang, `question.motive.${c.id}.${c.verdict}${asRead(c)}${noRate(c)}`,
     Object.fromEntries(Object.entries(c.values).map(([k, v]) => [k, typeof v === 'number' ? money(v, lang) : v]))));
   // R-27: approving cannot unlock these, so the agent says what would and offers to reject.
   const fix = whatWouldPay({ checks: failing.filter((c) => !HUMAN_OVERRIDABLE.includes(c.id)) }, lang)
-    .map((l) => (lang === 'es' ? l.replace(/^Que /, '') : l.charAt(0).toLowerCase() + l.slice(1)));
+    .map((l) => l.replace(lang === 'es' ? /^Que / : /^That /, '')).map((l) => (lang === 'es' ? l : l.charAt(0).toLowerCase() + l.slice(1)));
   // R-75, R-80: no answer from the reader, or the amount guard; whatever was approved since
   const s = reasonText(args.decision.checks, 'question', lang, { source: t(lang, `lector.source.${args.invoice.source}`) }, f)
     ?? `${fill(lang, 'question.sentence', {

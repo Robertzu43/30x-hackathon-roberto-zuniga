@@ -64,6 +64,10 @@ export interface PolicyRules {
   allowed_beneficiaries_only?: boolean | null;
 }
 
+// The newest stored market rate of a currency (fx_rates, AC-73): USD per unit, as stored (R-85.2).
+export interface MarketRate { currency: string; usd_per_unit: number; source: string; fetched_at: string }
+export type MarketRates = Record<string, MarketRate>;
+
 export interface PreviousInvoice {
   invoice_id: string;
   invoice_number: string | null;

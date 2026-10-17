@@ -40,6 +40,13 @@ const escalated = () => {
 };
 
 describe('agentTrace "Lo que hice" (AC-64, D24, R-29)', () => {
+  it('no current rate: step 4 names the rate as the reason, es and en (AC-74)', () => {
+    const i = inv({ payee_name: 'Contadores Andinos S.A.S.', amount: 1500000, currency: 'COP', invoice_number: 'CA-5521', bank_account: 'Davivienda corriente 4569-8812-0034' });
+    const stale = { COP: { currency: 'COP', usd_per_unit: 0.00024876, source: 'Yahoo Finance', fetched_at: '2026-10-14T15:00:00Z' } };
+    const d = stored(decide(i, findBeneficiary(i.fields.payee_name, DIRECTORY), { ...RULES, fx_rates: {} }, EMPTY, NOW, stale));
+    expect(trace(i, [d], { isDemo: true })[3]?.text).toBe('Decidí ESCALAR: no tengo una tasa de cambio vigente para COP.');
+    expect(trace(i, [d], { isDemo: true }, 'en')[3]?.text).toBe('I decided ESCALATE: I have no current exchange rate for COP.');
+  });
   it('PAGAR reproduces D24 verbatim, with its loop stages', () => {
     const i = inv();
     const steps = trace(i, [stored(run(i))]);
@@ -266,5 +273,35 @@ describe('agentTrace when the amount guard fired (AC-14 Clarified, R-80, R-77)',
     expect(a.outcome).toBe('ESCALAR');
     const h = stored(a, { id: 'd2', seq: 2, actor: 'human', actor_email: 'r@x.co', channel: 'link' });
     expect(trace(i, [d, h])[5]?.text).toMatch(/el resultado es ESCALAR: parece una nota crédito, no un cobro\.$/);
+  });
+});
+
+describe('"Lo que hice" step 1 names the channel (AC-86, R-90)', () => {
+  const via = (origin: 'app' | 'portal' | 'email', source: Invoice['source'] = 'pdf', sender: string | null = null) =>
+    ({ ...inv({}, source), origin, sender });
+  const first = (i: ReturnType<typeof via>, lang: 'es' | 'en' = 'es') => trace(i, [stored(run(i))], {}, lang)[0]?.text;
+
+  it('a portal PDF, image and message, in es and en', () => {
+    expect(first(via('portal'))).toBe('Leí el PDF que llegó por el portal de proveedores y encontré a Laura Méndez, 2.500 USD, factura #1042.');
+    expect(first(via('portal'), 'en')).toBe('I read the PDF that came through the vendor portal and found Laura Méndez, 2,500 USD, invoice #1042.');
+    expect(first(via('portal', 'image'))).toMatch(/^Leí la imagen que llegó por el portal de proveedores y encontré/);
+    expect(first(via('portal', 'chat'))).toMatch(/^Leí el mensaje que llegó por el portal de proveedores y encontré/);
+    expect(first(via('portal', 'chat'), 'en')).toMatch(/^I read the message that came through the vendor portal and found/);
+  });
+
+  it('an email names its sender, and a file names the email it came in', () => {
+    expect(first(via('email', 'email', 'ana@nubesur.co'))).toBe('Leí el correo que envió ana@nubesur.co y encontré a Laura Méndez, 2.500 USD, factura #1042.');
+    expect(first(via('email', 'email', 'ana@nubesur.co'), 'en')).toMatch(/^I read the email sent by ana@nubesur\.co and found Laura/);
+    expect(first(via('email', 'pdf', 'ana@nubesur.co'))).toMatch(/^Leí el PDF del correo que envió ana@nubesur\.co y encontré/);
+    expect(first(via('email', 'image', 'ana@nubesur.co'), 'en')).toMatch(/^I read the image from the email sent by ana@nubesur\.co and found/);
+  });
+
+  it('an app invoice, or one without origin, reads as before', () => {
+    expect(first(via('app'))).toBe('Leí el PDF y encontré a Laura Méndez, 2.500 USD, factura #1042.');
+  });
+
+  it('the unread path names the channel too', () => {
+    const i = { ...via('portal'), fields: { ...LAURA, payee_name: null, amount: null, currency: null, invoice_number: null, confidence: {}, read_error: 'lector_no_disponible' as const } };
+    expect(first(i)).toBe('Intenté leer el PDF que llegó por el portal de proveedores, pero el lector de facturas no estaba disponible; no inventé ningún dato.');
   });
 });

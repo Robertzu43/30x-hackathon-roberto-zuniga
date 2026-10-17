@@ -5,7 +5,7 @@ import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { escalationQuestion } from '../agent/question';
 import { recorder, type DecisionInput, type Recorder } from '../agent/record';
-import { directorio, duplicados, findBeneficiary, periodo, politica } from '../agent/tools';
+import { directorio, duplicados, findBeneficiary, periodo, politica, tasas } from '../agent/tools';
 import { recordedFields, type StoredDecision } from '../agent/trace';
 import { decideWithOverrides } from '../engine/decide';
 import { headline } from '../engine/explain';
@@ -60,13 +60,14 @@ async function answer(a: Answer): Promise<StoredDecision | Refusal> {
   // R-77, R-55: what the page showed: the stored fields, else those the escalation recorded. Never a re-read.
   const fields = recordedFields(row.fields, esc.checks);
   const invoice: Invoice = { id: row.id, received_at: row.received_at, source: row.source, fields };
-  const [directory, policy] = await Promise.all([directorio(db, companyId), politica(db, companyId)]);
+  // AC-74, R-85.6: the stored market rates; an answer never fetches.
+  const [directory, policy, market] = await Promise.all([directorio(db, companyId), politica(db, companyId), tasas(db)]);
   const beneficiary = findBeneficiary(fields.payee_name, directory);
   const failing = esc.checks.filter((c) => c.verdict !== 'cumple').map((c) => c.id);
   for (let attempt = 0; ; attempt++) {
     const period = { ...await periodo(db, companyId, invoice), previous: await duplicados(db, companyId, invoice, policy?.rules ?? null, directory) };
     const d: Decision = a.action === 'approve'
-      ? decideWithOverrides(failing, a.by, invoice, beneficiary, policy?.rules ?? null, period, new Date().toISOString())
+      ? decideWithOverrides(failing, a.by, invoice, beneficiary, policy?.rules ?? null, period, new Date().toISOString(), market)
       : { outcome: 'FRENAR', checks: esc.checks, amount_usd: esc.amount_usd, payment: null };
     const esc2 = d.outcome === 'ESCALAR';
     const question = (lang: 'es' | 'en') => (esc2 ? escalationQuestion({ approverEmail: a.approverEmail, invoice, decision: d }, lang) : null);

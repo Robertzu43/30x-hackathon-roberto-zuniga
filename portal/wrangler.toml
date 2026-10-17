@@ -1,0 +1,18 @@
+# The vendor portal Worker (D34, AC-83, AC-85 item 1): static assets and one service binding, nothing else. It holds no
+# secret, no Supabase URL and no key; the intake runs in the main Worker behind PortalApi's RPC methods.
+# Deploy after the main Worker: npx wrangler deploy -c portal/wrangler.toml
+name = "facturas"
+account_id = "f23a90e15150a8af524f01d3bce393ab"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = true # every response gets the security headers
+html_handling = "none"
+
+[[services]]
+binding = "MAIN"
+service = "30x-hackathon"
+entrypoint = "PortalApi"

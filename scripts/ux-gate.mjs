@@ -1,4 +1,4 @@
-/* global process, console, fetch, Buffer, URL, setTimeout, SVGElement, addEventListener, document, window, performance, getComputedStyle, innerWidth, innerHeight, NodeFilter, PerformanceObserver, sessionStorage, localStorage, axe */ // Node script + code that runs in the page
+/* global process, console, fetch, Buffer, URL, setTimeout, SVGElement, addEventListener, document, window, performance, getComputedStyle, innerWidth, innerHeight, NodeFilter, PerformanceObserver, requestAnimationFrame, location, sessionStorage, localStorage, axe */ // Node script + code that runs in the page
 // The D38 UX gate (AC-91). Usage:
 //   node scripts/ux-gate.mjs --base <url> [--screens inbox,policy|all] [--only 6.palette] [--palette]
 //                            [--mutate] [--route id=/path] [--approve-token t] [--status-token t]
@@ -51,7 +51,7 @@ const sendPortal = async (page, o) => {
 };
 const clickButton = (name) => async (page) => { await page.getByRole('button', { name }).first().click(); };
 export const SCREENS = [
-  { id: 'login', exp: 'finance', path: '/login', auth: false, fill: { '#login-email': 'gate@example.test' } },
+  { id: 'login', exp: 'finance', path: '/login', auth: false, intro: true, fill: { '#login-email': 'gate@example.test' } },
   { id: 'tour', exp: 'finance', path: '/', tour: true, primary: '.tour-card button.primary' },
   { id: 'inbox', exp: 'finance', path: '/', states: STATES },
   { id: 'new-invoice-file', base: 'new-invoice', exp: 'finance', path: '/', primary: 'form.new-invoice button.primary', prepare: newInvoice(0, false) },
@@ -66,18 +66,23 @@ export const SCREENS = [
   { id: 'beneficiaries', exp: 'finance', path: '/beneficiaries', states: STATES },
   { id: 'period', exp: 'finance', path: '/period', states: STATES },
   { id: 'approve', exp: 'finance', path: (v) => `/approve/${v.approveToken ?? 'invalid'}`, auth: false },
-  { id: 'demo', exp: 'finance', path: '/demo', auth: false },
+  { id: 'demo', exp: 'finance', path: '/demo', auth: false, intro: true }, // intro: checked after the wordmark intro ends, then once more with reduced motion (D42, AC-108)
   { id: 'portal', exp: 'vendor', path: '/andina-labs', auth: false, states: STATES, primary: 'button[type="submit"], button.primary', compose: 'textarea', send: true, na: { empty: 'sin estado vacío por diseño' } }, // compose: typed before 4.busy, an empty send takes the error path; send: error and offline type a message and send it
   { id: 'portal-reply', exp: 'vendor', path: '/andina-labs', auth: false, prepare: sendPortal, primary: 'button[type="submit"], button.primary' },
   { id: 'portal-error', exp: 'vendor', path: '/no-such-portal-gate', auth: false, notFound: true }, // designed 404 (R-103)
   { id: 'status', exp: 'vendor', path: (v) => `/estado/${v.statusToken}`, auth: false, states: STATES, needs: 'statusToken', na: { empty: SERVER_PAGE, error: SERVER_PAGE } }, // server-rendered; offline is the page's own notice
   { id: 'status-invalid', exp: 'vendor', path: '/estado/token-invalido-gate', auth: false, notFound: true },
   // D39-D41 (AC-91 Clarified). `session: 'trial'` screens share the run's one anonymous user. The prepare selectors follow AC-94/AC-95's copy; adjust with --route if Task 40/41 names differ.
-  { id: 'trial', exp: 'finance', path: '/', session: 'trial' },
+  { id: 'trial', exp: 'finance', path: '/', session: 'trial', pass: true }, // pass: screenshot at landing, CLS read when the first-login pass ends (R-143)
   { id: 'login-password', exp: 'finance', path: '/login', auth: false, prepare: clickButton(/contraseña|password/i), fill: { '#login-email': 'gate@example.test', '#login-password': 'gate-password' } }, // filled: an empty form stops at the browser's own check, with no busy state
   { id: 'save-access', exp: 'finance', path: '/', session: 'trial', prepare: clickButton(/guardar mi acceso|save my access/i), primary: '.save-access button.primary', fill: { '#save-email': 'gate@example.test', '#save-password': 'gate-password' } }, // without --mutate the save request is held and never sent
   { id: 'leave-trial', exp: 'finance', path: '/', session: 'trial', prepare: clickButton(/cerrar sesión|sign out/i) },
   { id: 'beneficiary', exp: 'finance', path: (v) => `/beneficiaries/${v.beneficiary}`, needs: 'beneficiary', na: 'the demo has no beneficiary' },
+  // D42 (AC-109): the hand-over from /login (password door, the public demo user) and from /demo into Bandeja. N/A until the transition exists.
+  { id: 'entry', exp: 'finance', path: '/login', auth: false, entry: true, doors: {
+    login: { path: '/login', go: async (page, o) => { await clickButton(/contraseña|password/i)(page); await page.locator('#login-email').fill(o.opts.vars.demoEmail); await page.locator('#login-password').fill(DEMO.password); return page.locator('form:has(#login-password) button[type="submit"]'); } },
+    demo: { path: '/demo', go: async (page) => page.getByRole('button', { name: /entrar como andina labs|sign in as andina labs/i }) },
+  } },
   { id: 'beneficiary-empty', base: 'beneficiary', exp: 'finance', path: (v) => `/beneficiaries/${v.beneficiary}`, needs: 'beneficiary', na: 'the demo has no beneficiary', fake: { path: '/api/screen/beneficiary/', patch: (j) => ({ ...j, totals: { paid_month_usd: 0, paid_total_usd: 0, invoices: 0 }, history: [], last: [] }) } }, // the real profile with no payments
 ];
 
@@ -334,6 +339,34 @@ function judge(m, c) {
 const JOBS = 2; // parallel browser contexts
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const wanted = (only, id) => !only || only.some((p) => id.startsWith(p));
+// D42: the logo's intro runs once per tab; the screenshot and axe wait until no animation is running on it, 1.5 s at most (AC-91 Clarified).
+export const logoSettled = (page) => page.waitForFunction(() => { const h = document.querySelector('h1'); return !h || !document.getAnimations().some((a) => a.playState === 'running' && h.contains(a.effect?.target)); }, null, { timeout: 1500 }).catch(() => {});
+// First paint of the logo, recorded in the page: with reduced motion nothing runs on it and every part is at rest (opacity 1, no transform).
+function logoWatch() {
+  const tick = () => {
+    const h = document.querySelector('h1');
+    if (!h) return requestAnimationFrame(tick);
+    const off = [h, ...h.querySelectorAll('*')].filter((e) => { const cs = getComputedStyle(e); return cs.opacity !== '1' || !['none', 'matrix(1, 0, 0, 1, 0, 0)'].includes(cs.transform); }).length;
+    window.__logo = { running: document.getAnimations().filter((a) => a.playState === 'running' && h.contains(a.effect?.target)).length, off };
+  };
+  requestAnimationFrame(tick);
+}
+// The pass is over when Bandeja has rows and none is «Pendiente» (a skeleton row counts as pending until the data arrives).
+const passEnded = () => document.querySelectorAll('#invoices tbody tr').length > 0 && !document.querySelector('#invoices tbody .chip-pending');
+// Entry (AC-109): recorded from the click. Layout shifts within 500 ms of an input are excused by the browser, so they are collected raw and summed here.
+export const entryCls = (shifts, t0) => shifts.filter((x) => x.t >= t0).reduce((n, x) => n + x.v, 0);
+function entryWatch() {
+  const e = (window.__e = { t0: null, shifts: [], seen: false, vt: null });
+  addEventListener('click', (ev) => { e.t0 = ev.timeStamp; }, true);
+  new PerformanceObserver((l) => { for (const x of l.getEntries()) e.shifts.push({ t: x.startTime, v: x.value }); }).observe({ type: 'layout-shift' });
+  const start = document.startViewTransition?.bind(document);
+  if (start) document.startViewTransition = (...a) => { e.vt = start(...a); e.seen = true; return e.vt; };
+  const watch = () => { // a transition done with CSS on the page's own elements counts too
+    if (e.t0 !== null) for (const a of document.getAnimations()) if (a.effect?.pseudoElement?.startsWith('::view-transition') || a.effect?.target?.closest?.('.login,.demo')) e.seen = true;
+    requestAnimationFrame(watch);
+  };
+  watch();
+}
 const isLocal = (base) => /^https?:\/\/(127\.0\.0\.1|localhost)[:/]?/.test(base);
 
 function installRoutes(page, base, { state, guard, delayGets, gate, fake }) {
@@ -374,6 +407,7 @@ let axeSource;
 const axeJs = () => (axeSource ??= readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8'));
 
 export async function runCell(browser, job) {
+  if (job.kind === 'entry') return runEntry(browser, job);
   const { base, screen, state, width, lang, kind, opts = {} } = job;
   const label = screen.id + (state ? '-' + state : '');
   const rows = [];
@@ -384,6 +418,7 @@ export async function runCell(browser, job) {
     deviceScaleFactor: width <= 390 ? 2 : 1,
     hasTouch: width <= 390,
     locale: lang === 'es' ? 'es-CO' : 'en-US',
+    ...(kind === 'reduced' && { reducedMotion: 'reduce' }),
   });
   let release;
   const gate = { release: new Promise((r) => (release = r)), held: [] };
@@ -394,6 +429,7 @@ export async function runCell(browser, job) {
     page.on('console', (msg) => ['error', 'warning'].includes(msg.type()) && logs.push({ text: `${msg.type()}: ${msg.text().slice(0, 120)}${msg.text().startsWith('Failed to load resource') ? ` <${msg.location().url}>` : ''}`, failedLoad: msg.text().startsWith('Failed to load resource') ? msg.location().url : null }));
     page.on('pageerror', (e) => logs.push({ text: `pageerror: ${String(e.message).slice(0, 120)}` }));
     await page.addInitScript(INIT, { lang, session: screen.auth === false ? null : screen.session === 'trial' ? opts.trialSession : opts.session, tour: !!screen.tour });
+    if (kind === 'reduced') await page.addInitScript(logoWatch);
     const guard = kind === 'dynamic' && !opts.mutate;
     await installRoutes(page, base, { state, guard, delayGets: kind === 'loading' ? 1500 : 0, gate, fake: screen.fake });
 
@@ -416,6 +452,11 @@ export async function runCell(browser, job) {
       return rows;
     }
 
+    if (kind === 'reduced') { // the second pass of login and demo (D42): the logo is final at first paint
+      const s = await page.waitForFunction(() => window.__logo ?? false, null, { timeout: 10_000, polling: 'raf' }).then((h) => h.jsonValue()).catch(() => null);
+      add(P('6.reduced', !s || s.running > 0 || s.off > 0, s ? s.running + s.off : 1, !s ? 'no logo heading at first paint' : `${s.running} logo animations running and ${s.off} parts not at rest at first paint`));
+      return rows;
+    }
     // First usable view: heading and primary action visible and enabled, from navigation start (item 7).
     const usable = await page.waitForFunction(({ sel }) => {
       const h = document.querySelector('h1');
@@ -427,6 +468,19 @@ export async function runCell(browser, job) {
     else release();
     await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
     await sleep(state ? 1200 : 800);
+    if (screen.intro) await logoSettled(page);
+    const shoot = async () => {
+      if (opts.shots === false || opts.only) return;
+      const dir = opts.shotDir ?? join(ROOT, 'docs/ux');
+      mkdirSync(dir, { recursive: true });
+      await page.screenshot({ path: join(dir, `${label}-${width}-${lang}.png`), fullPage: true });
+    };
+    if (screen.pass) await shoot(); // landing, tour step 1 on screen; the pass is still running
+    let passNote = '';
+    if (screen.pass && !state) {
+      passNote = await page.waitForFunction(passEnded, null, { timeout: 45_000 }).then(() => '', () => ', the pass had not ended after 45 s');
+      await sleep(300); // layout-shift entries are delivered asynchronously
+    }
 
     const reached = new URL(page.url()).pathname;
     const want = path.split('?')[0];
@@ -440,7 +494,7 @@ export async function runCell(browser, job) {
       add(!enforce ? R('7.usable', 'na', usable ?? 0, `${usable === null ? 'not usable' : Math.round(usable) + ' ms'} (enforced on the deployed URL)${part}`)
         : P('7.usable', usable === null || usable > 2000, usable ?? 99_999, usable === null ? `heading${noAction ? '' : ' and primary action'} never became usable` : `usable at ${Math.round(usable)} ms (limit 2000)${part}`));
       add(P('7.longtask', g.long > 300, Math.round(g.long), `longest task ${Math.round(g.long)} ms (limit 300)`));
-      add(P('4.cls', g.cls > 0.01, +g.cls.toFixed(4), `CLS ${g.cls.toFixed(4)} (limit 0.01)`));
+      add(P('4.cls', g.cls > 0.01, +g.cls.toFixed(4), `CLS ${g.cls.toFixed(4)} (limit 0.01)${screen.pass ? ` from landing to the end of the pass${passNote}` : ''}`));
     }
     if (screen.prepare) {
       const skip = await screen.prepare(page, { ...opts, lang });
@@ -480,17 +534,50 @@ export async function runCell(browser, job) {
       add(P('3.axe', hard.length > 0, hard.length, `${hard.length} serious or critical axe violations${hard.length ? ': ' + hard.map((x) => `${x.id} (${x.impact}, ${x.nodes}) ${x.at}`).slice(0, 3).join('; ') : ''}`));
       add(P('3.contrast', contrast.length > 0, contrast.length, `${contrast.length} contrast violations${contrast.length ? ': ' + contrast[0].at : ''}`));
     }
-    if (opts.shots !== false && !opts.only) {
-      const dir = opts.shotDir ?? join(ROOT, 'docs/ux');
-      mkdirSync(dir, { recursive: true });
-      await page.screenshot({ path: join(dir, `${label}-${width}-${lang}.png`), fullPage: true });
-    }
+    if (!screen.pass) await shoot();
     return rows;
   } catch (e) {
     add(R('0.run', 'fail', 1, `the cell crashed: ${String(e.message).split('\n')[0]}`));
     return rows;
   } finally {
     await Promise.all(gate.held); // no held write may outlive the context: closing it would release it to the origin
+    await context.close();
+  }
+}
+
+// AC-109: the hand-over from a door into Bandeja, checked for CLS from the click to the end of the transition (item 4) and for console lines (item 6).
+// N/A while the app starts no transition (neither a View Transition nor an animation on the login or demo page).
+async function runEntry(browser, { base, screen, door, width, lang, opts = {} }) {
+  const rows = [];
+  const add = (r) => wanted(opts.only, r.id) && rows.push({ screen: screen.id, width, lang, ...r });
+  const context = await browser.newContext({ viewport: { width, height: HEIGHT[width] ?? 800 }, deviceScaleFactor: width <= 390 ? 2 : 1, hasTouch: width <= 390, locale: lang === 'es' ? 'es-CO' : 'en-US' });
+  try {
+    const page = await context.newPage();
+    const logs = [];
+    page.on('console', (m) => ['error', 'warning'].includes(m.type()) && logs.push(`${m.type()}: ${m.text().slice(0, 120)}`));
+    page.on('pageerror', (e) => logs.push(`pageerror: ${String(e.message).slice(0, 120)}`));
+    await page.addInitScript(INIT, { lang, session: null, tour: false });
+    const { path, go } = screen.doors[door];
+    await page.goto(base + path, { waitUntil: 'load', timeout: 30_000 });
+    await page.waitForSelector('h1', { timeout: 15_000 });
+    await logoSettled(page);
+    const click = await go(page, { lang, opts });
+    logs.length = 0; // item 6 counts from the click
+    await page.evaluate(entryWatch);
+    await click.click();
+    await page.waitForFunction(() => location.pathname === '/', null, { timeout: 15_000, polling: 'raf' });
+    await page.evaluate(() => window.__e.vt?.finished.catch(() => {})); // the end of the transition
+    await sleep(150);
+    const e = await page.evaluate(() => ({ t0: window.__e.t0, shifts: window.__e.shifts, seen: window.__e.seen }));
+    if (!e.seen) return ['4.cls', '6.console'].forEach((id) => add(R(id, 'na', 0, `${door} door: the entry transition (AC-109) does not exist yet`))), rows;
+    const cls = entryCls(e.shifts, e.t0);
+    add(P('4.cls', cls > 0.01, +cls.toFixed(4), `${door} door: CLS ${cls.toFixed(4)} from the click to the end of the transition (limit 0.01)`));
+    add(P('6.console', logs.length > 0, logs.length, `${door} door: ${logs.length} console errors or warnings from the click${logs.length ? ': ' + logs.slice(0, 3).join('; ') : ''}`));
+    return rows;
+  } catch (e) {
+    add(R('0.run', 'fail', 1, `${door} door: the cell crashed: ${String(e.message).split('\n')[0]}`));
+    return rows;
+  } finally {
     await context.close();
   }
 }
@@ -564,7 +651,7 @@ export function aggregate(rows) {
     return { screen: g[0].screen, id: g[0].id, status, value: worst.value, measured: `${worst.measured} @${worst.width}/${worst.lang}`, cells: g.length, failing: failing.length, ...(Object.keys(users).length && { users }) };
   }).sort((a, b) => order(a.id).localeCompare(order(b.id)));
 }
-const WHAT = { '0.reach': 'screen opens', '1.scroll': 'no horizontal scroll', '1.offscreen': 'nothing off-screen', '1.clip': 'no clipped text', '1.overlap': 'no overlapping text', '1.tables': 'tables reflow or scroll', '2.targets': '44 px targets', '2.inputs': '16 px inputs', '2.primary': 'primary action in the lower 60%', '3.axe': 'axe: 0 serious or critical', '3.contrast': 'contrast AA', '3.focus': 'visible focus ring', '3.enter': 'Enter activates', '3.labels': 'inputs have labels', '3.lang': 'lang follows the language', '4.busy': 'busy within 100 ms', '4.loading': 'no blank while loading', '4.cls': 'CLS 0.01 or less', '4.state': 'designed state with next step', '5.words': 'no developer words', '5.mixed': 'one language per screen', '5.locale': 'numbers and dates in locale', '5.marker': 'data-user used for user data only', '6.palette': 'approved palette', '6.fonts': 'approved fonts', '6.logo': 'logo present', '6.console': 'no console errors', '6.images': 'SVG or 2x images', '6.primary_count': 'one primary button (reviewer)', '7.usable': 'usable in under 2 s', '7.longtask': 'no task over 300 ms' };
+const WHAT = { '0.reach': 'screen opens', '1.scroll': 'no horizontal scroll', '1.offscreen': 'nothing off-screen', '1.clip': 'no clipped text', '1.overlap': 'no overlapping text', '1.tables': 'tables reflow or scroll', '2.targets': '44 px targets', '2.inputs': '16 px inputs', '2.primary': 'primary action in the lower 60%', '3.axe': 'axe: 0 serious or critical', '3.contrast': 'contrast AA', '3.focus': 'visible focus ring', '3.enter': 'Enter activates', '3.labels': 'inputs have labels', '3.lang': 'lang follows the language', '4.busy': 'busy within 100 ms', '4.loading': 'no blank while loading', '4.cls': 'CLS 0.01 or less', '4.state': 'designed state with next step', '5.words': 'no developer words', '5.mixed': 'one language per screen', '5.locale': 'numbers and dates in locale', '5.marker': 'data-user used for user data only', '6.palette': 'approved palette', '6.fonts': 'approved fonts', '6.logo': 'logo present', '6.reduced': 'logo at rest at first paint (reduced motion)', '6.console': 'no console errors', '6.images': 'SVG or 2x images', '6.primary_count': 'one primary button (reviewer)', '7.usable': 'usable in under 2 s', '7.longtask': 'no task over 300 ms' };
 const word = { pass: 'PASS', fail: 'FAIL', info: 'INFO', na: 'N/A' };
 // R-131: every text 5.mixed and 5.locale skipped, for the UX reviewer. Any listed product copy is a blocking finding.
 const excludedList = (users = {}) => LANGS.filter((l) => users[l]?.n).length
@@ -657,6 +744,7 @@ export async function main(argv) {
     const list = await fetch(`${base}/api/beneficiaries`, { headers: { authorization: `Bearer ${JSON.parse(session.value).access_token}` } }).then((r) => r.json()).catch(() => []);
     vars.beneficiary = Array.isArray(list) ? list[0]?.id : undefined;
   }
+  if (picked.some((s) => s.entry)) vars.demoEmail = (await fetch(`${base}/api/config`).then((r) => r.json()).catch(() => ({}))).demo_email;
   const dicts = await loadDicts();
   const opts = { only, dicts, session, trialSession: trialSess, vars, mutate: a.bool.has('mutate'), shots: true };
 
@@ -666,9 +754,10 @@ export async function main(argv) {
       if (s.na) { console.log(`ux-gate: ${s.id} N/A (${s.na})`); rows.push({ screen: s.id, width: 390, lang: 'es', ...R('0.reach', 'na', 0, s.na) }); } else console.log(`ux-gate: ${s.id} skipped (needs --${s.needs.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase())})`);
       continue;
     }
+    if (s.entry) { for (const door of Object.keys(s.doors)) for (const lang of LANGS) for (const width of [390, 1440]) cells.push({ screen: s, state: null, width, lang, kind: 'entry', door }); continue; }
     const set = [null, ...(s.states ?? [])];
     for (const state of set) for (const lang of LANGS) for (const width of WIDTHS) cells.push({ screen: s, state, width, lang, kind: 'static' });
-    for (const lang of LANGS) for (const kind of ['dynamic', 'loading']) if (!only || only.some((p) => (kind === 'dynamic' ? /^(3\.focus|3\.enter|4\.busy)/ : /^4\.loading/).test(p))) cells.push({ screen: s, state: null, width: 390, lang, kind });
+    for (const lang of LANGS) for (const kind of ['dynamic', 'loading', ...(s.intro ? ['reduced'] : [])]) if (!only || only.some((p) => (kind === 'dynamic' ? /^(3\.focus|3\.enter|4\.busy)/ : kind === 'reduced' ? /^6\.reduced/ : /^4\.loading/).test(p))) cells.push({ screen: s, state: null, width: 390, lang, kind });
   }
   const browser = await launch();
   let next = 0;

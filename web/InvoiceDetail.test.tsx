@@ -191,7 +191,7 @@ test('FRENAR is final: no answer buttons, no payment block', async () => {
   mockApi({ [GET]: stopped });
   open();
   expect(await screen.findByRole('heading', { level: 1, name: stopped.headline })).toBeTruthy();
-  expect(screen.queryByRole('button')).toBeNull();
+  expect(screen.queryByRole('button', { name: /Aprobar|Rechazar/ })).toBeNull(); // the only button left is AC-67's «Preguntar»
   expect(screen.queryByRole('region', { name: 'Orden de pago' })).toBeNull();
 });
 
@@ -257,4 +257,90 @@ test('an invoice with no read_error (or before the backend sends it) shows no re
   open();
   await screen.findByText('Nube Sur LLC', { selector: 'dd' });
   expect(screen.queryByText(NOTICE_ES)).toBeNull();
+});
+
+// AC-77 (R-88): «Leído por IA». Snippets are located by code (src/lib/snippet.ts, Task 23); `match` is the found span inside it.
+const NOVA = 'Amazon Nova Lite (AWS Bedrock)';
+const NOT_FOUND_ES = 'No encontré este valor literal en el texto';
+const PRELOADED_ES = 'Datos precargados del conjunto de ejemplo; la IA no leyó este documento.';
+const reading = (provider = NOVA) => ({
+  provider,
+  fields: [
+    { name: 'payee_name', value: 'Nube Sur LLC', confidence: 0.97, snippet: 'Emisor: Nube Sur LLC, NIT 900.123', match: [8, 20] },
+    { name: 'amount', value: 4200, confidence: 0.92, snippet: 'Total a pagar: USD 4,200.00', match: [19, 27] },
+    { name: 'invoice_number', value: '2044', confidence: 0.9, snippet: 'Factura No. 2044' }, // no span sent: found by its text
+    { name: 'due_date', value: '2026-10-31', confidence: 0.6, snippet: null },
+    { name: 'bank_account', value: null, confidence: null, snippet: null },
+  ],
+});
+const fieldRow = (label: string) => screen.getByText(label, { selector: 'dt' }).parentElement!;
+
+test('a model-read invoice heads «Lo que leí» with the provider, and shows each field with value, percentage and snippet (AC-77)', async () => {
+  mockApi({ [GET]: { ...escalated, reading: reading() } });
+  open();
+  const badge = await screen.findByText(`Leído por IA · ${NOVA}`);
+  expect(screen.getByRole('heading', { name: 'Lo que leí' }).compareDocumentPosition(badge) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  const payee = fieldRow('Beneficiario');
+  expect(payee.textContent).toMatch(/Nube Sur LLC.*confianza 97\s%/);
+  expect(payee.querySelector('mark')?.textContent).toBe('Nube Sur LLC');
+  expect(payee.textContent).toContain('Emisor: Nube Sur LLC, NIT 900.123');
+  const amount = fieldRow('Monto');
+  expect(amount.textContent).toMatch(/^Monto4\.200confianza 92\s%/);
+  expect(amount.querySelector('mark')?.textContent).toBe('4,200.00');
+  expect(fieldRow('Número de factura').querySelector('mark')?.textContent).toBe('2044');
+  expect(fieldRow('Vencimiento').textContent).toContain(NOT_FOUND_ES);
+  const account = fieldRow('Cuenta bancaria');
+  expect(account.textContent).toContain('desconocido');
+  expect(account.textContent).not.toContain('confianza');
+  expect(screen.queryByText(PRELOADED_ES)).toBeNull();
+  expect(document.body.textContent).not.toMatch(/null|undefined|NaN/);
+});
+
+test('the Workers AI fallback is named with its model id, as recorded at read time (AC-77)', async () => {
+  mockApi({ [GET]: { ...escalated, reading: reading('Workers AI · @cf/meta/llama-3.2-11b-vision-instruct') } });
+  open();
+  expect(await screen.findByText('Leído por IA · Workers AI · @cf/meta/llama-3.2-11b-vision-instruct')).toBeTruthy();
+});
+
+test('an invoice no model read says its data was preloaded, with no AI badge (AC-77)', async () => {
+  mockApi({ [GET]: { ...escalated, reading: null } });
+  open();
+  expect(await screen.findByText(PRELOADED_ES)).toBeTruthy();
+  expect(screen.queryByText(/Leído por IA/)).toBeNull();
+  expect(screen.getByText('Nube Sur LLC', { selector: 'dd' })).toBeTruthy();
+});
+
+test('an unread invoice keeps the AC-13 notice, neither preloaded nor AI-read (AC-77)', async () => {
+  mockApi({ [GET]: { ...unread, reading: null } });
+  open();
+  expect(await screen.findByText(NOTICE_ES)).toBeTruthy();
+  expect(screen.queryByText(PRELOADED_ES)).toBeNull();
+  expect(screen.queryByText(/Leído por IA/)).toBeNull();
+});
+
+test('«Leído por IA» in English (AC-77)', async () => {
+  localStorage.setItem('lang', 'en');
+  mockApi({ [GET]: { ...escalated, reading: reading() } });
+  open();
+  expect(await screen.findByText(`Read by AI · ${NOVA}`)).toBeTruthy();
+  expect(fieldRow('Due date').textContent).toContain('I did not find this value verbatim in the text');
+  expect(fieldRow('Beneficiary').textContent).toMatch(/97% confidence/);
+});
+
+test('the preloaded notice in English (AC-77)', async () => {
+  localStorage.setItem('lang', 'en');
+  mockApi({ [GET]: { ...escalated, reading: null } });
+  open();
+  expect(await screen.findByText('Preloaded sample data; the AI did not read this document.')).toBeTruthy();
+});
+
+test('the record carries «Pregúntale a Thesaurus», which asks about this invoice (AC-67)', async () => {
+  const f = mockApi({ [GET]: stopped, 'POST /api/ask': { answer: 'Es un duplicado exacto de la factura #2044.', provider: NOVA, remaining: 9 } });
+  open();
+  await screen.findByRole('heading', { name: 'Pregúntale a Thesaurus' });
+  fireEvent.change(screen.getByLabelText('Tu pregunta sobre el registro'), { target: { value: '¿por qué frenaste esta factura?' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Preguntar' }));
+  expect(await screen.findByText('Es un duplicado exacto de la factura #2044.')).toBeTruthy();
+  const posted = f.mock.calls.find(([u]) => u === '/api/ask')![1]!;
+  expect(JSON.parse(String(posted.body))).toEqual({ question: '¿por qué frenaste esta factura?', lang: 'es', invoice_id: 'inv-1' });
 });

@@ -1,0 +1,33 @@
+/* AI on screen (AC-67, AC-77, AC-79; minimalist-ui, approved palette only): the ask box, «Leído por IA», the IA/código tags. */
+.ask { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 1.5rem; margin-top: 3rem; }
+section.ask > h2 { font: 400 var(--text-xl) / 1.2 var(--font-serif); letter-spacing: -0.02em; margin: 0 0 1rem; }
+.ask form { display: grid; gap: 0.75rem; justify-items: start; }
+.ask label { display: grid; gap: 0.5rem; width: 100%; }
+.ask textarea {
+  font: inherit;
+  font-size: var(--text-base);
+  width: 100%;
+  resize: vertical;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--ink);
+}
+.ask button { min-height: 44px; padding: 0.625rem 1rem; font-size: var(--text-base); }
+.ask [role='status'] > p { margin: 1rem 0 0; }
+.ask-answer { font: 400 1.125rem / 1.5 var(--font-serif); white-space: pre-wrap; overflow-wrap: anywhere; }
+.ask p.ask-meta { margin-top: 0.5rem; font-size: var(--text-sm); }
+.ask-note { color: var(--ink); background: #f1efe9; padding: 0.75rem 1rem; border-radius: 4px; }
+
+.ai-badge { display: inline-block; margin: 0 0 1rem; padding: 0.25rem 0.625rem; border-radius: 4px; background: #f1efe9; font-size: var(--text-sm); overflow-wrap: anywhere; }
+.detail-fields dd.reading-snippet { grid-column: 1 / -1; font: var(--text-sm) / 1.6 var(--font-mono); color: var(--ink-2); overflow-wrap: anywhere; }
+.reading-snippet mark { background: var(--accent-bg); color: var(--ink); padding: 0 0.125rem; border-radius: 2px; }
+
+/* /demo (AC-79): «IA» on what the model does, «código» on what code decides; the «Pregúntale a Thesaurus» row matches the stages. */
+.ai-tag { display: inline-block; margin-left: 0.5rem; padding: 0.125rem 0.5rem; border-radius: 9999px; font: 600 0.75rem / 1.4 var(--font-sans); letter-spacing: 0.05em; text-transform: uppercase; vertical-align: 0.2em; }
+.ai-tag-ai { background: #f1efe9; color: var(--ink); }
+.ai-tag-code { background: var(--accent-bg); color: var(--accent); }
+.demo-loop .demo-ask { display: grid; grid-template-columns: 13rem 1fr; gap: 1.5rem; align-items: baseline; margin-top: 1.25rem; }
+.demo-loop .demo-where { margin-top: 2.5rem; }
+@media (max-width: 640px) { .demo-loop .demo-ask { grid-template-columns: 1fr; gap: 0.25rem; } }

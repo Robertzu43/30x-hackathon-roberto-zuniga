@@ -27,6 +27,10 @@ export const es: Record<string, string> = {
   'inbox.new.sending': 'El agente está leyendo y decidiendo…',
   'inbox.new.bad_file': 'Formato no admitido: sube un PDF, PNG o JPG de hasta 10 MB',
   'inbox.new.bad_text': 'Pega un texto de 1 a 20.000 caracteres.',
+  // Tour step 1 (AC-66, AC-79): the AC-66 text plus where the AI acts and where code decides (web/tour-steps.ts).
+  'tour.inbox-ai.title': 'Bandeja',
+  'tour.inbox-ai.body':
+    'Thesaurus es un agente: con cada factura percibe → lee → consulta sus herramientas → decide → actúa → rinde cuentas. Aquí ves el resultado de cada una, PAGAR, FRENAR o ESCALAR, con su razón en una línea. Trabaja solo: revisa las facturas pendientes cada 5 minutos, aunque nadie haya iniciado sesión. Dónde actúa la IA: lee cada factura (Amazon Nova Lite en AWS Bedrock) y responde tus preguntas sobre el registro («Pregúntale a Thesaurus»). Dónde decide el código: las 13 reglas, la tabla de consecuencias y la tasa de cambio del día; solo el código puede escribir PAGAR.',
 };
 
 export const en: Record<string, string> = {
@@ -57,4 +61,7 @@ export const en: Record<string, string> = {
   'inbox.new.sending': 'The agent is reading and deciding…',
   'inbox.new.bad_file': 'Unsupported format: upload a PDF, PNG or JPG of up to 10 MB',
   'inbox.new.bad_text': 'Paste a text of 1 to 20,000 characters.',
+  'tour.inbox-ai.title': 'Inbox',
+  'tour.inbox-ai.body':
+    'Thesaurus is an agent: with every invoice it perceives → reads → consults its tools → decides → acts → accounts for it. Here you see each result, PAY, STOP or ESCALATE, with its reason in one line. It works on its own: it checks pending invoices every 5 minutes, even when nobody is signed in. Where the AI acts: it reads each invoice (Amazon Nova Lite on AWS Bedrock) and answers your questions about the record ("Ask Thesaurus"). Where code decides: the 13 rules, the consequence table and the day\'s exchange rate; only code can write PAY.',
 };

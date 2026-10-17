@@ -30,6 +30,12 @@ export const es: Record<string, string> = {
   'demo.pitch': 'El LLM lee, JEV duda, el código decide, el agente actúa.',
   // R-30: S2 (JEV) is not built, so this build states it is off.
   'demo.jev': 'JEV, la intuición rápida, es una capa opcional; en esta demo está apagada.',
+  // AC-79 (D29 d): where the AI acts and where code decides.
+  'demo.where':
+    'Dónde actúa la IA: lee cada factura (Amazon Nova Lite en AWS Bedrock) y responde tus preguntas sobre el registro («Pregúntale a Thesaurus»). Dónde decide el código: las 13 reglas, la tabla de consecuencias y la tasa de cambio del día; solo el código puede escribir PAGAR.',
+  'demo.tag.ai': 'IA',
+  'demo.tag.code': 'código',
+  'demo.ask.text': 'Responde tus preguntas sobre el registro de cada factura. No aprueba ni paga nada.',
   'demo.inbox.title': 'La bandeja de Andina Labs',
   'demo.inbox.lead':
     'Andina Labs es una empresa ficticia con facturas normales y facturas trampa. Cada fila es lo que decidió el agente y por qué, en una línea.',
@@ -75,6 +81,11 @@ export const en: Record<string, string> = {
   'demo.stage.rinde.text': 'It leaves a record anyone can read: what it did, every rule and why.',
   'demo.pitch': 'The LLM reads, JEV doubts, code decides, the agent acts.',
   'demo.jev': 'JEV, the fast intuition, is an optional layer; in this demo it is off.',
+  'demo.where':
+    'Where the AI acts: it reads each invoice (Amazon Nova Lite on AWS Bedrock) and answers your questions about the record ("Ask Thesaurus"). Where code decides: the 13 rules, the consequence table and the day\'s exchange rate; only code can write PAY.',
+  'demo.tag.ai': 'AI',
+  'demo.tag.code': 'code',
+  'demo.ask.text': "Answers your questions about each invoice's record. It never approves or pays anything.",
   'demo.inbox.title': "Andina Labs' inbox",
   'demo.inbox.lead':
     'Andina Labs is a fictional company with normal invoices and trap invoices. Each row is what the agent decided and why, in one line.',

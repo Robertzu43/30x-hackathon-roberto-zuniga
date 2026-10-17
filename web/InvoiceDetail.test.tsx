@@ -202,10 +202,17 @@ test('a pending invoice says the agent has not decided it yet and links back', a
   expect(screen.getByRole('link', { name: 'Volver a la bandeja' }).getAttribute('href')).toBe('/');
 });
 
-test('an unknown invoice says so', async () => {
+// UX-18: the API's 404 stays (its contract); the page gives a heading and a next step in both languages.
+test.each([
+  ['es', 'No encontré esta factura', 'Revisa el enlace, o vuelve a la bandeja y ábrela desde la lista.', 'Volver a la bandeja'],
+  ['en', 'I could not find this invoice', 'Check the link, or go back to the inbox and open it from the list.', 'Back to the inbox'],
+])('an unknown invoice (%s): a heading, a next step and the way back', async (lang, heading, next, back) => {
+  localStorage.setItem('lang', lang);
   mockApi({ [GET]: json({ error: 'Factura no encontrada' }, 404) });
   open();
-  expect(await screen.findByText('No encontré esta factura.')).toBeTruthy();
+  expect(await screen.findByRole('heading', { level: 1, name: heading })).toBeTruthy();
+  expect(screen.getByText(next)).toBeTruthy();
+  expect(screen.getByRole('link', { name: back }).getAttribute('href')).toBe('/');
 });
 
 test('English renders the English labels and en-US formats (AC-28)', async () => {
@@ -485,4 +492,31 @@ test('origin in English', async () => {
   mockApi({ [GET]: { ...escalated, invoice: { ...escalated.invoice, origin: 'email', sender: null, sender_note: null } } });
   open();
   expect(await screen.findByText('Email')).toBeTruthy();
+});
+
+// AC-91 item 1 (Task 29 review): a long sender in «Correo de …» or a long payee in the headline never pushes 360 sideways.
+test('the origin line and the headline wrap a long unbreakable sender or payee', async () => {
+  mockApi({ [GET]: { ...escalated, invoice: { ...escalated.invoice, origin: 'email', sender: 'cuentasporcobrar@distribuidoracolombiana.com.co' } } });
+  open();
+  expect((await screen.findByText(/cuentasporcobrar@/)).className).toContain('detail-origin');
+  const { readFileSync } = (await import('node:fs' as string)) as { readFileSync(p: string, enc: string): string };
+  expect(readFileSync('web/pages/detail.css', 'utf8')).toMatch(/\n\.detail h1, \.detail-origin \{[^}]*overflow-wrap: anywhere/);
+});
+
+// UX-05: the two detail links are 44 px tall tap targets on a phone.
+test('«Volver a la bandeja» and «Abrir el documento» are 44 px tap targets at phone width', async () => {
+  mockApi({ [GET]: { ...escalated, file_url: 'https://files.example/11.pdf' } });
+  open();
+  expect((await screen.findByRole('link', { name: 'Abrir el documento' })).className).toContain('detail-link');
+  expect(screen.getByRole('link', { name: 'Volver a la bandeja' }).className).toContain('detail-link');
+  const { readFileSync } = (await import('node:fs' as string)) as { readFileSync(p: string, enc: string): string };
+  const phone = readFileSync('web/pages/detail.css', 'utf8').split('@media (max-width: 640px) {')[1] ?? '';
+  expect(phone).toMatch(/\.detail-link \{[^}]*min-height: 44px/);
+});
+
+// UX-12 (AC-91 item 4): the document image pushed the page down when it loaded (768). Its box is sized before the
+// file arrives: the demo scans are 860 × 643 (4:3); any other shape is letterboxed inside it.
+test('the document image has a 4:3 box reserved before it loads', async () => {
+  const { readFileSync } = (await import('node:fs' as string)) as { readFileSync(p: string, enc: string): string };
+  expect(readFileSync('web/pages/detail.css', 'utf8')).toMatch(/\nimg\.detail-doc \{[^}]*aspect-ratio: 4 \/ 3;[^}]*object-fit: contain/);
 });

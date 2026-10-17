@@ -361,3 +361,20 @@ test('Bandeja carries the activity panel and refreshes it after each run call (A
   fireEvent.click(screen.getByRole('button', { name: 'Ejecutar agente' }));
   await waitFor(() => expect(calls(f, 'GET', '/api/agent/activity').length).toBe(before + 1));
 });
+
+// AC-91 item 1 (Task 29 review): «Correo de cuentasporcobrar@distribuidoracolombiana.com.co» or a long payee made 360 scroll sideways.
+test('a row wraps a long unbreakable sender or payee inside the screen', async () => {
+  const { readFileSync } = (await import('node:fs' as string)) as { readFileSync(p: string, enc: string): string };
+  expect(readFileSync('web/pages/inbox.css', 'utf8')).toMatch(/\n\.inbox-list a \{[^}]*overflow-wrap: anywhere/);
+});
+
+// UX-23 (AC-91 item 6): one primary per view. With the form open «Enviar al agente» is it; «Ejecutar agente» steps back.
+test('opening «Nueva factura» demotes «Ejecutar agente» to secondary; closing it restores it', async () => {
+  setup();
+  await screen.findAllByRole('listitem');
+  const primaries = () => screen.getAllByRole('button').filter((b) => b.classList.contains('primary')).map((b) => b.textContent);
+  open();
+  expect(primaries()).toEqual(['Enviar al agente']);
+  open();
+  expect(primaries()).toEqual(['Ejecutar agente']);
+});

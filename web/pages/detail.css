@@ -53,3 +53,13 @@ pre.detail-doc { white-space: pre-wrap; font: var(--text-sm) / 1.6 var(--font-mo
 .chip.PAGAR { background: #edf3ec; color: #346538; }
 .chip.FRENAR { background: #fdebec; color: #9f2f2d; }
 .chip.ESCALAR { background: #fbf3db; color: #956400; }
+
+/* AC-102 (Task 48): the document text's marks, the checklist's verdict word, the FX card, the timeline avatars. */
+.detail-doc-title { font-size: var(--text-sm); font-weight: 600; margin: 1.5rem 0 0.5rem; }
+pre.detail-doc mark { background: var(--accent-bg); color: var(--ink); padding: 0 0.125rem; border-radius: 2px; }
+.checks .check-verdict { display: block; font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-2); }
+.fx-card h3 { font-size: var(--text-sm); font-weight: 600; color: var(--ink-2); margin: 0 0 0.5rem; }
+.fx-card p { margin: 0; font-family: var(--font-mono); font-size: var(--text-sm); overflow-wrap: anywhere; }
+.timeline .avatar { width: 24px; height: 24px; flex: none; align-self: center; display: grid; place-items: center; border-radius: 50%;
+  background: var(--canvas); border: 1px solid var(--line); color: var(--ink-2); font-size: 0.625rem; font-weight: 600; overflow: hidden; }
+.timeline .avatar img { display: block; border-radius: 6px; }

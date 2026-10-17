@@ -1,5 +1,11 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { expect, test } from 'vitest';
+import type { StoredDecision } from '../src/agent/trace';
+import type { Check } from '../src/engine/types';
+import DocumentPanel from './components/DocumentPanel';
+import FxCard from './components/FxCard';
+import RuleChecklist from './components/RuleChecklist';
+import Timeline from './components/Timeline';
 import InvoiceDetail, { route } from './pages/InvoiceDetail';
 import { sentence } from './test/text';
 import { mockApi, renderAt, signedInAs } from './test/utils';
@@ -115,6 +121,107 @@ test('pasted email text is shown as is; a file that cannot be served says so', a
   mockApi({ [GET]: { ...escalated, file_url: null } });
   open();
   expect(await screen.findByText('No hay archivo para mostrar.')).toBeTruthy();
+});
+
+// AC-102 (Task 48): the D39 parts of the record, rendered from the API's contracts (doc_marks, checks, the Moneda values).
+const RAW = 'CUENTA DE COBRO 2044\nNube Sur LLC\nTotal: 4.200,00 USD';
+const MARKS = [{ field: 'invoice_number', start: 16, end: 20 }, { field: 'payee_name', start: 21, end: 33 }, { field: 'amount', start: 41, end: 49 }];
+
+test('the document panel marks exactly raw_text.slice(start, end) for each doc_mark, inside one data-user text (AC-102, R-131)', () => {
+  const { container } = renderAt(<DocumentPanel source="pdf" url="/demo/invoices/11.pdf" rawText={RAW} marks={MARKS} />);
+  expect(screen.getByTitle('Documento de la factura').getAttribute('src')).toBe('/demo/invoices/11.pdf');
+  const text = container.querySelector('pre')!;
+  expect(text.textContent).toBe(RAW);
+  expect(text.hasAttribute('data-user')).toBe(true);
+  expect([...text.querySelectorAll('mark')].map((m) => m.textContent)).toEqual(MARKS.map((m) => RAW.slice(m.start, m.end)));
+  expect(container.querySelectorAll('[data-user] mark, mark').length).toBe(3);
+  expect(container.querySelector('canvas, svg')).toBeNull(); // nothing drawn on the document (R-124)
+});
+
+test('the document panel: no marks when doc_marks is null; an image is shown; no text shows only the document; nothing says so', () => {
+  const a = renderAt(<DocumentPanel source="email" url={null} rawText={RAW} marks={null} />);
+  expect(a.container.querySelector('pre')!.textContent).toBe(RAW);
+  expect(a.container.querySelector('mark')).toBeNull();
+  a.unmount();
+  const b = renderAt(<DocumentPanel source="image" url="/demo/invoices/12.png" rawText={null} marks={null} />);
+  expect(screen.getByAltText('Documento de la factura').getAttribute('src')).toBe('/demo/invoices/12.png');
+  expect(b.container.querySelector('pre')).toBeNull();
+  b.unmount();
+  renderAt(<DocumentPanel source="pdf" url={null} rawText={null} marks={null} />);
+  expect(screen.getByText('No hay archivo para mostrar.')).toBeTruthy();
+});
+
+const mixed = () => IDS.map((id) => ({ id, verdict: id === 'umbral_aprobacion' ? 'no_cumple' : id === 'moneda' ? 'no_verificado' : 'cumple',
+  actual: '', threshold: '', values: {} })) as Check[];
+const sentences = IDS.map((id, i) => `Regla ${i + 1}: frase de la regla ${i + 1} → ${id === 'umbral_aprobacion' ? 'no cumple' : id === 'moneda' ? 'no se pudo verificar' : 'cumple'}`);
+
+test('the rules checklist: a segmented bar «11 de 13 cumplen» with its three counts, then one row per check (AC-102)', async () => {
+  renderAt(<RuleChecklist explanations={sentences} checks={mixed()} />);
+  const bar = await screen.findByRole('figure');
+  expect(bar.getAttribute('aria-label')).toBe('11 de 13 cumplen, en reglas: cumple 11, no cumple 1, no se pudo verificar 1.');
+  expect(within(bar).getByText('11 de 13 cumplen')).toBeTruthy();
+  const rows = within(screen.getByRole('list', { name: 'Lo que decidí' })).getAllByRole('listitem');
+  expect(rows).toHaveLength(13);
+  expect(rows[7]!.className).toBe('no_cumple');
+  expect(rows[7]!.querySelector('.mark')!.getAttribute('aria-hidden')).toBe('true');
+  expect(rows[7]!.querySelector('.check-verdict')!.textContent).toBe('no cumple');
+  expect(rows[7]!.querySelector('strong')!.textContent).toBe('Regla 8');
+  expect(rows[7]!.textContent).toContain('frase de la regla 8 → no cumple');
+  expect(rows[12]!.querySelector('.check-verdict')!.textContent).toBe('no se pudo verificar');
+});
+
+test('the rules checklist in English, and one passing rule in the singular (AC-102)', async () => {
+  localStorage.setItem('lang', 'en');
+  const { unmount } = renderAt(<RuleChecklist explanations={sentences} checks={mixed()} />);
+  expect(await screen.findByText('11 of 13 pass')).toBeTruthy();
+  expect(screen.getAllByText('passes', { selector: '.check-verdict' })).toHaveLength(11);
+  unmount();
+  localStorage.setItem('lang', 'es');
+  const one = mixed().map((c, i) => ({ ...c, verdict: i === 0 ? 'cumple' : 'no_cumple' })) as Check[];
+  renderAt(<RuleChecklist explanations={sentences} checks={one} />);
+  expect(await screen.findByText('1 de 13 cumple')).toBeTruthy();
+});
+
+const moneda = (values: Record<string, string | number | null>) =>
+  ({ id: 'moneda', verdict: values.rate === null ? 'no_verificado' : 'cumple', actual: '', threshold: '', values }) as Check;
+const market = { amount: 1500000, currency: 'COP', rate: 1 / 4020.1, amount_usd: 373.14, rate_source: 'Yahoo Finance', rate_fetched_at: '2026-10-17T15:00:00Z' };
+
+test('the FX card is not shown without a stored Moneda rate, nor for USD (AC-102)', () => {
+  const { container } = renderAt(<>
+    <FxCard check={moneda({ ...market, rate: null, amount_usd: null })} version={1} />
+    <FxCard check={moneda({ amount: 4200, currency: 'USD', rate: 1, amount_usd: 4200, rate_source: null, rate_fetched_at: null })} version={1} />
+    <FxCard check={undefined} version={1} />
+  </>);
+  expect(container.textContent).toBe('');
+});
+
+test.each([
+  ['es', market, 1, '1 USD = 4.020,10 COP · Yahoo Finance · 17 oct 2026 10:00 · 1.500.000 COP = 373,14 USD'],
+  ['en', market, 1, '1 USD = 4,020.10 COP · Yahoo Finance · Oct 17, 2026 10:00 · 1,500,000 COP = 373.14 USD'],
+  ['es', { ...market, rate: 1 / 4000, amount_usd: 375, rate_source: 'policy', rate_fetched_at: null }, 3,
+    '1 USD = 4.000,00 COP · tasa fijada por la política v3 · 1.500.000 COP = 375 USD'],
+  ['en', { ...market, rate: 1 / 4000, amount_usd: 375, rate_source: 'policy', rate_fetched_at: null }, 3,
+    '1 USD = 4,000.00 COP · rate pinned by policy v3 · 1,500,000 COP = 375 USD'],
+])('the FX card (%s) is built from the stored Moneda values (AC-102, AC-74)', (lang, values, version, line) => {
+  localStorage.setItem('lang', lang);
+  renderAt(<FxCard check={moneda(values)} version={version} />);
+  expect(screen.getByText(line)).toBeTruthy();
+  expect(screen.getByRole('heading', { name: lang === 'es' ? 'Tasa de cambio' : 'Exchange rate' })).toBeTruthy();
+});
+
+test('the timeline has an avatar per actor: the Thesaurus mark, a person\'s initials, a guest glyph (AC-102, R-26)', () => {
+  const d = (id: string, more: Partial<StoredDecision>) => ({ ...decision(1, 'ESCALAR'), id, ...more }) as StoredDecision;
+  renderAt(<Timeline decisions={[d('a', {}), d('b', { actor: 'human', actor_email: 'juan.perez@blinka.example', channel: 'link' }),
+    d('c', { actor: 'human', actor_email: 'ana@blinka.example', channel: 'dashboard' }), d('e', { actor: 'human', actor_email: 'invitado:3f9a1c2b', channel: 'dashboard' })]} />);
+  const [agent, juan, ana, guest] = screen.getAllByRole('listitem').map((r) => r.querySelector('.avatar')!);
+  expect(agent!.querySelector('img')!.getAttribute('src')).toBe('/brand/thesaurus-mark.svg');
+  expect(juan!.textContent).toBe('JP');
+  expect(ana!.textContent).toBe('A');
+  expect(guest!.querySelector('svg')).toBeTruthy();
+  expect(guest!.textContent).toBe('');
+  for (const a of [agent, juan, ana, guest]) expect(a!.getAttribute('aria-hidden')).toBe('true');
+  expect(screen.getByText('juan.perez@blinka.example').hasAttribute('data-user')).toBe(true);
+  expect(screen.getAllByRole('listitem')[3]!.textContent).toContain('Invitado 3f9a1c2b');
 });
 
 test('ESCALAR shows the stored question above Aprobar and Rechazar; Aprobar posts the shown seq, then the new entry appears (AC-65, R-55)', async () => {

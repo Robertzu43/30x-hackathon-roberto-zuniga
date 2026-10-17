@@ -10,7 +10,7 @@ Global definitions used by every AC:
 - "Fresh workspace" = a user created through Supabase Auth (OTP signup or Admin API `createUser`); the trigger seeds it. QA may create users with the Admin API so no AC needs mail delivery.
 - "Demo company" = Andina Labs Inc. with `is_demo = true` (D8).
 - Product email is AWS SES in sandbox: it delivers only to verified identities (`HEARTBEAT_EMAIL`). No MUST AC depends on mail being delivered to anyone (D9).
-- Provisional rulings R-01..R-30 at the end of this file bind every AC that cites them.
+- Provisional rulings R-01..R-31 at the end of this file bind every AC that cites them.
 - "The agent" = the loop in `src/agent/` (D22): percibe → lee → consulta sus herramientas → decide → actúa → rinde cuentas. Every path that decides an invoice (ingest, "Ejecutar agente", first login, "Reevaluar", "Reiniciar demo", the 5-minute cron) runs this one loop; PAGAR still exists only as the output of `decide()` (D2).
 
 ---
@@ -124,8 +124,8 @@ Trace: S-Policy, D18 (one active policy), PROBLEM "pantalla simple donde la empr
 **AC-31 (MUST)** When a new policy version is saved, the system lists which pending and escalated invoices would change outcome (invoice, current outcome → new outcome) without writing any decision, and "Reevaluar pendientes" re-runs only pending and ESCALAR invoices; PAGAR and FRENAR stay untouched, and Bandeja states "Las facturas pagadas o frenadas no se reevalúan; solo las pendientes y escaladas." Evidence: lower "Límite por pago" to 1000, read the list, press Reevaluar, compare Bandeja before/after. (R-14)
 Trace: S-Policy, D16. Rubric: Impacto. Axis: Seguridad, Explicabilidad. Tasks: 8, 14.
 
-**AC-32 (MUST)** When the user edits the company section (nombre, correo del aprobador, idioma), the system saves it; for the demo company the approver email stays `HEARTBEAT_EMAIL` and cannot be changed (field disabled, API 403). Evidence: change the approver email in a fresh workspace and reload; try the same as the demo user. (R-15)
-Trace: S-Escalation (`approver_email`), D8. Rubric: V. implementación. Axis: Seguridad. Tasks: 8, 14.
+**AC-32 (MUST)** When the user edits the company section (nombre, correo del aprobador, idioma), the system saves it; for the demo company the whole company section is read-only by every path a member can reach: the three fields are disabled, the API answers 403, and a Supabase REST `PATCH` on the demo company row with a demo member's JWT changes nothing (error or 0 rows), so the name stays "Andina Labs Inc." and the approver email stays `HEARTBEAT_EMAIL`. A non-demo member can still change all three through the API and REST. The judge's UI language is unaffected because it is stored per user (AC-41), not in `companies.lang`. Evidence: change the approver email in a fresh workspace and reload; try the same as the demo user in the UI and via `PATCH /api/company`; `PATCH /rest/v1/companies?id=eq.<demo id>` with the demo user's JWT and body `{"approver_email":"x@example.com"}`, then `{"name":"X"}`, then `{"lang":"en"}`: each re-read shows the row unchanged; `bash scripts/tests/run.sh` (schema.test.sh asserts the demo row refuses member updates and a non-demo row accepts them). (R-15, R-31)
+Trace: S-Escalation (`approver_email`), D8. Rubric: V. implementación. Axis: Seguridad. Tasks: 2 (database lock), 8, 14.
 
 **AC-33 (MUST)** When the user opens Beneficiarios, the system lists the directory and lets the user add or edit a beneficiary (name, country, currency, simulated bank account, route from ACH / Wire / SWIFT / Pix / CBU / Transferencia COP / USDC, category, agreement type retainer / por horas con tope / suscripción / único with amount, cap, periodicity and validity); a new beneficiary changes the next decision. Evidence: add "Pixel Lab" with the account printed on its seeded invoice, press Reevaluar, its invoice no longer fails "beneficiario nuevo".
 Trace: S-Directory, D4. Rubric: Impacto. Tasks: 8, 14.
@@ -283,6 +283,9 @@ Rulings from folding D22-D27 (product, 17 Oct 00:00Z; D2, D15, D16 and R-01..R-2
 - **R-29 "Lo que hice" is built only from what was recorded.** "Generated from the actual run" means the trace is rendered from the stored decision (`checks[].values`, `payment`, stored question), the invoice, the company's `is_demo` flag and the recorded send result, never from the current directory or policy (a later edit must not rewrite history). Therefore the checks store the snapshot the trace needs (agreement type/amount/periodicity, last 4 digits of the invoice's and the directory's account) and the send result is recorded once (`approval_tokens.email_sent`, `sent_to`, inserted after the send attempt); the trace never says "envié" for a failed send. Principle: evidence, Explicabilidad.
 - **R-30 The pitch line and JEV's real status (D27 vs "claims need evidence").** JEV is SHOULD (S2) behind `JEV_ENABLED`, off by default; it may never be built. Ruling: the pitch line appears verbatim as Roberto wrote it, and README and `/demo` state next to it, truthfully, JEV's status ("JEV, la intuición rápida, es una capa opcional; en esta demo está apagada" or "encendida"), from `JEV_ENABLED` and whether S2 shipped. Principle: evidence.
 
+Rulings during the run (product, 17 Oct):
+- **R-31 Demo company row is locked against members (Task 2 reviewer finding, AC-32).** Task 2's migration let any member of the demo company, i.e. the shared public demo user (AC-46), change `approver_email`, `name` and `lang` through Supabase REST, bypassing the Worker's 403. Ruling: (1) in scope of Task 2, AC-32 owns it, because the hole is in Task 2's grant and policy and AC-32's "cannot be changed" is false while REST allows it; (2) the whole demo company row is read-only to members, not only `approver_email`: no judge task in AC-46 needs to rename the company or change `companies.lang`, the UI language is per user (AC-41), and a renamed "Andina Labs" would be shown to every later judge on `/demo` and is not restored by "Reiniciar demo"; non-demo companies keep updating all three columns; (3) "Reiniciar demo" (AC-47) is not required to restore the company row, because no member path can change it; the seed's upsert stays the only writer and re-running the seed is its reset. Principle: company's actual user gets hurt (the next judge sees a vandalised shared demo), and evidence (prevent at the database, test it in schema.test.sh, instead of repairing after the fact).
+
 ---
 
 ## Task to AC map
@@ -290,7 +293,7 @@ Rulings from folding D22-D27 (product, 17 Oct 00:00Z; D2, D15, D16 and R-01..R-2
 | Task | ACs |
 |---|---|
 | 1 Scaffold | AC-01, AC-02, AC-41, AC-53 |
-| 2 Schema, RLS, RPC | AC-03, AC-04, AC-05, AC-06, AC-07, AC-08, AC-24, AC-25, AC-37, AC-62 (R-25 `p_expected_seq`), AC-63 (`agent_runs`), AC-64 (`email_sent`, `sent_to`), AC-65 (question columns) |
+| 2 Schema, RLS, RPC | AC-03, AC-04, AC-05, AC-06, AC-07, AC-08, AC-24, AC-25, AC-32 (demo company row locked, R-31), AC-37, AC-62 (R-25 `p_expected_seq`), AC-63 (`agent_runs`), AC-64 (`email_sent`, `sent_to`), AC-65 (question columns) |
 | 3 Seed data | AC-03, AC-07, AC-09, AC-10, AC-47 |
 | 4 Money + engine | AC-10, AC-14, AC-16, AC-17, AC-18, AC-19, AC-20, AC-21, AC-22, AC-23, AC-34, AC-64 (snapshot values, R-29) |
 | 5 Explanations + trace | AC-02, AC-22, AC-26, AC-27, AC-28, AC-64 (`src/agent/trace.ts`) |

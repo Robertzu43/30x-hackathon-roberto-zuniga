@@ -30,7 +30,7 @@ export function vendorReply(env: Env, company: string, invoices: ReplyInvoice[],
   const line = (s: string) => /^https:\/\//.test(s)
     ? `<p style="margin:0 0 12px"><a href="${esc(s)}" style="color:#111111">${esc(s)}</a></p>` : s ? `<p style="margin:0 0 4px">${esc(s)}</p>` : '<br>';
   const html = '<!doctype html><html lang="es"><body style="margin:0;padding:32px;background:#FBFBFA;color:#2F3437;font:15px/1.6 \'Helvetica Neue\',Helvetica,Arial,sans-serif">'
-    + `<img src="${esc(`${env.APP_URL ?? ''}/brand/thesaurus-logo.png`)}" alt="Thesaurus" width="160" style="display:block;margin:0 0 24px">`
+    + `<img src="${esc(`${env.APP_URL ?? ''}/brand/thesaurus-logo.png`)}" alt="Thesaurus" width="160" height="32" style="display:block;border:0;margin:0 0 24px">`
     + langs.map((l) => `<div lang="${l}">${block(l).map(line).join('')}</div>`).join('<hr style="border:0;border-top:1px solid #EAEAEA;margin:24px 0">')
     + '</body></html>';
   return { subject, text, html };

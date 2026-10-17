@@ -51,18 +51,25 @@ export const policy = memberRoutes()
     const now = new Date().toISOString();
     // One read of earlier invoices covers both windows: the checks filter by their own policy's window.
     const window = { duplicate_window_days: Math.max(previous?.rules.duplicate_window_days ?? 0, rules.duplicate_window_days ?? 0) };
-    // R-59: period state and duplicates come from these same rows in memory, not one read per invoice, so the list stays
-    // complete inside the subrequest budget however many invoices are pending or escalated.
-    const would_change: Array<{ invoice_id: string; headline: string; from: Outcome; to: Outcome }> = [];
-    for (const row of rows.filter((r) => reopenable(r) && r.fields)) {
-      const invoice = { ...row, fields: row.fields! } as Invoice;
+    // R-61, R-68: the same sequential pass "Reevaluar" runs (oldest first), simulated in memory over these rows (R-59): each
+    // simulated decision updates committed, paid and previous invoices before the next, so budget freed by a new FRENAR
+    // can turn a later ESCALAR into PAGAR. Every pending invoice is listed (`from` null: nobody saw an old outcome);
+    // an ESCALAR only when its outcome changes. A pending invoice not yet read cannot be simulated without the model.
+    const would_change: Array<{ invoice_id: string; headline: string; from: Outcome | null; to: Outcome | null }> = [];
+    let unread_pending = 0;
+    for (const row of rows.filter(reopenable)) {
+      if (!row.fields) { unread_pending++; would_change.push({ invoice_id: row.id, headline: '', from: null, to: null }); continue; }
+      const invoice = { ...row, fields: row.fields } as Invoice;
       const beneficiary = findBeneficiary(invoice.fields.payee_name, directory);
       const period = { ...periodFrom(rows, invoice), previous: previousFrom(rows, invoice, window, directory) };
       const next = decide(invoice, beneficiary, rules, period, now);
-      const from = row.outcome ?? decide(invoice, beneficiary, previous?.rules ?? null, period, now).outcome;
+      const from = row.outcome;
+      Object.assign(row, { outcome: next.outcome, amount_usd: next.amount_usd });
       if (from !== next.outcome) would_change.push({ invoice_id: row.id, headline: headline(next, invoice, beneficiary, lang), from, to: next.outcome });
     }
-    return c.json({ policy: saved, would_change });
+    // The banner's "el agente pagará <n> factura(s)" counts pending rows too (AC-31, R-68).
+    const will_pay = would_change.filter((w) => w.to === 'PAGAR').length;
+    return c.json({ policy: saved, would_change, will_pay, unread_pending });
   })
 
   // Pending and ESCALAR invoices after the cursor (AC-31, R-60); runAgent picks them for the 'reevaluate' trigger.

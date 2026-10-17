@@ -58,12 +58,12 @@ function consult(checks: Check[], lang: Lang): string {
   return fill(lang, 'trace.directory', { agreement: agreementText(v('acuerdo'), lang), account: account.directory_account_last4 });
 }
 
+// "<a> cumplen[, <b> no cumplen][, <c> no se pudieron verificar]"
 function counts(checks: Check[], lang: Lang): string {
   const plural = new Intl.PluralRules(lang === 'es' ? 'es-CO' : 'en-US');
-  const parts = (['cumple', 'no_cumple', 'no_verificado'] as const).map((v) => [v, checks.filter((c) => c.verdict === v).length] as const)
+  return (['cumple', 'no_cumple', 'no_verificado'] as const).map((v) => [v, checks.filter((c) => c.verdict === v).length] as const)
     .filter(([v, n]) => v === 'cumple' || n > 0)
-    .map(([v, n]) => fill(lang, `trace.count.${v}.${plural.select(n)}`, { n }));
-  return fill(lang, 'trace.rules', { total: checks.length, counts: parts.join(', ') });
+    .map(([v, n]) => fill(lang, `trace.count.${v}.${plural.select(n)}`, { n })).join(', ');
 }
 
 function act(d: StoredDecision, a: TraceArgs, lang: Lang): string {
@@ -79,17 +79,21 @@ function act(d: StoredDecision, a: TraceArgs, lang: Lang): string {
   return fill(lang, email_sent ? 'trace.act.sent' : 'trace.act.failed', { email: sent_to, question: d[`question_${lang}`] });
 }
 
-// A person's answer. Rejection = a human FRENAR whose own checks do not trigger FRENAR (an approval that re-checks
-// into a fresh duplicate or limit breach is still an approval).
-function human(d: StoredDecision, lang: Lang): string {
+// A later decision, from its own stored data (R-64): a person's answer (R-48) or the agent's re-evaluation. Rejection = a
+// human FRENAR whose own checks do not trigger FRENAR (an approval that re-checks into a fresh duplicate or limit breach is
+// still an approval). Anything but PAGAR states its reason, as the column beside it does.
+function later(d: StoredDecision, a: TraceArgs, lang: Lang): TraceStep {
+  const why = list(lang, motives(d.checks, lang, a.invoice.received_at));
+  const vars = { email: d.actor_email, channel: t(lang, `channel.${d.channel}`), outcome: t(lang, `outcome.${d.outcome}`), reason: why,
+    version: d.policy_version, counts: counts(d.checks, lang) };
+  if (d.actor === 'agent') return { stage: 'decide', text: fill(lang, why ? 'trace.reevaluated_reason' : 'trace.reevaluated', vars) };
   const rejected = d.outcome === 'FRENAR' && outcomeOf(d.checks) !== 'FRENAR';
-  return fill(lang, rejected ? 'trace.human.rejected' : 'trace.human.approved',
-    { email: d.actor_email, channel: t(lang, `channel.${d.channel}`), outcome: t(lang, `outcome.${d.outcome}`) });
+  return { stage: 'actua', text: fill(lang, rejected ? 'trace.human.rejected' : why ? 'trace.human.approved_reason' : 'trace.human.approved', vars) };
 }
 
-// Steps from the latest agent decision, then one step per later human answer.
+// Steps 1-5 narrate the FIRST agent decision and are never rewritten; each later decision adds one step, in seq order (R-64).
 export function agentTrace(a: TraceArgs, lang: Lang): TraceStep[] {
-  const i = a.decisions.map((d) => d.actor).lastIndexOf('agent');
+  const i = a.decisions.findIndex((d) => d.actor === 'agent');
   const d = a.decisions[i]; // [-1] = undefined: no agent decision yet
   if (!d) return [];
   const why = motives(d.checks, lang, a.invoice.received_at);
@@ -97,9 +101,9 @@ export function agentTrace(a: TraceArgs, lang: Lang): TraceStep[] {
   return [
     { stage: 'lee', text: read(a.invoice, lang) },
     { stage: 'consulta', text: consult(d.checks, lang) },
-    { stage: 'consulta', text: counts(d.checks, lang) },
+    { stage: 'consulta', text: fill(lang, 'trace.rules', { total: d.checks.length, counts: counts(d.checks, lang) }) },
     { stage: 'decide', text: fill(lang, why.length ? 'trace.decided_reason' : 'trace.decided', { outcome, reason: list(lang, why) }) },
     { stage: 'actua', text: act(d, a, lang) },
-    ...a.decisions.slice(i + 1).filter((h) => h.actor === 'human').map((h) => ({ stage: 'actua' as const, text: human(h, lang) })),
+    ...a.decisions.slice(i + 1).map((h) => later(h, a, lang)),
   ];
 }

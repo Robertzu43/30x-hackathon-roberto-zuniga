@@ -20,7 +20,7 @@ const addDays = (day: string, n: number) => new Date(Date.parse(`${day}T00:00:00
 // Case, accents and punctuation ignored (AC-19, AC-20).
 const norm = (s: string | null) =>
   (s ?? '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[.,]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
-const nameKey = (s: string | null) => norm(s).replace(/ (sas|ltda|inc|llc)$/, '');
+export const nameKey = (s: string | null) => norm(s).replace(/ (sas|ltda|inc|llc)$/, '');
 const accountKey = (s: string | null) => norm(s).replace(/ /g, '');
 const last4 = (s: string | null) => (s ? s.replace(/\D/g, '').slice(-4) || null : null);
 

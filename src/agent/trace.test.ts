@@ -132,6 +132,34 @@ describe('agentTrace "Lo que hice" (AC-64, D24, R-29)', () => {
     expect(trace(i, [d, { ...r, checks: [] }])[5]?.text).toBe(want);
     expect(trace(i, [d, r])[5]?.text).toBe(want);
   });
+  it('an approval that re-escalates keeps steps 1-5 of the first decision and ends with its own reason (R-64)', () => {
+    const { i, d } = escalated();
+    const full = { ...EMPTY, committed_usd: 40000 }; // the month's budget is gone by the time the person approves
+    const a = decideWithOverrides(['umbral_aprobacion'], { email: 'roberto@hacketix.com', channel: 'dashboard' },
+      i, findBeneficiary('Nube Sur LLC', DIRECTORY), RULES, full, NOW);
+    expect(a.outcome).toBe('ESCALAR');
+    const h = stored(a, { id: 'd2', seq: 2, actor: 'human', actor_email: 'roberto@hacketix.com', channel: 'dashboard' });
+    const steps = trace(i, [d, h], { notification: SENT });
+    expect(steps).toHaveLength(6);
+    expect(steps[2]?.text).toBe('Verifiqué 13 reglas: 12 cumplen, 1 no cumple.'); // history: the first decision's counts
+    expect(steps[5]).toEqual({ stage: 'actua', text: 'roberto@hacketix.com aprobó en el tablero; volví a verificar las reglas y el resultado es ' +
+      'ESCALAR: supera el presupuesto del periodo de 42.000 USD.' });
+    expect(trace(i, [d, h], { notification: SENT }, 'en')[5]?.text).toBe('roberto@hacketix.com approved on the dashboard; ' +
+      'I checked the rules again and the result is ESCALATE: exceeds the period budget of 42,000 USD.');
+  });
+  it('a re-evaluation adds one decide step with its policy version, counts and result; steps 1-5 stay the first decision (R-64)', () => {
+    const { i, d } = escalated();
+    const frenar = stored(run(i, { ...RULES, per_payment_limit_usd: 1000 }), { id: 'd2', seq: 2, policy_version: 2 });
+    const steps = trace(i, [d, frenar], { notification: SENT });
+    expect(steps.slice(0, 5)).toEqual(trace(i, [d], { notification: SENT }));
+    expect(steps[5]).toEqual({ stage: 'decide', text: 'Reevalué la factura con la política v2: 11 cumplen, 2 no cumplen. ' +
+      'Decidí FRENAR: supera el límite por pago de 1.000 USD y supera el umbral de aprobación de 2.500 USD.' });
+    expect(trace(i, [d, frenar], { notification: SENT }, 'en')[5]?.text).toBe('I re-evaluated the invoice under policy v2: 11 pass, 2 do not pass. ' +
+      'I decided STOP: exceeds the per-payment limit of 1,000 USD and exceeds the approval threshold of 2,500 USD.');
+    const pagar = stored(run(i, { ...RULES, approval_threshold_usd: 5000 }), { id: 'd2', seq: 2, policy_version: 3 });
+    expect(trace(i, [d, pagar])[5]?.text).toBe('Reevalué la factura con la política v3: 13 cumplen. Decidí PAGAR.');
+    expect(trace(i, [d, pagar], {}, 'en')[5]?.text).toBe('I re-evaluated the invoice under policy v3: 13 pass. I decided PAY.');
+  });
   it('no decision yet -> no steps', () => expect(trace(inv(), [])).toEqual([]));
   it('is built from templates only: no model import (R-29, AC-28)', () => expect(src).not.toMatch(/lib\/llm|AI\.run/));
 });

@@ -187,6 +187,9 @@ const en: Record<string, string> = {
   'trace.act.unsent': 'The question stayed on the dashboard; there is no record of an email being sent.',
   'trace.human.approved': '{email} approved {channel}; I checked the rules again and the result is {outcome}.',
   'trace.human.rejected': '{email} rejected {channel}; the result is {outcome} and I did not prepare a payment order.',
+  'trace.human.approved_reason': '{email} approved {channel}; I checked the rules again and the result is {outcome}: {reason}.',
+  'trace.reevaluated': 'I re-evaluated the invoice under policy v{version}: {counts}. I decided {outcome}.',
+  'trace.reevaluated_reason': 'I re-evaluated the invoice under policy v{version}: {counts}. I decided {outcome}: {reason}.',
   // Escalation question (AC-65, D25, R-26, R-27)
   'question.sentence': 'invoice {number} {payee} {amount} {motives}.',
   'question.number': '#{n}',

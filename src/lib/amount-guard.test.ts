@@ -190,3 +190,81 @@ describe('amountGuard: linear time on hostile and large text', () => {
     ['200 KB ordinary text', ordinary.repeat(Math.ceil(200_000 / ordinary.length))],
   ])('%s', (_name, text) => expect(ms(text)).toBeLessThan(50));
 });
+
+// R-82 (AC-14 Amended): every evidence input verbatim, `\n` a real line break, `\uXXXX` that character. Each one is
+// also timed: no new shape may cost more than 50 ms.
+const timed = (text: string, read: number | null) => {
+  const t = performance.now(), g = amountGuard(text, read);
+  expect(performance.now() - t).toBeLessThan(50);
+  return g;
+};
+describe('amountGuard R-82: flagged nota_credito', () => {
+  it.each([
+    ['Total: USD (500.00)', 'Total: USD (500.00)'],
+    ['Total: $ (500.00)', 'Total: $ (500.00)'],
+    ['Total: $(500.00)', 'Total: $(500.00)'],
+    ['Total USD (500.00)', 'Total USD (500.00)'],
+    ['Total:\nUSD (500.00)', 'Total: USD (500.00)'],
+    ['Total: USD (-500.00)', 'Total: USD (-500.00)'],
+    ['Total: USD (500.00) CR', 'Total: USD (500.00) CR'],
+    ['TOTAL DUE: USD (500.00)', 'TOTAL DUE: USD (500.00)'],
+    ['Total: US$ -500', 'Total: US$ -500'],
+    ['Total: - US$ 500', 'Total: - US$ 500'],
+    ['Total: US$ (500.00)', 'Total: US$ (500.00)'],
+    ['Total: S/ -500', 'Total: S/ -500'],
+    ['Total: S/. (500.00)', 'Total: S/. (500.00)'],
+    ['Total: R$ -500', 'Total: R$ -500'],
+    ['Total: COP$ -500.000', 'Total: COP$ -500.000'],
+    ['Nota­crédito 45\nTotal USD 80', 'Notacrédito'],
+    ['nota​crédito 45\nTotal USD 80', 'notacrédito'],
+    ['Total: USD (5​00.00)', 'Total: USD (500.00)'],
+    ['Nota‐crédito 45\nTotal USD 80', 'Nota‐crédito'],
+    ['credit‑memo 7\nTotal USD 80', 'credit‑memo'],
+    ['nota–de–credito 45\nTotal USD 80', 'nota–de–credito'],
+  ])('%j', (text, signal) => {
+    for (const read of [null, 80, 500, 119]) expect(timed(text, read)).toEqual({ read_error: 'nota_credito', read_detail: { signal } });
+  });
+  it('a parenthesised total beats a line-item sum that adds up (rule 2 beats rule 3)', () =>
+    expect(timed('Subtotal 100\nIVA 19\nTotal: USD (119.00)', 119)).toEqual({ read_error: 'nota_credito', read_detail: { signal: 'Total: USD (119.00)' } }));
+});
+
+describe('amountGuard R-82: flagged total_no_cuadra', () => {
+  const n = null;
+  it.each([
+    ['Subtotal US$ 100.00\nIVA US$ 19.00\nTotal US$ 150.00', n, [100, 19, 119, '150']],
+    ['Total a pagar: S/. 2,500.00', 1500, [n, n, n, '2500']],
+    ['Total: US$ 2,500.00', 1500, [n, n, n, '2500']],
+  ] as const)('%j (model %s)', (text, read, [subtotal, tax, sum, totals]) => {
+    expect(timed(text, read)).toEqual({ read_error: 'total_no_cuadra', read_detail: { subtotal, tax, sum, totals, amount_read: read } });
+  });
+});
+
+describe('amountGuard R-82: not flagged', () => {
+  it.each([
+    ['Total: USD 500.00', 500],
+    ['Total: US$ 2,500.00', 2500],
+    ['Total: S/ 500.00', 500],
+    ['Total a pagar: R$ 1.500,00', 1500],
+    ['Subtotal 100\nIVA 19\nTotal: USD 119.00', 119],
+    ['Total: USD 500.00 (incluye IVA)', 500],
+    ['Total (USD): 500.00', 500],
+    ['Notas: crédito a 30 días\nTotal USD 80', 80],
+  ])('%j (model %s)', (text, read) => expect(timed(text, read)).toBeNull());
+});
+
+// R-82 fuzz: runs of the new currency, parenthesis, invisible-character and hyphen shapes, 20000 each.
+describe('amountGuard R-82: linear time on runs of the new shapes', () => {
+  const ms = (text: string) => { const t = performance.now(); amountGuard(text, 1); return performance.now() - t; };
+  it.each([
+    ['"USD (" x 20000', `Total: ${'USD ('.repeat(20000)}`],
+    ['"US$ " x 20000', `Total: ${'US$ '.repeat(20000)}`],
+    ['"COP$" x 20000', `Total: ${'COP$'.repeat(20000)}1`],
+    ['"S/. (" x 20000', `Total: ${'S/. ('.repeat(20000)}`],
+    ['"$(" x 20000', `Total: ${'$('.repeat(20000)}`],
+    ['"- US$ (" x 20000', `Total: ${'- US$ ('.repeat(20000)}1`],
+    ['"Total: USD (" x 20000', 'Total: USD ('.repeat(20000)],
+    ['invisible chars x 20000', `nota${'​‌‍⁠﻿­'.repeat(20000)}x`],
+    ['"\\u00ad(" x 20000', `Total: ${'­('.repeat(20000)}`],
+    ['hyphens x 20000', `nota${'‐‑‒–−'.repeat(4000)}x`],
+  ])('%s', (_name, text) => expect(ms(text)).toBeLessThan(50));
+});

@@ -1,5 +1,6 @@
 import type { StoredDecision } from '../../src/agent/trace';
 import { useT } from '../i18n';
+import { tu } from './User';
 
 /** "Historial" (AC-26): every decision, oldest first, with actor, outcome and Bogotá date-time. */
 export default function Timeline({ decisions }: { decisions: StoredDecision[] }) {
@@ -11,10 +12,10 @@ export default function Timeline({ decisions }: { decisions: StoredDecision[] })
       <ol className="timeline" aria-label={t('detail.history')}>
         {decisions.map((d) => (
           <li key={d.id}>
-            <span>{d.actor === 'agent' ? t('detail.actor.agent') : [d.actor_email, d.channel && t(`channel.${d.channel}`)].filter(Boolean).join(' ')}</span>
+            <span>{d.actor === 'agent' ? t('detail.actor.agent') : <>{d.actor_email && <span data-user="">{d.actor_email}</span>}{d.actor_email && d.channel ? ' ' : ''}{d.channel && t(`channel.${d.channel}`)}</>}</span>
             <span className={`chip ${d.outcome}`}>{t(`outcome.${d.outcome}`)}</span>
             <time dateTime={d.created_at} className="muted">{when.format(new Date(d.created_at))}</time>
-            {d.note && <p className="muted">{t('detail.note', { note: d.note })}</p>}
+            {d.note && <p className="muted">{tu(t('detail.note'), { note: d.note })}</p>}
           </li>
         ))}
       </ol>

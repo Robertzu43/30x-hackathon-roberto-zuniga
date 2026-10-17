@@ -120,7 +120,7 @@ export default function Period() {
                 <tbody>
                   {data.by_beneficiary.map((b, i) => (
                     <tr key={b.beneficiary ?? i}>
-                      <td>{!b.beneficiary ? t('period.unread') : b.beneficiary}</td>
+                      <td data-user={b.beneficiary ? '' : undefined}>{b.beneficiary || t('period.unread')}</td>
                       <td className="num">{b.count}</td>
                       <td className="num">{usd(b.paid_usd)}</td>
                       <td className="num">{usd(b.committed_usd)}</td>

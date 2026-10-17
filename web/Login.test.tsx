@@ -5,7 +5,7 @@ import Login, { route } from './pages/Login';
 import { fakeAuth, mockApi, renderAt } from './test/utils';
 
 function setup() {
-  const fetchMock = mockApi({ 'POST /api/invoices/run': { decided: 3 } });
+  const fetchMock = mockApi({ 'POST /api/invoices/run': { PAGAR: 3, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null } });
   renderAt(
     <Routes>
       <Route path="/login" element={<Login />} />
@@ -108,13 +108,34 @@ test('signing in without touching the language toggle writes no language to the 
   expect(fakeAuth.updateUser).not.toHaveBeenCalled();
 });
 
-test('while the first run is going, the screen says the agent is reviewing pending invoices', async () => {
+test('while the first run is going, the screen counts the invoices decided so far, then opens Bandeja when the cursor is null', async () => {
   let finish: (v: unknown) => void = () => {};
-  mockApi({ 'POST /api/invoices/run': () => new Promise((r) => (finish = r)) });
+  const bodies: unknown[] = [];
+  mockApi({
+    'POST /api/invoices/run': (init: RequestInit) => {
+      bodies.push(init.body);
+      return bodies.length === 1
+        ? { PAGAR: 5, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 24, cursor: 'c1' }
+        : new Promise((r) => (finish = r));
+    },
+  });
   renderAt(<Routes><Route path="/login" element={<Login />} /><Route path="/" element={<p>bandeja</p>} /></Routes>, { at: '/login' });
   await sendEmail();
   enterCode('123456');
-  expect(await screen.findByText('El agente está revisando tus facturas pendientes…')).toBeTruthy();
-  finish({ decided: 0 });
+  expect(await screen.findByText('Decidiendo tus facturas pendientes… 5 de 29')).toBeTruthy();
+  expect(screen.queryByText('bandeja')).toBeNull();
+  finish({ PAGAR: 24, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null });
+  expect(await screen.findByText('bandeja')).toBeTruthy();
+  expect(bodies).toEqual([undefined, '{"cursor":"c1"}']);
+});
+
+test('an error in the middle of the loop still opens Bandeja', async () => {
+  let n = 0;
+  mockApi({
+    'POST /api/invoices/run': () => (n++ === 0 ? { PAGAR: 1, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 3, cursor: 'c1' } : new Response('{"error":"x"}', { status: 503 })),
+  });
+  renderAt(<Routes><Route path="/login" element={<Login />} /><Route path="/" element={<p>bandeja</p>} /></Routes>, { at: '/login' });
+  await sendEmail();
+  enterCode('123456');
   expect(await screen.findByText('bandeja')).toBeTruthy();
 });

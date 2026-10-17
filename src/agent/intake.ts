@@ -13,7 +13,7 @@ import { adminClient } from '../lib/admin';
 import { documentToText, extractFields } from '../lib/llm';
 import { must, type Budget, type Db } from '../lib/supabase';
 import { hashToken } from '../lib/tokens';
-import { runAgent } from './loop';
+import { FIRST_INVOICE, runAgent } from './loop';
 import { recordedFields } from './trace';
 
 // ip: the client IP (portal) or the sender's key (email) for the per-key limit; null counts only the company (an email's
@@ -28,6 +28,9 @@ export type StatusResult = { ok: true; company: string; status: Bilingual<string
 const MAX_BYTES = 10 * 1024 * 1024; // AC-15, R-11
 const MAX_TEXT = 20000;
 const MAX_NOTE = 2000; // R-90.5
+// R-56: the most one invoice's intake spends outside the agent: slug, intake_hit, upload, the reader's worst case (4, an
+// image), insert, status token and the latest-decision read. Email intake reserves it for each invoice still to come.
+export const INTAKE_COST = 10;
 // The file's first bytes decide its type, never its name or declared MIME type (R-11, as src/routes/invoices.ts).
 const FILES = [
   { magic: '%PDF', source: 'pdf', ext: 'pdf', type: 'application/pdf' },
@@ -77,8 +80,9 @@ const latestDecision = async (db: Db, companyId: string, invoiceId: string): Pro
   must(await db.from('decisions').select('outcome, actor, checks, created_at').eq('company_id', companyId).eq('invoice_id', invoiceId)
     .order('seq', { ascending: false }).limit(1).maybeSingle());
 
-// email: set by email intake only (never by the portal's RPC): origin 'email', the From as sender, a body is source 'email'.
-export async function intake(env: Env, budget: Budget, input: IntakeInput, email?: { sender: string | null }): Promise<IntakeResult> {
+// email: set by email intake only (never by the portal's RPC): origin 'email', the From as sender, a body is source 'email';
+// reserve: the subrequests the email still needs after this invoice (its later invoices and the reply, R-56).
+export async function intake(env: Env, budget: Budget, input: IntakeInput, email?: { sender: string | null; reserve: number }): Promise<IntakeResult> {
   const text = typeof input.text === 'string' ? input.text : '';
   const bytes = input.file?.bytes;
   const kind = bytes instanceof ArrayBuffer && bytes.byteLength && bytes.byteLength <= MAX_BYTES
@@ -95,13 +99,14 @@ export async function intake(env: Env, budget: Budget, input: IntakeInput, email
   const id = crypto.randomUUID();
   let doc: string | null = text;
   let filePath: string | null = null;
+  // R-56: the reader's worst case, counted up front: the fields (Bedrock, then Workers AI: 2) and before them the text of a
+  // scanned PDF (Bedrock: 1) or of an image (Bedrock, then Workers AI: 2).
+  budget.count(2 + (kind?.source === 'image' ? 2 : kind ? 1 : 0));
   if (kind) {
     filePath = `${company.id}/${id}.${kind.ext}`;
     must(await db.storage.from('files').upload(filePath, bytes!, { contentType: kind.type }));
-    if (kind.source === 'image') budget.count(); // the vision call (R-56)
     doc = await documentToText(env, { kind: kind.source, bytes: bytes! });
   }
-  budget.count(); // the reader (R-56)
   const fields = await extractFields(env, doc); // the vendor's note is never read (R-90.5)
   must(await db.from('invoices').insert({
     id, company_id: company.id, source: kind?.source ?? (email ? 'email' : 'chat'), origin: email ? 'email' : 'portal', file_path: filePath,
@@ -111,8 +116,15 @@ export async function intake(env: Env, budget: Budget, input: IntakeInput, email
   const token = b64url(crypto.getRandomValues(new Uint8Array(32)));
   must(await db.from('portal_status_tokens').insert({ token_hash: await hashToken(token), company_id: company.id, invoice_id: id }));
   // If the agent cannot run, the invoice stays pending and the cron decides it (R-60); the reply then says «en revisión».
-  await runAgent({ db, env, budget }, company.id, [id], 'ingest', null, email ? 'email' : 'portal')
-    .catch((e) => console.error('intake: not decided', id, e instanceof Error ? e.message : e));
+  // It runs only if its worst case fits beside the reserve and this invoice's latest-decision read, which are hidden from
+  // its own budget checks meanwhile (R-56).
+  const reserve = (email?.reserve ?? 0) + 1;
+  budget.count(reserve);
+  if (budget.left() >= FIRST_INVOICE) {
+    await runAgent({ db, env, budget }, company.id, [id], 'ingest', null, email ? 'email' : 'portal')
+      .catch((e) => console.error('intake: not decided', id, e instanceof Error ? e.message : e));
+  }
+  budget.count(-reserve);
   const name = company.name ?? '';
   const status = statusText(await latestDecision(db, company.id, id), name);
   const unread = fields.read_error === 'lector_no_disponible';

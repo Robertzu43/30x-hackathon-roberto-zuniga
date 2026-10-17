@@ -33,9 +33,10 @@ const LAURA: InvoiceFields = { payee_name: 'Laura Méndez', amount: 2500, curren
 // fake-db plus Storage and intake_hit as migration 000800 counts it: 10 an hour per key when p_ip is given, 100 a day per company.
 function intakeDb() {
   const base = fakeDb({
-    companies: [{ id: 'A', portal_slug: 'andina-labs', name: 'Andina Labs Inc.', is_demo: true, approver_email: 'aprobador@A.example' }],
-    policies: [{ company_id: 'A', version: 1, name: 'Política general', rules: SEED.rules }],
-    beneficiaries: SEED.beneficiaries.map((b: Row, n: number) => ({ ...b, id: `b${n}`, company_id: 'A' })),
+    companies: [{ id: 'A', portal_slug: 'andina-labs', name: 'Andina Labs Inc.', is_demo: true, approver_email: 'aprobador@A.example' },
+      { id: 'B', portal_slug: 'p-0123456789ab', name: 'Bogotá Diseño SAS', is_demo: false, approver_email: 'aprobador@B.example' }],
+    policies: ['A', 'B'].map((c) => ({ company_id: c, version: 1, name: 'Política general', rules: SEED.rules })),
+    beneficiaries: ['A', 'B'].flatMap((c) => SEED.beneficiaries.map((b: Row, n: number) => ({ ...b, id: `${c}b${n}`, company_id: c }))),
   });
   const rpc = base.rpc;
   const hits = new Map<string, number>();
@@ -55,7 +56,7 @@ function intakeDb() {
       if (a.p_ip !== null && hit(`ip:${a.p_ip}`, 10)) return { data: 'ip', error: null };
       return { data: hit(`company:${a.p_company}`, 100) ? 'company' : null, error: null };
     },
-    storage: { from: () => ({ upload: async (path: string) => { uploads.push(path); return { data: { path }, error: null }; } }) },
+    storage: { from: () => ({ upload: async (path: string) => { base.meter.hit(); uploads.push(path); return { data: { path }, error: null }; } }) },
   });
 }
 
@@ -263,5 +264,46 @@ describe('email intake: rules (AC-87)', () => {
     await deliver(fixture('two-pdfs'));
     expect(budgets.size).toBe(1);
     expect([...budgets][0]!.used).toBeGreaterThan(0);
+  });
+});
+
+// R-56(b): one email's subrequests, the reply included, never pass the 40 of one invocation; a read counts its worst case.
+describe('email intake: the subrequest budget (R-56, AC-70)', () => {
+  const pdf = (n: number, extra = '') => [`f${n}.pdf`, 'application/pdf', `%PDF-1.7 #${3000 + n} 2.500 USD${extra}`] as [string, string, string];
+  // Budget.used after the email, and after the last database call (the reply is the only subrequest after it).
+  async function metered(raw: string) {
+    let lastHit = 0;
+    const hit = db.meter.hit;
+    db.meter.hit = () => { hit(); lastHit = db.meter.budget!.used; };
+    await deliver(raw);
+    return { used: [...budgets][0]!.used, lastHit };
+  }
+
+  it('3 PDFs, non-demo company, changed accounts: every call and the reply fit in 40, the reply is counted', async () => {
+    const m = await metered(mime([pdf(1, ' 9999-0000-1111'), pdf(2, ' 9999-0000-1111'), pdf(3, ' 9999-0000-1111')])
+      .replace('facturas+andina-labs', 'facturas+p-0123456789ab'));
+    expect(invoices().map((i) => i.company_id)).toEqual(['B', 'B', 'B']);
+    expect(replies().filter((r) => r.to === 'laura@mendez.example')).toHaveLength(1); // the others: escalation mails to the approver
+    expect(m.used).toBe(m.lastHit + 1);
+    expect(m.used).toBeLessThanOrEqual(40);
+  });
+
+  it('3 PDFs on the demo company leave margin', async () => {
+    const m = await metered(mime([pdf(1), pdf(2), pdf(3)]));
+    expect(invoices()).toHaveLength(3);
+    expect(m.used).toBeLessThan(40);
+  });
+
+  it('an invoice the agent does not fit stays pending and its reply says «en revisión»', async () => {
+    await deliver(mime([pdf(1), pdf(2), pdf(3)]));
+    const decided = new Set(db.tables.decisions?.map((d) => d.invoice_id));
+    const pending = invoices().filter((i) => !decided.has(i.id));
+    expect(pending.map((i) => i.raw_text)).toContainEqual(expect.stringContaining('#3003'));
+    expect(replies()[0]!.text.match(/^Estado: en revisión$/gm)).toHaveLength(pending.length);
+  });
+
+  it.each([['one-pdf', 3], ['one-png', 4], ['text-only', 2]])('%s: the reader counts its worst case, %i calls (Bedrock, then Workers AI)', async (name, reads) => {
+    const m = await metered(fixture(name));
+    expect(m.used - db.meter.calls - 1).toBe(reads); // all but the database calls and the reply
   });
 });

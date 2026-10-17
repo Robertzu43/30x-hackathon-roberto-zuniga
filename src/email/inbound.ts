@@ -3,7 +3,7 @@
 // becomes an invoice through intake.ts, decided by runAgent like the portal. One templated reply goes to the sender,
 // except to automatic mail, a bad From or our own domain (loop guard), and never over a limit (no backscatter).
 import PostalMime from 'postal-mime';
-import { intake, portalCompany, type IntakeResult } from '../agent/intake';
+import { INTAKE_COST, intake, portalCompany, type IntakeResult } from '../agent/intake';
 import type { Env } from '../env';
 import { sendEmail } from '../lib/email';
 import { Budget } from '../lib/supabase';
@@ -46,17 +46,21 @@ export async function inbound(message: ForwardableEmailMessage, env: Env): Promi
     return 'stop';
   };
   // Images embedded in an HTML body (a signature logo) are part of the body, not attachments.
-  for (const a of mail.attachments.filter((x) => !x.related)) {
+  const files = mail.attachments.filter((x) => !x.related);
+  for (const [i, a] of files.entries()) {
     const name = a.filename ?? a.mimeType;
     if (made.length === MAX_FILES || !(a.content instanceof ArrayBuffer)) { ignored.push(name); continue; }
-    const r = await take(await intake(env, budget, { slug, file: { bytes: a.content }, ip: key }, { sender }));
+    // R-56: room kept for the invoices that may still come and for the reply
+    const reserve = Math.min(MAX_FILES - made.length - 1, files.length - i - 1) * INTAKE_COST + 1;
+    const r = await take(await intake(env, budget, { slug, file: { bytes: a.content }, ip: key }, { sender, reserve }));
     if (r === 'stop') return;
     if (r === 'skip') ignored.push(name);
   }
   if (!made.length) {
     const text = mail.text?.trim() ? mail.text : stripTags(mail.html ?? '');
-    if ((await take(await intake(env, budget, { slug, text, ip: key }, { sender }))) === 'stop') return;
+    if ((await take(await intake(env, budget, { slug, text, ip: key }, { sender, reserve: 1 }))) === 'stop') return;
   }
   if (!made.length || !replyTo) return;
+  budget.count(); // the reply is a subrequest too (R-56(b))
   await sendEmail(env, { to: replyTo, ...vendorReply(env, company.name, made, ignored) });
 }

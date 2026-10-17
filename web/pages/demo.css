@@ -1,0 +1,65 @@
+/* /demo (AC-45, AC-53, D21; design-taste-frontend "quiet instrument"): one left-of-centre column on the brand canvas,
+   sections separated by space only, the inbox shown as a true-size fragment of the product (data-ui). */
+.demo { --edge: max(1.5rem, 22vw); position: relative; min-height: 100svh; padding: 0 1.5rem 0 var(--edge); }
+.demo p { margin: 0; }
+.demo h2 { font: 400 1.75rem / 1.15 var(--font-serif); letter-spacing: -0.02em; margin: 0 0 1rem; }
+.demo-lang { position: absolute; top: 1.5rem; right: 1.5rem; }
+
+.demo-hero { padding-top: 26svh; max-width: 38rem; display: grid; gap: 1.5rem; justify-items: start; }
+.demo-mark { font-weight: 600; }
+.demo-hero h1 { font-size: clamp(2.25rem, 3.6vw, 3.25rem); line-height: 1.05; max-width: 22ch; margin: 0; }
+.demo-problem { display: grid; gap: 0.375rem; font-size: 1.125rem; line-height: 1.5; }
+.demo-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem 1.75rem; margin-top: 0.5rem; }
+.demo a { color: var(--ink); text-underline-offset: 4px; }
+.demo a:hover { text-decoration-thickness: 2px; }
+
+.demo section { margin-top: clamp(7rem, 16vh, 10rem); max-width: 38rem; }
+.demo section > p { font-size: 1.0625rem; }
+
+.demo-loop ol { list-style: none; margin: 2.5rem 0 0; padding: 0; display: grid; gap: 1.25rem; }
+.demo-loop li { display: grid; grid-template-columns: 13rem 1fr; gap: 1.5rem; align-items: baseline; }
+.demo-loop strong { font: 400 1.375rem / 1.2 var(--font-serif); letter-spacing: -0.01em; }
+.demo-loop blockquote { margin: 4rem 0 0.75rem; font: 400 clamp(1.5rem, 2.4vw, 2.25rem) / 1.2 var(--font-serif); letter-spacing: -0.02em; }
+
+.demo section.demo-inbox { max-width: 48rem; }
+.demo-filter { display: flex; flex-wrap: wrap; gap: 1.25rem; margin: 2rem 0 1rem; }
+.demo-unavailable { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin-top: 2rem; }
+.demo-unavailable p { color: #9f2f2d; }
+.demo-rows { list-style: none; margin: 0; padding: 0.25rem 1.5rem; background: #f1efe9; border-radius: var(--radius); }
+.demo-rows li { display: flex; gap: 1rem; align-items: baseline; padding: 0.875rem 0; }
+.demo-chip {
+  flex: none;
+  min-width: 6.5rem;
+  text-align: center;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  padding: 0.125rem 0.625rem;
+  border-radius: 9999px;
+}
+.demo-chip-PAGAR { background: #edf3ec; color: #346538; }
+.demo-chip-FRENAR { background: #fdebec; color: #9f2f2d; }
+.demo-chip-ESCALAR { background: #fbf3db; color: #956400; }
+.demo-chip-pending { background: #e1f3fe; color: #1f6c9f; }
+
+.demo-period dl { display: grid; grid-template-columns: 8rem 1fr; gap: 1.75rem 1.5rem; align-items: baseline; margin: 2.5rem 0 0; }
+.demo-period dt { font: 400 2rem / 1 var(--font-serif); text-align: right; font-variant-numeric: tabular-nums; }
+.demo-period dd { margin: 0; font-size: 1.0625rem; }
+
+.demo-footer { margin-top: clamp(8rem, 22vh, 12rem); padding: 2rem 0 3rem; color: var(--ink-2); }
+
+@media (max-width: 640px) {
+  .demo-hero { padding-top: 18svh; }
+  .demo-loop li { grid-template-columns: 1fr; gap: 0.25rem; }
+  .demo-rows { padding: 0.25rem 1rem; }
+  .demo-rows li { flex-direction: column; gap: 0.375rem; }
+  .demo-period dl { grid-template-columns: 5.5rem 1fr; }
+  .demo-period dt { font-size: 1.5rem; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .demo-hero > *, .demo section > *, .demo-rows li { animation: rise 600ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .demo-hero > :nth-child(2), .demo section > :nth-child(2), .demo-rows li:nth-child(2) { animation-delay: 80ms; }
+  .demo-hero > :nth-child(3), .demo section > :nth-child(3), .demo-rows li:nth-child(3) { animation-delay: 160ms; }
+  .demo-hero > :nth-child(n + 4), .demo section > :nth-child(n + 4), .demo-rows li:nth-child(n + 4) { animation-delay: 240ms; }
+}

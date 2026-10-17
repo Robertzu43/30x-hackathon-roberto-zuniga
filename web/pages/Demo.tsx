@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import type { PageRoute } from '../App';
 import { config, supabase } from '../api';
 import { DEMO_TOUR, isDemoUser, useSession } from '../auth';
+import Logo from '../components/Logo';
 import { RunProgress, useRunAgent } from '../components/RunProgress';
 import { useT } from '../i18n';
 import './demo.css';
@@ -77,7 +78,7 @@ export default function Demo() {
       </div>
 
       <header className="demo-hero">
-        <p className="demo-mark">{t('app.name')}</p>
+        <Logo />
         <h1>{t('demo.title')}</h1>
         <div className="demo-problem">
           {[1, 2, 3].map((n) => <p key={n} data-testid="problem-line">{t(`demo.problem.${n}`)}</p>)}

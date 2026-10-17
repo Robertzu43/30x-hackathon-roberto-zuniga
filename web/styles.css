@@ -32,6 +32,7 @@ h1 {
 }
 
 .muted { color: var(--ink-2); }
+.logo { display: block; height: 1.75rem; width: auto; }
 
 .topbar {
   display: flex;

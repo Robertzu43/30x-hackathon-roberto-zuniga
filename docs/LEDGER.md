@@ -187,3 +187,8 @@ Process fix from launcher: builders, reviewer, QA and product are dispatched in 
 - Reviewer pass 2/2 Task 4 (scoped, sonnet): PASS, all 3 findings ADDRESSED, no new finding >= 95. Residual (below bar, deferred minor): the currency token in parseAmount is any three letters ("100 abc" -> 100, "Net 30" -> 30); restricting to known codes would close it; "1.000,00 €" (trailing symbol) -> null conservative. Seed raw_text formats all still parse.
 - Ruling: no QA agent run for Task 4 — a pure-logic module with no running surface (no QA_URL, no live data); its evidence is the vitest seed replay over all 29 seeded rows at 3 pinned dates, 12 mutation checks, and two reviewer passes; the engine is exercised end to end by Task 8's QA and the final happy path — cost if wrong: a defect found one task later.
 - Task 4 done: merged into r202610162341/integration (task commits f06b155, c0c815a); full suite green (lint, typecheck, npm test 215, build, run.sh). Budget: builder 2/2, reviewer 2/2, QA 0 (ruled), product questions R-42..R-45 (0 disputes).
+
+## Tasks 5 and 7 (parallel, disjoint files; base 0b364a7)
+- Task 5: r202610162341/task/5-explain — senior-builder (opus; Explicabilidad copy and trace contract used by Tasks 6, 8, 13). Builder 1/2, reviewer 0/2, QA 0 (pure module), rulings 0.
+- Task 7: r202610162341/task/7-reader — senior-builder (sonnet; LLM path, schema validation, fallback). Builder 1/2, reviewer 0/2, QA 0/2 (real Workers AI exercised by Task 8 QA), rulings 0. May add `unpdf`, `zod` dependencies (autonomy: builder justifies in report).
+- Dispatched 2026-10-17T02:25Z in background (independent tasks); waiting for both completion notices before the next step.

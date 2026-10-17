@@ -28,7 +28,7 @@ const json = (body: object, status: number) => Response.json(body, { status, hea
 async function page(env: Env, req: Request, status: number, view: View, data: object = {}): Promise<Response> {
   const shell = await (await env.ASSETS.fetch(new URL('/index.html', req.url))).text();
   const boot = JSON.stringify({ view, ...data, t: { es, en } }).replace(/</g, '\\u003c');
-  return new Response(shell.replace('<!--boot-->', `<script type="application/json" id="boot">${boot}</script>`),
+  return new Response(shell.replace('<!--boot-->', () => `<script type="application/json" id="boot">${boot}</script>`), // a function: '$' in the data is not a pattern
     { status, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
 }
 

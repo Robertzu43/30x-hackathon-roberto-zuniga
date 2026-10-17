@@ -88,6 +88,13 @@ describe('pages (AC-83, AC-84)', () => {
     expect((await boot(res)).company).toBe('</script><script>alert(1)</script>');
   });
 
+  it.each(["Pagos $' SAS", 'Pagos $` SAS', 'Pagos $& SAS', 'Pagos $$ SAS'])('a payee or company name with a replacement pattern survives in the boot JSON: %s', async (name) => {
+    MAIN.company.mockResolvedValueOnce({ name });
+    expect((await boot(await call('/andina-labs'))).company).toBe(name);
+    MAIN.status.mockResolvedValueOnce({ ok: true, company: name, status: { es: 'en revisión', en: 'under review' }, read: { es: [name], en: [name] }, updated_at: '2026-10-17T15:00:00Z' });
+    expect((await boot(await call(`/estado/${TOKEN}`))).status).toMatchObject({ company: name, read: { es: [name], en: [name] } });
+  });
+
   it('static assets pass through with the same headers; other methods are refused', async () => {
     const res = await call('/app.js');
     expect([res.status, await res.text()]).toEqual([200, '// js']);

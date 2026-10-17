@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { Frame, useFmt, type Series } from './shared';
 
 const ONE: Series[] = [{ label: '', tone: 'ink' }]; // a single measure: one ink colour, no legend
@@ -20,7 +21,7 @@ export default function HBars({ title, unit, series = ONE, rows, height }: {
             <span className="chart-htracks">
               {series.map((s, i) => (
                 <span className="chart-hrow" key={s.label}>
-                  <span className={`chart-hbar tone-${s.tone}`} style={{ width: `${((r.values[i] ?? 0) / max) * 100}%` }} aria-hidden="true" />
+                  <span className={`chart-hbar tone-${s.tone}`} style={{ '--r': (r.values[i] ?? 0) / max } as CSSProperties} aria-hidden="true" />
                   <span className="chart-hvalue">{n(r.values[i] ?? 0)}</span>
                 </span>
               ))}

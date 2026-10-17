@@ -153,3 +153,31 @@ test('axe finds no serious or critical violation in any chart state', async () =
     unmount();
   }
 });
+
+test('hbar lengths are proportional: 100% and 85% of the maximum render different widths, none clamped', async () => {
+  const { container } = renderAt(<HBars title="Pagado" unit="USD" rows={[{ label: 'a', values: [100] }, { label: 'b', values: [85] }, { label: 'c', values: [50] }]} />);
+  const r = [...container.querySelectorAll<HTMLElement>('.chart-hbar')].map((el) => Number(el.style.getPropertyValue('--r')));
+  expect(r).toEqual([1, 0.85, 0.5]);
+  const { readFileSync } = (await import('node:fs' as string)) as { readFileSync(p: string, enc: string): string };
+  expect(readFileSync('web/charts/charts.css', 'utf8')).not.toMatch(/\.chart-hbar \{[^}]*max-width/);
+});
+
+const day = (i: number) => `2026-10-${String(10 + i)}`;
+const series_ = (vs: (number | null)[]) => vs.map((value, i) => ({ day: day(i), value }));
+
+test('a null day stops the line: [a, null, b, c] draws two polylines and a dot on the isolated point', () => {
+  const { container } = renderAt(<Line title="Presupuesto" unit="USD" points={series_([10, null, 4, 3])} />);
+  const lines = [...container.querySelectorAll('polyline')].map((p) => p.getAttribute('points')!.split(' ').length);
+  expect(lines).toEqual([1, 2]);
+  expect(container.querySelectorAll('.chart-dot').length).toBe(2); // isolated first point + latest
+});
+
+test('an over-budget (negative) value is drawn above the bottom edge with a visible zero line', () => {
+  const { container } = renderAt(<Line title="Presupuesto" unit="USD" points={series_([5000, -2000])} />);
+  const ys = container.querySelector('polyline')!.getAttribute('points')!.split(' ').map((p) => Number(p.split(',')[1]));
+  expect(Math.max(...ys)).toBeLessThanOrEqual(100);
+  expect(ys[1]).toBe(100); // lowest value sits on the bottom edge
+  const zero = container.querySelector('.chart-zero')!;
+  expect(Number(zero.getAttribute('y1'))).toBeCloseTo(100 - (2000 / 7000) * 100);
+  expect(renderAt(<Line title="P" unit="USD" points={series_([5, 4])} />).container.querySelector('.chart-zero')).toBeNull();
+});

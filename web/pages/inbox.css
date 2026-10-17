@@ -17,21 +17,6 @@
   color: var(--ink);
 }
 
-.inbox-list { list-style: none; padding: 0; margin: 0; border-top: 1px solid var(--line); }
-.inbox-list a {
-  display: grid;
-  grid-template-columns: 7rem 1fr auto;
-  gap: 1rem;
-  align-items: baseline;
-  padding: 1rem 0.5rem;
-  border-bottom: 1px solid var(--line);
-  color: var(--ink);
-  text-decoration: none;
-  overflow-wrap: anywhere; /* AC-91 item 1: a long sender («Correo de …») or payee wraps at 360 */
-}
-.inbox-list a:hover { background: var(--surface); }
-.inbox-list time { font-size: var(--text-sm); font-family: var(--font-mono); }
-
 .chip {
   justify-self: start;
   border-radius: 9999px;
@@ -45,7 +30,7 @@
 .chip-PAGAR { background: #edf3ec; color: #346538; }
 .chip-FRENAR { background: #fdebec; color: #9f2f2d; }
 .chip-ESCALAR { background: #fbf3db; color: #956400; }
-.chip-pending { background: #f1f1ef; color: var(--ink-2); }
+.chip-pending { background: #f1efe9; color: var(--ink-2); }
 
 .new-invoice {
   display: grid;
@@ -63,10 +48,9 @@
 
 @media (max-width: 640px) {
   .inbox-last-run { min-height: 3.2em; }
-  .inbox-list a { grid-template-columns: 1fr; gap: 0.25rem; }
 }
 
-/* AC-86 origin label; the portal link card and «Actividad del agente» (AC-78) after the list, at the 2.5 rem section gap. */
+/* AC-86 origin label; the portal link card and «Actividad del agente» (AC-78), at the 2.5 rem section gap. */
 .inbox-origin { display: block; font-size: var(--text-sm); }
 .portal-card,
 .activity { margin-top: 2.5rem; }

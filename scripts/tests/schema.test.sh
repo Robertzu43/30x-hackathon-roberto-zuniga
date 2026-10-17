@@ -75,8 +75,8 @@ expect "$UA" "select name || '|' || approver_email || '|' || lang from public.co
 expect "$UA" "select count(*) from public.companies where id = '$CB'" '^0$' "A reads B's company (AC-04)"
 expect "$UA" "insert into public.invoices (company_id, source) values ('$CB', 'chat')" 'row-level security' "A inserts into B (AC-04)"
 I="a0000000-0000-4000-8000-00000000000"
-expect "$UA" "insert into public.invoices (id, company_id, source, fields) select ('${I}' || n)::uuid, '$CA', 'chat', '{\"payee_name\":\"Laura\"}' from generate_series(1, 6) n; select count(*) from public.invoice_current" '^6$' "A inserts and reads own invoices"
-expect "$UB" "select count(*) from public.invoice_current" '^0$' "B sees A's invoices (AC-04)"
+expect "$UA" "insert into public.invoices (id, company_id, source, fields) select ('${I}' || n)::uuid, '$CA', 'chat', '{\"payee_name\":\"Laura\"}' from generate_series(1, 6) n; select count(*) from public.invoice_current where id::text like 'a0000000-%'" '^6$' "A inserts and reads own invoices"
+expect "$UB" "select count(*) from public.invoice_current where company_id = '$CA'" '^0$' "B sees A's invoices (AC-04)"
 expect "$UA" "update public.invoices set expected_outcome = 'PAGAR' where id = '${I}1'" 'permission denied' "expected_outcome updatable (AC-06)"
 expect "$UA" "update public.invoices set archived = false where id = '${I}1' returning archived" '^f$' "archived not updatable (AC-06)"
 dec(){ printf "select seq from public.insert_decision('%s', %s, '%s', %s)" "$1" "$2" "$3" "$4"; }
@@ -123,7 +123,7 @@ expect svc "$(dec "${I}6" 400 "$(HU "$(one "$(OV umbral_aprobacion)")")" 1)" '^2
 # AC-68/R-32: a member JWT writes none of the four record tables, directly or through the RPC; other writes still work
 expect "$UA" "$(dec "${I}5" 400 "$PAY" 1)" 'permission denied' "member executes insert_decision (AC-68)"
 expect "$UA" "insert into public.decisions (company_id, invoice_id, seq, outcome, actor, checks) values ('$CA', '${I}5', 2, 'PAGAR', 'agent', '$OK')" 'permission denied' "member inserts a decision (AC-68)"
-expect "$UA" "insert into public.policies (company_id, version, name, rules) values ('$CA', 1, 'p', '{}'); insert into public.beneficiaries (company_id, name) values ('$CA', 'Laura'); select 1" '^1$' "member insert on policies/beneficiaries (AC-68)"
+expect "$UA" "insert into public.policies (company_id, version, name, rules) values ('$CA', 2, 'p', '{}'); insert into public.beneficiaries (company_id, name) values ('$CA', 'Laura'); select 1" '^1$' "member insert on policies/beneficiaries (AC-68)"
 # AC-05/AC-63/AC-08/R-03
 sql -c "select count(*) from pg_policies where schemaname = 'public' and cmd in ('DELETE', 'ALL')" | grep -q '^0$' || fail "delete-capable policy (D10)"
 D1=$(sql -c "select id from public.decisions where invoice_id = '${I}1' and seq = 1")

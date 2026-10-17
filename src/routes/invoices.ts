@@ -128,7 +128,9 @@ function readingOf(stored: ReadFields | null, first: StoredDecision | undefined,
     }) } };
   }
   const error = stored ? stored.read_error : lectura?.values.reason;
-  const reading_status = error === 'lector_no_disponible' ? 'unavailable' as const : stored && !error ? 'preloaded' as const : 'none' as const;
+  // An «ilegible» ingest with no model call stored its empty text (a corrupt PDF); a seeded one stored null.
+  const unread = stored?.concept === 'ilegible' && text !== null && !text.trim();
+  const reading_status = error === 'lector_no_disponible' ? 'unavailable' as const : stored && !error && !unread ? 'preloaded' as const : 'none' as const;
   return { reading_status, reading: null };
 }
 

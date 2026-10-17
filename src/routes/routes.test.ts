@@ -412,14 +412,34 @@ describe('"Leído por IA" reading (AC-77)', () => {
   });
 
   it('a seeded invoice and one inserted with fields are preloaded, an unread one none; all with reading null', async () => {
-    db = testDb(workspace(['01', '13']));
+    db = testDb(workspace(['01', '13', '18']));
     db.tables.invoices!.push({ id: uid('A-x'), company_id: 'A', source: 'chat', raw_text: 'Factura 1050', archived: false, received_at: NOW, fields: null });
     db.tables.invoices!.push({ id: uid('A-f'), company_id: 'A', source: 'chat', raw_text: 'Factura 1050', archived: false, received_at: NOW,
       fields: { ...READ, confidence: {} } });
     expect(await detail(uid('A-01'))).toMatchObject({ reading: null, reading_status: 'preloaded' });
     expect(await detail(uid('A-13'))).toMatchObject({ reading: null, reading_status: 'preloaded' });
+    expect(await detail(uid('A-18'))).toMatchObject({ reading: null, reading_status: 'preloaded' }); // seeded «ilegible», no text stored
     expect(await detail(uid('A-f'))).toMatchObject({ reading: null, reading_status: 'preloaded' });
     expect(await detail(uid('A-x'))).toMatchObject({ reading: null, reading_status: 'none' });
+  });
+
+  it('a model that answers invalid JSON is ai: the «ilegible» read names the provider that answered (R-97)', async () => {
+    db = testDb(workspace([]));
+    ai.run.mockImplementationOnce(async () => ({ response: 'lo siento, no puedo' }));
+    const { invoice } = await json<{ invoice: Row }>(await call('POST', '/api/invoices', { source: 'chat', text: 'una foto borrosa' }));
+    const { reading, reading_status } = await detail(invoice.id);
+    expect(reading_status).toBe('ai');
+    expect(reading!.provider).toBe('Workers AI · m');
+    expect(reading!.fields.every((f) => f.confidence === null)).toBe(true); // nothing it answered was usable
+  });
+
+  it('a corrupt PDF with no text is an «ilegible» with no model call: none, not preloaded (R-97)', async () => {
+    db = testDb(workspace([]));
+    const r = await call('POST', '/api/invoices', upload(new TextEncoder().encode('%PDF-roto'), 'f.pdf', 'application/pdf'));
+    const { invoice } = await json<{ invoice: Row }>(r);
+    expect(ai.run).not.toHaveBeenCalled();
+    expect(db.tables.invoices!.find((i) => i.id === invoice.id)!.fields).toMatchObject({ concept: 'ilegible' });
+    expect(await detail(invoice.id)).toMatchObject({ reading: null, reading_status: 'none' });
   });
 
   // R-97: who read it is decided by the read, not by where the invoice came from.

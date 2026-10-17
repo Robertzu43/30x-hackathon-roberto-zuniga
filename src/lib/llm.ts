@@ -164,13 +164,14 @@ async function modelFields(env: Env, text: string): Promise<[ReadFields, number 
     console.error('reader: lector_no_disponible', reason(e));
     return [{ ...UNAVAILABLE }, null];
   }
+  const read_by = { provider: `Workers AI · ${env.WORKERS_AI_MODEL}` }; // R-97: it answered, usable or not
   try {
     const raw = out?.response;
     const [fields, amount] = toFields(typeof raw === 'string' ? JSON.parse(raw) : raw);
-    return [{ ...fields, read_by: { provider: `Workers AI · ${env.WORKERS_AI_MODEL}` } }, amount];
+    return [{ ...fields, read_by }, amount];
   } catch (e) {
     console.error('reader: ilegible', reason(e));
-    return [{ ...ILEGIBLE }, null];
+    return [{ ...ILEGIBLE, read_by }, null];
   }
 }
 

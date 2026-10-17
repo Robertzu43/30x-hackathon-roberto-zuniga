@@ -148,4 +148,43 @@ for c in "name = 'X'" "approver_email = 'x@example.com'" "lang = 'en'"; do
 expect "$UB" "select name || '|' || approver_email || '|' || lang from public.companies" '^otra\|otra@b.co\|es$' "demo member changed the demo row (AC-32, R-31)"
 expect "$UA" "update public.companies set name = 'Andina', approver_email = 'a@b.co', lang = 'en' where id = '$CA' returning name || '|' || approver_email || '|' || lang" '^Andina\|a@b.co\|en$' "non-demo member cannot edit its company (AC-32)"
 expect "$UA" "update public.companies set is_demo = true where id = '$CA'" 'permission denied' "member flips is_demo (R-15, R-31)"
+# R-69/R-70 (AC-06, AC-20, AC-23, AC-47): a member archives only a pending invoice, never un-archives, and cannot write
+# expected_outcome, received_at or archived on insert. insert_decision refuses an archived invoice (ARCHIVED) under the lock.
+V=$'\\set VERBOSITY verbose\n'   # psql prints the SQLSTATE: "ERROR:  42501: <message>"
+NOARC='Solo se puede archivar una factura pendiente; una factura con decisión queda en el registro. Para retirar una factura escalada, recházala.'
+NOARC_EN='Only a pending invoice can be archived; a decided invoice stays on the record. To withdraw an escalated invoice, reject it.'
+refused(){ out=$(as "$UA" "${V}update public.invoices set archived = $2 where id = '$1'")
+  echo "$out" | grep -qF "42501: $3" && echo "$out" | grep -qF "HINT:  $4" || fail "$5 (got: $out)"
+  is_arch=$(sql -c "select archived from public.invoices where id = '$1'"); [ "$is_arch" = "$([ "$2" = true ] && echo f || echo t)" ] || fail "$5: row changed"; }
+inv(){ as "$UA" "insert into public.invoices (company_id, source, fields) values ('$CA', 'chat', '$1') returning id"; }
+cur(){ printf "(select (public.period_state('%s', current_date) ->> 'committed_usd')::numeric)" "$CA"; }   # committed now
+FRE='{"outcome":"FRENAR","actor":"agent","checks":[]}'
+expect "$UA" "insert into public.invoices (company_id, source, expected_outcome, received_at, archived) values ('$CA', 'chat', 'FRENAR', '2026-01-01', true) returning coalesce(expected_outcome, 'null') || '|' || archived || '|' || (abs(extract(epoch from received_at - now())) < 60)" '^null\|false\|true$' "member insert keeps expected_outcome/received_at/archived (R-70)"
+expect svc "insert into public.invoices (company_id, source, expected_outcome, received_at) values ('$CA', 'chat', 'FRENAR', '2026-01-01') returning expected_outcome || '|' || received_at::date" '^FRENAR\|2026-01-01$' "service role insert lost its values (R-70)"
+NS=$(inv '{"invoice_number":"NS-2219","payee_name":"Nube Sur LLC"}')
+expect svc "$(dec "$NS" "$(cur)" "$PAY" 0)" '^1$' "NS-2219 paid"
+refused "$NS" true "$NOARC" "$NOARC_EN" "member archives the paid NS-2219 (QA repro, R-69)"
+expect "$UA" "select count(*) from public.invoice_current where id = '$NS'" '^1$' "NS-2219 left the record (R-69)"
+ES=$(inv '{}'); expect svc "$(dec "$ES" "$(cur)" "$ESC" 0)" '^1$' "escalated"
+refused "$ES" true "$NOARC" "$NOARC_EN" "member archives an ESCALAR (R-69)"
+FR=$(inv '{}'); expect svc "$(dec "$FR" "$(cur)" "$FRE" 0)" '^1$' "stopped"
+refused "$FR" true "$NOARC" "$NOARC_EN" "member archives a FRENAR (R-69)"
+P=$(inv '{}')
+expect "$UA" "update public.invoices set archived = true where id = '$P' returning archived" '^t$' "member archives a pending invoice (R-69)"
+refused "$P" false 'Una factura archivada no se puede restaurar.' 'An archived invoice cannot be restored.' "member un-archives (R-69)"
+expect svc "$(dec "$P" 0 "$PAY" 0)" 'ARCHIVED' "insert_decision on an archived invoice (R-69)"
+expect svc "$(dec "$P" 0 "$PAY" 7)" 'ARCHIVED' "ARCHIVED before ALREADY_DECIDED (R-69)"
+expect svc "$(dec 00000000-0000-4000-8000-000000000000 0 "$PAY" 0)" 'INVOICE_NOT_FOUND' "INVOICE_NOT_FOUND first"
+expect svc "update public.invoices set archived = true where id in ('$NS', '$ES', '$FR') returning archived" '^t' "service role archives decided invoices (R-69)"
+expect svc "update public.invoices set archived = false where id = '$P' returning archived" '^f$' "service role un-archives (R-69)"
+# The archive waits for a decision being written, then sees it and refuses: no PAGAR hides behind an archive (R-69)
+Q=$(inv '{}')
+as svc "begin; $(dec "$Q" "$(cur)" "$FRE" 0); select pg_sleep(1.5); commit;" >"$D/s2" &
+sleep 0.5; refused "$Q" true "$NOARC" "$NOARC_EN" "archive did not wait for the company lock (R-69)"
+wait; grep -q '^1$' "$D/s2" || fail "decision session did not commit: $(cat "$D/s2")"
+# A decision waits for an archive in flight, then re-reads the invoice and refuses it (R-69)
+R=$(inv '{}')
+as "$UA" "begin; update public.invoices set archived = true where id = '$R'; select pg_sleep(1.5); commit;" >"$D/s3" &
+sleep 0.5; expect svc "$(dec "$R" "$(cur)" "$FRE" 0)" 'ARCHIVED' "insert_decision ignored an archive in flight (R-69)"
+wait; expect "$UA" "select archived from public.invoices where id = '$R'" '^t$' "archive session did not commit: $(cat "$D/s3")"
 echo "schema.test: greps and live Postgres checks passed"

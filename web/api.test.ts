@@ -44,3 +44,14 @@ test('a non-2xx answer throws ApiError with the JSON error and the status', asyn
 });
 
 test('config exposes the demo email', async () => expect((await config()).demo_email).toBe('demo@andina-labs.example'));
+
+// R-98 (AC-28 Clarified): every call carries the tab's language, so the API renders the record in it.
+test('sends the tab language as X-Lang on every call', async () => {
+  const fetchMock = mockApi({ 'GET /api/invoices': [], 'POST /api/invoices/run': {} });
+  sessionStorage.setItem('lang', 'en');
+  await api.get('/api/invoices');
+  expect(new Headers(fetchMock.mock.calls.at(-1)![1]!.headers).get('X-Lang')).toBe('en');
+  sessionStorage.setItem('lang', 'es');
+  await api.post('/api/invoices/run');
+  expect(new Headers(fetchMock.mock.calls.at(-1)![1]!.headers).get('X-Lang')).toBe('es');
+});

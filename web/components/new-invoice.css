@@ -1,0 +1,7 @@
+/* Nueva factura (Task 31, UX-19, UX-23): the file picker in the app's words; the chosen tab never looks like a primary button. */
+.new-invoice-file { display: grid; gap: 0.5rem; font-size: var(--text-sm); color: var(--ink-2); }
+.file-pick { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; min-height: 44px; cursor: pointer; }
+.file-pick input { position: absolute; left: 0; top: 0; width: 1px; height: 1px; opacity: 0; }
+.file-pick .file-button { border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--ink); padding: 0.5rem 0.75rem; }
+.file-pick:focus-within .file-button { outline: 2px solid var(--accent); outline-offset: 2px; }
+.new-invoice [role='tablist'] [role='tab'][aria-selected='true'] { background: var(--surface); color: var(--ink); border-color: var(--ink); font-weight: 600; }

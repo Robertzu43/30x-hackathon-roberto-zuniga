@@ -4,6 +4,7 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useT } from '../i18n';
+import './new-invoice.css';
 
 const TABS = ['file', 'email', 'chat'] as const;
 const TYPES = ['application/pdf', 'image/png', 'image/jpeg'];
@@ -22,7 +23,8 @@ export default function NewInvoice() {
     e.preventDefault();
     let body: FormData | { source: string; text: string };
     if (tab === 'file') {
-      if (!file || !TYPES.includes(file.type) || !file.size || file.size > MAX_BYTES) return setError(t('inbox.new.bad_file'));
+      if (!file) return setError(t('inbox.new.no_file')); // UX-20
+      if (!TYPES.includes(file.type) || !file.size || file.size > MAX_BYTES) return setError(t('inbox.new.bad_file'));
       body = new FormData();
       body.set('file', file);
       body.set('source', file.type === 'application/pdf' ? 'pdf' : 'image');
@@ -51,10 +53,15 @@ export default function NewInvoice() {
         ))}
       </div>
       {tab === 'file' ? (
-        <label>
-          {t('inbox.new.file')}
-          <input type="file" accept="application/pdf,image/png,image/jpeg" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-        </label>
+        <div className="new-invoice-file">
+          <span>{t('inbox.new.file')}</span>
+          {/* UX-19: the browser's own button text follows the browser language; this one follows the app's. */}
+          <label className="file-pick">
+            <input type="file" aria-label={t('inbox.new.file')} accept="application/pdf,image/png,image/jpeg" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+            <span className="file-button" aria-hidden="true">{t('inbox.new.choose')}</span>
+            <span className="muted">{file?.name ?? t('inbox.new.none_chosen')}</span>
+          </label>
+        </div>
       ) : (
         <label>
           {t('inbox.new.text')}

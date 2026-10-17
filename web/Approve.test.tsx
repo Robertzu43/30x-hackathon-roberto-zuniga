@@ -83,3 +83,24 @@ test('English: the page reads in the chosen language', async () => {
   expect(await screen.findByText(view().decision.headline_en)).toBeTruthy();
   await waitFor(() => expect(screen.getByRole('button', { name: 'Confirm' })).toBeTruthy());
 });
+
+// UX-17: a link that cannot be answered is no dead end under «Aprobar este pago»: its own heading and a next step in words.
+test.each([
+  ['es', 'No puedo mostrar este pago', 'Si todavía hay que responderlo, pídele a tu equipo de pagos un enlace nuevo.'],
+  ['en', "I can't show this payment", 'If it still needs an answer, ask your payments team for a new link.'],
+])('an invalid link (%s) gets its own heading and a next step, not the approve title', async (lang, title, next) => {
+  localStorage.setItem('lang', lang);
+  mockApi({ [`GET ${URL_}`]: err(404, 'invalid_token') });
+  show();
+  expect(await screen.findByRole('heading', { level: 1, name: title })).toBeTruthy();
+  expect(screen.getByText(next)).toBeTruthy();
+  expect(screen.queryByRole('heading', { name: /Aprobar este pago|Approve this payment/ })).toBeNull();
+});
+
+test('a failure after the link was shown keeps the approve heading: the summary is still on screen', async () => {
+  mockApi({ [`GET ${URL_}`]: view(), [`POST ${URL_}`]: err(409, 'token_used') });
+  show();
+  fireEvent.click(await screen.findByRole('button', { name: 'Confirmar' }));
+  await screen.findByRole('alert');
+  expect(screen.getByRole('heading', { level: 1, name: 'Aprobar este pago' })).toBeTruthy();
+});

@@ -51,7 +51,7 @@ function TopBar({ onTour }: { onTour: () => void }) {
 }
 
 function Shell({ onTour, children }: { onTour: () => void; children: ReactNode }) {
-  const { t } = useT();
+  const { t, lang } = useT();
   const { session } = useSession();
   return (
     <>
@@ -61,7 +61,7 @@ function Shell({ onTour, children }: { onTour: () => void; children: ReactNode }
           {nav.map(({ route }) => <NavLink key={route.path} to={route.path} end>{t(route.nav!.key)}</NavLink>)}
         </nav>
       )}
-      <main>{children}</main>
+      <main key={lang}>{children}</main>{/* R-98: a language switch remounts the screen, which re-fetches its record in that language */}
     </>
   );
 }

@@ -132,10 +132,21 @@ describe('approved palette and fonts', () => {
       return; // shallow clone without that commit
     }
     const hex = (c) => c.toLowerCase().replace(/^#(.)(.)(.)$/, '#$1$1$2$2$3$3');
-    const found = new Set([...css.matchAll(/#[0-9a-fA-F]{3,6}\b/g)].map((m) => hex(m[0])));
+    const found = new Set([...css.matchAll(/#[0-9a-fA-F]{3,6}\b/g)].map((m) => hex(m[0])).map((c) => (c === '#787774' ? '#6d6c69' : c))); // R-99: the one swap
     found.add('#000000'); // rgba(0, 0, 0, 0.6) tour overlay
+    found.add('#956400').add('#fbf3db'); // R-100: the ESCALAR status pair
     expect([...found].sort()).toEqual([...PALETTE].sort());
     for (const f of css.match(/--font-(?:sans|serif|mono): [^;]+/g)) expect(FONTS).toContain(f.split(': ')[1]);
+  });
+
+  it('R-99: the old muted grey #787774 is gone from web/, portal/ and src/lib/email.ts', () => {
+    let hits;
+    try {
+      hits = execFileSync('git', ['grep', '-il', '787774', '--', 'web', 'portal', 'src/lib/email.ts'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    } catch (e) {
+      hits = e.status === 1 ? '' : String(e); // git grep exits 1 when nothing matches
+    }
+    expect(hits.trim()).toBe('');
   });
 });
 

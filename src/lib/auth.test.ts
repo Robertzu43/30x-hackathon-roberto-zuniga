@@ -55,6 +55,12 @@ describe('requireUser', () => {
     expect(await res.json()).toEqual({ user: 'u1', companyId: 'c1', lang: 'en', db: 'function' });
     expect(headerOf('/rest/v1/company_members', 'Authorization')).toBe('Bearer good');
   });
+
+  it('R-98: the request language (X-Lang header) wins over the stored one; an unknown value falls back to it', async () => {
+    const as = (lang: string) => app.request('/me', { headers: { Authorization: 'Bearer good', 'X-Lang': lang } }, ENV);
+    expect(((await (await as('es')).json()) as { lang: string }).lang).toBe('es'); // stored en
+    expect(((await (await as('fr')).json()) as { lang: string }).lang).toBe('en');
+  });
 });
 
 describe('clients', () => {

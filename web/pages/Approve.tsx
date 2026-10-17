@@ -42,11 +42,12 @@ export default function Approve() {
   };
 
   const canAnswer = link && !done && (!error || error === 'busy' || error === 'generic');
+  const dead = !link && !!error; // UX-17: nothing to answer here, so no «Aprobar este pago» heading over a dead end
   const f = link?.invoice.fields;
   const d = link?.decision;
   return (
     <section className="approve">
-      <h1>{t(`approve.title.${link?.action ?? 'approve'}`)}</h1>
+      <h1>{t(dead ? 'approve.title.dead' : `approve.title.${link?.action ?? 'approve'}`)}</h1>
       {!link && !error && <p className="muted">{t('approve.loading')}</p>}
       {link && f && d && (
         <>
@@ -75,6 +76,7 @@ export default function Approve() {
         </div>
       )}
       {error && <p role="alert" className="error">{t(`approve.error.${error}`)}</p>}
+      {dead && <p className="approve-next">{t('approve.dead.next')}</p>}
       {canAnswer && (
         <div className="approve-confirm">
           <p>{t(`approve.does.${link.action}`)}</p>

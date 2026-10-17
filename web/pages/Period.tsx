@@ -1,5 +1,6 @@
 // Periodo (AC-44, D17, R-01, AC-53): the month's money and the three honesty figures from GET /api/period.
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import type { PageRoute } from '../App';
 import { api } from '../api';
 import { useT } from '../i18n';
@@ -17,25 +18,33 @@ type Period = {
 
 // Same Bogota-day month the API defaults to.
 const thisMonth = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }).slice(0, 7);
+// UX-19: a select in the app's language, not <input type="month"> (the browser's). ponytail: the last 24 months; widen if asked.
+const lastMonths = (from: string) => Array.from({ length: 24 }, (_, i) => {
+  const [y, m] = from.split('-').map(Number);
+  const d = new Date(Date.UTC(y!, m! - 1 - i, 1));
+  return d.toISOString().slice(0, 7);
+});
 
 export default function Period() {
   const { t, locale } = useT();
   const [month, setMonth] = useState(thisMonth);
   const [data, setData] = useState<Period | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let live = true;
     setData(null);
-    setError(null);
+    setFailed(false);
+    // UX-13: any failure (offline, 500) gets the designed message; the raw text never reaches the screen.
     api.get<Period>(`/api/period?month=${month}`).then(
       (d) => live && setData(d),
-      (e: Error) => live && setError(e.message),
+      () => live && setFailed(true),
     );
     return () => {
       live = false;
     };
-  }, [month]);
+  }, [month, attempt]);
 
   const usd = (n: number | null) => (n === null ? '—' : new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', currencyDisplay: 'code' }).format(n));
 
@@ -44,10 +53,19 @@ export default function Period() {
       <h1>{t('screen.period')}</h1>
       <label>
         {t('period.month')}
-        <input type="month" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} />
+        <select value={month} onChange={(e) => setMonth(e.target.value)}>
+          {lastMonths(thisMonth()).map((m) => (
+            <option key={m} value={m}>{new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${m}-01T00:00:00Z`))}</option>
+          ))}
+        </select>
       </label>
-      {error && <p role="alert">{error}</p>}
-      {!data && !error && <p role="status" className="muted">{t('period.loading')}</p>}
+      {failed && (
+        <div className="period-state">
+          <p role="alert" className="error">{t('period.load_error')}</p>
+          <button type="button" onClick={() => setAttempt((n) => n + 1)}>{t('period.retry')}</button>
+        </div>
+      )}
+      {!data && !failed && <p role="status" className="muted">{t('period.loading')}</p>}
       {data && (
         <>
           <div className="period-figures">
@@ -83,9 +101,13 @@ export default function Period() {
           </ul>
           <h2>{t('period.beneficiaries')}</h2>
           {data.by_beneficiary.length === 0 ? (
-            <p className="muted">{t('period.none')}</p>
+            <div className="period-state empty">
+              <p>{t('period.none')}</p>
+              <p className="muted">{t('period.none_next')}</p>
+              <Link to="/">{t('period.to_inbox')}</Link>
+            </div>
           ) : (
-            <div className="table-wrap">
+            <div className="table-wrap" role="region" aria-label={t('period.beneficiaries')} tabIndex={0}>
               <table>
                 <thead>
                   <tr>

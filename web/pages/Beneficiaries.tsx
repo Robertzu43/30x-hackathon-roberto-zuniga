@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import type { PageRoute } from '../App';
 import type { Beneficiary } from '../../src/engine/types';
@@ -28,6 +28,9 @@ export default function Beneficiaries() {
   const [editing, setEditing] = useState<Row | null>(null);
   const [err, setErr] = useState<ReturnType<typeof failure> | null>(null);
   const [saved, setSaved] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const formRef = useRef<HTMLElement>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
   const load = () => api.get<Row[]>('/api/beneficiaries').then(setRows);
   useEffect(() => void load().catch((e) => setErr(failure(e))), []);
 
@@ -37,10 +40,17 @@ export default function Beneficiaries() {
     setErr(null);
     setSaved(false);
   };
+  // UX-14, UX-15: the form sits below the list; bring it into view and put the cursor in it.
+  const openForm = (b: Row | null) => {
+    edit(b);
+    formRef.current?.scrollIntoView({ block: 'start' });
+    nameRef.current?.focus({ preventScroll: true });
+  };
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setErr(null);
     setSaved(false);
+    setBusy(true);
     const opt = (s: string) => s.trim() || null;
     const agreement = !f.type ? null : {
       type: f.type,
@@ -58,6 +68,7 @@ export default function Beneficiaries() {
     } catch (x) {
       setErr(failure(x));
     }
+    setBusy(false);
   };
 
   const bad = (k: string) => (err?.field === k ? true : undefined);
@@ -71,10 +82,15 @@ export default function Beneficiaries() {
       <h1>{t('screen.beneficiaries')}</h1>
       <p className="muted">{t('ben.intro')}</p>
 
-      <section className="card table-wrap">
+      <section className="card table-wrap" aria-label={t('ben.list')} tabIndex={0}>
         {!rows && !err && <p className="muted">{t('policy.loading')}</p>}
         {!rows && err && <p role="alert" className="error">{t('ben.load_error')}</p>}
-        {rows?.length === 0 && <p className="muted">{t('ben.empty')}</p>}
+        {rows?.length === 0 && (
+          <div className="empty">
+            <p className="muted">{t('ben.empty')} {t('ben.empty_next')}</p>
+            <button type="button" onClick={() => openForm(null)}>{t('ben.add')}</button>
+          </div>
+        )}
         {!!rows?.length && (
           <table>
             <thead>
@@ -89,7 +105,7 @@ export default function Beneficiaries() {
                   <td>{b.route ?? '—'}</td>
                   <td>{b.category ?? '—'}</td>
                   <td>{agreement(b.agreement)}</td>
-                  <td><button type="button" aria-label={`${t('ben.edit')} ${b.name}`} onClick={() => edit(b)}>{t('ben.edit')}</button></td>
+                  <td><button type="button" aria-label={`${t('ben.edit')} ${b.name}`} onClick={() => openForm(b)}>{t('ben.edit')}</button></td>
                 </tr>
               ))}
             </tbody>
@@ -97,13 +113,13 @@ export default function Beneficiaries() {
         )}
       </section>
 
-      <section className="card" aria-labelledby="ben-form-h">
+      <section className="card" aria-labelledby="ben-form-h" ref={formRef}>
         <h2 id="ben-form-h">{editing ? t('ben.edit_title', { name: editing.name }) : t('ben.new_title')}</h2>
         <form onSubmit={submit} noValidate>
           <div className="grid">
             {TEXT.map((k) => (
               <label key={k}>{t(`ben.${k}`)}
-                <input value={f[k]} aria-invalid={bad(k)} maxLength={k === 'country' ? 2 : k === 'currency' ? 3 : 200}
+                <input ref={k === 'name' ? nameRef : undefined} value={f[k]} aria-invalid={bad(k)} maxLength={k === 'country' ? 2 : k === 'currency' ? 3 : 200}
                   onChange={(e) => setF({ ...f, [k]: k === 'country' || k === 'currency' ? e.target.value.toUpperCase() : e.target.value })} />
               </label>
             ))}
@@ -134,12 +150,12 @@ export default function Beneficiaries() {
                   </select>
                 </label>
                 <label>{t('ben.agreement.valid_until')}
-                  <input type="date" value={f.valid_until} aria-invalid={bad('agreement')} onChange={set('valid_until')} />
+                  <input inputMode="numeric" placeholder={t('ben.date_placeholder')} maxLength={10} value={f.valid_until} aria-invalid={bad('agreement')} onChange={set('valid_until')} />
                 </label>
               </>
             )}
           </div>
-          <button className="primary">{t('ben.save')}</button>
+          <button className="primary" disabled={busy} aria-busy={busy}>{t(busy ? 'ben.saving' : 'ben.save')}</button>
           {editing && <button type="button" onClick={() => edit(null)}>{t('ben.cancel')}</button>}
           {err && rows && <p role="alert" className="error">{err.text}</p>}
           {saved && <p role="status">{t('ben.saved')} <Link to="/policy">{t('ben.go_policy')}</Link>.</p>}

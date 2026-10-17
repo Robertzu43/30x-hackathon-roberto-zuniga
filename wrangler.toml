@@ -32,10 +32,3 @@ binding = "KV"
 id = "715b34210bab409e81ef707e105f0334"
 
 # Secrets (wrangler secret put): AWS_SES_ACCESS_KEY_ID, AWS_SES_SECRET_ACCESS_KEY, SES_FROM_EMAIL, SUPABASE_SERVICE_ROLE_KEY, APPROVAL_HMAC_SECRET. Legacy: RESEND_API_KEY, SUPABASE_POOLER_URL. Optional: TYPESAFE_API_KEY, ANTHROPIC_API_KEY
-
-# AC-43: 60 POSTs a minute per user on /api/* (keyed by user id in src/routes/agent.ts).
-[[unsafe.bindings]]
-name = "RATE_LIMIT"
-type = "ratelimit"
-namespace_id = "1001"
-simple = { limit = 60, period = 60 }

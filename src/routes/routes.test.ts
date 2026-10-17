@@ -13,7 +13,8 @@ type Db = ReturnType<typeof testDb>;
 let db: Db;
 // Both clients count on the request's Budget, as the real ones do through Budget.fetch (R-56).
 const counting = (budget?: BudgetT) => { if (budget) db.meter.budget = budget; return db; };
-vi.mock('../lib/supabase', async (orig) => ({ ...(await orig<typeof import('../lib/supabase')>()), userClient: (_e: Env, _j: string, b?: BudgetT) => counting(b) }));
+vi.mock('../lib/supabase', async (orig) => ({ ...(await orig<typeof import('../lib/supabase')>()),
+  userClient: (_e: Env, jwt: string, b?: BudgetT) => ({ ...counting(b), rpc: (name: string, args: Row) => db.rpc(name, args, jwt) }) }));
 vi.mock('../lib/admin', () => ({ adminClient: (_e: Env, b?: BudgetT) => counting(b) }));
 vi.mock('../lib/email', async (orig) => ({ ...(await orig<typeof import('../lib/email')>()), sendEmail: vi.fn(async () => ({ sent: true })) }));
 const { app } = await import('../index');
@@ -45,6 +46,18 @@ function testDb(seed: Record<string, Row[]> = {}) {
   const writes: Array<{ table: string; op: 'insert' | 'update'; payload: Row | Row[] }> = [];
   const uploads: Array<{ bucket: string; path: string; contentType?: string; size: number }> = [];
   const conflict = { policies: false };
+  // rate_limit_hit of migration 20261017000500, per user (the JWT's) and minute; refuse/fail inject its answers.
+  const rateLimit = { hits: new Map<string, number>(), refuse: false, fail: '' };
+  async function rpc(name: string, args: Row, jwt?: string) {
+    if (name !== 'rate_limit_hit') return base.rpc(name, args);
+    base.meter.hit();
+    base.rpcs.push({ name, args });
+    if (rateLimit.fail === 'throw') throw new TypeError('fetch failed');
+    if (rateLimit.fail) return { data: null, error: { message: rateLimit.fail } };
+    const key = `${USERS[jwt ?? '']?.id}|${Math.floor(Date.now() / 60000)}`;
+    rateLimit.hits.set(key, (rateLimit.hits.get(key) ?? 0) + 1);
+    return { data: !rateLimit.refuse && rateLimit.hits.get(key)! <= Number(args.p_limit), error: null };
+  }
   let n = 0;
   function write(table: string, op: 'insert' | 'update', payload: Row | Row[]) {
     writes.push({ table, op, payload });
@@ -83,7 +96,7 @@ function testDb(seed: Record<string, Row[]> = {}) {
     return b;
   }
   return {
-    ...base, writes, uploads, conflict,
+    ...base, writes, uploads, conflict, rateLimit, rpc,
     from: (t: string) => Object.assign(base.from(t), { insert: (p: Row | Row[]) => write(t, 'insert', p), update: (p: Row) => write(t, 'update', p) }),
     auth: { getUser: async (jwt: string) => (base.meter.hit(), USERS[jwt] ? { data: { user: USERS[jwt] }, error: null } : { data: { user: null }, error: { message: 'invalid JWT' } }) },
     storage: {
@@ -574,19 +587,34 @@ describe('GET /api/agent/last-run (AC-63)', () => {
   });
 });
 
-describe('rate limit (AC-43)', () => {
-  it('the 61st POST of one user within a minute answers 429; GET is not limited', async () => {
+// R-72: the limit is the database counter rate_limit_hit (migration 20261017000500), called with the user's own JWT.
+describe('rate limit (AC-43, R-72)', () => {
+  const limitCalls = () => db.rpcs.filter((r) => r.name === 'rate_limit_hit');
+  it('one user: POSTs 1-60 pass, the 61st answers 429 with the exact body; GET and a second user are not limited', async () => {
     db = testDb(workspace([]));
-    const hits = new Map<string, number>();
-    const limit = vi.fn(async ({ key }: { key: string }) => { hits.set(key, (hits.get(key) ?? 0) + 1); return { success: hits.get(key)! <= 60 }; });
-    const limited = { ...env, RATE_LIMIT: { limit } } as unknown as Env;
-    for (let i = 0; i < 60; i++) expect((await call('POST', '/api/invoices/run', undefined, 'tok-a', limited)).status).toBe(200);
-    const r = await call('POST', '/api/invoices/run', undefined, 'tok-a', limited);
+    for (let i = 0; i < 60; i++) expect((await call('POST', '/api/invoices/run')).status).toBe(200);
+    const r = await call('POST', '/api/invoices/run');
     expect(r.status).toBe(429);
     expect(await r.json()).toEqual({ error: 'Demasiadas solicitudes, intenta en un minuto' });
-    expect(limit).toHaveBeenLastCalledWith({ key: 'user-a' });
-    expect((await call('GET', '/api/invoices', undefined, 'tok-a', limited)).status).toBe(200);
-    expect((await call('POST', '/api/invoices/run', undefined, 'tok-en', limited)).status).toBe(200);
+    expect(limitCalls().at(-1)).toEqual({ name: 'rate_limit_hit', args: { p_limit: 60 } });
+    expect((await call('GET', '/api/invoices')).status).toBe(200);
+    expect((await call('POST', '/api/invoices/run', undefined, 'tok-en')).status).toBe(200);
+    expect(limitCalls()).toHaveLength(62); // one counted call per member POST, none per GET
+  });
+  it('a refused POST does nothing else: no agent run, no write', async () => {
+    db = testDb(workspace(['01']));
+    db.rateLimit.refuse = true;
+    expect((await call('POST', '/api/invoices/run')).status).toBe(429);
+    expect(decisionsOf('A-01')).toHaveLength(0);
+    expect(db.tables.agent_runs ?? []).toHaveLength(0);
+  });
+  it.each([['answers an error', 'boom'], ['throws', 'throw']])('the counter %s -> the request goes through and the error is logged', async (_, how) => {
+    db = testDb(workspace(['01']));
+    db.rateLimit.fail = how;
+    const r = await call('POST', '/api/invoices/run');
+    expect(r.status).toBe(200);
+    expect(decisionsOf('A-01')).toHaveLength(1);
+    expect(vi.mocked(console.error)).toHaveBeenCalledWith('rate limit: counter failed, request allowed', expect.anything());
   });
 });
 
@@ -595,13 +623,11 @@ const { Budget } = await import('../lib/supabase');
 const send = vi.mocked((await import('../lib/email')).sendEmail);
 
 describe('budgeted, resumable runs over HTTP (AC-70, R-56, R-57, R-59, R-60)', () => {
-  const rate = { limit: vi.fn(async () => ({ success: true })) };
-  const metered = { ...env, RATE_LIMIT: rate } as unknown as Env;
-  // Every subrequest of one request: Supabase calls (fake db), Workers AI, emails and the rate-limit binding.
-  const usage = () => db.meter.calls + ai.run.mock.calls.length + send.mock.calls.length + rate.limit.mock.calls.length;
+  // Every subrequest of one request: Supabase calls (fake db, the rate-limit counter included), Workers AI and emails.
+  const usage = () => db.meter.calls + ai.run.mock.calls.length + send.mock.calls.length;
   async function counted(method: string, path: string, body?: unknown) {
     const before = usage();
-    const r = await call(method, path, body, 'tok-a', metered);
+    const r = await call(method, path, body, 'tok-a');
     return { r, n: usage() - before };
   }
   // The browser's call loop with each call's count.
@@ -666,7 +692,7 @@ describe('budgeted, resumable runs over HTTP (AC-70, R-56, R-57, R-59, R-60)', (
       expect(r.status).toBe(400);
       expect(await r.json()).toEqual({ error: 'Cursor no válido' });
     }
-    expect(db.rpcs).toEqual([]);
+    expect(db.rpcs.filter((r) => r.name !== 'rate_limit_hit')).toEqual([]); // only the rate-limit counter ran
     expect(db.tables.agent_runs).toEqual([]);
   });
 

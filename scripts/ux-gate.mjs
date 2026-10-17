@@ -101,6 +101,7 @@ function measure(o) {
     const cs = getComputedStyle(el), r = el.getBoundingClientRect();
     return cs.position === 'absolute' && r.width <= 1 && r.height <= 1 && (cs.clip !== 'auto' || cs.clipPath !== 'none');
   };
+  const inSrOnly = (el) => { for (let p = el; p; p = p.parentElement) if (srOnly(p)) return true; return false; }; // hidden cells of an sr-only table
   const hasText = (el) => [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
   const clippedBy = (el) => {
     for (let p = el.parentElement; p && p !== document.documentElement; p = p.parentElement) if (getComputedStyle(p).overflowX !== 'visible') return p;
@@ -123,7 +124,7 @@ function measure(o) {
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   for (let n = walker.nextNode(); n; n = walker.nextNode()) {
     const el = n.parentElement;
-    if (!el || !live.has(el) || srOnly(el) || !n.textContent.trim()) continue;
+    if (!el || !live.has(el) || inSrOnly(el) || !n.textContent.trim()) continue;
     const range = document.createRange();
     range.selectNodeContents(n);
     const rects = [...range.getClientRects()].filter((r) => r.width > 1 && r.height > 1);

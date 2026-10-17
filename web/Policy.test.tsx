@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { expect, test } from 'vitest';
 import Policy, { route } from './pages/Policy';
 import { mockApi, renderAt } from './test/utils';
@@ -16,8 +16,16 @@ const company = { id: 'c1', name: 'Andina Labs Inc.', approver_email: 'ana@andin
 const json = (body: unknown, status: number) => new Response(JSON.stringify(body), { status });
 const body = (init: RequestInit) => JSON.parse(String(init.body));
 
+const fx = {
+  provider: 'yahoo',
+  rates: [
+    { currency: 'COP', usd_per_unit: 0.00024876, units_per_usd: 4020.1, source: 'Yahoo Finance', fetched_at: '2026-10-17T15:00:00Z', stale: false },
+    { currency: 'MXN', usd_per_unit: 0.054, units_per_usd: 18.5185, source: 'open.er-api.com', fetched_at: '2026-10-14T15:00:00Z', stale: true },
+  ],
+};
+
 function setup(extra: Record<string, unknown> = {}) {
-  return mockApi({ 'GET /api/company': company, 'GET /api/policy': versions, ...extra });
+  return mockApi({ 'GET /api/company': company, 'GET /api/policy': versions, 'GET /api/fx': fx, ...extra });
 }
 const limit = () => screen.findByLabelText('Límite por pago (USD)') as Promise<HTMLInputElement>;
 const save = () => fireEvent.click(screen.getByRole('button', { name: /^Guardar como versión/ }));
@@ -262,4 +270,95 @@ test('English: mixed and escalated-only headers (R-68)', async () => {
   put({ would_change: [{ invoice_id: 'e', headline: 'Nube Sur', from: 'ESCALAR', to: 'FRENAR' }] });
   await saveEn();
   expect(await screen.findByText('If you press "Re-evaluate pending", the agent will change the result of 1 escalated invoice(s):')).toBeTruthy();
+});
+
+const sentenceEs = 'Fuente de tasas: Yahoo Finance (respaldo: open.er-api.com). Tu empresa puede conectar otra fuente —su banco, su proveedor de tesorería o la tasa de Blinka— agregando un proveedor; ver README, sección «Tasas de cambio».';
+const sentenceEn = 'Rate source: Yahoo Finance (fallback: open.er-api.com). Your company can connect another source (its bank, its treasury provider or Blinka\'s rate) by adding a provider; see README, section "Tasas de cambio".';
+
+test('«Tasas de mercado» lists each rate read-only: 1 USD in units, USD per unit, source, fetched time in Bogotá and status (AC-76)', async () => {
+  setup();
+  renderAt(<Policy />);
+  const table = await screen.findByRole('table', { name: 'Tasas de mercado' });
+  const cop = within(table).getByRole('row', { name: /COP/ });
+  const cells = within(cop).getAllByRole('cell').map((c) => c.textContent);
+  expect(cells).toEqual(['COP', '1 USD = 4.020,10 COP', '0,00024876', 'Yahoo Finance', 'consultada 17 oct 2026 10:00', 'vigente']);
+  expect(within(table).getAllByRole('row').map((r) => r.textContent).join('|')).toContain('MXN');
+  expect(table.querySelector('input')).toBeNull();
+});
+
+test('a stale row says «vencida: el agente escalará las facturas en esta moneda», a fresh one «vigente» (AC-76)', async () => {
+  setup();
+  renderAt(<Policy />);
+  const table = await screen.findByRole('table', { name: 'Tasas de mercado' });
+  expect(within(within(table).getByRole('row', { name: /MXN/ })).getByText('vencida: el agente escalará las facturas en esta moneda')).toBeTruthy();
+  expect(within(table).getAllByText('vigente')).toHaveLength(1);
+});
+
+test('the market table sits above the optional pin section, and the source sentence closes the rates (AC-76, AC-30)', async () => {
+  setup();
+  renderAt(<Policy />);
+  const table = await screen.findByRole('table', { name: 'Tasas de mercado' });
+  const pins = screen.getByText('Tasas fijadas por la política');
+  const sentence = screen.getByText(sentenceEs);
+  expect(table.compareDocumentPosition(pins) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(pins.compareDocumentPosition(sentence) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+test('English: table, status, date and sentence (AC-76)', async () => {
+  localStorage.setItem('lang', 'en');
+  setup();
+  renderAt(<Policy />);
+  const table = await screen.findByRole('table', { name: 'Market rates' });
+  expect(within(within(table).getByRole('row', { name: /COP/ })).getAllByRole('cell').map((c) => c.textContent)).toEqual(['COP', '1 USD = 4,020.10 COP', '0.00024876', 'Yahoo Finance', 'fetched Oct 17, 2026 10:00', 'current']);
+  expect(within(table).getByText('expired: the agent will escalate invoices in this currency')).toBeTruthy();
+  expect(screen.getByText('Rates pinned by the policy')).toBeTruthy();
+  expect(screen.getByText(sentenceEn)).toBeTruthy();
+});
+
+test('with an empty pin table, saving posts fx_rates: {} (AC-30 Clarified, R-85)', async () => {
+  const f = setup({
+    'GET /api/policy': [{ ...versions[0], rules: { ...rules, fx_rates: {} } }],
+    'PUT /api/policy': { policy: { ...versions[0], version: 3 }, would_change: [] },
+  });
+  renderAt(<Policy />);
+  await limit();
+  save();
+  await screen.findByText('Versión 3 guardada.');
+  const sent = f.mock.calls.find(([, i]) => i?.method === 'PUT' && String(i.body).includes('fx_rates'))!;
+  expect(body(sent[1]!).rules.fx_rates).toEqual({});
+});
+
+test('a rate ≤ 0 pin is refused with the API text and marks the pin inputs (AC-30)', async () => {
+  setup({ 'PUT /api/policy': json({ error: 'Valor no válido: las tasas deben ser mayores que 0', field: 'fx_rates' }, 400) });
+  renderAt(<Policy />);
+  await limit();
+  fireEvent.change(screen.getByLabelText('1 COP en USD'), { target: { value: '0' } });
+  save();
+  expect((await screen.findByRole('alert')).textContent).toContain('tasas');
+  expect(screen.getByLabelText('1 COP en USD').getAttribute('aria-invalid')).toBe('true');
+});
+
+test('no rates yet: a designed empty message, and no table (AC-91)', async () => {
+  setup({ 'GET /api/fx': { provider: 'yahoo', rates: [] } });
+  renderAt(<Policy />);
+  expect(await screen.findByText(/Todavía no hay tasas de mercado/)).toBeTruthy();
+  expect(screen.queryByRole('table')).toBeNull();
+});
+
+test('/api/fx fails: a designed message with the next step, in both languages, no status code (AC-91)', async () => {
+  setup({ 'GET /api/fx': json({ error: 'boom' }, 500) });
+  renderAt(<Policy />);
+  const msg = await screen.findByText(/No pude cargar las tasas de mercado\. Recarga la página/);
+  expect(msg.textContent).not.toMatch(/500|boom/);
+  cleanup();
+  localStorage.setItem('lang', 'en');
+  setup({ 'GET /api/fx': json({ error: 'boom' }, 500) });
+  renderAt(<Policy />);
+  expect(await screen.findByText(/I could not load the market rates\. Reload the page/)).toBeTruthy();
+});
+
+test('while /api/fx loads the section shows a message, not a blank (AC-91)', () => {
+  setup({ 'GET /api/fx': () => new Promise(() => {}) });
+  renderAt(<Policy />);
+  expect(screen.getAllByText('Cargando…').length).toBeGreaterThan(0);
 });

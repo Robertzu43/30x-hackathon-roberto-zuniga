@@ -1,6 +1,6 @@
 # Spec: Thesaurus (Reto Blinka: Agentes que pagan por la empresa)
 
-Owner: `product`. Sources: `docs/PROBLEM.md`, `docs/DECISIONS.md` (D1-D27 plus the "Scope: in" bullets, cited as S-Ingest, S-Reader, S-Directory, S-Policy, S-Engine, S-Record, S-Escalation, S-Screens, S-Auth, S-Bilingual, S-Output, S-DataSet, S-Tests, S-Submission, S-SES; D22-D27 are the section "Thesaurus is an agent", folded in as AC-61..AC-67; D28-D38 are the section "Roberto's feedback after watching the draft", folded in on 17 Oct as section 13d, AC-73..AC-91, rulings R-85..R-95; D39-D41, Roberto's 17:40-17:50Z feedback, are folded in as section 13e, AC-92..AC-106, rulings R-115..R-126, Tasks 39-51), `docs/CONTEXT.md` (rubric, submission form), `CLAUDE.md` (demo requirements). The plan is `docs/PLAN.md` (Tasks 1-19, done and merged; S1-S6 SHOULD) plus `docs/PLAN-D28.md` (Tasks 20-38 for D28-D38, the same list as the section "Tasks D28-D35" at the end of this file, which also covers D36-D38).
+Owner: `product`. Sources: `docs/PROBLEM.md`, `docs/DECISIONS.md` (D1-D27 plus the "Scope: in" bullets, cited as S-Ingest, S-Reader, S-Directory, S-Policy, S-Engine, S-Record, S-Escalation, S-Screens, S-Auth, S-Bilingual, S-Output, S-DataSet, S-Tests, S-Submission, S-SES; D22-D27 are the section "Thesaurus is an agent", folded in as AC-61..AC-67; D28-D38 are the section "Roberto's feedback after watching the draft", folded in on 17 Oct as section 13d, AC-73..AC-91, rulings R-85..R-95; D39-D41, Roberto's 17:40-17:50Z feedback, are folded in as section 13e, AC-92..AC-106, rulings R-115..R-126, Tasks 39-51; D42, Roberto's 22:50Z feedback, is folded in as section 13f, AC-107..AC-109, rulings R-143..R-149, Tasks 52-54), `docs/CONTEXT.md` (rubric, submission form), `CLAUDE.md` (demo requirements). The plan is `docs/PLAN.md` (Tasks 1-19, done and merged; S1-S6 SHOULD) plus `docs/PLAN-D28.md` (Tasks 20-38 for D28-D38, the same list as the section "Tasks D28-D35" at the end of this file, which also covers D36-D38).
 
 Format: `AC-nn (MUST|SHOULD) When <situation>, the system <observable behaviour>. Evidence: <what a tester runs or clicks>.` followed by Trace, Rubric (Impacto 30 / Innovación 20 / V. técnica 20 / V. implementación 20 / Presentación 10), Axis (Autonomía / Seguridad / Explicabilidad) where it applies, and Tasks.
 
@@ -203,7 +203,8 @@ Trace: S-Escalation, S-SES, D8, D9. Rubric: V. implementación. Axis: Seguridad.
 
 **AC-40 (MUST)** When a visitor opens `/login`, the system offers "Español | English", an email field with "Enviar código", then a 6-digit code field; a wrong code shows "Código incorrecto o vencido"; a valid code opens Bandeja, and on first login the user's pending invoices are decided once. (Clarified, R-56, Task 8c: "once" is one pass, which may be several calls (AC-70). It shows "Decidiendo tus facturas pendientes… n de m" and then opens Bandeja. A failed call does not block the login; Bandeja opens and the cron decides what is left.) Evidence: `npx vitest run web` login test with a mocked Supabase client; on the deployed URL, entering an email reaches the "Te enviamos un código de 6 dígitos" state. Code delivery itself is AC-54 (SHOULD).
 Clarified (D41, R-120): the login screen's one primary action is now «Probar con mi propia empresa» (AC-92). «Enviar código» stays and works as before, styled as a secondary button. A secondary «Entrar con contraseña» opens the email + password form (AC-95). The OTP flow is unchanged for Roberto and real customers.
-Trace: S-Auth, D20. Rubric: V. implementación. Tasks: 11.
+Amended (D42, R-143): the first-login pass no longer runs on the login screen. A valid code (or password) opens Bandeja at once, and the pass runs there, after landing, with «Decidiendo tus facturas pendientes… n de m» on Bandeja (AC-107). Everything else in R-56's text holds: one pass, several calls (AC-70), a failed call never blocks, and the cron decides what is left.
+Trace: S-Auth, D20, D42. Rubric: V. implementación. Tasks: 11, 52.
 
 **AC-41 (MUST)** When the user picks a language on the login screen or in the top bar, the system switches UI, tour, record sentences and number/date formats (es-CO / en-US) without reload and stores the choice per user, so it persists on the next login from another browser. Evidence: switch to "en", log out, clear localStorage, log in: UI is English.
 Clarified (R-78, final QA B): the shared demo user is the exception, because every judge uses the same user. Its language is never stored on the user. It lives only in the browser tab's session. `/demo` opens in Spanish (D14) unless the visitor switches it with `/demo`'s own es/en switch. "Entrar como Andina Labs" opens the dashboard in the language `/demo` shows at that moment, whatever an earlier judge chose. The top-bar switch then changes the language for that tab's session only. The web never writes the demo user's language through the API, and ignores any language stored on the demo user. Non-demo users are unchanged (stored per user, evidence above). Evidence: private window A: `/demo` → "Entrar como Andina Labs" → top bar "English" → sign out. Private window B: `/demo` is Spanish, and "Entrar como Andina Labs" opens a Spanish dashboard with a Spanish tour. Window C: `/demo` → switch to English → "Entrar como Andina Labs": English dashboard and English tour.
@@ -218,7 +219,14 @@ Clarified (R-105, Task 24 UX pass 2 B1), the tour card on every step and width:
 - At widths ≤ 480 px the card is pinned to the bottom of the viewport: 0.75 rem from the left, right and bottom edges (plus `env(safe-area-inset-bottom)`), with padding 1 rem × 1.25 rem and `max-height: calc(100dvh - var(--tour-top) - 1.5rem)`. Body text stays at `--text-base`; it is never shrunk to make the text fit. Wider screens keep the current placement and get the same three-part structure and cue.
 - Required result: at 360 × 800 and 390 × 844, in es and en, step 1 (copy in AC-79 Clarified R-105) fits without scrolling the body, so the cue is absent. If it does not fit, the builder may tighten only the card's own margins and padding, and the result returns to product; the copy is not cut further.
 - Evidence: `web/Tour.test.tsx` shows the cue when the body's measured `scrollHeight` > `clientHeight` (stubbed) and hides it when it fits and after scrolling to the end; the gate on `tour` at 360 and 390, es and en, with item 1 (no clipped text) passing.
-Trace: D19, D20. Rubric: Presentación, V. implementación. Tasks: 11, 11d.
+Clarified (D42, R-144), the tour while the agent is still deciding:
+- It starts on landing, when the entry transition (AC-109) has ended, or at once when there is none. It never waits for the first-login pass to finish.
+- Steps 1 to 3 anchor on elements that do not change during the pass: the Bandeja section, «Nueva factura» and «Ejecutar agente». During the pass «Ejecutar agente» is busy, as the same run (AC-107).
+- Step 4 (`invoice-row`) anchors on the first table row. During the pass, rows keep their order and their box, and only the chip and the headline text change (AC-107). So the spotlight stays on the same row.
+- The tour re-measures its spotlight after each refresh of the screen data, as it already does on resize and scroll.
+- The copy does not change. R-105's two paragraphs and their fit at 360 and 390 still hold.
+- Evidence: `web/Tour.test.tsx`, with a pass running (mocked): step 1 shows at once, and the spotlight rectangle of step 4 is the same before and after a batch refresh. Gate `trial`: `tour` step 1 is on screen at landing, and CLS stays at or under 0.01 through the pass.
+Trace: D19, D20, D42. Rubric: Presentación, V. implementación. Tasks: 11, 11d, 52, 54.
 
 **AC-43 (MUST)** When one user sends more than 60 POST requests to `/api/*` within a minute, the system answers 429 with "Demasiadas solicitudes, intenta en un minuto". Evidence: route test with a fake `RATE_LIMIT` binding.
 Clarified (R-72, final QA A): the AC is met on the deployed URL, not only in the route test. A test with a fake binding does not count as the live check. Acceptance: one user sends 120 sequential `POST /api/invoices/run` within 60 seconds. Responses 1-60 are never 429. At least one later response is 429 with exactly `{"error":"Demasiadas solicitudes, intenta en un minuto"}`. A second user is not limited during the burst. A fake-binding unit test is not enough, and neither is a per-isolate in-memory counter. First fix: make the Cloudflare `ratelimit` binding work, with the `wrangler deploy` output listing `RATE_LIMIT`. If the deployed burst still shows no 429, the accepted fallback is a Supabase counter: one additive table with RLS on and no member policies, plus one `security definer` function. The function keys on `auth.uid()`, never a body value, and on the current minute, increments atomically by upsert, never deletes, and returns allowed or refused. That is 1 subrequest per member POST, replacing the binding call in the R-56 count, so the 40 budget holds. If the counter itself errors, the request goes through and the error is logged with `console.error`. AC-43 is not downgraded and is not left as not-done.
@@ -258,6 +266,7 @@ Clarified (D39-D41; Task 35b is the README writer):
 - «Velocidad» links `docs/perf.md`. It also says, in plain words (R-139, R-140):
   - creating a trial company takes about <latest QA range> seconds, once, with visible progress, bounded at 30 s;
   - the first visitor to `/demo` after a minute with no visits waits about <latest miss median> for the demo numbers, while the heading and the buttons show at once; later visitors get the cached figure.
+  - Amended (D42, R-143): the trial line becomes «Entrar tarda menos de 2 s por cualquiera de las cuatro puertas (código, contraseña, empresa de prueba, Andina Labs); en una empresa de prueba nueva, el agente decide las 29 facturas en unos <latest range> segundos, a la vista en la Bandeja». The numbers come from `docs/perf.md` (AC-97 targets 5 and 6).
 - "What's not done" adds three items:
   - emails attached with «Guardar mi acceso» are not verified, because autoconfirm is on while SES is in sandbox (R-118);
   - trial workspaces are never deleted;
@@ -278,6 +287,11 @@ Trace: CLAUDE.md Demo requirements, CONTEXT (submission: "README must explain th
 10. It ends on the Periodo figures (rinde cuentas).
 
 Clarified (D39-D41, R-126): the video is recorded on the UI as it stands at the 02:00Z UI freeze, after Tasks 33 and 34 pass on it. In step 1 the caption adds «Cualquier persona del jurado puede probarlo con su propia empresa, sin correo» while «Probar con mi propia empresa» is on screen. It is not clicked, because the first-run pass would add a wait. Step 2 still uses «Entrar como Andina Labs». Steps 4 and 10 show the Bandeja dashboard and the Periodo charts if AC-101 and AC-103 shipped. Otherwise they show the screens as they are. The `docs/perf.md` table (AC-97) is committed before recording.
+Clarified (D42, R-149): D42 says all three of its parts appear in the video.
+- Step 1 opens on `/demo` in a fresh context, so the wordmark intro (AC-108) plays. The caption adds nothing for it.
+- Step 2: «Entrar como Andina Labs» shows the transition into the app (AC-109) and a usable Bandeja in under 2 s (AC-107). The caption reads «Entrar tarda menos de 2 segundos».
+- «Probar con mi propia empresa» is still shown and not clicked. The happy path stays on the demo company, because R-35's sequence needs it.
+- If AC-108 or AC-109 was cut at checkpoint C (R-149), the video shows the product as it is, and the cut is in the ledger.
 Live AI use is at most 2 reads and 2 questions per take, and there are at most 3 takes (R-94). Evidence: open `<URL>/demo/happy-path.webm` (or `.mp4`) in a private window; the duration from `ffprobe` (or Playwright's measured recording time, written in the ledger) is between 120 and 180 s; QA watches it once and lists any frozen frame or wait longer than 2 s, and any is a defect.
 Trace: CLAUDE.md "One recorded happy path", CONTEXT submission ("Video demo (URL)"), S-Tests, D32, D29, D34, D36, D38. Rubric: Presentación, Innovación. Tasks: 18, 37.
 
@@ -504,7 +518,7 @@ Evidence:
 
 Trace: D29(b), D36, S-Reader, R-29. Rubric: Innovación. Axis: Explicabilidad. Tasks: 20 (provider recorded), 23 (snippet, `raw_text`, API), 24 (web).
 
-**AC-78 (MUST; becomes SHOULD under R-95's cut rule)** When the user is on Bandeja, the system shows an «Actividad del agente» panel. It plays, step by step, what the agent did on each invoice it decided, built from the recorded decision and never invented (R-29, R-89).
+**AC-78 (MUST; never cut since D42, R-143; R-95's and R-126's cut rules no longer apply to it)** When the user is on Bandeja, the system shows an «Actividad del agente» panel. It plays, step by step, what the agent did on each invoice it decided, built from the recorded decision and never invented (R-29, R-89).
 - Steps: «Leyendo la factura de Laura Méndez con IA…», only when a model read it in that run; otherwise «Tomando los datos ya leídos de la factura de Laura Méndez…». Then «Consultando el directorio…», «Verificando 13 reglas…» and «Decidí PAGAR». Outcome words follow R-46.
 - Pace and scope: about 400 ms per step, newest invoice first, the last 10 invoices at most.
 - While a browser call loop runs (AC-70), each call's newly decided invoices play as soon as the call returns. Otherwise the panel polls `GET /api/agent/activity?since=<ISO>` every 10 s while the tab is visible, and stops when it is hidden. That shows decisions by the cron, the portal and email.
@@ -516,7 +530,9 @@ Evidence:
 - QA: as the demo user, REST-insert 2 pending invoices and press "Ejecutar agente", and both play. Then REST-insert one more and keep Bandeja open up to 10 minutes, and the cron's decision plays.
 - The D38 gate on `inbox`.
 
-Trace: D29(c), D23, D24. Rubric: Innovación, Presentación. Axis: Autonomía, Explicabilidad. Tasks: 29.
+Clarified (D42, R-143): D42 names this panel as the place where the juror sees the agent work after landing. So it is never cut. A gate failure on it is fixed, never dropped. During the first-login pass (AC-107), the pass is a browser call loop, so each call's decisions play as soon as the call returns. That holds wherever the pass was started, the login screen, the door or a reload. Evidence addition: `web/AgentActivity.test.tsx`: a pass started before Bandeja mounted still plays each batch on Bandeja.
+
+Trace: D29(c), D23, D24, D42. Rubric: Innovación, Presentación. Axis: Autonomía, Explicabilidad. Tasks: 29, 52.
 
 **AC-79 (MUST)** When a reader meets `/demo`, the tour or README, the system says plainly where the AI acts and where code decides: «Dónde actúa la IA: lee cada factura (Amazon Nova Lite en AWS Bedrock) y responde tus preguntas sobre el registro («Pregúntale a Thesaurus»). Dónde decide el código: las 13 reglas, la tabla de consecuencias y la tasa de cambio del día; solo el código puede escribir PAGAR.» / "Where the AI acts: it reads each invoice (Amazon Nova Lite on AWS Bedrock) and answers your questions about the record ("Ask Thesaurus"). Where code decides: the 13 rules, the consequence table and the day's exchange rate; only code can write PAY."
 - `/demo` shows it next to the six loop stages (AC-66). "lee" and «Pregúntale a Thesaurus» are tagged «IA», and "consulta sus herramientas" and "decide" are tagged «código».
@@ -623,7 +639,11 @@ Clarified (D39-D41, R-121, R-125): the finance screen list adds:
 - `leave-trial`, the warning;
 - `beneficiary`, the profile, with its `empty` state.
 The `inbox`, `period` and `beneficiary` screens also get the D39 sections' empty states. Item 7 is extended by D40: a screen reached by in-app navigation shows its heading or skeleton within 100 ms and its data within 1 s, and any `docs/perf.md` FAIL (AC-97) on a screen is a failed item 7 for that screen. Trial screens reuse one anonymous session per gate run, created once, so a run never meets AC-96's sign-in limit.
-Trace: D38, D37, D31, D20, D14, D39, D40, D41. Rubric: Presentación, V. técnica, V. implementación. Tasks: 27 (harness), every UI task, 33, 34, 44 (new screen ids).
+Clarified (D42, R-143, R-147, R-148):
+- `trial` now means the Bandeja of a fresh trial user, from landing until the first-login pass ends. The separate progress screen no longer exists. Item 4's CLS (≤ 0.01) is measured over that whole interval, without user input, at 390 and 1440, es and en. The screenshot is taken at landing, with tour step 1 on screen.
+- `login` and `demo` are screenshotted and checked by axe after the wordmark intro has ended. The gate waits until no animation is running on the logo, at most 1.5 s. A second pass with `reducedMotion: 'reduce'` checks that the logo shows its final state at first paint.
+- New screen id `entry`: the hand-over from `/login` and from `/demo` into Bandeja (AC-109), checked for item 4 (CLS ≤ 0.01 from the click to the end of the transition) and item 6 (no console line).
+Trace: D38, D37, D31, D20, D14, D39, D40, D41, D42. Rubric: Presentación, V. técnica, V. implementación. Tasks: 27 (harness), every UI task, 33, 34, 44 (new screen ids).
 
 **AC-82 (MUST)** When the D31 UX QA pass runs (QA in Chromium, at 1440 × 900 and 390 × 844, in es and en, on every AC-91 screen, using the gate harness plus hands-on use), the system's findings are listed in `docs/UX-QA.md` as `UX-nn`. Each entry gives the screen, width, language, steps, expected result, actual result, screenshot path, and one category: broken state, layout jump, loading without feedback, confusing copy, dead link, or slow or stuck screen (more than 2 s without feedback). Before the final video every item is closed: either «corregido (<commit>)», re-verified by QA, or «no es defecto» with a product ruling. Evidence: `docs/UX-QA.md` has no open item; the QA verdicts are in the ledger; the video (AC-50) shows none of the listed defects.
 
@@ -792,7 +812,13 @@ The guardrails do not move:
 - One primary. The button is the one primary action on both screens (R-120).
 - Time. From the click to a Bandeja that lists every DATASET.md row with its expected outcome takes at most 30 s on the deployed URL, measured by wall clock. That is AC-47's bound, and progress is visible the whole time (AC-91 item 4).
 - Failure. If the sign-in fails (AC-96's rate limit, network, Auth down), the page shows, in place: «No pude crear tu empresa de prueba ahora. Intenta de nuevo en unos minutos, o entra como Andina Labs.» / "I couldn't create your trial company right now. Try again in a few minutes, or enter as Andina Labs." It offers «Entrar como Andina Labs» as the next step and never shows a blank screen.
-- Clarified (R-139, launcher watchdog 21:42Z, 17 Oct): the door's speed is measured in two parts, and the behaviour does not change.
+- Amended (D42, R-143; this replaces the "First run" and "Time" bullets above and the R-139 block below, which stay only as the record of what changed):
+  - First run. Right after the anonymous sign-in, the system opens Bandeja. It does not wait for the agent. Bandeja lists every DATASET.md row, each with the muted «Pendiente» chip until the server has written its decision. The tour starts on landing (AC-42 Clarified, R-144). The agent's pass then runs on Bandeja, visibly: «Decidiendo tus facturas pendientes… n de m» above the dashboard, the chips changing in place, and «Actividad del agente» playing each batch (AC-78, AC-107).
+  - Door feedback. Within 100 ms of the click the button is disabled and `aria-busy`, and reads «Creando tu empresa de prueba…» / "Creating your trial company…" until Bandeja shows. «n de m» is no longer shown on the door.
+  - Time, two bounds. (a) From the click to a usable Bandeja: under 2.000 ms, AC-107's measurement (`entry trial` in `docs/perf.md`). (b) From the click until every DATASET.md row shows its expected outcome: at most 30 s by wall clock (AC-47's bound, `entry trial (all decided)` in `docs/perf.md`).
+  - Unchanged: the sign-in, the company and its seed, one primary action (R-120), the failure message, AC-93..AC-96, R-115..R-119, and AC-16/AC-69: the web never shows a seeded row's `expected_outcome` as its outcome. A chip shows only what the server wrote (R-122).
+  - Evidence, replacing the QA line below: QA on the deployed URL, in a private window at 390 and 1440, es and en. Click and record two times in the ledger: landing, and all decided. At landing, the top bar shows «Empresa de prueba <n>», Bandeja lists the DATASET.md row count, and tour step 1 is on screen. After the pass, every row has its expected outcome and Periodo shows «Violaciones 0». `web/Trial.test.tsx`: one click calls `signInAnonymously` once, then navigates to Bandeja before any `/api/invoices/run` request is answered, and the tour shows; the pass then runs on Bandeja.
+- Superseded by D42 (R-143), kept for the record. Clarified (R-139, launcher watchdog 21:42Z, 17 Oct): the door's speed is measured in two parts, and the behaviour does not change.
   - The door itself: `/login` and `/demo`, with «Probar con mi propia empresa» visible and enabled, load in under 2.000 ms. That is D40's first-load target, measured by AC-97 target 1.
   - The one-time first run, from the click until Bandeja is shown: at most 30 s by wall clock, with «Decidiendo tus facturas pendientes… n de m» visible the whole time. This is a progress state (AC-91 item 4, R-120), not a screen, so D40's 2 s does not apply to it. QA's measured 14.6-18.4 s passes.
   - Bandeja opens only after the pass ends, as R-120 ruled. It is not opened while the agent is still deciding.
@@ -806,7 +832,7 @@ Evidence:
 - QA on the deployed URL, in a private window at 390 and 1440, es and en. Click and time it; the time goes in the ledger. The top bar shows «Empresa de prueba <n>». Bandeja matches DATASET.md, Periodo shows «Violaciones 0», and tour step 1 is on screen.
 - The D38 gate on `login`, `demo` and `trial`.
 
-Trace: D41, D8, D19, D20. Rubric: Presentación, Impacto (the jury evaluates on their own). Axis: Autonomía. Tasks: 39 (trigger, config script), 40 (web).
+Trace: D41, D8, D19, D20, D42. Rubric: Presentación, Impacto (the jury evaluates on their own). Axis: Autonomía. Tasks: 39 (trigger, config script), 40 (web), 52 (D42 landing).
 
 **AC-93 (MUST; never cut)** When a trial user works in their workspace, the system lets them do everything a customer does, and nothing more.
 - Invoices. They can upload a PDF or image and paste an email or chat text (AC-11). The agent decides each one.
@@ -941,13 +967,33 @@ Trace: D41 ("Abuse guard … AI quota per user (R-87) applies"), D36 (cost hygie
     - README «Velocidad» states the latest miss median in plain words (AC-49 Clarified, R-140).
   - The `login` row measures the door: the page counts as usable when its heading and its one primary action («Probar con mi propia empresa», R-120) are visible and enabled. A run where QA sees the door usable by hand but the row says "not usable" is a harness defect, fixed in Task 44b. It is not a product FAIL, and it is not a PASS until the script measures it.
   - Perf never blocks a deploy. Deploys are how a fix gets measured. The blocking moment is unchanged: the final table, committed before the video, has every PASS/FAIL line PASS.
+- Clarified (D42, R-146): two targets are added. Both are graded PASS/FAIL, MUST and never cut.
+  5. Entry: from the click on an entry button to a usable Bandeja, under 2.000 ms, median of 3, each sample in a fresh context. There are four rows:
+     - `entry otp`: «Verificar código» on `/login`;
+     - `entry password`: «Entrar» in «Entrar con contraseña» on `/login`;
+     - `entry trial`: «Probar con mi propia empresa» on `/demo`;
+     - `entry demo`: «Entrar como Andina Labs» on `/demo`.
+  6. `entry trial (all decided)`: from the same click until every row shows an outcome chip that is not «Pendiente», at most 30.000 ms, median of 3.
+  - Start, t0: the `timeStamp` of the click event in the page, taken by a capture-phase listener that the script adds before clicking.
+  - End, t1: the first animation frame, read by the page's own `performance.now()`, at which all of these hold:
+    1. `location.pathname` is `/`;
+    2. the Bandeja `h1` is visible;
+    3. the invoice table is rendered from data: no `.skeleton` ancestor, and at least one row, or the designed empty state;
+    4. «Nueva factura» is visible and enabled;
+    5. no entry transition is running (AC-109).
+    «Ejecutar agente» counts as usable when enabled, and also when busy because the first-login pass is running.
+  - Only the click-to-landing interval is graded. The steps before t0 are set-up and are not timed: loading the page, typing, and for `entry otp`, obtaining the code.
+  - How `entry otp` gets a code without mail (R-146). The script fulfils the browser's `POST /auth/v1/otp` with a 200 itself, so no email is sent. It then takes the code from the Admin API's `generateLink` for the QA user, using the service-role key from the environment, never printed. It types the code, then clicks. The graded interval, `verifyOtp` through landing, is entirely live.
+  - QA users: `qa-perf-otp@example.com` and `qa-perf-password@example.com`. The script creates each through the Admin API if it is missing. It sets a fresh random password for the password user on each run, held only in memory. The users are never deleted.
+  - `entry trial` creates one anonymous user per sample, 3 per run, inside AC-96's 30 per hour. Those users are never deleted.
+  - The table names the QA user and whether the sample was a first login, with pending invoices, or a returning one.
 
 Evidence:
 - `docs/perf.md`.
 - `npx vitest run scripts`: median, p95 and the gz sum on fixtures.
 - The 17:40Z baseline (`/api/demo/overview` 2.27 s; one 626 KB bundle) is the first row of `docs/perf.md`, for comparison.
 
-Trace: D40. Rubric: V. técnica, Presentación. Tasks: 44 (script and baseline), 42, 43, and every D39 task (its screens).
+Trace: D40, D42 (targets 5 and 6). Rubric: V. técnica, Presentación. Tasks: 44 (script and baseline), 42, 43, every D39 task (its screens), 52b (entry rows), 52 (entry speed).
 
 **AC-98 (MUST; never cut)** When a screen loads, the system fetches its data with at most one API request on the critical path. That request makes at most one database round trip for data: one PostgREST RPC to that screen's function, plus the authentication check.
 - Endpoints. This contract is fixed now, so web tasks build on mocks:
@@ -989,6 +1035,7 @@ Trace: D40 ("one DB function per screen", "short-lived caching … never for dec
 - Each page is its own chunk, loaded on navigation. `/login`, `/demo` and the approve page load no chart code and no code from logged-in pages. Chart code loads only on screens that show charts.
 - Every screen renders a skeleton with the same markup as its loaded state (R-109's pattern) while its data loads. CLS stays at or under 0.01 (AC-91 item 4).
 - Hashed static assets are served with `Cache-Control: public, max-age=31536000, immutable`. `index.html` is not cached long.
+- Clarified (D42, R-145): while the first-login pass runs, any Bandeja section whose content grows as decisions arrive may keep a fixed box, at most its own maximum content. That is AC-101's 3 approvals and 5 due-soon rows, and AC-78's 10 items, or a fixed-height list that scrolls inside. This is the loaded state's own space, not padding beyond it. A larger reservation is still a defect.
 
 Evidence:
 - `grep -n 'mode = "smart"' wrangler.toml`.
@@ -1138,12 +1185,140 @@ Trace: D39 (5), S-Policy, D16. Rubric: Presentación, Impacto. Tasks: 51.
    Numbers and dates follow the tab's locale.
 4. Light. Chart code loads lazily (AC-99). No animation longer than 300 ms. Adding a chart library is allowed only when the builder's report justifies it and AC-97's 250 KB still holds.
 
+Clarified (R-142, Task 49 review), item 3 and R-131 on charts. A chart summary keeps the payee or beneficiary name it is about, for example «Mayor gasto: Estudio Kairos, USD 1.200». In the visible summary sentence, each such name sits in its own `<span data-user>`. The rest of the sentence, and the amounts the app formats, are never marked. Every chart label, value-table cell or legend entry whose whole text is a payee or beneficiary name carries `data-user`, on the cell or on a span inside it. Fallback copy from the dictionary, such as «Beneficiario no leído», the empty state, titles, units, outcome words and axis values never carry it. The `aria-label` keeps the same full sentence; it is an attribute, not a text node, so R-131's marker does not apply to it. This holds for every chart under `web/charts`, `web/period` and `web/dashboard` (Bandeja included), and for Detalle and Beneficiarios when they show a chart.
+
 Evidence:
-- `npx vitest run web/charts`: summary sentences, the empty state, locale.
+- `npx vitest run web/charts`: summary sentences, the empty state, locale, and (R-142) a summary or label with a name renders that name inside `[data-user]` while «Beneficiario no leído» renders without it.
 - The D38 gate: palette, axe, CLS.
 - The cross-checks in AC-101 to AC-104.
 
 Trace: D39 ("built with the `dataviz` skill", "no fake data"), D37. Rubric: Presentación, V. técnica. Tasks: 46, 47-51.
+
+## 13f. Roberto's feedback at 22:50Z (D42, 17 Oct)
+
+Product folded this in on 17 Oct at about 23:00Z. Rulings R-143..R-149 bind these ACs. Q20 is added to docs/QUESTIONS.md.
+
+D42 is Roberto's decision. Where it conflicts with an earlier product ruling, D42 wins. R-143 lists what it supersedes and what stays.
+
+The order is binding:
+1. Login speed (AC-107). MUST, never cut. It is a juror's first impression.
+2. The wordmark intro (AC-108).
+3. The transition into the app (AC-109).
+
+Items 2 and 3 are MUST, but they can be cut under R-149.
+
+These guardrails do not move:
+- AC-16 and AC-69: no model writes PAGAR.
+- R-122: no outcome is painted before the server writes it, and no member data goes in a shared cache.
+- AC-38 and AC-68.
+- AC-91: the gate applies to every screen these ACs touch.
+- AC-92..AC-96, apart from AC-92's amended first-run bullets.
+
+**AC-107 (MUST; never cut, R-143)** When a person enters through any of the four doors, the system shows a usable Bandeja in under 2 s and runs the agent after landing, in view. The four doors are: «Verificar código» (OTP), «Entrar» in «Entrar con contraseña», «Probar con mi propia empresa» and «Entrar como Andina Labs».
+- Nothing blocks the landing. Before it navigates to Bandeja, the web waits only for the sign-in call itself: `verifyOtp`, `signInWithPassword` or `signInAnonymously`. For «Entrar como Andina Labs», it may also wait for `GET /api/config` (the demo email), which the page may fetch on load. The web does not wait for any of these:
+  - the language write (`updateUser` with `lang`, AC-41). It still happens, and the picked language shows at once;
+  - the first-login pass (`/api/invoices/run`, AC-70);
+  - `GET /api/company`;
+  - the `tour_seen` write.
+- Feedback while waiting. Within 100 ms of the click the button is disabled and `aria-busy` (AC-91 item 4). It reads «Creando tu empresa de prueba…» / "Creating your trial company…" on the trial door, and «Entrando…» / "Signing in…" on the other three.
+- The pass after landing. The first-login pass (AC-40 Amended, AC-92 Amended) is the same pass as before: oldest first, budgeted calls (AC-70), one summed summary. It now runs on Bandeja after landing.
+  - The pass belongs to the app shell, not to the page. Moving to another screen, for example when the tour reaches Política, neither stops it nor restarts it.
+  - A reload in the same tab while the pass runs resumes it. The pass only decides pending invoices, so it never decides one twice (R-25).
+  - If the tab is closed, the cron decides what is left (AC-40 Clarified).
+  - Only one pass runs per tab. While it runs, «Ejecutar agente» is busy as the same run.
+  - «Entrar como Andina Labs» still runs no pass, as today.
+- Bandeja while the agent works (R-145):
+  - Rows. Every invoice is listed at landing. A pending row shows the muted grey «Pendiente» chip and its pending line (AC-40 Clarified). Its outcome chip appears only when the server has written the decision. The web never shows a seeded row's `expected_outcome`.
+  - After each call of the pass, the screen's data is refreshed: one `GET /api/screen/inbox`, at most one in flight. AC-98 counts loads, not these refreshes.
+  - Chips and headlines change in place. During the pass, rows never reorder, appear or disappear unless the person sorts or filters. A row keeps its height when its text changes.
+  - The progress line. «Decidiendo tus facturas pendientes… n de m. Las cifras se actualizan con cada decisión.» / "Deciding your pending invoices… n of m. The figures update with each decision." It sits in RunProgress's place above the dashboard. When the pass ends, it is replaced by AC-29's summary «n PAGAR · n FRENAR · n ESCALAR».
+  - Honest numbers. The KPI tiles, the charts (with their «pendiente» series), the table filter «pendiente», and «Pregúntale a Thesaurus»'s count line (R-138, «pendientes») all show the server's current state after each refresh.
+  - No misleading empty state. While the pass runs and rows are pending, a dashboard section that would show its empty text, «Necesita tu respuesta» for example, shows instead «Thesaurus todavía está decidiendo <n> facturas; lo que necesite tu respuesta aparecerá aquí.» / "Thesaurus is still deciding <n> invoices; anything that needs your answer will appear here." Here <n> is the current pending count.
+  - Layout. CLS stays at or under 0.01 from landing to the end of the pass, without user input (AC-99 Clarified, R-145).
+  - «Actividad del agente» plays each call's decisions as the call returns (AC-78 Clarified).
+  - If a call of the pass fails, the pass stops. RunProgress shows the response's `error` text (AC-70), the rows stay «Pendiente», and the cron decides them later. Bandeja stays usable.
+- The tour starts on landing (AC-42 Clarified, R-144).
+- If a time misses: R-141's first lever is pre-authorised in Task 52. That means running `/api/company` beside the screen request, or folding the company name into the screen payload. The binding table is the one in AC-97.
+
+Evidence:
+- `npx vitest run web/Login.test.tsx web/Trial.test.tsx web/Demo.test.tsx web/Inbox.test.tsx web/AgentActivity.test.tsx`, plus a test file for the pass's own module:
+  - With a mocked Supabase whose `updateUser` never resolves, and a `/api/invoices/run` that never answers, each of the four doors navigates to `/`.
+  - The pass starts after landing and shows «n de m» on Bandeja.
+  - The pass survives navigating to `/policy` and back, and resumes after a remount that stands in for a reload.
+  - A failed call leaves «Pendiente» rows and shows the error text.
+  - A seeded row with `expected_outcome` PAGAR and no decision renders «Pendiente».
+  - During the pass, the approvals empty state shows the «todavía está decidiendo» text.
+- `docs/perf.md`: the rows `entry otp`, `entry password`, `entry trial` and `entry demo` are under 2.000 ms, and `entry trial (all decided)` is at or under 30.000 ms (AC-97 targets 5 and 6). Only the binding table at checkpoint C, or the later one for Task 52 (R-149), counts.
+- QA on the deployed URL, at 390 and 1440 px, es and en, through the four doors. The OTP door uses an Admin-API code for a QA user, with no mail sent. Check by hand:
+  - the pressed state;
+  - the landing;
+  - the progress line;
+  - the chips changing in place;
+  - the activity panel;
+  - that the tour is on screen;
+  - Periodo «Violaciones 0» after the pass.
+  The times go in the ledger.
+- The D38 gate on `login`, `login-password`, `demo`, `trial` (through the pass) and `inbox`.
+
+Trace: D42 (1), D41, D40, D29(c), D23. Rubric: Presentación, V. técnica, Impacto (the jury gets in fast). Axis: Autonomía (the agent works in view), Seguridad (no predicted outcome). Tasks: 52, 52b.
+
+**AC-108 (MUST; cut second, R-149)** When `/login` is opened, or `/demo` is opened for the first time in a browser tab, the system plays the wordmark intro: «Thesaurus» writes itself in, letter by letter, from left to right.
+- Motion:
+  - each of the 9 letters slides and fades in. It moves with `transform` and `opacity` only, starting from a few pixels to its left;
+  - each letter starts 40 to 60 ms after the one before it;
+  - the mark, the SVG symbol, settles last, with opacity or scale;
+  - the whole intro ends within 1.200 ms of first paint.
+- How. CSS and SVG only. No animation library and no JavaScript animation loop. The letters may be inline SVG `<tspan>`s or spans in the logo's font.
+- The final frame looks exactly like today's logo (AC-80): the same font, size, letter-spacing, colour and position.
+- When it plays. At most once per screen per browser tab (`sessionStorage`). It does not play again on in-app navigation, a language switch, the email-to-code step, or a sign-out back to `/login` in the same tab. The top-bar logo never animates.
+- `prefers-reduced-motion: reduce`: the logo shows in its final state at first paint, with no animation.
+- It never delays input.
+  - The form, the door and every button are enabled and clickable from first paint. A click during the intro works.
+  - The intro creates no long task over 300 ms.
+  - It causes no layout shift, because each letter holds its final box from the start.
+- Accessibility. Screen readers read the logo once, as «Thesaurus»: the letter elements are `aria-hidden`, and the logo has one accessible name. Contrast is checked on the final frame (AC-91 Clarified).
+
+Evidence:
+- `npx vitest run web/Logo.test.tsx`:
+  - the intro variant renders 9 letters, in order, with increasing delays 40-60 ms apart;
+  - the mark's delay is the last one;
+  - delay plus duration is at most 1.200 ms for every part;
+  - a second mount in the same tab renders the static logo;
+  - the accessible name is «Thesaurus».
+- On the deployed URL, in Playwright:
+  - every logo animation in `document.getAnimations()` animates only `transform` or `opacity` and ends by 1.200 ms;
+  - with `reducedMotion: 'reduce'` there are no such animations;
+  - the door button is enabled at 100 ms after `DOMContentLoaded`, and a click at that moment starts the sign-in;
+  - CLS is 0 during the intro.
+- Screenshots `docs/ux/login-intro-end-1440-es.png` and `docs/ux/demo-intro-end-390-en.png`. The UX reviewer compares them with the static logo.
+- The video's first seconds (AC-50 Clarified).
+- The D38 gate on `login` and `demo` (AC-91 Clarified).
+
+Trace: D42 (2), D37, D30. Rubric: Presentación. Tasks: 53.
+
+**AC-109 (MUST; cut first, R-149)** When a person enters through any of the four doors, the system hands the login or `/demo` page over to the app in one smooth transition.
+- What moves. The logo moves from its place on the page into its place in the top bar, with `transform` only. The login card or the `/demo` content fades out. Bandeja fades in over its skeleton, or over its data if that has already arrived, with `opacity` and a vertical `transform` of at most 8 px.
+- Timing. The transition lasts 300 to 500 ms. It starts when the web navigates to Bandeja, and it never waits for Bandeja's data.
+- How. It animates `transform` and `opacity` only. It may use the browser's View Transitions API, a native platform feature, or a CSS transform on the logo. No animation library.
+- Fallbacks. In a browser without View Transitions, or with `prefers-reduced-motion: reduce`, the swap is instant.
+- No layout jump. CLS stays at or under 0.01 from the click to the end of the transition.
+- It counts inside AC-107's 2 s. AC-97 target 5's end condition waits for it to end.
+- The tour's first step shows after the transition ends (AC-42 Clarified). «Volver a mi empresa de prueba» uses the same transition, and it is not timed.
+
+Evidence:
+- `npx vitest run web`:
+  - with reduced motion, or with no `document.startViewTransition`, navigation happens with no transition;
+  - otherwise the navigation runs inside one transition;
+  - the tour mounts only after it ends.
+- On the deployed URL, in Playwright, for each door:
+  - the transition's duration, from the View Transition's `ready` to `finished` or from the animations' timing, is 300 to 500 ms;
+  - the animated properties are only `transform` and `opacity`;
+  - CLS from the click to the end is at most 0.01;
+  - a screenshot halfway through, `docs/ux/entry-mid-1440-es.png`, shows the logo between its two positions.
+- The gate on `entry` (AC-91 Clarified).
+- The video, step 2 (AC-50 Clarified).
+
+Trace: D42 (3), D37. Rubric: Presentación. Tasks: 54.
 
 ## 14. SHOULD (only after every MUST passed QA)
 
@@ -1475,6 +1650,7 @@ Rulings from folding D39-D41 (product, 17 Oct ~18:00Z; Roberto's decisions D39, 
   - D40's per-screen targets apply to screens. This one-time run is a progress state, which item 4 already governs.
   - Principle: company-can-deploy-Monday, and scope.
   - Loser's best argument: "a juror waiting up to 30 seconds at the door is a bad first impression; open Bandeja instantly and let the activity panel show the agent working".
+  - Superseded in part by D42 (R-143): bullets 2 to 4 (the first run as a progress screen before Bandeja, and the rejection of landing at once). Bullet 1, the door as the one primary action, stands.
 - **R-121 How D40 is measured (AC-97, AC-91 Clarified).**
   - D40 gives targets but no method, so the method is fixed so QA and builders measure the same thing.
   - One script, `scripts/perf.mjs`. A fresh Chromium context for first loads, and a warm Worker (one `/api/health` first).
@@ -1540,6 +1716,7 @@ Rulings from folding D39-D41 (product, 17 Oct ~18:00Z; Roberto's decisions D39, 
   - The orchestrator ledgers each checkpoint result.
   - Principle: scope, in Roberto's stated order (D41, then D40, then D39).
   - Loser's best argument: "cut D40's code splitting before any D39 screen; a richer screen is what the juror sees, a smaller bundle is not".
+  - Amended by D42 (R-149). AC-107 joins the never-cut list, and so does AC-78. AC-109 and then AC-108 enter the cut order right after AC-81. Task 52 may merge after checkpoint C.
 
 Rulings on the finance-web QA questions Q-L..Q-O (product, 17 Oct; product questions, not disputes; nobody was asked):
 - **R-127 «USD por unidad» below 1024 px (AC-76, Q-L).** Hiding it below 1024 px is accepted, and AC-76 is clarified. The value is the exact inverse of «1 USD = …» on the same card, so a phone user loses nothing. D38 asks tables to reflow into cards on phones, not to carry every desktop column. The API and DOM keep it, and the desktop table shows all six. Principle: the company's actual user is not hurt, nothing breaks Monday, so it is style and the builder wins. Loser's best argument: "AC-76 lists six columns with no width exception; for EUR the conventional quote is USD per euro, and the card only shows 1 USD = 0,93 EUR".
@@ -1595,7 +1772,7 @@ Rulings on the D41 door QA questions Q-P and Q-Q (product, 17 Oct; product quest
 - Observation, no AC, for README «Lo que no está hecho»: `src/agent/scheduled.ts` lists pending companies from one PostgREST select capped at 1.000 rows. With many scripted trial companies holding pending rows at once, some companies could miss cron turns until the backlog drains. R-133 bounds the rows per trial company, not the number of trial companies. The orchestrator adds one README line, and nothing is built for it now.
 
 Rulings on the launcher watchdog observations of 21:42Z (product, 17 Oct; product questions, not disputes; nobody was asked):
-- **R-139 The door keeps its progress screen. Bandeja does not open while the agent decides (AC-92 Clarified, AC-49 Clarified; R-120 stands).** Option (c): neither (a) nor (b). Why:
+- **R-139 The door keeps its progress screen. Bandeja does not open while the agent decides (AC-92 Clarified, AC-49 Clarified; R-120 stands).** Superseded by D42 (R-143), except its point that D40's 2 s applies to the door screens themselves, which AC-97 target 1 keeps. Option (c): neither (a) nor (b). Why:
   - R-120 already ruled on this exact proposal and rejected it. A ruling is never reopened. The new number does not change R-120's facts: R-120 accepted up to 30 s, and QA measured 14.6-18.4 s with progress visible, so AC-92 passed on the deployed URL.
   - R-120's reasons still hold, and they are stronger now:
     - rows would change under the tour's spotlight, which breaks AC-91's CLS bar and the tour anchors;
@@ -1632,6 +1809,93 @@ Ruling on AC-98's meaning after live QA on E3 (deployed a65b1436) (product, 17 O
   - AC-97 target 3's list is unchanged. A session request is not a screen's data request. Its warm p95 adds no protection that target 1 does not already give.
   - Principle: evidence (the AC is judged by its Evidence line, and the cost is graded where AC-97 measures it), then scope (a passing MUST gets no new work the night before the UI freeze).
   - Loser's best argument: "AC-98 says 'at most one API request on the critical path', not 'one data request'; D40 names 'parallel requests' as a lever; on a deep link `/api/config` alone costs up to 652 ms, a third of the 2 s budget, before the screen request even starts. That is exactly the chained waterfall D40 was written to kill."
+
+Ruling on names inside chart summaries (product, 17 Oct; product question from the Task 49 review, not a dispute; MUST; AC-106 item 3 Clarified, R-131):
+- **R-142 Chart summaries keep the name, and the name alone is marked `data-user` (AC-106 Clarified, R-131).** Option (a). Why:
+  - R-131 already decides the shape. In a line like «Pago a {payee}», only the `<span>` around the name is marked. A chart summary is that kind of line, so no new rule is needed, only its application to charts.
+  - Option (b) would turn «Mayor gasto: Estudio Kairos, USD 1.200» into «Mayor gasto: USD 1.200». That tells a finance user nothing about who, and that is the one thing a per-beneficiary chart exists to say. It would also make the visible sentence weaker than the chart it summarises, against AC-106 item 3.
+  - Scope: every visible chart summary, every chart label, value-table cell (the visually hidden table included) and legend entry that shows a payee or beneficiary name, under `web/charts`, `web/period` and `web/dashboard` (Bandeja's summaries included), and in Detalle and Beneficiarios when they show one. Only the name is marked. Product copy, fallback copy such as «Beneficiario no leído», and every amount, date or percentage the app formats are never marked, so `5.locale` keeps checking them.
+  - `aria-label` keeps the full sentence. It is an attribute, so R-131's marker does not apply, and nothing changes in the gate.
+  - Who: Task 49's fix round, for Periodo and the `web/charts` primitives it uses (the optional `user` flag on HBars rows). Bandeja, Detalle and Beneficiarios chart files get theirs from the task that owns each file, or from the next task to touch them under R-125. Tasks 47 to 51 keep every marker, as R-131 says.
+  - Principle: the company's actual user (the summary must name who), then completeness (R-131 applies wherever a name is shown).
+  - Loser's best argument, (b): "leave names out of the summary sentence; a sentence of only dictionary words and app-formatted numbers needs no marker, the gate checks every word of it, and the name is still one tab away in the chart labels and the table".
+
+Rulings folding D42 (product, 17 Oct, ~23:00Z; Roberto's decision, so these amend earlier rulings and do not re-litigate them; nobody was asked):
+- **R-143 D42 lands the juror first. The agent works after landing, in view (AC-107, AC-92 Amended, AC-40 Amended, AC-78 Clarified).**
+  - D42 (1) is Roberto's words: "Nothing blocks the landing", and the trial seed decisions "happen after the Bandeja is shown, visibly". A decision from Roberto outranks product rulings, so this is an amendment, not a reopening.
+  - What D42 supersedes:
+    - R-139, all of it except its point that D40's 2 s applies to `/login` and `/demo` themselves. AC-97 target 1 keeps that point;
+    - R-120's bullets 2 to 4: the first run as a progress state before Bandeja, and the rejection of landing at once;
+    - AC-92's "First run" and "Time" bullets and its R-139 Clarified block;
+    - AC-40 Clarified's «… and then opens Bandeja»;
+    - AC-49 Clarified's trial-speed line.
+  - What stays, unchanged:
+    - R-120 bullet 1: the door is the one primary;
+    - R-122: no outcome is painted before the server writes it, and no member data goes in a shared cache. This is what keeps «Pendiente» honest;
+    - AC-16 and AC-69: no model writes PAGAR. The seeded `expected_outcome` is never shown as an outcome;
+    - R-115..R-119, R-133 (the database cap) and R-138 (the counts line, with «pendientes»);
+    - AC-40 Clarified's grey «Pendiente» chip, and a failed call leaving rows for the cron;
+    - R-140 and R-141. R-141's first lever is pre-authorised in Task 52 if an entry row misses;
+    - AC-47's 30 s, now the bound for "all decided" (AC-97 target 6);
+    - AC-93..AC-96.
+  - AC-78 becomes never cut. D42 names «Actividad del agente» as where the agent's work is seen, so a gate failure on the panel is fixed, not dropped.
+  - Why the speed fix is safe. The decisions themselves do not change. Only when the browser shows Bandeja changes. Every outcome still comes from `decide()` through the same loop.
+  - Principle: scope (Roberto's decision is the source of truth), then the company's actual user (a juror's first impression).
+  - Loser's best argument, from R-120 and R-139, recorded verbatim: "rows would change under the tour's spotlight, which breaks AC-91's CLS bar and the tour anchors". R-144 and R-145 answer it with stable anchors and stable boxes, measured by the gate.
+- **R-144 The tour starts on landing, on anchors that do not move (AC-42 Clarified).**
+  - Option chosen: start at once, after the entry transition. Option rejected: start when the pass ends.
+  - A tour that pops up 15 to 20 s later lands on a juror who has already started clicking. That interrupts them and hides what they were looking at.
+  - Starting at once works, because steps 1 to 3 anchor on fixed elements, and step 4's row keeps its order and box during the pass (R-145).
+  - The dimmed page still shows the chips changing and the progress line, so the agent is seen working behind the tour.
+  - Principle: the company's actual user.
+  - Loser's best argument: "start the tour when the pass ends, so the juror first watches the agent decide and the spotlight never sits on a changing table".
+- **R-145 What Bandeja shows while the agent works (AC-107, AC-99 Clarified).**
+  - Every row is listed at landing as «Pendiente». The chip changes only when the server has written the decision. The figures are refreshed after each call, and one sentence says they update.
+  - Empty states that would say "nothing here" while rows are pending say "still deciding <n>" instead, because "nothing needs your answer" would be false 15 s before 11 escalations appear.
+  - Rows hold their order and height during the pass. Growing sections may hold their own maximum box (3 approvals, 5 due-soon rows, 10 activity items). That is the loaded state's own space, so AC-99's rule against reserving space larger than the content is kept.
+  - Rejected:
+    - showing the seeded `expected_outcome` early, which is a predicted outcome (R-122, AC-16);
+    - freezing the dashboard until the pass ends, which is not "visibly", and still shifts once at the end.
+  - Principle: evidence (every number is the server's), then the company's actual user.
+  - Loser's best argument: "keep the dashboard's figures hidden behind one «calculando…» state until the pass ends; partial numbers that move every second look broken".
+- **R-146 Entry time is measured from the click to a usable Bandeja, in `perf.mjs` (AC-97 targets 5 and 6).**
+  - The start is the click event's `timeStamp` in the page. The end is the first frame where all of these hold: Bandeja's heading, a data-rendered table, an enabled «Nueva factura», and no running transition. Medians of 3, each sample in a fresh context.
+  - Only the click-to-landing interval is graded.
+  - For OTP, the script fulfils the send step itself, and takes the code from the Admin API's `generateLink`. No mail goes to an address SES cannot reach. The graded part, from `verifyOtp` to landing, is all live.
+  - A mock is not a live check. Here the mock sits outside the measured interval.
+  - Principle: evidence.
+  - Loser's best argument: "measure OTP by hand with Roberto's HEARTBEAT_EMAIL; any scripted code path is not the real login".
+- **R-147 The intro plays once per tab per screen, is accessible, and never gates input (AC-108).**
+  - D42 says "on the login screen and on the first visit of /demo, not on every navigation". One rule covers both screens: once per tab per screen. A juror who signs out does not watch it again.
+  - The letters are hidden from screen readers, and the logo keeps one name, «Thesaurus».
+  - The gate checks the final frame, and then the reduced-motion first paint.
+  - Principle: the company's actual user.
+  - Loser's best argument: "play it on every load of /login; it is the brand moment and costs nothing".
+- **R-148 The transition may use the browser's View Transitions API, with an instant fallback (AC-109).**
+  - It is a native platform feature, with transform and opacity on the compositor. No library is needed, and the same call covers all four doors.
+  - Browsers without it get an instant swap. That is the same as reduced motion, and acceptable.
+  - The transition is inside the 2 s. Input may be ignored during its 500 ms at most. D42 sets "never delays input" for the intro only.
+  - Principle: scope (minimum code that meets the AC).
+  - Loser's best argument: "hand-written FLIP on the logo works in every browser; View Transitions is Chromium-first".
+- **R-149 Order, seats, clock and cut order for D42 (amends R-126).**
+  - Never cut: AC-107 (D42 (1)) and AC-78. Task 52 has seat priority over all new work. In-flight fix rounds (40d, 46b, 46c, and 49, 50 and 51) finish first, because they are close to done.
+  - Task 52 may merge after checkpoint C (02:00Z) as a speed fix, until FREEZE. Then the gate re-runs on `login`, `login-password`, `demo`, `trial` and `inbox`. The video (Task 37) waits for it. If it is still open at FREEZE, it goes to product for re-scope then, as R-126 says.
+  - Cut order, first to last:
+    1. AC-88;
+    2. AC-81;
+    3. AC-109 (the transition);
+    4. AC-108 (the intro);
+    5. AC-105;
+    6. AC-104;
+    7. AC-103;
+    8. AC-102;
+    9. AC-101.
+    AC-100, a SHOULD, is merged as built and needs no cut.
+  - Checkpoint C stays hard for Tasks 53 and 54. Not merged and gate-passed at 02:00Z means cut. The AC becomes SHOULD, the branch stays unmerged, and the ledger says why.
+  - The transition goes before the intro because it touches files shared with Task 52 and with the entry path (`App.tsx`, `auth.tsx`, `Login.tsx`, `Demo.tsx` and `TrialButton.tsx`). It carries the most risk to the never-cut AC-107. The intro lives in its own component, plus one mount line on each of two pages.
+  - Both go before the remaining D39 screens because those carry Impacto (30 %), while the intro and the transition carry Presentación (10 %). Most D39 screens are also merged already.
+  - Principle: scope, in Roberto's stated order (D42 (1), then (2), then (3)), and company-can-deploy-Monday.
+  - Loser's best argument: "D42 is Roberto's newest word; the intro and transition should outrank every D39 screen, since he asked for them tonight".
 
 ---
 
@@ -1709,6 +1973,10 @@ Ruling on AC-98's meaning after live QA on E3 (deployed a65b1436) (product, 17 O
 | 50 D39 Beneficiarios profile | AC-104, AC-106, AC-91 (gate: `beneficiaries`, `beneficiary`, `beneficiary-empty`) |
 | 51 D39 Política cards + diff list | AC-105, AC-91 (gate: `policy`) |
 | 35b README + SUBMISSION refresh | AC-49 / AC-51 Clarified (D41 doors, «Para el jurado», «Velocidad», SES verified identity, not-done items) |
+| 52 D42 entry speed: land first, the pass on Bandeja | AC-107, AC-92 Amended, AC-40 Amended, AC-42 Clarified (tour on landing, stable anchors), AC-78 Clarified, AC-99 Clarified, AC-91 (gate: `login`, `login-password`, `demo`, `trial`, `inbox`) |
+| 52b D42 perf entry rows + gate timing | AC-97 Clarified (targets 5 and 6), AC-91 Clarified (`trial` through the pass, `login`/`demo` after the intro, `entry`) |
+| 53 D42 wordmark intro | AC-108, AC-80 (final frame), AC-91 (gate: `login`, `demo`) |
+| 54 D42 transition into the app | AC-109, AC-42 Clarified (tour after the transition), AC-91 (gate: `entry`) |
 | S1 CSV | AC-56 |
 | S6 Pregúntale a Thesaurus | superseded: AC-67 is MUST, built by Tasks 20, 23 and 24 |
 | S2 JEV | AC-57 |
@@ -1769,3 +2037,16 @@ Order is binding: D41, then D40, then D39 (R-126). New work starts in new files 
 | 35b | README + SUBMISSION refresh | junior | AC-49/51 Cl. | after C | own files | none |
 
 Then, unchanged: 33 and 34 (gates, from checkpoint C), 36, 37 (video), 38 (merge to main). Never cut: D41 (AC-92..AC-96), D40 targets (AC-97..AC-99), the gate, the video. D39 cut order (R-126): AC-105, then AC-104, then AC-103, then AC-102, then AC-101.
+
+### Tasks D42 (17 Oct ~23:00Z; full briefs, shared files and clock in `docs/PLAN-D28.md`, section "D42")
+
+The order is binding: 52, then 53, then 54 (R-149). Task 52 is never cut, and it may merge after checkpoint C. Tasks 53 and 54 are cut if they have not merged and passed the gate by 02:00Z. There are no migrations.
+
+| # | Task | Seat | ACs | Depends on | Merge order on shared files | Deploy |
+|---|---|---|---|---|---|---|
+| 52 | Entry speed: land first, the pass on Bandeja, tour on landing | senior (1st priority, now) | AC-107, AC-92 Am., AC-40 Am., AC-42 Cl., AC-78 Cl., AC-99 Cl., AC-91 | none; new files now; edits to `App.tsx` after 40d merges | 40d → 52 on `App.tsx`; 52 → 53 → 54 on `Login.tsx`, `Demo.tsx`; 52 → 54 on `TrialButton.tsx`, `trial.ts` | E5a: deploy, then the `perf.mjs` entry rows and QA on AC-107 (E7 if it merges after C) |
+| 52b | `perf.mjs` entry rows (targets 5 and 6); gate: `trial` through the pass, `login`/`demo` after the intro, `entry` | junior (next free) | AC-97 Cl., AC-91 Cl. | `perf.mjs` now; the `ux-gate.mjs` edit after 46b and 46c merge | 46b, 46c → 52b on `ux-gate.mjs` | its run follows E5a |
+| 53 | Wordmark intro | junior (next free after 52b) | AC-108, AC-91 | new files now; the mount after 52 merges | 52 → 53 on `Login.tsx`, `Demo.tsx`; 53 → 54 on `LogoIntro.tsx` | E5a or E5b, before 02:00Z |
+| 54 | Transition into the app | senior (2nd) | AC-109, AC-42 Cl., AC-91 | new files now; the mount after 52 and 53 merge | last on `App.tsx`, `auth.tsx`, `Login.tsx`, `Demo.tsx`, `TrialButton.tsx`, `LogoIntro.tsx` | E5b, before 02:00Z |
+
+The cut order (R-149) is: AC-88, AC-81, AC-109, AC-108, then AC-105, AC-104, AC-103, AC-102 and AC-101. AC-107 and AC-78 are never cut.

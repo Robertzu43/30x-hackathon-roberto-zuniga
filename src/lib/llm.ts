@@ -20,6 +20,12 @@ const withTimeout = <T>(p: Promise<T>): Promise<T> => {
   return Promise.race([p, timeout]).finally(() => clearTimeout(t));
 };
 
+// Why a read failed, as a short code for `wrangler tail` (never the document text): 4006 = the account's daily Workers AI
+// allocation is used up, which turns every read into "ilegible" until 00:00 UTC (7c live regression).
+const reason = (e: unknown): string =>
+  e instanceof z.ZodError ? 'schema' : e instanceof SyntaxError ? 'invalid_json' : !(e instanceof Error) ? 'model_error'
+    : e.message === 'timeout' ? 'timeout' : /4006|neurons/i.test(e.message) ? 'quota' : 'model_error';
+
 const ai = (env: Env, model: string, input: object): Promise<unknown> =>
   withTimeout(env.AI.run(model as keyof AiModels, input as never) as Promise<unknown>);
 
@@ -39,7 +45,8 @@ export async function documentToText(
     const out = (await ai(env, env.WORKERS_AI_VISION_MODEL, { image: [...new Uint8Array(input.bytes)], prompt: VISION_PROMPT, max_tokens: 2048 })) as
       { response?: string; description?: string } | null;
     return out?.response ?? out?.description ?? '';
-  } catch {
+  } catch (e) {
+    console.error('reader: no text', reason(e));
     return ''; // extractFields turns empty text into ilegible
   }
 }
@@ -88,7 +95,8 @@ export async function extractFields(env: Env, text: string): Promise<InvoiceFiel
       bank_account: keep('bank_account', a.bank_account),
       confidence: Object.fromEntries(Object.entries(a.confidence).filter(([k]) => k in ILEGIBLE && k !== 'confidence')),
     };
-  } catch {
+  } catch (e) {
+    console.error('reader: ilegible', reason(e));
     return { ...ILEGIBLE };
   }
 }

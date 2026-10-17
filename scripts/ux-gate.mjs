@@ -28,6 +28,9 @@ const DEMO = { email: 'demo@andina-labs.example', password: 'andina-demo-2026' }
 
 // ---- Screens (AC-91 lists them). `path` may be a function of the run's variables; `states` get empty, error and offline cells. ----
 const STATES = ['empty', 'error', 'offline'];
+const FX_STATES = ['fx-empty', 'fx-error']; // policy: only GET /api/fx is forced; the rest of the screen loads normally (AC-73)
+// "Unread": the agent has not decided the invoice, or the reader could not read it. The demo may have none: then the screen is N/A, not a failure.
+export const unreadId = (invoices) => invoices?.find((i) => i.outcome == null || i.fields?.read_error)?.id;
 const EMPTY_BODY = { '/api/period': { budget_usd: null, balance_usd: null, paid_usd: 0, committed_usd: 0, available_usd: null, count_by_outcome: { PAGAR: 0, FRENAR: 0, ESCALAR: 0 }, by_beneficiary: [], autonomy: { n: 0, m: 0 }, autonomy_pct: null, violations: 0, explained_pct: 0 }, '/api/agent/last-run': null };
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
 const newInvoice = (i, text) => async (page) => {
@@ -53,9 +56,9 @@ export const SCREENS = [
   { id: 'detail-pagar', exp: 'finance', path: (v) => `/invoices/${v.invoice('PAGAR')}` },
   { id: 'detail-frenar', exp: 'finance', path: (v) => `/invoices/${v.invoice('FRENAR')}` },
   { id: 'detail-escalar', exp: 'finance', path: (v) => `/invoices/${v.invoice('ESCALAR')}` },
-  { id: 'detail-unread', exp: 'finance', path: (v) => `/invoices/${v.invoice(null)}` }, // assumption: "unread" = an invoice the agent has not decided yet
+  { id: 'detail-unread', exp: 'finance', path: (v) => `/invoices/${v.unread}`, needs: 'unread', na: 'the demo has no undecided or unreadable invoice' },
   { id: 'ask', exp: 'finance', path: '/ask' }, // Task 24 owns the route; override with --route ask=/path
-  { id: 'policy', exp: 'finance', path: '/policy' },
+  { id: 'policy', exp: 'finance', path: '/policy', states: FX_STATES },
   { id: 'beneficiaries', exp: 'finance', path: '/beneficiaries', states: STATES },
   { id: 'period', exp: 'finance', path: '/period', states: STATES },
   { id: 'approve', exp: 'finance', path: (v) => `/approve/${v.approveToken ?? 'invalid'}`, auth: false },
@@ -184,7 +187,8 @@ function measure(o) {
 }
 
 // ---- Judging ----
-const DEV = [/\bnull\b/, /\bundefined\b/, /\bNaN\b/, /\[object Object\]/, /^[a-z]+(\.[a-z_]+)+$/, /\b(?:HTTP|status|error|código|code)\W{0,3}[1-5]\d\d\b/i, /^[1-5]\d\d$/, /\bERR_[A-Z_]+\b/, /\bPGRST\d+\b/, /\bFailed to fetch\b/i, /\bTypeError\b/];
+// Codes count only as HTTP error codes: after "error"/"HTTP", or alone on a line when it is a real error status. A bare "160" is an amount.
+const DEV = [/\bnull\b/, /\bundefined\b/, /\bNaN\b/, /\[object Object\]/, /^[a-z]+(\.[a-z_]+)+$/, /\b(?:HTTP|status|error|código|code)\W{0,3}[45]\d\d\b/i, /^(?:400|401|403|404|405|408|409|422|429|500|502|503|504)$/, /\bat (?:[\w$.<>]+ \([^)]*:\d+:\d+\)|https?:\/\/\S+:\d+:\d+)/, /\bERR_[A-Z_]+\b/, /\bPGRST\d+\b/, /\bFailed to fetch\b/i, /\bTypeError\b/];
 const LOCALE = {
   es: [/\b\d{1,3}(?:,\d{3})+(?:\.\d+)?\b/, /(?<![\d.,])\d+\.\d{2}(?![\d.,])/, /\b(?:January|February|March|April|June|July|August|September|October|November|December)\b/, /\b(?:Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\.? \d/],
   en: [/\b\d{1,3}(?:\.\d{3})+(?:,\d+)?\b/, /(?<![\d.,])\d+,\d{2}(?![\d.,])/, /\b(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b/i, /\b\d{1,2} (?:ene|abr|ago|dic)\b/],
@@ -270,6 +274,8 @@ function installRoutes(page, base, { state, guard, delayGets, gate }) {
     const path = new URL(req.url()).pathname;
     const config = path === '/api/config';
     if (state === 'offline' && data && !config) { await gate.release; return route.continue(); }
+    if (data && path === '/api/fx' && req.method() === 'GET' && state === 'fx-empty') return route.fulfill({ status: 200, contentType: 'application/json', body: '{"provider":"gate","rates":[]}' });
+    if (data && path === '/api/fx' && req.method() === 'GET' && state === 'fx-error') return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"gate"}' });
     if (data && !config && state === 'error') return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"gate"}' });
     if (data && !config && state === 'empty' && req.method() === 'GET') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(path in EMPTY_BODY ? EMPTY_BODY[path] : []) });
     if (guard && req.method() !== 'GET' && req.method() !== 'OPTIONS') {
@@ -531,9 +537,11 @@ export async function main(argv) {
   if (!picked.length) throw new Error(`no screen matches ${a.screens}; known: ${SCREENS.map((s) => s.id).join(', ')}`);
 
   const vars = { approveToken: a['approve-token'], statusToken: a['status-token'], invoice: () => 'missing' };
+  const rows = [];
   if (picked.some((s) => typeof s.path === 'function' && s.id.startsWith('detail'))) {
     const ov = await fetch(`${base}/api/demo/overview`).then((r) => r.json()).catch(() => ({ invoices: [] }));
     vars.invoice = (outcome) => ov.invoices?.find((i) => i.outcome === outcome)?.id ?? 'missing';
+    vars.unread = unreadId(ov.invoices);
   }
   const session = picked.some((s) => s.auth !== false && s.exp === 'finance') ? await demoSession(base).catch((e) => { console.error(`ux-gate: ${e.message}`); return null; }) : null;
   const dicts = await loadDicts();
@@ -541,13 +549,15 @@ export async function main(argv) {
 
   const cells = [];
   for (const s of picked.map((x) => ({ ...x, path: a.route[x.id] ?? x.path }))) {
-    if (s.needs && !vars[s.needs]) { console.log(`ux-gate: ${s.id} skipped (needs --${s.needs.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase())})`); continue; }
+    if (s.needs && !vars[s.needs]) {
+      if (s.na) { console.log(`ux-gate: ${s.id} N/A (${s.na})`); rows.push({ screen: s.id, width: 390, lang: 'es', ...R('0.reach', 'na', 0, s.na) }); } else console.log(`ux-gate: ${s.id} skipped (needs --${s.needs.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase())})`);
+      continue;
+    }
     const set = [null, ...(s.states ?? [])];
     for (const state of set) for (const lang of LANGS) for (const width of WIDTHS) cells.push({ screen: s, state, width, lang, kind: 'static' });
     for (const lang of LANGS) for (const kind of ['dynamic', 'loading']) if (!only || only.some((p) => (kind === 'dynamic' ? /^(3\.focus|3\.enter|4\.busy)/ : /^4\.loading/).test(p))) cells.push({ screen: s, state: null, width: 390, lang, kind });
   }
   const browser = await launch();
-  const rows = [];
   let next = 0;
   const worker = async () => {
     for (let c = cells[next++]; c; c = cells[next++]) {

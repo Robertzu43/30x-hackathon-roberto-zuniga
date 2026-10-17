@@ -17,6 +17,7 @@ const DEMO = 'demo@andina-labs.example';
 const USERS: Record<string, { id: string; email: string; user_metadata: Row }> = {
   'tok-a': { id: 'user-a', email: 'juan@andina.co', user_metadata: {} },
   'tok-d': { id: 'user-d', email: 'Demo@Andina-Labs.example', user_metadata: {} },
+  'tok-en': { id: 'user-en', email: 'ana@andina.co', user_metadata: { lang: 'en' } },
 };
 
 // take_question of migration 20261017000700: 10 per key and day, 500 for the deployment (scripts/tests/schema.test.sh runs the SQL).
@@ -36,7 +37,7 @@ let db: ReturnType<typeof testDb>;
 const adminCalls: string[] = [];
 function testDb() {
   const base = fakeDb({
-    company_members: [{ company_id: 'A', user_id: 'user-a' }, { company_id: 'A', user_id: 'user-d' }],
+    company_members: [{ company_id: 'A', user_id: 'user-a' }, { company_id: 'A', user_id: 'user-d' }, { company_id: 'A', user_id: 'user-en' }],
     companies: [{ id: 'A', name: 'Andina', approver_email: 'juan@andina.co', lang: 'es', is_demo: false }, { id: 'B', name: 'Otra', is_demo: false }],
     policies: [{ id: 'p1', company_id: 'A', version: 1, name: 'Política general', rules: SEED.rules, created_at: '2026-10-01T00:00:00Z' }],
     beneficiaries: SEED.beneficiaries.map((b: object, i: number) => ({ ...b, id: uid(`b${i}`), company_id: 'A', archived: false })),
@@ -130,6 +131,22 @@ describe('POST /api/ask on a record (AC-67)', () => {
     expect(db.tables.decisions!.length).toBe(before); // «págala» changes nothing
   });
 
+  it('puts every check sentence of the record in the context verbatim', async () => {
+    await ask(ON_04);
+    const d = (await (await app.request(`/api/invoices/${uid('A-04')}`, { headers: { Authorization: 'Bearer tok-a' } }, env)).json()) as { explanations: string[] };
+    expect(d.explanations.length).toBeGreaterThan(0);
+    const context = /<registro>\n([\s\S]*)\n<\/registro>/.exec(prompt()[1]!.content)![1]!;
+    for (const sentence of d.explanations) expect(context).toContain(sentence);
+  });
+
+  it('without lang it answers in the stored language, then Spanish (R-98)', async () => {
+    expect((await ask({ question: ON_04.question, invoice_id: ON_04.invoice_id }, 'tok-en')).status).toBe(200);
+    expect(prompt()[0]!.content).toBe(ASK_SYSTEM('en'));
+    expect(prompt()[1]!.content).toContain(headline('A-04', 'en'));
+    expect((await ask({ question: ON_04.question, invoice_id: ON_04.invoice_id })).status).toBe(200);
+    expect(prompt()[0]!.content).toBe(ASK_SYSTEM('es'));
+  });
+
   it('answers in English with the English record when lang is en', async () => {
     await ask({ ...ON_04, lang: 'en' });
     const [system, user] = prompt();
@@ -152,14 +169,44 @@ describe('POST /api/ask on Bandeja (AC-67)', () => {
   it('grounds on the period figures and each non-archived invoice outcome and headline', async () => {
     const r = await ask({ question: '¿cuánto queda del presupuesto?', lang: 'es' });
     expect(r.status).toBe(200);
-    const period = (await (await app.request('/api/period', { headers: { Authorization: 'Bearer tok-a' } }, env)).json()) as Row;
     const context = /<registro>\n([\s\S]*)\n<\/registro>/.exec(prompt()[1]!.content)![1]!;
-    expect(context).toContain(JSON.stringify(period.available_usd));
-    expect(context).toContain(JSON.stringify(period.autonomy));
     expect(context).toContain(headline('A-04', 'es'));
     expect(context).toContain(headline('A-11', 'es'));
     expect(context).not.toContain(headline('A-02', 'es')); // archived
     expect(context).not.toContain('DR-031');
+  });
+});
+
+// QA defect (AC-67): asked «¿cuánto queda del presupuesto?», the model quoted the Saldo. Each Periodo figure is now one line,
+// "<label Periodo shows>: <value as Periodo prints it>", with what it means, so no figure can pass for another.
+describe('Bandeja context: the Periodo figures as Periodo shows them (AC-67, AC-44)', () => {
+  const contextIn = async (lang?: 'es' | 'en') => {
+    expect((await ask({ question: '¿cuánto queda del presupuesto?', ...(lang && { lang }) })).status).toBe(200);
+    return /<registro>\n([\s\S]*)\n<\/registro>/.exec(prompt()[1]!.content)![1]!.split('\n');
+  };
+  const periodo = async () => (await (await app.request('/api/period', { headers: { Authorization: 'Bearer tok-a' } }, env)).json()) as Record<string, number>;
+  // Periodo's own format (web/pages/Period.tsx): currency USD, code display, the tab's locale.
+  const usd = (n: number, locale: string) =>
+    new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', currencyDisplay: 'code' }).format(n).replace(/[.]/g, '\\.');
+
+  it('es: Presupuesto, Comprometido, Disponible, Pagado and Saldo each on its own line with the value Periodo returns', async () => {
+    const lines = await contextIn('es');
+    const p = await periodo();
+    expect(p.available_usd).toBe(Math.round((p.budget_usd! - p.committed_usd!) * 100) / 100);
+    for (const [label, key] of [['Presupuesto', 'budget_usd'], ['Comprometido', 'committed_usd'], ['Disponible', 'available_usd'], ['Pagado', 'paid_usd'], ['Saldo', 'balance_usd']] as const) {
+      expect(lines.filter((l) => l.startsWith(`${label}: `))).toEqual([expect.stringMatching(new RegExp(`^${label}: ${usd(p[key]!, 'es-CO')}( |$)`))]);
+    }
+    expect(lines.find((l) => l.startsWith('Disponible: '))).toMatch(/presupuesto del periodo menos lo comprometido/);
+    expect(lines.find((l) => l.startsWith('Saldo: '))).toMatch(/no es lo que queda del presupuesto/);
+    expect(prompt()[0]!.content).toMatch(/quote a figure only with its label.*never compute a figure or rename one/i);
+  });
+
+  it('en: the English labels and the en-US format, without lang falling back to the stored language', async () => {
+    expect((await ask({ question: 'how much budget is left?' }, 'tok-en')).status).toBe(200);
+    const lines = /<registro>\n([\s\S]*)\n<\/registro>/.exec(prompt()[1]!.content)![1]!.split('\n');
+    const p = await periodo();
+    expect(lines).toContainEqual(expect.stringMatching(new RegExp(`^Available: ${usd(p.available_usd!, 'en-US')}( |$)`)));
+    expect(lines).toContainEqual(expect.stringMatching(new RegExp(`^Balance: ${usd(p.balance_usd!, 'en-US')}( |$)`)));
   });
 });
 
@@ -228,11 +275,15 @@ describe('validation (AC-67)', () => {
     ['a blank question', { ...ON_04, question: '   ' }],
     ['501 characters', { ...ON_04, question: 'a'.repeat(501) }],
     ['no question', { lang: 'es' }],
-    ['a language that is not es or en', { ...ON_04, lang: 'fr' }],
   ])('%s: 400, no quota taken, no model call', async (_, body) => {
     expect(await ask(body)).toEqual({ status: 400, body: { error: 'Escribe una pregunta de 1 a 500 caracteres.' } });
     expect(adminCalls).toEqual([]);
     expect(ai.run).not.toHaveBeenCalled();
+  });
+
+  it('a language that is not es or en falls back to the stored language: the 400 is for a bad question only', async () => {
+    expect((await ask({ ...ON_04, lang: 'fr' }, 'tok-en')).status).toBe(200);
+    expect(prompt()[0]!.content).toBe(ASK_SYSTEM('en'));
   });
 
   it('500 characters is answered', async () => {

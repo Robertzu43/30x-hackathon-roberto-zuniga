@@ -21,7 +21,7 @@ npm run ux:gate -- --base <url>                             # every screen
 
 It writes `docs/ux/<screen>-<width>-<lang>.png` (device scale 2 at 360 and 390, 1 otherwise) and `docs/ux/gate-<experience>.md` (PASS or FAIL per item with the measured number; screens a partial run did not touch keep their old section). Exit code 1 when any item failed. Chromium is `/opt/pw-browsers/chromium`, or `GATE_CHROMIUM`. Playwright is the local or the global install.
 
-Screen ids: finance `login tour inbox new-invoice (file, email, chat) detail-pagar detail-frenar detail-escalar detail-unread ask policy beneficiaries period approve demo`; vendor `portal portal-reply portal-error status status-invalid`. `inbox beneficiaries period portal status` also run their `empty`, `error` and `offline` states (ids `inbox-empty` and so on).
+Screen ids: finance `login tour inbox new-invoice (file, email, chat) detail-pagar detail-frenar detail-escalar detail-unread ask policy beneficiaries period approve demo`; vendor `portal portal-reply portal-error status status-invalid`. `inbox beneficiaries period portal status` also run their `empty`, `error` and `offline` states (ids `inbox-empty` and so on). `policy` runs `policy-fx-empty` (GET /api/fx answers `{provider, rates: []}`) and `policy-fx-error` (GET /api/fx answers 500); the rest of the screen loads normally. Each is checked by `4.state` in es and en: a message with `role="alert"` or `"status"` and a next step.
 
 | Flag | Meaning |
 |---|---|
@@ -33,7 +33,7 @@ Screen ids: finance `login tour inbox new-invoice (file, email, chat) detail-pag
 | `--route id=/path` | override a screen's path (for example `ask`, `portal`) |
 | `--approve-token`, `--status-token` | real tokens for `approve` and `status` (`status` is skipped without one) |
 
-Finance screens sign in as the public demo user (AC-46) by injecting its session. `detail-*` use the demo inbox's invoices by outcome; `detail-unread` is an invoice with no outcome yet.
+Finance screens sign in as the public demo user (AC-46) by injecting its session. `detail-*` use the demo inbox's invoices by outcome; `detail-unread` opens the first invoice that has no outcome yet or whose reader failed (`fields.read_error`); the demo may have none, and then the screen is reported N/A (with the reason), never FAIL, because no screen exists to test.
 
 ## What the script measures, and what stays with the UX reviewer
 
@@ -43,5 +43,6 @@ Measured per screen, width and language: `1.scroll 1.offscreen 1.clip 1.overlap 
 - The primary action is `button.primary` (override per screen in `SCREENS`). `2.primary` scrolls the primary's form to the bottom of the viewport and needs the button in the lower 60%, or inside a fixed or sticky ancestor.
 - The logo is any visible `[data-logo]`, `.logo`, image or element whose alt or aria-label contains "logo".
 - A designed state marks its message with `role="alert"`, `role="status"` or class `error`, `empty`, `state`; the container of that message must hold the next step (a button or link, or a verb such as "recarga" or "retry").
+- `5.words` flags null, undefined, NaN, [object Object], dotted keys, stack traces, and error codes only as such: after "error", "HTTP", "status" or "code", or as a standalone 400, 401, 403, 404, 405, 408, 409, 422, 429, 500, 502, 503 or 504. An amount such as "160 USD" is not flagged.
 - `5.mixed` compares visible text nodes with the other language's UI dictionary (`src/i18n/es.ts`, `en.ts`, `features/*.ts`); stored data is not in the dictionary, so it is excepted.
 - Approved palette and fonts: the colours and the three font stacks of `web/styles.css` at 6d34830 (`PALETTE` and `FONTS` in the script; the test compares them with that commit).

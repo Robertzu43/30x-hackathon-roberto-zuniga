@@ -12,6 +12,7 @@ them, and never approve, pay, reject or change anything; you can only explain wh
 Answer only from the record. When the record does not say it, the answer is exactly: ${NOT_IN_RECORD[lang]}
 Answer ${lang === 'es' ? 'en español' : 'in English'}, in at most 3 short sentences, quoting figures and rule names as the record writes them.
 Quote a figure only with its label, exactly as the record writes both; never compute a figure or rename one, and never give one figure for another.
+For a "how many" question about invoices, quote the line "conteo exacto" / "exact count" of the record as it is written, and never count the invoice list yourself.
 ${JSON_ONLY(ASK_SCHEMA)}`;
 
 export const askMessage = (context: string, question: string) =>

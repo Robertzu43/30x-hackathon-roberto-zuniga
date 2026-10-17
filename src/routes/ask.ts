@@ -52,6 +52,13 @@ const MEANING: Record<Lang, Record<Usd, string>> = {
   },
 };
 const PENDING = { es: 'Pendiente: el agente aún no la decidió', en: 'Pending: the agent has not decided it yet' };
+// R-138: the count is made here, the model only quotes it. Same outcome words as Periodo's line.
+const COUNTS = { es: ['Facturas por resultado ahora (conteo exacto)', 'pendientes'], en: ['Invoices by outcome right now (exact count)', 'pending'] };
+function countsLine(rows: Array<{ outcome: string | null }>, lang: Lang): string {
+  const n = (o: string | null) => rows.filter((r) => r.outcome === o).length;
+  const [label, pending] = COUNTS[lang];
+  return `${label}: ${(['PAGAR', 'FRENAR', 'ESCALAR'] as const).map((o) => `${t(lang, `outcome.${o}`)} ${n(o)}`).join(', ')}, ${pending} ${n(null)}, total ${rows.length}`;
+}
 
 // Periodo's figures as "<label Periodo shows>: <value as Periodo prints it>", one per line (web/pages/Period.tsx).
 function periodLines(p: Figures, lang: Lang): string[] {
@@ -79,7 +86,7 @@ async function inboxContext(c: Context<AppEnv>, lang: Lang): Promise<string> {
     c.var.db.from('invoice_current').select('outcome, headline_es, headline_en').eq('company_id', c.var.companyId)
       .order('received_at', { ascending: false }).then(must) as Promise<Array<{ outcome: string | null; headline_es: string | null; headline_en: string | null }>>,
   ]);
-  return [...periodLines(figures, lang), `${periodText[lang]['period.invoices']}:`,
+  return [...periodLines(figures, lang), countsLine(rows, lang), `${periodText[lang]['period.invoices']}:`,
     ...rows.map((r) => `- ${r[`headline_${lang}`] ?? PENDING[lang]}`)].join('\n');
 }
 

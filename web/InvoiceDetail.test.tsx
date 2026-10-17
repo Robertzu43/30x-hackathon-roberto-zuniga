@@ -458,3 +458,31 @@ test('every top-level detail section sits 2.5 rem below what precedes it (R-106)
   expect(css).toMatch(/\.detail-card \{[^}]*margin-top: 2\.5rem/);
   expect(css).toMatch(/\.detail h2 \{[^}]*margin: 2\.5rem 0 1rem/);
 });
+
+// AC-86: the record names the channel; a vendor's portal message is shown, never read (R-90.5).
+test('a portal invoice shows «Portal de proveedores» and the vendor message', async () => {
+  mockApi({ [GET]: { ...escalated, invoice: { ...escalated.invoice, origin: 'portal', sender: null, sender_note: 'Adjunto la factura de octubre.' } } });
+  open();
+  expect(await screen.findByText('Portal de proveedores')).toBeTruthy();
+  const note = screen.getByRole('region', { name: 'Mensaje del proveedor' });
+  expect(within(note).getByText('Adjunto la factura de octubre.')).toBeTruthy();
+});
+
+test('an email invoice shows «Correo de <remitente>»; an app invoice shows no origin and no message', async () => {
+  mockApi({ [GET]: { ...escalated, invoice: { ...escalated.invoice, origin: 'email', sender: 'cobros@nubesur.example', sender_note: null } } });
+  const view = open();
+  expect(await screen.findByText('Correo de cobros@nubesur.example')).toBeTruthy();
+  expect(screen.queryByRole('region', { name: 'Mensaje del proveedor' })).toBeNull();
+  view.unmount();
+  mockApi({ [GET]: { ...escalated, invoice: { ...escalated.invoice, origin: 'app', sender: null, sender_note: null } } });
+  open();
+  await screen.findByRole('heading', { level: 1, name: escalated.headline });
+  expect(screen.queryByText(/Portal de proveedores|Correo de/)).toBeNull();
+});
+
+test('origin in English', async () => {
+  localStorage.setItem('lang', 'en');
+  mockApi({ [GET]: { ...escalated, invoice: { ...escalated.invoice, origin: 'email', sender: null, sender_note: null } } });
+  open();
+  expect(await screen.findByText('Email')).toBeTruthy();
+});

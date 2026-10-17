@@ -10,6 +10,7 @@ import { useSession } from '../auth';
 import AgentTrace from '../components/AgentTrace';
 import AskThesaurus from '../components/AskThesaurus';
 import ChecksTable from '../components/ChecksTable';
+import { originLabel } from '../components/PortalLinkCard';
 import ReadingPanel, { type Reading } from '../components/ReadingPanel';
 import Timeline from '../components/Timeline';
 import { useT } from '../i18n';
@@ -19,7 +20,9 @@ export const route: PageRoute = { path: '/invoices/:id' };
 
 type Detail = {
   // read_error (AC-13, R-75): the reader never answered; absent until the backend sends it.
-  invoice: { source: 'pdf' | 'image' | 'email' | 'chat'; raw_text: string | null; fields: (InvoiceFields & { read_error?: string }) | null };
+  invoice: { source: 'pdf' | 'image' | 'email' | 'chat'; raw_text: string | null; fields: (InvoiceFields & { read_error?: string }) | null;
+    /** AC-86: the channel (invoice_current.origin, sender) and a vendor's portal message, shown and never read (R-90.5). */
+    origin?: 'app' | 'portal' | 'email'; sender?: string | null; sender_note?: string | null };
   headline: string | null;
   decisions: StoredDecision[];
   explanations: string[];
@@ -98,6 +101,13 @@ export default function InvoiceDetail() {
     <section className="detail">
       {back}
       <h1>{data.headline}</h1>
+      {originLabel(t, invoice) && <p className="muted">{originLabel(t, invoice)}</p>}
+      {invoice.sender_note && (
+        <section aria-labelledby="sender-note">
+          <h2 id="sender-note">{t('inbox.sender_note')}</h2>
+          <p style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{invoice.sender_note}</p>
+        </section>
+      )}
       <AgentTrace steps={data.trace} />
       <div className="detail-cols">
         <div>

@@ -843,14 +843,104 @@ describe('GET /api/agent/last-run (AC-63)', () => {
       { company_id: 'A', trigger: 'manual', created_at: '2026-10-17T14:50:00Z' },
       { company_id: 'B', trigger: 'manual', created_at: '2026-10-17T14:59:00Z' },
     ] });
-    expect(await json(await call('GET', '/api/agent/last-run'))).toEqual({ at: '2026-10-17T14:58:00Z', trigger: 'cron' });
+    expect(await json(await call('GET', '/api/agent/last-run'))).toEqual({ at: '2026-10-17T14:58:00Z', trigger: 'cron', via: null });
     db.tables.agent_runs!.push({ company_id: 'A', trigger: 'ingest', created_at: '2026-10-17T14:59:30Z' });
-    expect(await json(await call('GET', '/api/agent/last-run'))).toEqual({ at: '2026-10-17T14:59:30Z', trigger: 'ingest' });
+    expect(await json(await call('GET', '/api/agent/last-run'))).toEqual({ at: '2026-10-17T14:59:30Z', trigger: 'ingest', via: null });
+  });
+
+  it('carries via for a run started by the vendor portal or the email intake (AC-63 Clarified, R-90)', async () => {
+    db = testDb({ agent_runs: [{ company_id: 'A', trigger: 'ingest', via: 'portal', created_at: '2026-10-17T14:59:00Z' }] });
+    expect(await json(await call('GET', '/api/agent/last-run'))).toEqual({ at: '2026-10-17T14:59:00Z', trigger: 'ingest', via: 'portal' });
   });
 
   it('returns null when nothing has run', async () => {
     db = testDb();
     expect(await (await call('GET', '/api/agent/last-run')).json()).toBeNull();
+  });
+});
+
+// AC-78, R-89: the activity panel replays the recorded decisions; no AI call, at most 3 subrequests, own company only.
+describe('GET /api/agent/activity (AC-78)', () => {
+  const IDS = ['lectura', 'beneficiario_permitido', 'beneficiario_cuenta', 'acuerdo', 'moneda', 'duplicado_exacto', 'duplicado_probable',
+    'vencimiento', 'limite_factura', 'presupuesto', 'umbral', 'periodo', 'monto_coherente'];
+  const checks = (lectura: Row = {}, payee = 'Laura Méndez') => IDS.map((id) => ({ id, verdict: 'cumple',
+    ...(id === 'lectura' ? lectura : {}), values: id === 'beneficiario_permitido' ? { payee_name: payee } : {} }));
+  // One invoice_current row (decided_at is the view's column) and its stored decision.
+  function decided(company: string, id: string, at: string, o: { outcome?: string; actor?: string; fields?: Row | null; lectura?: Row; seq?: number } = {}) {
+    const actor = o.actor ?? 'agent';
+    db.tables.invoices!.push({ id, company_id: company, source: 'pdf', origin: 'app', received_at: at, decided_at: at,
+      fields: o.fields === undefined ? { payee_name: `Proveedor ${id}` } : o.fields });
+    db.tables.decisions!.push({ id: `d-${id}`, invoice_id: id, company_id: company, seq: o.seq ?? 1, outcome: o.outcome ?? 'PAGAR', actor,
+      ...(actor === 'human' ? { actor_email: 'ana@a.example', channel: 'dashboard' } : {}), checks: checks(o.lectura, `Proveedor ${id}`), created_at: at });
+  }
+  const at = (m: number) => new Date(Date.parse(NOW) + m * 60_000).toISOString();
+  type Item = { invoice_id: string; payee: string; outcome: string; decided_at: string; actor: string; read_by_ai: boolean; steps: Array<{ stage: string; text: string }> };
+  const activity = async (q = '', token = 'tok-a') => (await json<{ items: Item[] }>(await call('GET', `/api/agent/activity${q}`, undefined, token))).items;
+
+  it('replays what the agent decided from the record: AI read on ingest, stored data on a seeded invoice', async () => {
+    db = testDb(workspace(['01']));
+    await call('POST', '/api/invoices/run');
+    const r = await call('POST', '/api/invoices', { source: 'email', text: 'De: Laura Méndez\nFactura 1050, USD 2.500' });
+    const { invoice } = (await r.json()) as { invoice: Row };
+    const items = await activity();
+    const ingested = items.find((i) => i.invoice_id === invoice.id)!;
+    expect(ingested).toMatchObject({ payee: 'Laura Méndez', outcome: 'PAGAR', actor: 'agent', read_by_ai: true });
+    expect(ingested.steps).toEqual([
+      { stage: 'lee', text: 'Leyendo la factura de Laura Méndez con IA…' },
+      { stage: 'consulta', text: 'Consultando el directorio…' },
+      { stage: 'consulta', text: 'Verificando 13 reglas…' },
+      { stage: 'decide', text: 'Decidí PAGAR' },
+    ]);
+    const seeded = items.find((i) => i.invoice_id === uid('A-01'))!;
+    const payee = (db.tables.invoices!.find((i) => i.id === uid('A-01'))!.fields as Row).payee_name;
+    expect(seeded.read_by_ai).toBe(false);
+    expect(seeded.steps[0]).toEqual({ stage: 'lee', text: `Tomando los datos ya leídos de la factura de ${payee}…` });
+    expect(items.map((i) => i.invoice_id)).not.toContain(uid('B-01'));
+    expect(ai.run.mock.calls.length).toBe(1); // the ingest read only; the activity route makes no AI call
+  });
+
+  it('own company only, agent decisions only, newest first, at most 10, with at most 3 subrequests', async () => {
+    db = testDb();
+    for (let i = 0; i < 12; i++) decided('A', `a${i}`, at(i));
+    decided('B', 'b1', at(30));
+    decided('A', 'h1', at(31), { actor: 'human', seq: 2 });
+    const before = db.meter.calls;
+    const items = await activity();
+    expect(db.meter.calls - before).toBeLessThanOrEqual(3);
+    expect(items.map((i) => i.invoice_id)).toEqual(['a11', 'a10', 'a9', 'a8', 'a7', 'a6', 'a5', 'a4', 'a3', 'a2']);
+    expect(items[0]).toMatchObject({ payee: 'Proveedor a11', decided_at: at(11), actor: 'agent' });
+  });
+
+  it('?since=<ISO> returns only decisions at or after it; a bad since is 400', async () => {
+    db = testDb();
+    decided('A', 'old', at(0));
+    decided('A', 'new', at(5));
+    expect((await activity(`?since=${encodeURIComponent(at(1))}`)).map((i) => i.invoice_id)).toEqual(['new']);
+    const r = await call('GET', '/api/agent/activity?since=ayer');
+    expect(r.status).toBe(400);
+    expect(await r.json()).toEqual({ error: 'Fecha no válida' });
+  });
+
+  it('a REST-inserted invoice read by the run: AI step and the payee as the checks recorded it (R-97); a later re-evaluation read nothing', async () => {
+    db = testDb();
+    decided('A', 'rest', at(0), { fields: null, lectura: { read_by: { provider: 'Amazon Nova Lite (AWS Bedrock)' } } });
+    decided('A', 'again', at(1), { fields: { payee_name: 'Kodex Labs', read_by: { provider: 'Workers AI · m' } }, seq: 2, outcome: 'ESCALAR' });
+    const items = await activity();
+    expect(items.find((i) => i.invoice_id === 'rest')).toMatchObject({ payee: 'Proveedor rest', read_by_ai: true });
+    expect(items.find((i) => i.invoice_id === 'again')).toMatchObject({ read_by_ai: false });
+  });
+
+  it('steps in English with the R-46 outcome words', async () => {
+    db = testDb();
+    decided('A', 'x', at(0), { outcome: 'FRENAR' });
+    expect((await activity('', 'tok-en'))[0]!.steps.map((s) => s.text)).toEqual([
+      "Taking the already-read data from Proveedor x's invoice…", 'Checking the directory…', 'Checking 13 rules…', 'I decided STOP',
+    ]);
+  });
+
+  it('needs a JWT', async () => {
+    db = testDb();
+    expect((await call('GET', '/api/agent/activity', undefined, null)).status).toBe(401);
   });
 });
 

@@ -1,22 +1,27 @@
 // Bandeja (AC-29, AC-63, AC-66, AC-70): every invoice with its outcome chip and one-line headline, filters,
 // "Ejecutar agente" (shared run loop, Task 11b), "Nueva factura" (AC-11), when the agent last ran and «Pregúntale a Thesaurus» (AC-67).
+// After the list: the portal link card (AC-86) and «Actividad del agente» (AC-78). They appear once the rows and the link
+// have loaded, below everything else, so nothing above them moves (AC-91 item 4).
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { findBeneficiary, nameKey } from '../../src/engine/checks';
 import type { Beneficiary } from '../../src/engine/types';
 import type { PageRoute } from '../App';
 import { api } from '../api';
+import AgentActivity from '../components/AgentActivity';
 import AskThesaurus from '../components/AskThesaurus';
 import NewInvoice from '../components/NewInvoice';
 import { OutcomeChip, type Outcome } from '../components/OutcomeChip';
+import PortalLinkCard, { originLabel, type PortalLink } from '../components/PortalLinkCard';
 import { RunProgress, useRunAgent } from '../components/RunProgress';
 import { useT } from '../i18n';
 import './inbox.css';
 
 export const route: PageRoute = { path: '/', nav: { key: 'screen.inbox', order: 10 } };
 
-type Row = { id: string; outcome: Outcome | null; headline: string | null; received_at: string; fields: { payee_name: string | null } | null };
-type LastRun = { at: string; trigger: string } | null;
+type Row = { id: string; outcome: Outcome | null; headline: string | null; received_at: string; fields: { payee_name: string | null } | null;
+  origin?: 'app' | 'portal' | 'email'; sender?: string | null };
+type LastRun = { at: string; trigger: string; via?: 'portal' | 'email' | null } | null;
 const UNREAD = '#'; // nameKey never yields '#'
 const keyOf = (r: Row) => nameKey(r.fields?.payee_name ?? null) || UNREAD;
 
@@ -29,6 +34,8 @@ export default function Inbox() {
   const [payee, setPayee] = useState('');
   const [adding, setAdding] = useState(false);
   const [directory, setDirectory] = useState<Beneficiary[]>([]);
+  const [link, setLink] = useState<PortalLink | 'error' | null>(); // null: no URL in the answer, no card
+  const [batches, setBatches] = useState(0);
 
   const loadRows = () =>
     api.get<Row[]>('/api/invoices').then((r) => { setRows(r); setFailed(false); }, () => setFailed(true));
@@ -37,8 +44,9 @@ export default function Inbox() {
     void loadRows();
     void loadLastRun();
     api.get<Beneficiary[]>('/api/beneficiaries').then(setDirectory, () => {}); // without it the filter still groups by name
+    api.get<PortalLink>('/api/portal-link').then((l) => setLink(typeof l?.portal_url === 'string' ? l : null), () => setLink('error'));
   }, []);
-  const run = useRunAgent({ first: '/api/invoices/run', onBatch: () => void loadRows() });
+  const run = useRunAgent({ first: '/api/invoices/run', onBatch: () => { void loadRows(); setBatches((n) => n + 1); } });
 
   // AC-29 (R-79), grouped like Periodo (R-63): the engine's AC-19 name rule; labelled with the directory name, else the payee as
   // read on the group's oldest invoice; unread payees in one entry, listed last.
@@ -73,7 +81,7 @@ export default function Inbox() {
             ? t('inbox.last_run.never')
             : t('inbox.last_run', {
                 ago: mins < 1 ? t('inbox.last_run.under_min') : t('inbox.last_run.min', { n: mins }),
-                how: t(lastRun.trigger === 'cron' ? 'inbox.last_run.cron' : 'inbox.last_run.manual'),
+                how: t(lastRun.via ? `inbox.last_run.${lastRun.via}` : lastRun.trigger === 'cron' ? 'inbox.last_run.cron' : 'inbox.last_run.manual'),
               })}
       </p>
       <p className="muted">{t('inbox.reevaluate_note')}</p>
@@ -113,12 +121,21 @@ export default function Inbox() {
             <li key={r.id} data-tour="invoice-row">
               <Link to={`/invoices/${r.id}`}>
                 <OutcomeChip outcome={r.outcome} />
-                <span>{r.headline ?? t('inbox.pending_headline', { payee: r.fields?.payee_name ?? t('value.unknown_payee') })}</span>
+                <span>
+                  {r.headline ?? t('inbox.pending_headline', { payee: r.fields?.payee_name ?? t('value.unknown_payee') })}
+                  {originLabel(t, r) && <small className="muted inbox-origin">{originLabel(t, r)}</small>}
+                </span>
                 <time className="muted" dateTime={r.received_at}>{date.format(new Date(r.received_at))}</time>
               </Link>
             </li>
           ))}
         </ul>
+      )}
+      {rows !== null && link !== undefined && (
+        <>
+          {link && <PortalLinkCard link={link} />}
+          <AgentActivity refresh={batches} />
+        </>
       )}
     </section>
   );

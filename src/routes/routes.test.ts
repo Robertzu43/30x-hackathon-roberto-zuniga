@@ -371,14 +371,16 @@ describe('GET /api/invoices/:id (AC-26, AC-08, AC-64, AC-65)', () => {
 // AC-77, R-88: who read the invoice (recorded at read time) and, per field, the line of the stored text where code found it.
 describe('"Leído por IA" reading (AC-77)', () => {
   type Reading = { provider: string; fields: Array<{ name: string; value: unknown; confidence: number | null; snippet: string | null; match: [number, number] | null }> };
-  const detail = async (id: unknown, e: Env = env) => json<{ reading: Reading | null }>(await call('GET', `/api/invoices/${id}`, undefined, 'tok-a', e));
+  const detail = async (id: unknown, e: Env = env) =>
+    json<{ reading: Reading | null; reading_status: string }>(await call('GET', `/api/invoices/${id}`, undefined, 'tok-a', e));
   const printed = (f: Reading['fields'][number]) => (f.snippet && f.match ? f.snippet.slice(...f.match) : null);
 
   it('an ingested invoice returns the provider and each field with its value, confidence, snippet and highlight span', async () => {
     db = testDb(workspace([]));
     const text = 'De: Laura Méndez\nFactura 1050, USD 2.500, Bancolombia ahorros 0012-3456-4821';
     const { invoice } = await json<{ invoice: Row }>(await call('POST', '/api/invoices', { source: 'email', text }));
-    const { reading } = await detail(invoice.id);
+    const { reading, reading_status } = await detail(invoice.id);
+    expect(reading_status).toBe('ai');
     expect(reading!.provider).toBe('Workers AI · m');
     expect(reading!.fields.map((f) => f.name)).toEqual(['payee_name', 'amount', 'currency', 'invoice_number', 'issue_date', 'due_date', 'concept', 'bank_account']);
     const by = Object.fromEntries(reading!.fields.map((f) => [f.name, f]));
@@ -409,12 +411,77 @@ describe('"Leído por IA" reading (AC-77)', () => {
     expect(String(db.tables.invoices!.find((i) => i.id === img.id)!.raw_text)).toHaveLength(20000);
   });
 
-  it('a seeded invoice, one inserted with fields, and an unread one have reading null', async () => {
+  it('a seeded invoice and one inserted with fields are preloaded, an unread one none; all with reading null', async () => {
     db = testDb(workspace(['01', '13']));
     db.tables.invoices!.push({ id: uid('A-x'), company_id: 'A', source: 'chat', raw_text: 'Factura 1050', archived: false, received_at: NOW, fields: null });
-    expect((await detail(uid('A-01'))).reading).toBeNull();
-    expect((await detail(uid('A-13'))).reading).toBeNull();
-    expect((await detail(uid('A-x'))).reading).toBeNull();
+    db.tables.invoices!.push({ id: uid('A-f'), company_id: 'A', source: 'chat', raw_text: 'Factura 1050', archived: false, received_at: NOW,
+      fields: { ...READ, confidence: {} } });
+    expect(await detail(uid('A-01'))).toMatchObject({ reading: null, reading_status: 'preloaded' });
+    expect(await detail(uid('A-13'))).toMatchObject({ reading: null, reading_status: 'preloaded' });
+    expect(await detail(uid('A-f'))).toMatchObject({ reading: null, reading_status: 'preloaded' });
+    expect(await detail(uid('A-x'))).toMatchObject({ reading: null, reading_status: 'none' });
+  });
+
+  // R-97: who read it is decided by the read, not by where the invoice came from.
+  const restInsert = (raw_text: string | null) => {
+    db = testDb(workspace([]));
+    db.tables.invoices!.push({ id: uid('A-r'), company_id: 'A', source: 'email', raw_text, archived: false, received_at: NOW, fields: null });
+  };
+  const lecturaOf = () => (decisionsOf(uid('A-r'))[0]!.checks as Row[]).find((c) => c.id === 'lectura')!;
+
+  it('a REST-inserted invoice with fields null that a run reads is ai: provider and confidences from its decision, snippets over raw_text', async () => {
+    restInsert('De: Laura Méndez\nFactura 1050, USD 2.500');
+    ai.run.mockImplementationOnce(async () => ({ response: { ...READ, subtotal: null, tax: null,
+      confidence: { ...Object.fromEntries(Object.keys(READ).map((k) => [k, 0.95])), payee_name: 0.92 } } }));
+    expect(await json(await call('POST', '/api/invoices/run'))).toMatchObject({ errors: 0 });
+    expect(db.tables.invoices!.find((i) => i.id === uid('A-r'))!.fields).toBeNull(); // AC-38 not amended
+    ai.run.mockClear();
+    const { reading, reading_status } = await detail(uid('A-r'), { ...env, WORKERS_AI_MODEL: 'otro' } as Env);
+    expect(ai.run).not.toHaveBeenCalled();
+    expect(reading_status).toBe('ai');
+    expect(reading!.provider).toBe('Workers AI · m');
+    const by = Object.fromEntries(reading!.fields.map((f) => [f.name, f]));
+    expect(by.payee_name).toEqual({ name: 'payee_name', value: 'Laura Méndez', confidence: 0.92, snippet: 'De: Laura Méndez', match: [4, 16] });
+    expect(by.amount).toMatchObject({ value: 2500, confidence: 0.95, snippet: 'Factura 1050, USD 2.500', match: [18, 23] });
+  });
+
+  it('a run read with no stored text gives every field snippet null and match null', async () => {
+    restInsert('Factura 1050');
+    ai.run.mockImplementationOnce(async () => ({ response: { ...READ, subtotal: null, tax: null, confidence: Object.fromEntries(Object.keys(READ).map((k) => [k, 0.95])) } }));
+    await call('POST', '/api/invoices/run');
+    db.tables.invoices!.find((i) => i.id === uid('A-r'))!.raw_text = null;
+    const { reading, reading_status } = await detail(uid('A-r'));
+    expect(reading_status).toBe('ai');
+    expect(reading!.fields.every((f) => f.snippet === null && f.match === null)).toBe(true);
+    expect(reading!.fields.find((f) => f.name === 'payee_name')).toMatchObject({ value: 'Laura Méndez', confidence: 0.95 });
+  });
+
+  it('the reader unavailable is unavailable, at ingest (fields) and in a run (the first decision\'s Lectura reason)', async () => {
+    const QUOTA = () => Promise.reject(new Error('4006: you have used up your daily free allocation of 10,000 neurons'));
+    db = testDb(workspace([]));
+    ai.run.mockImplementationOnce(QUOTA);
+    const { invoice } = await json<{ invoice: Row }>(await call('POST', '/api/invoices', { source: 'chat', text: 'Laura Méndez 1050' }));
+    expect(await detail(invoice.id)).toMatchObject({ reading: null, reading_status: 'unavailable' });
+    restInsert('Factura 1050');
+    ai.run.mockImplementationOnce(QUOTA);
+    await call('POST', '/api/invoices/run');
+    expect(lecturaOf()).toMatchObject({ values: { reason: 'lector_no_disponible' } });
+    expect(lecturaOf()).not.toHaveProperty('read_by');
+    expect(await detail(uid('A-r'))).toMatchObject({ reading: null, reading_status: 'unavailable' });
+  });
+
+  it('an «ilegible» run read with no model call (empty text) and a decision written before R-97 are none', async () => {
+    restInsert('');
+    await call('POST', '/api/invoices/run');
+    expect(ai.run).not.toHaveBeenCalled();
+    expect(decisionsOf(uid('A-r'))).toHaveLength(1);
+    expect(await detail(uid('A-r'))).toMatchObject({ reading: null, reading_status: 'none' });
+    restInsert('Factura 1050');
+    ai.run.mockImplementationOnce(async () => ({ response: { ...READ, subtotal: null, tax: null, confidence: Object.fromEntries(Object.keys(READ).map((k) => [k, 0.95])) } }));
+    await call('POST', '/api/invoices/run');
+    const { read_by: _, confidence: __, ...old } = lecturaOf(); // eslint-disable-line @typescript-eslint/no-unused-vars
+    decisionsOf(uid('A-r'))[0]!.checks = (decisionsOf(uid('A-r'))[0]!.checks as Row[]).map((c) => (c.id === 'lectura' ? old : c));
+    expect(await detail(uid('A-r'))).toMatchObject({ reading: null, reading_status: 'none' });
   });
 });
 

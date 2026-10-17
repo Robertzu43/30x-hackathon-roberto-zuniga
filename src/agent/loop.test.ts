@@ -500,6 +500,16 @@ describe('recorded fields (R-77)', () => {
   };
   const checkOf = (id: string, check: string) => (decisionsOf(id).at(-1)!.checks as Array<{ id: string; verdict: string }>).find((c) => c.id === check);
 
+  it('a run read records who read it and the model confidences on its Lectura check, a stored reading neither (R-97)', async () => {
+    await restInsertedPaid();
+    const lectura = (id: string) => (decisionsOf(id)[0]!.checks as Array<Record<string, unknown>>).find((c) => c.id === 'lectura')!;
+    expect(lectura('A-01')).toMatchObject({ verdict: 'cumple', read_by: { provider: `Workers AI · ${env.WORKERS_AI_MODEL}` }, confidence: READ_01().confidence });
+    copy('A-copy');
+    await runAgent(deps(), 'A', 'pending', 'manual');
+    expect(lectura('A-copy')).not.toHaveProperty('read_by');
+    expect(lectura('A-copy')).not.toHaveProperty('confidence');
+  });
+
   it('a pasted copy of it is FRENAR «duplicado exacto» (AC-20 Clarified)', async () => {
     await restInsertedPaid();
     copy('A-copy');

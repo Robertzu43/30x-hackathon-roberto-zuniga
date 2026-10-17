@@ -12,7 +12,7 @@ import { documentToText, extractFields } from '../lib/llm';
 import { must, type Budget, type Db } from '../lib/supabase';
 import { hashToken, signToken, TOKEN_TTL_MS } from '../lib/tokens';
 import { escalationQuestion } from './question';
-import { recorder, type Counts, type DecisionInput, type Recorder, type Trigger } from './record';
+import { recorder, type Counts, type DecisionInput, type LecturaCheck, type Recorder, type Trigger } from './record';
 import { recordedFields, type StoredDecision } from './trace';
 import { decide, directorio, duplicados, findBeneficiary, periodo, politica, tasas } from './tools';
 
@@ -88,7 +88,8 @@ export async function runAgent(deps: AgentDeps, companyId: string, invoiceIds: s
       stage('lee', row.id);
       if (!known) budget.count(READ);
       // ponytail: reads raw_text only; a stored file without fields is decided as illegible (ingest reads files first).
-      const fields = known ?? await extractFields(env, await documentToText(env, { kind: 'text', text: row.raw_text ?? '' }));
+      const read = known ? null : await extractFields(env, await documentToText(env, { kind: 'text', text: row.raw_text ?? '' }));
+      const fields = known ?? read!;
       const invoice: Invoice = { id: row.id, received_at: row.received_at, source: row.source, fields };
       const beneficiary = findBeneficiary(fields.payee_name, directory);
       const currency = validFields(fields).currency;
@@ -114,9 +115,11 @@ export async function runAgent(deps: AgentDeps, companyId: string, invoiceIds: s
         const question = (lang: 'es' | 'en') => escalationQuestion({ approverEmail: company.approver_email ?? '', invoice, decision: d }, lang);
         const esc = d.outcome === 'ESCALAR';
         const input: DecisionInput = {
-          outcome: d.outcome, actor: 'agent', checks: d.checks, amount_usd: d.amount_usd, payment: d.payment, policy_version: policy?.version ?? null,
+          outcome: d.outcome, actor: 'agent', amount_usd: d.amount_usd, payment: d.payment, policy_version: policy?.version ?? null,
           headline_es: headline(d, invoice, beneficiary, 'es'), headline_en: headline(d, invoice, beneficiary, 'en'),
           question_es: esc ? question('es') : null, question_en: esc ? question('en') : null,
+          // R-97: this run's read, recorded where the API finds it (LecturaCheck)
+          checks: read?.read_by ? d.checks.map((c): LecturaCheck => (c.id === 'lectura' ? { ...c, read_by: read.read_by, confidence: read.confidence } : c)) : d.checks,
         };
         let stored: StoredDecision;
         try {

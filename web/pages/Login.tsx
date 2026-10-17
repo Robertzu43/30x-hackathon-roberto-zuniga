@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { PageRoute } from '../App';
-import { api, supabase } from '../api';
+import { supabase } from '../api';
 import { useT } from '../i18n';
+import { runUntilDone, type Progress } from '../runAgent';
 import type { Lang } from '../../src/i18n';
 
 export const route: PageRoute = { path: '/login', public: true, fullBleed: true };
@@ -16,7 +17,7 @@ export default function Login() {
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [deciding, setDeciding] = useState(false);
+  const [deciding, setDeciding] = useState<Progress | null | false>(false);
   const [picked, setPicked] = useState<Lang | null>(null); // only a click on this screen counts as a choice
   const pick = (l: Lang) => { setPicked(l); setLang(l); };
 
@@ -47,9 +48,9 @@ export default function Login() {
       await (await supabase()).auth.updateUser({ data: { lang: picked } }).catch(() => undefined);
       setLang(picked); // the user's previously saved language may have been applied meanwhile; the choice just made wins
     }
-    // First login: decide what is pending once. A failure is not fatal: the 5-minute cron decides them (D23).
-    setDeciding(true);
-    await api.post('/api/invoices/run').catch(() => undefined);
+    // First login: decide what is pending, in budgeted calls (AC-70). A failure is not fatal: the 5-minute cron decides them (D23).
+    setDeciding(null);
+    await runUntilDone({ first: '/api/invoices/run', onProgress: setDeciding });
     navigate('/', { replace: true });
   };
 
@@ -86,7 +87,7 @@ export default function Login() {
               value={code}
               onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
             />
-            <button type="submit" className="primary" disabled={busy}>{t(deciding ? 'login.deciding' : busy ? 'login.verifying' : 'login.verify')}</button>
+            <button type="submit" className="primary" disabled={busy}>{deciding !== false ? t('login.deciding', { n: deciding?.n ?? 0, m: deciding?.m ?? '…' }) : t(busy ? 'login.verifying' : 'login.verify')}</button>
             <button type="button" className="link" onClick={() => { setSent(false); setCode(''); setError(''); }}>{t('login.other_email')}</button>
           </form>
         )}

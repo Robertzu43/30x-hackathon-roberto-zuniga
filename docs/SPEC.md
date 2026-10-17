@@ -967,6 +967,15 @@ Trace: D40. Rubric: V. técnica, Presentación. Tasks: 44 (script and baseline),
 - The demo overview. `/api/demo/overview` calls one function through the demo user's JWT and is cached at the edge (Workers Cache API) for 60 s. It is the only cached API response that holds company data, and that data is the public demo company's (AC-45).
 - Auth. The Worker may verify the JWT locally instead of calling `/auth/v1/user` (R-122): signature against the project's JWKS, or the project JWT secret held as a `wrangler secret`; plus `exp` and `aud = authenticated`. An expired, altered or other-project token still answers 401.
 - Off the critical path: the activity poll (AC-78) and the ask route.
+- Clarified (R-141, live QA on E3, 17 Oct): "one API request" counts data requests. A data request is one that returns the screen's records: `GET /api/screen/*`, or `GET /api/invoices/:id` on Detalle. Each screen load makes exactly one.
+  - Session requests are not data requests. These are `GET /api/config` (the public client settings) and `GET /api/company` (the top bar's company name). A full page load, such as a deep link or a refresh, may make each one once before or beside the screen's data request. AC-98 still passes when all three hold:
+    1. each is made at most once per page load, and never again on in-app navigation;
+    2. neither returns any of the screen's records;
+    3. no screen waits for a second data request.
+  - Their time is not exempt. It is inside AC-97 target 1 (first load under 2.000 ms, which starts at navigation), and AC-97 grades it there. If a first-load row fails and these requests cause the miss, that is an AC-97 FAIL under AC-97's Rules. It is not an AC-98 FAIL.
+  - Evidence, added to QA's network-tab check:
+    - in-app navigation to each screen shows exactly one data request and no session request;
+    - a deep link shows one data request, plus at most one `/api/config` and one `/api/company`.
 
 Evidence:
 - `npx vitest run src/routes src/lib`, with a fake db that counts calls: each screen GET makes at most 1 RPC. JWT cases: valid gives 200; expired, bad signature or wrong `aud` gives 401.
@@ -1612,6 +1621,17 @@ Rulings on the launcher watchdog observations of 21:42Z (product, 17 Oct; produc
     The final table at checkpoint C stays the binding one.
   - Principle: evidence (measure what the AC defines, and publish what it does not grade).
   - Loser's best argument: "the watchdog measured 2.66 s on the deployed URL; D40 says API under 600 ms; a juror who opens /demo first sees the slow path, so it should block like any other FAIL".
+
+Ruling on AC-98's meaning after live QA on E3 (deployed a65b1436) (product, 17 Oct; a product question, not a dispute; nobody was asked):
+- **R-141 AC-98 counts data requests. `/api/config` and `/api/company` are session requests, and their time is graded by AC-97 (AC-98 Clarified).** Option (a). Why:
+  - AC-98 says "fetches its data with at most one API request". Its own Evidence line says "one data request on load". D39 says "one round trip per screen". D40's lever is "one DB function per screen instead of chained queries". All four are about the screen's data. The config and the company name are page-load setup, not screen data, and they are not repeated on navigation.
+  - QA's evidence on E3 passes that reading on every screen: one `/api/screen/*` (or `GET /api/invoices/:id` on Detalle), cached revisits in 100-140 ms, and no blank loading states.
+  - The cost a juror feels is already graded. The deep link's `/api/config` (178-652 ms) and the trial's `/api/company` (346-583 ms) fall inside AC-97 target 1, which is measured from navigation start in a fresh context. That is MUST, never cut, and any FAIL blocks. Counting the same milliseconds again under AC-98 adds a second judge, not protection. On E3 the slowest measured case, Bandeja data for the demo user, took 1.2-1.7 s, inside the 2 s budget.
+  - Option (b) would mean new web and Worker work in `main.tsx`, `api.ts` and the HTML shell, files Task 43 owns. That work would land hours before the 02:00Z UI freeze, on an AC that passes on its evidence, for a gain no target asks for. The tie-breakers: no user is hurt while AC-97 passes, nothing breaks on Monday, and it would block the D39 mounts.
+  - No task. If the binding table at checkpoint C (E6) shows a first-load FAIL and these requests cause it, AC-97's Rules route it to product under R-126. The first lever then is to run `/api/company` in parallel with the screen request, or to fold the company name into the screen payload. Nothing is built for it now.
+  - AC-97 target 3's list is unchanged. A session request is not a screen's data request. Its warm p95 adds no protection that target 1 does not already give.
+  - Principle: evidence (the AC is judged by its Evidence line, and the cost is graded where AC-97 measures it), then scope (a passing MUST gets no new work the night before the UI freeze).
+  - Loser's best argument: "AC-98 says 'at most one API request on the critical path', not 'one data request'; D40 names 'parallel requests' as a lever; on a deep link `/api/config` alone costs up to 652 ms, a third of the 2 s budget, before the screen request even starts. That is exactly the chained waterfall D40 was written to kill."
 
 ---
 

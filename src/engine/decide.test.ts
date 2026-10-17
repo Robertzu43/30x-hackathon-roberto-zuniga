@@ -147,6 +147,11 @@ describe('policy missing or empty (AC-18, Review Focus 4)', () => {
     const d = run(cop, { rules });
     expect(d.outcome).toBe('ESCALAR');
     for (const id of RULE_CHECKS) expect([id, check(d, id).verdict]).toEqual([id, 'no_verificado']);
+    for (const id of ['lectura', 'beneficiario_cuenta', 'duplicado_probable', 'periodo'] as const) expect([id, check(d, id).verdict]).toEqual([id, 'cumple']);
+  });
+  it('rules null with a USD invoice -> moneda is still cumple (needs no rate)', () => {
+    const d = run({}, { rules: null });
+    expect([d.outcome, check(d, 'moneda').verdict]).toEqual(['ESCALAR', 'cumple']);
   });
   it('empty allowed list (empty directory) -> ESCALAR, beneficiario nuevo', () => {
     const d = run({}, { directory: [] });
@@ -301,6 +306,11 @@ describe('human approval (AC-34, R-02, R-21, R-22)', () => {
   it.each(['limite_pago', 'duplicado_exacto'] as CheckId[])('%s is never overridable -> still FRENAR', (id) => {
     const d = approve([id, 'umbral_aprobacion', 'acuerdo'], { ...nube, amount: 9800 }, { previous: [prev({ beneficiary_id: 'id-Nube Sur LLC', invoice_number: '1042' })] });
     expect([d.outcome, 'overridden' in check(d, id)]).toEqual(['FRENAR', false]);
+  });
+  it.each([-2500, 0])('approving lectura on amount %s never pays: limits stay no_verificado -> ESCALAR', (amount) => {
+    const d = approve(['lectura', 'acuerdo'], { amount });
+    expect([d.outcome, d.payment]).toEqual(['ESCALAR', null]);
+    expect(check(d, 'limite_pago').verdict).toBe('no_verificado');
   });
   it('a check that passes is never marked overridden', () => {
     expect(approve(['lectura', 'umbral_aprobacion'], nube).checks.filter((c) => c.overridden).map((c) => c.id)).toEqual(['umbral_aprobacion']);

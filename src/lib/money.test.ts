@@ -15,7 +15,7 @@ describe('parseAmount (AC-14, Review Focus 1)', () => {
     ['€ 4.300,00', 4300],
   ])('%s -> %s', (raw, n) => expect(parseAmount(raw)).toBe(n));
 
-  it.each(['2.500,5', '1,5', '', 'abc', '-500', '1.000,000', '1,000,00', '1.2.3', '12.34.567', '.'])(
+  it.each(['2.500,5', '1,5', '', 'abc', '-500', '1.000,000', '1,000,00', '1.2.3', '12.34.567', '.', '1O.000,00', '12abc34', '1e5', 'Item 1 2.500'])(
     'ambiguous or invalid %j -> null',
     (raw) => expect(parseAmount(raw)).toBeNull(),
   );

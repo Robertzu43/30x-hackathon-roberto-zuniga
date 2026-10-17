@@ -105,10 +105,10 @@ export function duplicado_probable(ctx: CheckContext): Check {
     { duplicate_of: dup?.invoice_id ?? null, duplicate_number: dup?.invoice_number ?? null });
 }
 
-// amount_usd against a USD limit; base = what is already counted (committed or paid), 0 for per-invoice limits.
+// amount_usd against a USD limit (a zero or negative amount is never verifiable: lectura is overridable, limits are not); base = what is already counted (committed or paid), 0 for per-invoice limits.
 function limit(id: CheckId, key: keyof PolicyRules, { rules, amountUsd }: CheckContext, base?: { key: string; usd: number }): Check {
   const max = num(rules, key);
-  if (max === null || amountUsd === null) return make(id, 'no_verificado', amountUsd, max, { amount_usd: amountUsd, limit_usd: max });
+  if (max === null || amountUsd === null || !(amountUsd > 0)) return make(id, 'no_verificado', amountUsd, max, { amount_usd: amountUsd, limit_usd: max });
   const total = round2((base?.usd ?? 0) + amountUsd);
   const values: Values = base
     ? { [base.key]: base.usd, amount_usd: amountUsd, total_usd: total, [key === 'period_budget_usd' ? 'budget_usd' : 'balance_usd']: max }

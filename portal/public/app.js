@@ -1,4 +1,4 @@
-/* global document, navigator, localStorage, location, fetch, FormData, URLSearchParams */
+/* global document, navigator, localStorage, location, fetch, FormData, URLSearchParams, setTimeout, addEventListener */
 // The vendor portal page (AC-83, AC-84, AC-90). Every value, vendor text and read field included, is set as text
 // (textContent, setAttribute), never as HTML (AC-85 item 4). The words come from the boot data the facturas Worker embeds.
 const boot = JSON.parse(document.getElementById('boot')?.textContent || '{"view":"unavailable","t":{"es":{},"en":{}}}');
@@ -9,8 +9,11 @@ const MESSAGE_VIEWS = { not_found: 'portal.not_found', invalid: 'portal.status_i
 const SEND_ERRORS = { not_found: 'portal.not_found', file: 'portal.error.file', text: 'portal.error.text', rate_ip: 'portal.error.rate_ip', rate_company: 'portal.error.rate_company' };
 
 const stored = () => { try { return localStorage.getItem('portal.lang'); } catch { return null; } };
+const remember = (l) => { try { localStorage.setItem('portal.lang', l); } catch { /* private mode: the choice lasts this page only */ } };
 // Spanish unless the vendor chose English (?lang=en or the switch, remembered on this device).
-let lang = [new URLSearchParams(location.search).get('lang'), stored()].find((l) => l === 'es' || l === 'en') || 'es';
+const queried = new URLSearchParams(location.search).get('lang');
+let lang = [queried, stored()].find((l) => l === 'es' || l === 'en') || 'es';
+if (queried === lang) remember(lang);
 // {company}. after «Andina Labs Inc.» keeps one period.
 const tr = (key, vars = {}) => (boot.t[lang][key] ?? '').replace(/\{(\w+)\}(\.?)/g, (m, k, dot) => {
   const v = String(vars[k] ?? `{${k}}`);
@@ -30,15 +33,32 @@ const messages = [{ from: 'agent', keys: ['portal.greeting', 'portal.hint'] }];
 let file = null;
 let ui = null; // the chat page's lasting nodes, built once so a typed message survives a language switch
 
+// R-102: copy the status URL; «Copiado» for 2 s, or the press-and-hold fallback, announced politely.
+function copyButton(link) {
+  const b = el('button', { type: 'button', class: 'copy', text: tr('portal.copy') });
+  b.addEventListener('click', async () => {
+    let key = 'portal.copied';
+    try { await navigator.clipboard.writeText(link); } catch { key = 'portal.copy_failed'; } // no clipboard API counts as refused
+    b.textContent = ui.live.textContent = tr(key);
+    if (key === 'portal.copied') setTimeout(() => { b.textContent = tr('portal.copy'); ui.live.textContent = ''; }, 2000);
+  });
+  return b;
+}
+
+function line(text, reply) {
+  const prefix = (boot.t[lang]['portal.reply.status'] ?? '').split('{status}')[0];
+  return reply && prefix && text.startsWith(prefix) ? el('p', {}, prefix, el('strong', { text: text.slice(prefix.length) })) : el('p', { text });
+}
+
 function bubble(m) {
-  const li = el('li', { class: `bubble ${m.from}` });
-  if (m.from === 'me') li.append(el('span', { class: 'sr-only', text: `${tr('portal.you')}: ` }));
+  const b = el('article', { class: `bubble ${m.from}` });
+  if (m.from === 'me') b.append(el('span', { class: 'sr-only', text: `${tr('portal.you')}: ` }));
   const lines = m.lines ? m.lines[lang] : m.keys ? m.keys.map((k) => tr(k, { company })) : [m.text];
-  li.append(...lines.filter(Boolean).map((text) => el('p', { text })));
-  if (m.file) li.append(el('p', { class: 'file', text: m.file }));
-  if (m.link) li.append(el('p', { text: tr('portal.reply.link') }), el('p', {}, el('a', { href: m.link, text: m.link })));
-  if (m.pending) li.classList.add('pending');
-  return li;
+  b.append(...lines.filter(Boolean).map((text) => line(text, !!m.lines)));
+  if (m.file) b.append(el('p', { class: 'file', text: m.file }));
+  if (m.link) b.append(el('p', { text: tr('portal.reply.link') }), el('p', {}, el('a', { href: m.link, text: m.link })), copyButton(m.link));
+  if (m.pending) b.classList.add('pending');
+  return b;
 }
 
 const renderLog = () => {
@@ -108,7 +128,7 @@ function clip() {
 function buildChat() {
   const fileInput = el('input', { type: 'file', id: 'file', accept: '.pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg', hidden: '' });
   const u = {
-    title: el('h1'), log: el('ol', { class: 'log', role: 'log', 'aria-live': 'polite' }), fileInput,
+    title: el('h1'), log: el('div', { class: 'log', role: 'log', 'aria-live': 'polite' }), live: el('p', { class: 'sr-only', 'aria-live': 'polite' }), fileInput,
     attach: el('button', { type: 'button', class: 'attach' }, clip()),
     label: el('label', { for: 'msg', class: 'sr-only' }), text: el('textarea', { id: 'msg', rows: '1' }),
     send: el('button', { type: 'submit', class: 'primary' }), chipName: el('span'), remove: el('button', { type: 'button', class: 'remove', text: '×' }),
@@ -124,7 +144,7 @@ function buildChat() {
   });
   u.text.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) u.form.requestSubmit(); });
   u.form.addEventListener('submit', send);
-  main.append(u.title, u.log, u.form);
+  main.append(u.title, u.log, u.live, u.form);
   return u;
 }
 
@@ -138,10 +158,18 @@ function paintChat() {
   renderLog();
 }
 
+// UX-08: offline, the page keeps what it showed and says how to get a fresh status.
+const offline = el('p', { class: 'state', role: 'status' });
+const paintOffline = () => {
+  offline.textContent = tr('portal.status_offline');
+  offline.hidden = navigator.onLine !== false;
+};
+
 function paintStatus() {
   const s = boot.status;
+  paintOffline();
   const when = new Intl.DateTimeFormat(lang === 'es' ? 'es-CO' : 'en-US', { dateStyle: 'long', timeStyle: 'short' }).format(new Date(s.updated_at));
-  main.replaceChildren(el('article', { class: 'card' },
+  main.replaceChildren(offline, el('article', { class: 'card' },
     el('h1', { text: s.status[lang] }),
     el('p', { class: 'company', text: tr('portal.status_title', { company: s.company }) }),
     el('h2', { text: tr('portal.status_read') }),
@@ -169,9 +197,10 @@ function paint() {
 for (const b of document.querySelectorAll('button[data-lang]')) {
   b.addEventListener('click', () => {
     lang = b.dataset.lang;
-    try { localStorage.setItem('portal.lang', lang); } catch { /* private mode: the choice lasts this page only */ }
+    remember(lang);
     paint();
   });
 }
 if (boot.view === 'chat') ui = buildChat();
+if (boot.view === 'status') for (const e of ['online', 'offline']) addEventListener(e, paintOffline);
 paint();

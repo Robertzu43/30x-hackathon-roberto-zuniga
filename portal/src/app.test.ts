@@ -42,14 +42,14 @@ beforeEach(() => {
   vi.stubGlobal('fetch', fetchMock);
   Object.defineProperty(navigator, 'onLine', { value: true, configurable: true });
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe('chat page (AC-83, AC-90)', () => {
   it('greets with the company name, labels every control, and sets the document language', async () => {
     await open({ view: 'chat', company: 'Andina Labs Inc.' });
     expect(document.documentElement.lang).toBe('es');
     expect($('h1').textContent).toBe('Facturas para Andina Labs Inc.');
-    expect(texts('.log li')[0]).toContain('Hola, soy Thesaurus, el agente de pagos de Andina Labs Inc. Envíame tu factura o cuenta de cobro.');
+    expect(texts('.log .bubble')[0]).toContain('Hola, soy Thesaurus, el agente de pagos de Andina Labs Inc. Envíame tu factura o cuenta de cobro.');
     expect($('label[for=msg]').textContent).toBe('Mensaje');
     expect($('button.attach').getAttribute('aria-label')).toBe('Adjuntar factura');
     expect($('button[type=submit]').textContent).toBe('Enviar');
@@ -60,7 +60,7 @@ describe('chat page (AC-83, AC-90)', () => {
     await open({ view: 'chat', company: 'Andina Labs Inc.' });
     $<HTMLButtonElement>('button[data-lang=en]').click();
     expect(document.documentElement.lang).toBe('en');
-    expect(texts('.log li')[0]).toContain("Hi, I'm Thesaurus, Andina Labs Inc.'s payments agent. Send me your invoice or bill.");
+    expect(texts('.log .bubble')[0]).toContain("Hi, I'm Thesaurus, Andina Labs Inc.'s payments agent. Send me your invoice or bill.");
     expect($('button[type=submit]').textContent).toBe('Send');
     expect($('button[data-lang=en]').getAttribute('aria-pressed')).toBe('true');
     await open({ view: 'chat', company: 'Andina Labs Inc.' });
@@ -69,13 +69,27 @@ describe('chat page (AC-83, AC-90)', () => {
     expect(document.documentElement.lang).toBe('es');
   });
 
+  it('an explicit ?lang= is remembered on the next visit with no query, and ?lang=es overrides a stored en (R-101)', async () => {
+    const view = { view: 'chat', company: 'Andina Labs Inc.' };
+    await open(view, '/andina-labs', 'en');
+    await open(view);
+    expect(document.documentElement.lang).toBe('en');
+    await open({ view: 'unavailable' }, `/estado/${'a'.repeat(43)}`);
+    expect(document.documentElement.lang).toBe('en');
+    await open(view, '/andina-labs', 'es');
+    await open(view);
+    expect(document.documentElement.lang).toBe('es');
+    await open(view, '/andina-labs', 'fr');
+    expect(localStorage.getItem('portal.lang')).toBe('es');
+  });
+
   it('on send: the vendor bubble and «Recibido…» at once, the button busy, then the reply as text with the status link', async () => {
     await open({ view: 'chat', company: 'Andina Labs Inc.' });
     let answer!: (r: Response) => void;
     fetchMock.mockImplementationOnce(() => new Promise((r) => { answer = r; }));
     typeAndSend(XSS);
     const send = $<HTMLButtonElement>('button[type=submit]');
-    expect(texts('.log li').slice(1)).toEqual([expect.stringContaining(XSS), 'Recibido; estoy leyendo tu factura…']);
+    expect(texts('.log .bubble').slice(1)).toEqual([expect.stringContaining(XSS), 'Recibido; estoy leyendo tu factura…']);
     expect(send.disabled).toBe(true);
     expect($('form').getAttribute('aria-busy')).toBe('true');
     expect($<HTMLTextAreaElement>('textarea').value).toBe('');
@@ -84,13 +98,13 @@ describe('chat page (AC-83, AC-90)', () => {
     answer(new Response(JSON.stringify(REPLY), { status: 200 }));
     await settle();
     expect(send.disabled).toBe(false);
-    const reply = document.querySelectorAll('.log li')[2]!;
+    const reply = document.querySelectorAll('.log .bubble')[2]!;
     expect([...reply.querySelectorAll('p')].map((p) => p.textContent).slice(0, 5)).toEqual(REPLY.reply.es);
     const link = reply.querySelector('a')!;
     expect([link.getAttribute('href'), link.textContent]).toEqual([`${location.origin}${TOKEN_PATH}`, `${location.origin}${TOKEN_PATH}`]);
     expect(document.querySelector('img[src=x]')).toBeNull(); // shown literally, nothing runs
     $<HTMLButtonElement>('button[data-lang=en]').click();
-    expect(document.querySelectorAll('.log li')[2]!.querySelector('p')!.textContent).toBe('This is what I read on your invoice:');
+    expect(document.querySelectorAll('.log .bubble')[2]!.querySelector('p')!.textContent).toBe('This is what I read on your invoice:');
   });
 
   it('a file goes as the invoice with the text beside it', async () => {
@@ -109,7 +123,7 @@ describe('chat page (AC-83, AC-90)', () => {
   ])('%s: a friendly error at once, nothing sent', async (_, act, message) => {
     await open({ view: 'chat', company: 'A' });
     act();
-    expect(texts('.log li.error')).toEqual([message]);
+    expect(texts('.log .bubble.error')).toEqual([message]);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -125,7 +139,7 @@ describe('chat page (AC-83, AC-90)', () => {
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ok: false, error }), { status }));
     typeAndSend('mi factura');
     await settle();
-    expect(texts('.log li.error')).toEqual([message]);
+    expect(texts('.log .bubble.error')).toEqual([message]);
     expect($<HTMLTextAreaElement>('textarea').value).toBe('mi factura');
   });
 
@@ -134,8 +148,66 @@ describe('chat page (AC-83, AC-90)', () => {
     fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
     typeAndSend('mi factura');
     await settle();
-    expect(texts('.log li.error')).toEqual(['Sin conexión. Tu mensaje no se envió; revisa tu conexión e inténtalo de nuevo.']);
+    expect(texts('.log .bubble.error')).toEqual(['Sin conexión. Tu mensaje no se envió; revisa tu conexión e inténtalo de nuevo.']);
     expect($<HTMLTextAreaElement>('textarea').value).toBe('mi factura');
+  });
+});
+
+describe('QA run 1 fixes (AC-84 R-102, AC-90 R-101, AC-91 items 3 and 6)', () => {
+  it('the language buttons: the accessible name starts with the visible text; no browser-language detection (R-101)', async () => {
+    Object.defineProperty(navigator, 'language', { value: 'en-US', configurable: true });
+    await open({ view: 'chat', company: 'A' });
+    expect(document.documentElement.lang).toBe('es');
+    for (const b of document.querySelectorAll('button[data-lang]')) expect(b.getAttribute('aria-label')).toMatch(new RegExp(`^${b.textContent}\\b`));
+  });
+
+  it('the chat log is a div role=log of articles, never list items under the log role', async () => {
+    await open({ view: 'chat', company: 'A' });
+    const log = $('[role=log]');
+    expect([log.tagName, log.querySelectorAll('li').length, log.firstElementChild!.tagName]).toEqual(['DIV', 0, 'ARTICLE']);
+  });
+
+  it('the logo mark is named «Thesaurus» once and marked data-logo', async () => {
+    await open({ view: 'chat', company: 'A' });
+    expect([$('img.mark').getAttribute('alt'), $('img.mark').hasAttribute('data-logo')]).toEqual(['Thesaurus', true]);
+    expect($('.brand [aria-hidden=true]').textContent).toBe('Thesaurus');
+  });
+
+  it('the reply status words are emphasised', async () => {
+    await open({ view: 'chat', company: 'A' });
+    typeAndSend('mi factura');
+    await settle();
+    expect(texts('.log .bubble strong')).toEqual(['en revisión']);
+    $<HTMLButtonElement>('button[data-lang=en]').click();
+    expect(texts('.log .bubble strong')).toEqual(['under review']);
+  });
+
+  const copy = async (writeText: () => Promise<void>) => {
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText: vi.fn(writeText) }, configurable: true });
+    await open({ view: 'chat', company: 'A' });
+    typeAndSend('mi factura');
+    await settle();
+    const b = $<HTMLButtonElement>('button.copy');
+    expect([b.textContent, b.classList.contains('primary')]).toEqual(['Copiar enlace', false]);
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    b.click();
+    await vi.advanceTimersByTimeAsync(0);
+    return b;
+  };
+
+  it('«Copiar enlace» copies the full status URL, says «Copiado» for 2 s and announces it (R-102)', async () => {
+    const b = await copy(async () => {});
+    expect(vi.mocked(navigator.clipboard.writeText)).toHaveBeenCalledWith(`${location.origin}${TOKEN_PATH}`);
+    expect([b.textContent, $('[aria-live=polite].sr-only').textContent]).toEqual(['Copiado', 'Copiado']);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(b.textContent).toBe('Copiar enlace');
+  });
+
+  it('a refused clipboard says to press and hold the link (R-102)', async () => {
+    const b = await copy(async () => { throw new DOMException('denied', 'NotAllowedError'); });
+    expect([b.textContent, $('[aria-live=polite].sr-only').textContent]).toEqual(Array(2).fill('No pude copiarlo; mantén presionado el enlace.'));
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(b.textContent).toBe('No pude copiarlo; mantén presionado el enlace.');
   });
 });
 
@@ -153,6 +225,21 @@ describe('status and message pages (AC-84, AC-90)', () => {
     $<HTMLButtonElement>('button[data-lang=en]').click();
     expect($('h1').textContent).toBe('needs approval from Andina Labs Inc.');
     expect($('main').textContent).toMatch(/Last update: .*2026/);
+  });
+
+  it('the status page offline: a designed notice with the next step, gone when back online (UX-08)', async () => {
+    Object.defineProperty(navigator, 'onLine', { value: false, configurable: true });
+    await open({ view: 'status', status: STATUS }, TOKEN_PATH);
+    expect($('[role=status]').textContent).toBe('Sin conexión. Revisa tu conexión y vuelve a abrir este enlace.');
+    $<HTMLButtonElement>('button[data-lang=en]').click();
+    expect($('[role=status]').textContent).toBe('No connection. Check your connection and open this link again.');
+    Object.defineProperty(navigator, 'onLine', { value: true, configurable: true });
+    window.dispatchEvent(new Event('online'));
+    expect($('[role=status]').hidden).toBe(true);
+    Object.defineProperty(navigator, 'onLine', { value: false, configurable: true });
+    window.dispatchEvent(new Event('offline'));
+    expect($('[role=status]').hidden).toBe(false);
+    expect($('h1').textContent).toBe('needs approval from Andina Labs Inc.'); // what was shown stays
   });
 
   it.each([

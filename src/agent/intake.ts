@@ -116,7 +116,7 @@ export async function intake(env: Env, budget: Budget, input: IntakeInput): Prom
     ok: true,
     reply: both((lang) => [
       ...(unread ? [say(lang, 'portal.reply.unread', { company: name })] : [say(lang, 'portal.reply.read'), ...readLines(fields, lang)]),
-      say(lang, 'portal.reply.status', { status: status[lang] }),
+      say(lang, 'portal.reply.status', { status: status[lang].replace(/^(rechazada|rejected): (.*)$/, '$1 ($2)') }), // «Estado: rechazada (duplicada)»: one colon
     ]),
     status_path: `/estado/${token}`,
   };

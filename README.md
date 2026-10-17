@@ -99,7 +99,7 @@ Las pruebas usan Supabase y el modelo simulados; no necesitan red. `scripts/test
 
 ## Cómo desplegarlo
 
-Antes de desplegar en otra cuenta, cambia en `wrangler.toml` lo que hoy apunta a las cuentas de Roberto: `account_id` (Cloudflare), el `id` del namespace KV (créalo con `npx wrangler kv namespace create KV`) y las variables `APP_URL` (la URL del Worker) y `SUPABASE_URL` (junto con `SUPABASE_ANON_KEY`, de tu proyecto de Supabase).
+Antes de desplegar en otra cuenta, cambia en `wrangler.toml` lo que hoy apunta a las cuentas de Roberto: `account_id` (Cloudflare) y las variables `APP_URL` (la URL del Worker) y `SUPABASE_URL` (junto con `SUPABASE_ANON_KEY`, de tu proyecto de Supabase).
 
 1. Variables de la sesión: las de `.env.example`. Los valores públicos (URL de Supabase, clave anónima, modelos) están en `wrangler.toml`.
 2. Migraciones: `bash scripts/db-push.sh` (por la API de gestión de Supabase; solo aplica las que faltan).
@@ -116,7 +116,7 @@ Todo correo que sale del Worker (la pregunta al aprobador) pasa por una función
 Esta lista es honesta a propósito. Cada punto se verificó contra el código o el registro.
 
 - **Correo de producción de SES (AC-54, AC-55, SHOULD).** AWS negó el acceso de producción. SES está en modo de pruebas y solo entrega a direcciones verificadas, así que el código de ingreso y el correo de aprobación no llegan a cualquiera. El código de envío está probado con SES simulado (`src/lib/email.test.ts`); la entrega real a la dirección del aprobador no la verifiqué en vivo. Por eso el demo no necesita correo: "Entrar como Andina Labs" no pide código y la empresa demo nunca envía correos ni crea enlaces.
-- **JEV no existe todavía.** La capa opcional (TypeSafe/JEV, SHOULD S2) no está construida: en el código solo existen la variable `JEV_ENABLED` (apagada) y su tipo. Por eso se dice "apagada". La seguridad no depende de ella.
+- **JEV no existe todavía.** La capa opcional (TypeSafe/JEV, SHOULD S2) no está construida: en el código solo existe la variable `JEV_ENABLED` (apagada) en `wrangler.toml`; ningún código la lee. Por eso se dice "apagada". La seguridad no depende de ella.
 - **Otras funciones SHOULD sin construir:** exportar el registro a CSV, "Pregúntale a Thesaurus" (chat sobre el registro), el botón "Invitar", varias políticas por categoría y exportar/importar la política en JSON. No hay rastro de ellas en `src/` ni `web/`.
 - **Plan gratuito de Cloudflare.** La cuenta está en Workers Free (50 subrequests por invocación). Una ejecución del agente se reparte en lotes de como máximo 40 subrequests contados, y el navegador sigue pidiendo lotes hasta terminar ("Decidiendo facturas… n de m"). El cron hace lo mismo y las empresas se turnan. En un plan de pago se sube la constante `SUBREQUESTS` de `src/lib/supabase.ts`, el único valor que cambia. Efecto: con muchas facturas pendientes, parte de ellas espera al siguiente ciclo de 5 minutos.
 - **Límite diario del lector (Workers AI gratuito).** En el plan gratuito de Cloudflare, Workers AI da unas 10.000 neuronas al día; una lectura gasta unas 39, así que el lector hace unas 250 lecturas diarias. El cupo se reinicia a las 00:00 UTC (19:00 en Bogotá). Cuando se acaba, o si el modelo falla o no responde en 20 segundos, si el lector no está disponible la factura entra como ESCALAR «sin leer»: el registro dice «factura sin leer: el lector de facturas no estaba disponible» (no «ilegible»), no se inventa ningún dato y nada se reintenta solo; hay que volver a ingresarla más tarde y rechazar la copia sin leer. Las facturas sembradas y las decisiones posteriores (aprobar, rechazar, reevaluar) nunca dependen del lector. Un plan de pago de Workers levanta el límite.
@@ -146,6 +146,9 @@ Esta lista es honesta a propósito. Cada punto se verificó contra el código o 
   - Q5: los miembros no escriben decisiones; solo el Worker, y la base rechaza un PAGAR fuera de las reglas.
   - Q6: una factura escalada por falta de presupuesto sigue contando como comprometida (conservador); el video rechaza una antes de aprobar Nube Sur.
   - Q7: seguir en el plan gratuito de Cloudflare; subir de plan cuesta USD 5 al mes.
+  - Q8: seguir en el plan gratuito; el lector (Workers AI) da unas 250 lecturas diarias y, si se agotan, una factura nueva entra como ESCALAR «sin leer». ¿Pasar a Workers Paid (USD 5 al mes, lecturas extra a unos 0,04 centavos de dólar cada una) para que los jurados nunca lleguen al límite?
+  - Q9: una factura cuyo total ya resta retenciones (ReteFuente, ReteIVA, ReteICA) o descuentos sale ESCALAR con «el total no cuadra». ¿Se reconocen las retenciones y se paga el total bruto o el neto?
+  - Q10: quedan dos PAGAR falsos que QA escribió por REST en empresas de prueba (`qa-r202610162341-*`) antes del bloqueo; nada se borra, así que siguen ahí. ¿Se marcan u ocultan esas empresas antes de compartir la base con la empresa?
 
 ## Registro de decisiones y entrega
 

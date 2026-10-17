@@ -6,7 +6,6 @@ compatibility_flags = ["nodejs_compat"]
 
 [vars]
 APP_ENV = "production"
-RESEND_FROM = "onboarding@resend.dev"
 SUPABASE_URL = "https://dhjumvswohajnusdifim.supabase.co"  # public
 SUPABASE_ANON_KEY = "sb_publishable_qKF4nId7_l5TJ78gSEAgWQ_bfZiFx4K"     # public by design; RLS protects data
 WORKERS_AI_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"  # product LLM; change here, not in code
@@ -26,9 +25,5 @@ binding = "AI"  # Workers AI: no key, authorised by the account
 directory = "./dist"
 not_found_handling = "single-page-application"
 run_worker_first = ["/api/*"]
-
-[[kv_namespaces]]
-binding = "KV"
-id = "715b34210bab409e81ef707e105f0334"
 
 # Secrets (wrangler secret put): AWS_SES_ACCESS_KEY_ID, AWS_SES_SECRET_ACCESS_KEY, SES_FROM_EMAIL, SUPABASE_SERVICE_ROLE_KEY, APPROVAL_HMAC_SECRET. Legacy: RESEND_API_KEY, SUPABASE_POOLER_URL. Optional: TYPESAFE_API_KEY, ANTHROPIC_API_KEY

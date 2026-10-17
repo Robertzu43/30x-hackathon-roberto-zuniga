@@ -1,13 +1,11 @@
 export interface Env {
   AI: Ai;
-  KV: KVNamespace;
   // public vars (wrangler.toml)
   SUPABASE_URL: string;
   SUPABASE_ANON_KEY: string;
   WORKERS_AI_MODEL: string;
   WORKERS_AI_VISION_MODEL: string;
   SES_REGION: string;
-  JEV_ENABLED: string;
   DEMO_EMAIL: string;
   APP_URL?: string;
   // secrets (wrangler secret put)

@@ -112,7 +112,7 @@ describe('POST /api/demo/reset (AC-47, R-15)', () => {
 });
 
 // scripts/seed-demo-user.mjs (AC-46, R-18): the orchestrator runs it after migrations and deploy; here with fakes.
-interface Seed { main(d: Row): Promise<unknown>; DEMO_PASSWORD: string }
+interface Seed { main(d: Row): Promise<unknown>; DEMO_PASSWORD: string; demoEmailFrom(toml: string): string }
 const loadScript = async () => (await import('../../scripts/seed-demo-user.mjs' as string)) as Seed;
 
 function scriptFakes(existing: Array<{ id: string; email: string }>) {
@@ -176,6 +176,19 @@ describe('scripts/seed-demo-user.mjs (AC-46, R-18)', () => {
     await main(deps);
     expect(log.filter((l) => /createUser|delete/i.test(l))).toEqual([]);
     expect(log).toContain(`updateUserById u-demo ${JSON.stringify({ password: PASSWORD })}`);
+  });
+
+  it('takes the demo email from wrangler.toml only: a different env.DEMO_EMAIL is ignored (AC-46, same value as the Worker)', async () => {
+    const { demoEmailFrom } = await loadScript();
+    vi.stubEnv('DEMO_EMAIL', 'otro@x.example');
+    const { readFileSync } = (await import('node:fs' as string)) as { readFileSync(u: URL, enc: string): string }; // no @types/node in this project
+    expect(demoEmailFrom(readFileSync(new URL('../../wrangler.toml', import.meta.url), 'utf8'))).toBe('demo@andina-labs.example');
+    vi.unstubAllEnvs();
+  });
+
+  it('throws when wrangler.toml has no DEMO_EMAIL, with no hardcoded fallback', async () => {
+    const { demoEmailFrom } = await loadScript();
+    expect(() => demoEmailFrom('[vars]\nSUPABASE_URL = "https://sb.test"\n')).toThrow('DEMO_EMAIL');
   });
 
   it('fails loudly when the app refuses the agent run', async () => {

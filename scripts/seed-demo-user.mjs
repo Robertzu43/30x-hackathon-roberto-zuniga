@@ -2,7 +2,7 @@
 // Task 10 (AC-46, R-18, D8): the shared demo user. Run once after the migrations and the deploy, and again whenever
 // anyone locked judges out by changing its password:
 //   node scripts/seed-demo-user.mjs <APP_URL>
-// Env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY, HEARTBEAT_EMAIL (DEMO_EMAIL optional, else wrangler.toml).
+// Env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY, HEARTBEAT_EMAIL. The demo email comes from wrangler.toml [vars] only (the Worker reads the same value); no env override.
 // Idempotent: find or create the user, reset its password, mark its company as the demo company, then run the agent
 // through the deployed app so the demo shows decisions before anyone enters. Never deletes anything; never prints a key.
 import { readFileSync } from 'node:fs';
@@ -10,6 +10,13 @@ import { pathToFileURL } from 'node:url';
 
 export const DEMO_PASSWORD = 'andina-demo-2026'; // public by design (D8); same constant as src/routes/demo.ts
 const PER_PAGE = 1000;
+
+// One source of truth: the DEMO_EMAIL var the Worker signs in with. Missing = stop, never guess another user.
+export const demoEmailFrom = (toml) => {
+  const email = toml.match(/^DEMO_EMAIL\s*=\s*"([^"]+)"/m)?.[1];
+  if (!email) throw new Error('DEMO_EMAIL missing in wrangler.toml [vars]');
+  return email;
+};
 
 const must = ({ data, error }, what) => {
   if (error) throw new Error(`${what}: ${error.message}`);
@@ -50,10 +57,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   }
   const { createClient } = await import('@supabase/supabase-js');
   const opts = { auth: { persistSession: false, autoRefreshToken: false } };
-  const demoEmail = env.DEMO_EMAIL || readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf8').match(/^DEMO_EMAIL\s*=\s*"([^"]+)"/m)?.[1];
-  await main({
-    admin: createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, opts),
-    anon: createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, opts),
-    fetch, appUrl, demoEmail: demoEmail || 'demo@andina-labs.example', approverEmail: env.HEARTBEAT_EMAIL, log: console.log,
-  }).catch((e) => { console.error(`seed-demo-user: ${e.message}`); process.exit(1); });
+  try {
+    await main({
+      admin: createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, opts),
+      anon: createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, opts),
+      fetch, appUrl, demoEmail: demoEmailFrom(readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf8')), approverEmail: env.HEARTBEAT_EMAIL, log: console.log,
+    });
+  } catch (e) { console.error(`seed-demo-user: ${e.message}`); process.exit(1); }
 }

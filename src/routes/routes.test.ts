@@ -677,6 +677,33 @@ describe('policy (AC-30, AC-31, R-14, R-41)', () => {
     expect(db.rpcs.filter((x) => x.name === 'insert_decision')).toEqual([]);
   });
 
+  // AC-105, R-98, R-79: each row carries what the diff list shows; `unchanged` counts the evaluated invoices that keep their outcome.
+  it.each(['es', 'en'] as const)('PUT /api/policy rows carry payee, amount, currency and the first failing check in %s; unchanged counts the rest', async (lang) => {
+    decided();
+    const r = await app.request('/api/policy', { method: 'PUT', headers: { Authorization: 'Bearer tok-a', 'Content-Type': 'application/json', 'X-Lang': lang },
+      body: JSON.stringify({ rules }) }, env);
+    const out = await json<{ would_change: Row[]; unchanged: number }>(r);
+    expect(out.would_change.map((w) => Object.keys(w))).toEqual(Array(2).fill(['invoice_id', 'headline', 'from', 'to', 'payee', 'amount', 'currency', 'reason']));
+    expect(out.would_change).toMatchObject([
+      { invoice_id: uid('A-01'), payee: 'Laura Méndez', amount: 2500, currency: 'USD' },
+      { invoice_id: uid('A-11'), payee: 'Nube Sur LLC', amount: 4200, currency: 'USD' },
+    ]);
+    const reasons = out.would_change.map((w) => String(w.reason));
+    expect(reasons[0]).toMatch(lang === 'es' ? /límite|supera/i : /limit|exceed/i);
+    expect(reasons[0]).not.toMatch(/^(ESCALAR|ESCALATE|FRENAR|STOP)/);
+    expect(out.unchanged).toBe(0); // the two evaluated ones both moved; A-04 FRENAR is final
+  });
+
+  it('PUT /api/policy with no effect answers would_change [] and unchanged = every evaluated invoice', async () => {
+    db = testDb(workspace(['04', '11']));
+    db.tables.decisions!.push(
+      { id: 'd4', invoice_id: uid('A-04'), company_id: 'A', seq: 1, outcome: 'FRENAR', actor: 'agent', amount_usd: 9800, checks: [] },
+      { id: 'd11', invoice_id: uid('A-11'), company_id: 'A', seq: 1, outcome: 'ESCALAR', actor: 'agent', amount_usd: 4200, checks: [] },
+    );
+    const out = await json<{ would_change: Row[]; unchanged: number }>(await call('PUT', '/api/policy', { rules: SEED.rules }));
+    expect(out).toMatchObject({ would_change: [], unchanged: 1 });
+  });
+
   it('PUT /api/policy keeps the previous name when none is given', async () => {
     db = testDb(workspace([]));
     const out = await json<{ policy: Row }>(await call('PUT', '/api/policy', { rules }));
@@ -1429,7 +1456,7 @@ describe('budgeted, resumable runs over HTTP (AC-70, R-56, R-57, R-59, R-60)', (
     const before = latest();
     const r = await call('PUT', '/api/policy', { rules: { ...SEED.rules, per_payment_limit_usd: 1000 } });
     expect(r.status).toBe(200);
-    const out = await json<{ will_pay: number; unread_pending?: number; would_change: Array<{ invoice_id: string; from: string | null; to: string | null }> }>(r);
+    const out = await json<{ will_pay: number; unchanged: number; unread_pending?: number; would_change: Array<{ invoice_id: string; from: string | null; to: string | null; amount: number; currency: string }> }>(r);
     await runAgent({ db: db as never, env, budget: new Budget(Infinity) }, 'A', 'pending', 'reevaluate');
     return { before, after: latest(), out, listed: out.would_change.map((w) => [w.invoice_id, w.from, w.to]) };
   };
@@ -1455,23 +1482,42 @@ describe('budgeted, resumable runs over HTTP (AC-70, R-56, R-57, R-59, R-60)', (
     await runAgent({ db: db as never, env, budget: new Budget(Infinity) }, 'A', 'pending', 'manual');
     expect(decide.length).toBeGreaterThan(0);
     db.tables.invoices.push(...pending);
-    const { before, after, listed } = await previewAndReevaluate();
+    const { before, after, listed, out } = await previewAndReevaluate();
     const mine = [...after].filter(([id, o]) => id.startsWith(uid('A-00').slice(0, -4)) && (before.get(id) === null || before.get(id) !== o));
     expect(listed.sort()).toEqual(mine.map(([id, o]) => [id, before.get(id), o]).sort());
     expect([...before.values()].filter((o) => o === 'ESCALAR').length).toBeGreaterThan(0);
     expect(listed.some((x) => x[1] === null)).toBe(true);
     expect(listed.some((x) => x[1] === 'ESCALAR')).toBe(true);
     expect(listed.some((x) => x[1] === 'ESCALAR' && x[2] === 'ESCALAR')).toBe(false);
+    // AC-105: `unchanged` is the ESCALAR invoices Reevaluar left as they were; the rows carry the invoice's read fields.
+    const stayed = [...before].filter(([id, o]) => o === 'ESCALAR' && after.get(id) === 'ESCALAR').length;
+    expect(stayed).toBeGreaterThan(0);
+    expect(out.unchanged).toBe(stayed);
+    for (const w of out.would_change) {
+      const f = db.tables.invoices!.find((i) => i.id === w.invoice_id)!.fields as { amount: number; currency: string };
+      expect([w.amount, w.currency]).toEqual([f.amount, f.currency]);
+    }
   });
 
   it('R-68: a pending invoice with no read fields is listed with to null, counted in unread_pending and not in will_pay', async () => {
     db = testDb(workspace(['01', '04']));
     db.tables.invoices!.find((i) => i.id === uid('A-04'))!.fields = null;
     const r = await call('PUT', '/api/policy', { rules: { ...SEED.rules, per_payment_limit_usd: 1000 } });
-    const out = await json<{ will_pay: number; unread_pending: number; would_change: Array<{ invoice_id: string; from: unknown; to: unknown }> }>(r);
+    const out = await json<{ will_pay: number; unchanged: number; unread_pending: number; would_change: Array<{ invoice_id: string; from: unknown; to: unknown }> }>(r);
     expect(out.would_change.map((w) => [w.invoice_id, w.from, w.to])).toEqual([[uid('A-01'), null, 'FRENAR'], [uid('A-04'), null, null]]);
     expect(out.unread_pending).toBe(1);
     expect(out.will_pay).toBe(0);
+    expect(out.would_change[1]).toMatchObject({ payee: null, amount: null, currency: null, reason: null });
+    expect(out.unchanged).toBe(0); // A-01 moved and the unread A-04 is a listed row: every listed row changes, none is also counted unchanged (AC-105, R-61)
+  });
+
+  it('AC-105, R-61: an unread invoice is a listed row and an ESCALAR that stays the same is the only one counted unchanged', async () => {
+    db = testDb(workspace(['04', '11']));
+    db.tables.invoices!.find((i) => i.id === uid('A-04'))!.fields = null;
+    db.tables.decisions!.push({ id: 'd11', invoice_id: uid('A-11'), company_id: 'A', seq: 1, outcome: 'ESCALAR', actor: 'agent', amount_usd: 4200, checks: [] });
+    const out = await json<{ would_change: Array<{ invoice_id: string; to: unknown }>; unchanged: number }>(await call('PUT', '/api/policy', { rules: SEED.rules }));
+    expect(out.would_change.map((w) => [w.invoice_id, w.to])).toEqual([[uid('A-04'), null]]);
+    expect(out.unchanged).toBe(1);
   });
 });
 

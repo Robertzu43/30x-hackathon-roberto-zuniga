@@ -255,8 +255,6 @@ describe('invoices (AC-11, AC-29)', () => {
     ['a 2-byte file', () => upload(new Uint8Array([0x25, 0x50]), 'f.pdf', 'application/pdf')],
     ['a 3-byte file', () => upload(new Uint8Array([0x25, 0x50, 0x44]), 'f.pdf', 'application/pdf')],
     ['no file field', () => new FormData()],
-    ['empty pasted text', () => ({ source: 'chat', text: '   ' })],
-    ['pasted text over 20.000 characters', () => ({ source: 'email', text: 'x'.repeat(20001) })],
     ['a JSON source that is not email or chat', () => ({ source: 'pdf', text: 'hola' })],
     ['a body that is not JSON', () => 'not json'],
   ])('POST /api/invoices refuses %s with 400 and stores nothing (AC-15)', async (_, body) => {
@@ -267,6 +265,21 @@ describe('invoices (AC-11, AC-29)', () => {
     expect(await r.json()).toEqual({ error: FORMAT });
     expect(db.tables.invoices!.length).toBe(before);
     expect(db.uploads).toEqual([]);
+    expect(ai.run).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['missing text', () => ({ source: 'chat' })],
+    ['text that is not a string', () => ({ source: 'chat', text: 42 })],
+    ['blank pasted text', () => ({ source: 'chat', text: '   ' })],
+    ['pasted text over 20.000 characters', () => ({ source: 'email', text: 'x'.repeat(20001) })],
+  ])('POST /api/invoices refuses %s with 400 and its own message, storing nothing (AC-15, R-84)', async (_, body) => {
+    db = testDb(workspace([]));
+    const before = db.tables.invoices!.length;
+    const r = await call('POST', '/api/invoices', body());
+    expect(r.status).toBe(400);
+    expect(await r.json()).toEqual({ error: 'Pega un texto de 1 a 20.000 caracteres.' });
+    expect(db.tables.invoices!.length).toBe(before);
     expect(ai.run).not.toHaveBeenCalled();
   });
 

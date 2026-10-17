@@ -32,7 +32,9 @@ const FILES = [
   { magic: '\x89PNG', source: 'image', ext: 'png', type: 'image/png' },
   { magic: '\xff\xd8\xff', source: 'image', ext: 'jpg', type: 'image/jpeg' },
 ] as const;
-const Pasted = z.object({ source: z.enum(['email', 'chat']), text: z.string().max(20000).refine((t) => t.trim().length > 0) });
+const BAD_TEXT = 'Pega un texto de 1 a 20.000 caracteres.'; // R-84
+const PastedSource = z.object({ source: z.enum(['email', 'chat']) });
+const PastedText = z.string().max(20000).refine((t) => t.trim().length > 0);
 const SIGNED_URL_SECONDS = 300; // AC-08
 const NOT_RUN = 'No pude ejecutar el agente ahora. Las facturas siguen pendientes; lo intentaré solo en la próxima revisión automática (cada 5 minutos).';
 
@@ -80,9 +82,13 @@ export const invoices = memberRoutes()
       if (kind.source === 'image') c.var.budget.count(); // the Workers AI vision call (R-56)
       text = await documentToText(c.env, { kind: kind.source, bytes });
     } else {
-      const p = Pasted.safeParse(await c.req.json().catch(() => null));
-      if (!p.success) return c.json({ error: FORMAT }, 400);
-      ({ source, text } = p.data);
+      const body: unknown = await c.req.json().catch(() => null);
+      const s = PastedSource.safeParse(body);
+      if (!s.success) return c.json({ error: FORMAT }, 400);
+      const t = PastedText.safeParse((body as { text?: unknown }).text);
+      if (!t.success) return c.json({ error: BAD_TEXT }, 400);
+      source = s.data.source;
+      text = t.data;
     }
     c.var.budget.count(); // the Workers AI reader (R-56)
     const fields = await extractFields(c.env, text);

@@ -13,8 +13,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
 
-// ---- The approved look: web/styles.css at 6d34830 (R-93.5). The test compares these with that commit. ----
-export const PALETTE = ['#000000', '#111111', '#333333', '#346538', '#787774', '#9f2f2d', '#eaeaea', '#edf3ec', '#f1efe9', '#fbfbfa', '#fdebec', '#ffffff'];
+// ---- The approved look: web/styles.css at 6d34830 (R-93.5) with R-99 (#787774 -> #6d6c69) and R-100 (#956400 on #fbf3db). The test checks that commit plus exactly these. ----
+export const PALETTE = ['#000000', '#111111', '#333333', '#346538', '#6d6c69', '#956400', '#9f2f2d', '#eaeaea', '#edf3ec', '#f1efe9', '#fbf3db', '#fbfbfa', '#fdebec', '#ffffff'];
 export const FONTS = [
   "'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif",
   "'Newsreader', 'Instrument Serif', 'Playfair Display', Georgia, serif",

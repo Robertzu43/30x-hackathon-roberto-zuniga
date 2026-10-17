@@ -65,10 +65,10 @@ export function escalationEmail(a: { lang: 'es'; question: string; invoice: Invo
   const html = `<!doctype html><html lang="es"><body style="margin:0;padding:32px;background:#FBFBFA;color:#2F3437;font:15px/1.6 'Helvetica Neue',Helvetica,Arial,sans-serif">`
     + logo
     + p(a.question, 'margin:0 0 12px;font-size:17px;color:#111111')
-    + p(head, 'margin:0 0 12px;color:#787774')
-    + `<h2 style="font-size:13px;margin:24px 0 8px;color:#787774;text-transform:uppercase;letter-spacing:0.05em">${esc(t(lang, 'email.read'))}</h2>`
+    + p(head, 'margin:0 0 12px;color:#6d6c69')
+    + `<h2 style="font-size:13px;margin:24px 0 8px;color:#6d6c69;text-transform:uppercase;letter-spacing:0.05em">${esc(t(lang, 'email.read'))}</h2>`
     + read.map((r) => p(r, 'margin:0')).join('')
-    + `<h2 style="font-size:13px;margin:24px 0 8px;color:#787774;text-transform:uppercase;letter-spacing:0.05em">${esc(t(lang, 'email.rules'))}</h2>`
+    + `<h2 style="font-size:13px;margin:24px 0 8px;color:#6d6c69;text-transform:uppercase;letter-spacing:0.05em">${esc(t(lang, 'email.rules'))}</h2>`
     + `<ul style="margin:0 0 24px;padding-left:20px">${rules.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>`
     + button(approve, a.approveUrl, 'background:#111111;color:#FFFFFF')
     + button(reject, a.rejectUrl, 'background:#FFFFFF;color:#111111;border:1px solid #EAEAEA')

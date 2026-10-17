@@ -13,29 +13,29 @@ Status of every entry: open. Source: "hands" = seen by hand in Chromium, "gate" 
 
 | Id | Screen | Width | Lang | Category | Severity | Source | Status |
 |---|---|---|---|---|---|---|---|
-| UX-01 | inbox | 1440, 390 | en | confusing copy | high | both | open |
-| UX-02 | detail-pagar / frenar / escalar | 1440, 390 | en | confusing copy | high | both | open |
+| UX-01 | inbox | 1440, 390 | en | confusing copy | high | both | fixed (Task 31) |
+| UX-02 | detail-pagar / frenar / escalar | 1440, 390 | en | confusing copy | high | both | fixed (Task 31) |
 | UX-03 | tour (step 1) | 390 | es, en | broken state | medium | hands | open |
 | UX-04 | every screen | all | es, en | broken state | medium | gate | open |
-| UX-05 | every screen | 390 (and 360) | es, en | broken state | medium | both | open |
-| UX-06 | inbox, new-invoice, policy, beneficiaries, period, detail-escalar | 390 (and 360) | es, en | broken state | medium | gate | open |
-| UX-07 | every screen | all | es, en | broken state | medium | both | open |
+| UX-05 | every screen | 390 (and 360) | es, en | broken state | medium | both | partly fixed (Task 31): top bar, buttons, selects, section links; detail links and /demo video link left for Task 32 |
+| UX-06 | inbox, new-invoice, policy, beneficiaries, period, detail-escalar | 390 (and 360) | es, en | broken state | medium | gate | fixed (Task 31) |
+| UX-07 | every screen | all | es, en | broken state | medium | both | fixed (Task 31) |
 | UX-08 | inbox, new-invoice | 390, 1440 | es, en | layout jump | medium | both | open |
 | UX-09 | policy | 390, 1440 | es, en | layout jump | medium | both | open |
 | UX-10 | policy | 360 | es, en | broken state | low | both | open |
-| UX-11 | detail-frenar | 1440, 390 | es, en | broken state | low | both | open |
+| UX-11 | detail-frenar | 1440, 390 | es, en | broken state | low | both | fixed (Task 31) |
 | UX-12 | detail-frenar | 768 | es | layout jump | low | gate | open |
-| UX-13 | period (error and offline) | 1440, 390 | es, en | broken state | high | both | open |
-| UX-14 | period, beneficiaries (empty) | 1440, 390 | es, en | broken state | low | both | open |
-| UX-15 | beneficiaries (Editar) | 1440, 390 | es, en | loading without feedback | medium | hands | open |
-| UX-16 | policy, beneficiaries (Save buttons) | 390 | es | loading without feedback | low | gate | open |
-| UX-17 | approve (invalid token) | 1440, 390 | es, en | confusing copy | medium | both | open |
+| UX-13 | period (error and offline) | 1440, 390 | es, en | broken state | high | both | fixed (Task 31) |
+| UX-14 | period, beneficiaries (empty) | 1440, 390 | es, en | broken state | low | both | fixed (Task 31) |
+| UX-15 | beneficiaries (Editar) | 1440, 390 | es, en | loading without feedback | medium | hands | fixed (Task 31) |
+| UX-16 | policy, beneficiaries (Save buttons) | 390 | es | loading without feedback | low | gate | partly fixed (Task 31): Beneficiarios Save; Política Save left for Task 22/32 |
+| UX-17 | approve (invalid token) | 1440, 390 | es, en | confusing copy | medium | both | partly fixed (Task 31): own heading and next step; the console 404 needs src/routes/approvals.ts |
 | UX-18 | detail (unknown invoice) | 1440, 390 | es, en | broken state | low | both | open |
-| UX-19 | period, beneficiaries, new-invoice | 1440, 390 | es | confusing copy | low | hands | open |
-| UX-20 | new-invoice (file tab) | 1440, 390 | es, en | confusing copy | low | hands | open |
-| UX-21 | inbox, tour, demo, detail-escalar | all | es, en | broken state | low | gate | open |
-| UX-22 | period | 390 | es, en | broken state | medium | gate | open |
-| UX-23 | inbox with the new-invoice form open | 390, 1440 | es, en | confusing copy | low | hands | open |
+| UX-19 | period, beneficiaries, new-invoice | 1440, 390 | es | confusing copy | low | hands | fixed (Task 31) |
+| UX-20 | new-invoice (file tab) | 1440, 390 | es, en | confusing copy | low | hands | fixed (Task 31) |
+| UX-21 | inbox, tour, demo, detail-escalar | all | es, en | broken state | low | gate | fixed (Task 31) |
+| UX-22 | period | 390 | es, en | broken state | medium | gate | fixed (Task 31) |
+| UX-23 | inbox with the new-invoice form open | 390, 1440 | es, en | confusing copy | low | hands | partly fixed (Task 31): chosen tab no longer looks primary; «Ejecutar agente» stays primary while the form is open (Inbox.tsx, Task 32) |
 | UX-24 | policy | 1440, 390 | es, en | confusing copy | low | hands | open |
 
 ## Entries
@@ -47,7 +47,7 @@ Status of every entry: open. Source: "hands" = seen by hand in Chromium, "gate" 
 - Actual: the badge says "STOP" / "PAY" / "ESCALATE" but the row text next to it says "FRENAR · 10.000 BRL a Ana Souza: duplicado exacto de la factura #AS-0087 y 1 motivo más", "PAGAR · 160 USD a Northstar Group, horas de octubre, dentro de reglas". Amounts use Spanish separators ("10.000 BRL"). Gate: 5.mixed finds 31 Spanish-dictionary strings and 5.locale 29 numbers not in en-US, in 5 of 10 cells (all en).
 - Note: the sentences are stored data written in Spanish. AC-91 item 5 excepts "stored seed data", so product must rule whether this is a defect; as a user on the en screen it reads as a half-translated product.
 - Screenshot: docs/ux/qa/inbox-1440-en.png
-- Category: confusing copy. Severity: high. Status: open.
+- Category: confusing copy. Severity: high. Status: fixed (Task 31).
 
 ### UX-02 Decision detail pages are in Spanish on the English screen
 - Screen: detail-pagar, detail-frenar, detail-escalar. Width: 1440 and 390. Language: en.
@@ -56,7 +56,7 @@ Status of every entry: open. Source: "hands" = seen by hand in Chromium, "gate" 
 - Actual: headings and labels are English ("What I did", "What I read", "READ", "CHECK", "DECIDE") but the content is Spanish: the title "ESCALAR · 640 USD a Lumbrera Estudio Grafico S.A.S.: beneficiario nuevo...", the steps "Leí el correo y encontré a...", "Verifiqué 13 reglas: 9 cumplen, 2 no cumplen", "Decidí ESCALAR: ...", and every rule line ("Beneficiario permitido: ... → no cumple"). Gate 5.mixed: 33, 35 and 37 Spanish strings on the three details.
 - Note: same stored-data cause and the same ruling question as UX-01. A visitor who picks English sees Spanish in the main part of the product.
 - Screenshot: docs/ux/qa/detail-escalar-1440-en.png
-- Category: confusing copy. Severity: high. Status: open.
+- Category: confusing copy. Severity: high. Status: fixed (Task 31).
 
 ### UX-03 Tour step 1 covers the thing it points at on a phone
 - Screen: tour, step "1 de 7 / 1 of 7 Bandeja / Inbox". Width: 390 (1440 is fine). Language: es and en.
@@ -81,7 +81,7 @@ Status of every entry: open. Source: "hands" = seen by hand in Chromium, "gate" 
 - Expected: every interactive element at least 44 x 44 (AC-91 item 2).
 - Actual (hands, 390): the section links "Bandeja / Política / Beneficiarios / Periodo" are 22 px tall; the "es" and "en" buttons are 42 x 44; "Nueva factura" 32 px tall; the filter selects 37 px; "Editar" 32 px; "Volver a la bandeja" 22 px; "Abrir el documento" 20 px. On login and /demo the "Español" / "English" links are 22 px tall and "Ver el recorrido en video" 26 px. Gate: 7 to 16 failing targets per logged-in screen, 2 to 3 on login and demo, 4 of 4 cells each.
 - Screenshot: docs/ux/qa/login-390-en.png, docs/ux/qa/inbox-390-es.png
-- Category: broken state. Severity: medium. Status: open.
+- Category: broken state. Severity: medium. Status: partly fixed (Task 31): top bar, buttons, selects, section links; detail links and /demo video link left for Task 32.
 
 ### UX-06 Form fields use 14 px text on a phone
 - Screen: inbox filters, new-invoice (email and chat textarea), policy (17 fields), beneficiaries form (7), period month field, detail-escalar field. Width: 390 (gate also 360). Language: es and en.
@@ -89,7 +89,7 @@ Status of every entry: open. Source: "hands" = seen by hand in Chromium, "gate" 
 - Expected: at least 16 px so iOS does not zoom the page when a field is tapped (AC-91 item 2).
 - Actual: every field is 14 px ("17 of 17 inputs under 16 px" on policy, "7 of 7" on the beneficiaries form, "3 of 3" on new-invoice email and chat).
 - Screenshot: docs/ux/qa/new-invoice-file-390-en.png
-- Category: broken state. Severity: medium. Status: open.
+- Category: broken state. Severity: medium. Status: fixed (Task 31).
 
 ### UX-07 Grey helper text fails the contrast rule
 - Screen: every screen (tagline, user email, hints, labels). Width: all. Language: es and en.
@@ -97,7 +97,7 @@ Status of every entry: open. Source: "hands" = seen by hand in Chromium, "gate" 
 - Expected: axe reports no serious violation; text 4.5:1 (AC-91 item 3).
 - Actual: axe `color-contrast` (serious) on 10 of 10 cells of every screen, 7 to 66 elements per page (".topbar > .muted", "header > .muted"). The grey #787774 measures 4.48:1 on white, 4.32:1 on the page background #fbfbfa and 3.89:1 on #f1efe9. Because the palette is frozen (AC-53, AC-81) this needs a product ruling, not a quiet colour change.
 - Screenshot: docs/ux/qa/inbox-390-es.png
-- Category: broken state. Severity: medium. Status: open.
+- Category: broken state. Severity: medium. Status: fixed (Task 31).
 
 ### UX-08 Inbox list jumps when the data arrives
 - Screen: inbox and the three new-invoice tabs. Width: 390 and 1440. Language: es and en.
@@ -129,7 +129,7 @@ Status of every entry: open. Source: "hands" = seen by hand in Chromium, "gate" 
 - Expected: the link uses the product's colours.
 - Actual: browser-default blue #0000ee, underlined, the only blue on the page (gate 6.palette, 10 of 10 cells).
 - Screenshot: docs/ux/qa/detail-frenar-1440-es.png
-- Category: broken state. Severity: low. Status: open.
+- Category: broken state. Severity: low. Status: fixed (Task 31).
 
 ### UX-12 Document image shifts the detail page at 768
 - Screen: detail-frenar. Width: 768 (AC-91 width, outside the two hands-on widths). Language: es.
@@ -145,7 +145,7 @@ Status of every entry: open. Source: "hands" = seen by hand in Chromium, "gate" 
 - Expected: a designed message with a next step, in the chosen language (AC-91 item 4, 5), like the inbox has ("No pude cargar las facturas. Recarga la página para intentar de nuevo.").
 - Actual: offline shows "Failed to fetch" (English browser text, also on the es screen) under the month field, nothing else. Error shows only the raw server text ("gate" in the forced test) with no retry. Gate: 4.state fails for period-error and period-offline, 5.words "Failed to fetch". The inbox and beneficiaries error and offline states pass.
 - Screenshot: docs/ux/qa/period-offline-390-es.png, docs/ux/qa/period-offline-1440-en.png, docs/ux/qa/period-error-390-es.png
-- Category: broken state. Severity: high. Status: open.
+- Category: broken state. Severity: high. Status: fixed (Task 31).
 
 ### UX-14 Empty states without a next step
 - Screen: period (no invoices) and beneficiaries (no beneficiaries). Width: 1440 and 390. Language: es and en.
@@ -153,7 +153,7 @@ Status of every entry: open. Source: "hands" = seen by hand in Chromium, "gate" 
 - Expected: a message and a next step (AC-91 item 4).
 - Actual: period shows zeros, dashes and "No payments this month." with nothing to do next; beneficiaries shows "Todavía no hay beneficiarios." and the add form further down. Gate 4.state: "empty: nothing shown and 0 next-step controls", 10 of 10 cells for both. The inbox empty state passes.
 - Screenshot: docs/ux/qa/period-empty-390-en.png
-- Category: broken state. Severity: low. Status: open.
+- Category: broken state. Severity: low. Status: fixed (Task 31).
 
 ### UX-15 "Editar" on a beneficiary looks like it does nothing
 - Screen: beneficiaries. Width: 1440 and 390. Language: es and en.
@@ -161,7 +161,7 @@ Status of every entry: open. Source: "hands" = seen by hand in Chromium, "gate" 
 - Expected: the edit form is brought into view or focused.
 - Actual: the form opens below the table: top of the first field at y 1068 on 1440 x 900 and y 1575 on 390 x 844. scrollY stays 0 and focus does not move, so in the viewport nothing changes. On a phone the user must scroll about two screens to find it. The form also shows no "demo is read-only" notice, unlike the Policy page.
 - Screenshot: docs/ux/qa/beneficiaries-edit-click-390-es.png (what the user sees after the click), docs/ux/qa/beneficiaries-edit-form-1440-es.png (where the form is)
-- Category: loading without feedback. Severity: medium. Status: open.
+- Category: loading without feedback. Severity: medium. Status: fixed (Task 31).
 
 ### UX-16 Save buttons show no pressed or busy state
 - Screen: policy, beneficiaries. Width: 390. Language: es.
@@ -169,7 +169,7 @@ Status of every entry: open. Source: "hands" = seen by hand in Chromium, "gate" 
 - Expected: disabled, aria-busy or a progress element within 100 ms.
 - Actual: "no disabled, aria-busy or progress state within 150 ms" on both screens. Not repeated by hand because it would write to the demo data.
 - Screenshot: none.
-- Category: loading without feedback. Severity: low. Status: open.
+- Category: loading without feedback. Severity: low. Status: partly fixed (Task 31): Beneficiarios Save; Política Save left for Task 22/32.
 
 ### UX-17 Invalid approval link: no next step and a console error
 - Screen: approve with a bad token (/approve/invalid-token-qa). Width: 1440 and 390. Language: es and en.
@@ -177,7 +177,7 @@ Status of every entry: open. Source: "hands" = seen by hand in Chromium, "gate" 
 - Expected: a friendly message that says what to do (for example ask for a new link), and no console error.
 - Actual: the heading "Aprobar este pago / Approve this payment" is followed by "Este enlace no es válido o venció" and nothing else, on a nearly empty page: no link, no contact, no way back. The browser console logs `error: Failed to load resource: the server responded with a status of 404`; gate 6.console fails (10 of 10 cells). The heading promises an action that is not there.
 - Screenshot: docs/ux/qa/approve-invalid-390-es.png
-- Category: confusing copy. Severity: medium. Status: open.
+- Category: confusing copy. Severity: medium. Status: partly fixed (Task 31): own heading and next step; the console 404 needs src/routes/approvals.ts.
 
 ### UX-18 Unknown invoice page logs a console error
 - Screen: detail with an id that does not exist. Width: 1440 and 390. Language: es and en.
@@ -193,7 +193,7 @@ Status of every entry: open. Source: "hands" = seen by hand in Chromium, "gate" 
 - Expected: one language.
 - Actual: the month field shows "October 2026", the date "10/17/2027" (US order), and the file field "Choose File / No file chosen", all next to Spanish labels. This follows the browser's language (headless Chromium is en-US), so a Spanish browser may look right; the app language switch does not change them.
 - Screenshot: docs/ux/qa/period-month-390-es.png, docs/ux/qa/new-invoice-file-390-en.png (file chooser, same text on the es screen)
-- Category: confusing copy. Severity: low. Status: open.
+- Category: confusing copy. Severity: low. Status: fixed (Task 31).
 
 ### UX-20 Empty file submit says "format not supported"
 - Screen: new-invoice, tab "Subir PDF o imagen". Width: 1440 and 390. Language: es and en.
@@ -201,7 +201,7 @@ Status of every entry: open. Source: "hands" = seen by hand in Chromium, "gate" 
 - Expected: "choose a file first" or similar.
 - Actual: "Formato no admitido: sube un PDF, PNG o JPG de hasta 10 MB" / "Unsupported format: upload a PDF, PNG or JPG of up to 10 MB", as if a wrong file had been chosen. The two text tabs say "Pega un texto de 1 a 20.000 caracteres." and are fine.
 - Screenshot: docs/ux/qa/new-invoice-empty-file-390-es.png
-- Category: confusing copy. Severity: low. Status: open.
+- Category: confusing copy. Severity: low. Status: fixed (Task 31).
 
 ### UX-21 Colours outside the approved palette
 - Screen: inbox, tour, demo (the ESCALAR chip), detail-escalar (the "?" mark). Width: all. Language: es and en.
@@ -209,7 +209,7 @@ Status of every entry: open. Source: "hands" = seen by hand in Chromium, "gate" 
 - Expected: only approved colours.
 - Actual: #956400 on #fbf3db (amber) in the ESCALAR chip and the "?" mark, 10 of 10 cells. (The deployed app may predate the palette decision; it is listed because the gate fails.)
 - Screenshot: docs/ux/qa/inbox-1440-en.png
-- Category: broken state. Severity: low. Status: open.
+- Category: broken state. Severity: low. Status: fixed (Task 31).
 
 ### UX-22 The period table cannot be scrolled with the keyboard
 - Screen: period, "Por beneficiario" table. Width: 390 (gate: 10 of 10 cells). Language: es and en.
@@ -217,7 +217,7 @@ Status of every entry: open. Source: "hands" = seen by hand in Chromium, "gate" 
 - Expected: no serious axe violation.
 - Actual: axe `scrollable-region-focusable` (serious) on `.table-wrap`: a scrolling container the keyboard cannot reach.
 - Screenshot: none.
-- Category: broken state. Severity: medium. Status: open.
+- Category: broken state. Severity: medium. Status: fixed (Task 31).
 
 ### UX-23 Several dark buttons compete when the new-invoice form is open
 - Screen: inbox with "Nueva factura" open. Width: 390 and 1440. Language: es and en.
@@ -225,7 +225,7 @@ Status of every entry: open. Source: "hands" = seen by hand in Chromium, "gate" 
 - Expected: one primary button per view (AC-91 item 6; judged by eye).
 - Actual: three solid dark controls at once: "Ejecutar agente", the selected tab ("Subir PDF o imagen") and "Enviar al agente". The selected tab looks like an action button.
 - Screenshot: docs/ux/qa/new-invoice-file-390-en.png
-- Category: confusing copy. Severity: low. Status: open.
+- Category: confusing copy. Severity: low. Status: partly fixed (Task 31): chosen tab no longer looks primary; «Ejecutar agente» stays primary while the form is open (Inbox.tsx, Task 32).
 
 ### UX-24 Policy version list has no limit
 - Screen: policy. Width: 1440 and 390. Language: es and en.

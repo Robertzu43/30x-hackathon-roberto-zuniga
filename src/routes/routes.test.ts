@@ -320,6 +320,22 @@ describe('GET /api/invoices/:id (AC-26, AC-08, AC-64, AC-65)', () => {
     expect(en.trace[0]!.text).toMatch(/^I read/);
   });
 
+  // R-98 (AC-28 Clarified): the tab's language travels on the request (X-Lang) and wins over the stored one, then es.
+  it('answers in the request language (X-Lang) over the stored one: list headline, detail headline, trace and question', async () => {
+    db = testDb(workspace(['11']));
+    await call('POST', '/api/invoices/run');
+    const asEn = (path: string) => app.request(path, { headers: { Authorization: 'Bearer tok-a', 'X-Lang': 'en' } }, env); // tok-a stored es
+    const list = await json(await asEn('/api/invoices'));
+    expect(list[0]!.headline).toMatch(/^ESCALATE · 4,200 USD to Nube Sur LLC/);
+    const d = await json<{ headline: string; trace: Row[]; question: string; explanations: string[]; fixes: string[] }>(await asEn(`/api/invoices/${uid('A-11')}`));
+    expect(d.headline).toMatch(/^ESCALATE ·/);
+    expect(d.trace[0]!.text).toMatch(/^I read/);
+    expect(d.question).toMatch(/^Juan, invoice #2044/);
+    expect(d.explanations.join(' ')).not.toMatch(/ cumple| no cumple/);
+    const bad = await json(await app.request('/api/invoices', { headers: { Authorization: 'Bearer tok-en', 'X-Lang': 'fr' } }, env));
+    expect(bad[0]!.headline).toMatch(/^ESCALATE ·/); // an unknown value falls back to the stored language
+  });
+
   it('signs a stored file for 5 minutes (AC-08)', async () => {
     db = testDb(workspace([]));
     const { invoice } = (await (await call('POST', '/api/invoices', upload(await pdfFixture(), 'f.pdf', 'application/pdf'))).json()) as { invoice: Row };

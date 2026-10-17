@@ -1,6 +1,9 @@
 .period { max-width: 64rem; }
 .period label { font-size: var(--text-sm); color: var(--ink-2); display: flex; gap: 0.5rem; align-items: center; margin-bottom: 2rem; }
-.period input[type='month'] { font: inherit; padding: 0.25rem 0.5rem; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); }
+.period select { font: inherit; padding: 0.25rem 0.5rem; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--ink); }
+.period-state { display: grid; gap: 0.75rem; justify-items: start; margin-bottom: 1rem; } /* UX-13, UX-14: the message, then its next step */
+.period-state p { margin: 0; }
+.period-state a { display: inline-flex; align-items: center; min-height: 44px; }
 .period h2 { font-size: var(--text-sm); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-2); margin: 2.5rem 0 0.75rem; }
 .period-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 1rem; }
 .period-fig { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: 1.5rem; }

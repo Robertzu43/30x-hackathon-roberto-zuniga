@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import { describe, expect, it } from 'vitest';
+import { FULL_CONFIDENCE } from '../engine/__fixtures__/seed';
 import sql from '../../supabase/migrations/20261017000300_seed_andina.sql?raw';
 import { findBeneficiary } from '../engine/checks';
 import { decide, decideWithOverrides } from '../engine/decide';
@@ -15,7 +16,7 @@ const NOW = '2026-10-17T15:00:00Z';
 const EMPTY: PeriodState = { committed_usd: 0, paid_usd: 0, previous: [] };
 const NUBE: InvoiceFields = {
   payee_name: 'Nube Sur LLC', amount: 4200, currency: 'USD', invoice_number: '2044', issue_date: '2026-10-10', due_date: '2026-11-24',
-  concept: 'Suscripción mensual plataforma de datos', bank_account: 'ACH routing 026009593 cuenta 483920175', confidence: {},
+  concept: 'Suscripción mensual plataforma de datos', bank_account: 'ACH routing 026009593 cuenta 483920175', confidence: FULL_CONFIDENCE,
 };
 const inv = (f: Partial<InvoiceFields> = {}): Invoice => ({ id: 'i', received_at: '2026-10-10T15:00:00Z', source: 'pdf', fields: { ...NUBE, ...f } });
 const run = (i: Invoice, period = EMPTY) => decide(i, findBeneficiary(i.fields.payee_name, DIRECTORY), RULES, period, NOW);
@@ -26,6 +27,16 @@ describe('escalationQuestion (AC-65, D25)', () => {
   it('reproduces D25 verbatim for the Nube Sur fixture and juan@…', () => {
     const i = inv();
     expect(ask(i, run(i))).toBe('Juan, la factura #2044 de Nube Sur LLC por 4.200 USD supera tu umbral de aprobación de 2.500 USD. ¿La pago?');
+  });
+  it('an amount the engine cannot trust is "un monto que no pude leer" (R-71)', () => {
+    const i = inv({ amount: 1e15 });
+    expect(ask(i, run(i))).toContain('por un monto que no pude leer');
+  });
+  it('a changed account with the same last 4 names both accounts as read, es and en (R-73, AC-65)', () => {
+    const i = inv({ bank_account: 'ACH routing 026009593 cuenta 3920175' });
+    expect(ask(i, run(i))).toBe('Juan, la factura #2044 de Nube Sur LLC por 4.200 USD trae la cuenta «ACH routing 026009593 cuenta 3920175» y la registrada es «ACH routing 026009593 cuenta 483920175» ' +
+      'y supera tu umbral de aprobación de 2.500 USD. ¿La pago?');
+    expect(ask(i, run(i), 'en')).toContain('carries the account "ACH routing 026009593 cuenta 3920175" and the one on file is "ACH routing 026009593 cuenta 483920175"');
   });
   it('en version', () => {
     const i = inv();

@@ -17,8 +17,13 @@ export function parseAmount(raw: string): number | null {
   return ok ? Number(`${int.replace(/[.,]/g, '')}.${dot ?? comma ?? '0'}`) : null;
 }
 
-// null = no usable rate (missing, zero or negative): the engine escalates "moneda sin tasa".
+// R-71: the largest amount and USD amount the engine trusts; decisions.amount_usd numeric(14,2) can never overflow.
+export const MAX_AMOUNT = 1e11;
+
+// null = no usable rate (missing, zero or negative): the engine escalates "moneda sin tasa"; or a result that is not
+// finite or above MAX_AMOUNT (R-71).
 export function toUsd(amount: number, currency: string, rates: Record<string, number>): number | null {
   const rate = currency === 'USD' ? 1 : rates[currency];
-  return rate !== undefined && rate > 0 ? round2(amount * rate) : null;
+  const usd = rate !== undefined && rate > 0 ? round2(amount * rate) : null;
+  return usd !== null && usd <= MAX_AMOUNT ? usd : null;
 }

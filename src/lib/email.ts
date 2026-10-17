@@ -1,6 +1,7 @@
 // The only mail path (CLAUDE.md): SES v2 SendEmail signed with SigV4. Never throws; the caller records the result (R-29).
 // SES is in sandbox (R-19): mail reaches verified addresses only, anything else comes back { sent: false }.
 import { AwsClient } from 'aws4fetch';
+import { validFields } from '../engine/checks';
 import { explainCheck, headline, money } from '../engine/explain';
 import type { Decision, Invoice } from '../engine/types';
 import type { Env } from '../env';
@@ -44,7 +45,7 @@ const longDate = (d: string) => {
 // HTML-escaped: invoice fields come from a model reading arbitrary documents.
 export function escalationEmail(a: { lang: 'es'; question: string; invoice: Invoice; decision: Pick<Decision, 'outcome' | 'checks'>; approveUrl: string; rejectUrl: string }): Omit<EmailMessage, 'to'> {
   const { lang, invoice: inv, decision } = a;
-  const f = inv.fields;
+  const f = validFields(inv.fields); // R-71: an untrusted value reads desconocido
   const unknown = t(lang, 'value.unknown');
   const shown = {
     payee_name: f.payee_name, amount: f.amount === null ? null : `${money(f.amount, lang)} ${f.currency ?? ''}`.trim(), invoice_number: f.invoice_number,

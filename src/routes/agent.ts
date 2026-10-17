@@ -4,11 +4,13 @@ import { requireUser, type AppEnv } from '../lib/auth';
 import { must } from '../lib/supabase';
 
 // Every member route: a verified JWT and the user's own company (requireUser), then at most 60 POSTs a minute per user
-// (wrangler.toml RATE_LIMIT). No binding (unit tests, local dev) means no limit.
+// (AC-43, R-72): the database counter rate_limit_hit, keyed on the JWT's auth.uid(), one counted subrequest (R-56). The
+// Workers ratelimit binding refused nothing live, so it is gone. A failing counter lets the request through, logged.
 export const memberRoutes = () => new Hono<AppEnv>().use('*', requireUser, async (c, next) => {
-  if (c.req.method === 'POST' && c.env.RATE_LIMIT) {
-    c.var.budget.count(); // a binding call (R-56)
-    if (!(await c.env.RATE_LIMIT.limit({ key: c.var.user.id })).success) return c.json({ error: 'Demasiadas solicitudes, intenta en un minuto' }, 429);
+  if (c.req.method === 'POST') {
+    const r = await c.var.db.rpc('rate_limit_hit').then((x) => x, (e: unknown) => ({ data: null, error: e }));
+    if (r.error) console.error('rate limit: counter failed, request allowed', r.error);
+    else if (r.data === false) return c.json({ error: 'Demasiadas solicitudes, intenta en un minuto' }, 429);
   }
   await next();
 });

@@ -14,7 +14,7 @@ import type { Env } from '../env';
 import { adminClient } from '../lib/admin';
 import { requireUser, type AppEnv } from '../lib/auth';
 import { documentToText, extractFields } from '../lib/llm';
-import { must, type Db } from '../lib/supabase';
+import { isUuid, must, type Db } from '../lib/supabase';
 import { hashToken, verifyToken } from '../lib/tokens';
 
 const ERRORS = {
@@ -145,6 +145,7 @@ approvals.post('/approve/:token', async (c) => {
 // Dashboard "Aprobar" / "Rechazar": actor_email from the verified JWT (AC-37); writes no approval_uses row (AC-36).
 for (const action of ['approve', 'reject'] as const) {
   approvals.post(`/invoices/:id/${action}`, requireUser, async (c) => {
+    if (!isUuid(c.req.param('id'))) return refuse(c, 'not_found'); // R-74: as an unknown id, no lookup
     const body = await bodyOf(c);
     if (!body) return refuse(c, 'bad_request');
     const { db, companyId, user } = c.var;

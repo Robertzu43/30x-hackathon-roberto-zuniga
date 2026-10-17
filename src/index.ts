@@ -23,6 +23,11 @@ app.route('/api/agent', agent);
 app.route('/api/demo', demo); // Task 10: public overview (AC-45) and Reiniciar demo (AC-47)
 app.route('/api', approvals); // Task 9: approval links and dashboard answers
 app.all('/api/*', (c) => c.json({ error: 'not_found' }, 404));
+// R-74: anything uncaught is a logged JSON 500, never Hono's plain-text one.
+app.onError((e, c) => {
+  console.error('api: uncaught', c.req.method, c.req.path, e instanceof Error ? e.message : e);
+  return c.json({ error: 'No pude completar la solicitud; intenta de nuevo.' }, 500);
+});
 
 export { app };
 // fetch serves the API and the SPA; scheduled is the 5-minute cron (wrangler.toml [triggers], AC-62).

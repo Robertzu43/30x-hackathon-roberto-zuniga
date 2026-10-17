@@ -27,7 +27,8 @@ function conclude(checks: Check[], amount_usd: number | null, invoice: Invoice, 
   return { outcome, checks, amount_usd, payment };
 }
 
-export function decide(invoice: Invoice, beneficiary: Beneficiary | null, rules: PolicyRules | null, period: PeriodState, now: string): Decision {
+export function decide(read: Invoice, beneficiary: Beneficiary | null, rules: PolicyRules | null, period: PeriodState, now: string): Decision {
+  const invoice = { ...read, fields: C.validFields(read.fields) }; // R-71: every check sees only trusted fields
   const { amount, currency } = invoice.fields;
   const amountUsd = amount === null || !currency ? null : toUsd(amount, currency, rules?.fx_rates ?? {});
   const ctx: C.CheckContext = { invoice, beneficiary, rules, period, now, amountUsd };

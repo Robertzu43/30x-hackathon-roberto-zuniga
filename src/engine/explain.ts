@@ -1,5 +1,6 @@
 // Record sentences (AC-27, AC-28, D7): fixed templates filled with stored values, never written by a model.
 import { t, type Lang } from '../i18n';
+import { validFields } from './checks';
 import { outcomeOf } from './decide';
 import type { Beneficiary, Check, Decision, Invoice } from './types';
 
@@ -25,6 +26,13 @@ const READ_FIELDS = ['payee_name', 'amount', 'currency', 'invoice_number'];
 export const fieldList = (lang: Lang, fields: string[]) => list(lang, fields.map((f) => t(lang, `field.${f}`)));
 const missingOf = (c: Check) => (c.values.missing ? String(c.values.missing).split(', ') : ['amount']); // null missing = amount <= 0
 const illegible = (c: Check) => READ_FIELDS.every((f) => missingOf(c).includes(f));
+
+// R-73: a changed account whose last 4 digits read the same on both sides (or are missing) is named by both accounts
+// as read: no record ever says two identical endings differ. '' or the '_text' template suffix.
+export const asRead = (c: Check) => {
+  const a = c.values.invoice_account_last4, b = c.values.directory_account_last4;
+  return c.id === 'beneficiario_cuenta' && c.verdict === 'no_cumple' && (!a || !b || a === b) ? '_text' : '';
+};
 
 export function agreementText(values: Check['values'], lang: Lang): string {
   const type = values.agreement_type;
@@ -59,7 +67,7 @@ const checkVars = (c: Check, lang: Lang, receivedAt: string, policyVersion?: num
 // "Límite por pago: 2.500 USD ≤ 5.000 USD → cumple"; overridden: "… → no cumple · aprobado por <correo> <canal>" (R-22).
 export function explainCheck(check: Check, lang: Lang, receivedAt: string, policyVersion?: number | null): string {
   const v = checkVars(check, lang, receivedAt, policyVersion);
-  const variant = check.verdict !== 'cumple' ? ''
+  const variant = check.verdict !== 'cumple' ? asRead(check)
     : check.id === 'moneda' && check.values.currency === 'USD' ? '_usd'
     : check.id === 'beneficiario_permitido' && !check.values.directory_name ? '_open' : '';
   const verdict = t(lang, `verdict.${check.verdict}`);
@@ -74,7 +82,7 @@ const blocking = (checks: Check[]) => checks.filter((c) => c.verdict !== 'cumple
   .sort((a, b) => Number(outcomeOf([b]) === 'FRENAR') - Number(outcomeOf([a]) === 'FRENAR'));
 
 export const motives = (checks: Check[], lang: Lang, receivedAt: string) => blocking(checks).map((c) =>
-  c.id === 'lectura' && illegible(c) ? t(lang, 'motive.lectura.illegible') : fill(lang, `motive.${c.id}.${c.verdict}`, checkVars(c, lang, receivedAt)));
+  c.id === 'lectura' && illegible(c) ? t(lang, 'motive.lectura.illegible') : fill(lang, `motive.${c.id}.${c.verdict}${asRead(c)}`, checkVars(c, lang, receivedAt)));
 
 // "Qué tendría que pasar para pagarla": one line per blocking check. Spanish lines start with "Que " (R-27).
 export const whatWouldPay = (decision: Pick<Decision, 'checks'>, lang: Lang): string[] =>
@@ -82,7 +90,7 @@ export const whatWouldPay = (decision: Pick<Decision, 'checks'>, lang: Lang): st
 
 // "ESCALAR · 4.200 USD a Nube Sur LLC: supera el umbral de aprobación de 2.500 USD".
 export function headline(decision: Pick<Decision, 'outcome' | 'checks'>, invoice: Invoice, beneficiary: Beneficiary | null, lang: Lang): string {
-  const { amount, currency, payee_name } = invoice.fields;
+  const { amount, currency, payee_name } = validFields(invoice.fields); // R-71: an untrusted value is never printed as read
   const base = {
     outcome: t(lang, `outcome.${decision.outcome}`),
     amount: amount === null ? t(lang, 'value.unknown_amount') : `${money(amount, lang)} ${currency ?? ''}`.trim(),

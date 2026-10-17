@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import { describe, expect, it } from 'vitest';
+import { FULL_CONFIDENCE } from './__fixtures__/seed';
 import sql from '../../supabase/migrations/20261017000300_seed_andina.sql?raw';
 import en from '../i18n/en';
 import es from '../i18n/es';
@@ -15,7 +16,7 @@ const NOW = '2026-10-17T15:00:00Z';
 const EMPTY: PeriodState = { committed_usd: 0, paid_usd: 0, previous: [] };
 const LAURA: InvoiceFields = {
   payee_name: 'Laura Méndez', amount: 2500, currency: 'USD', invoice_number: '1042', issue_date: '2026-10-10',
-  due_date: '2026-11-24', concept: 'Retainer mensual de desarrollo', bank_account: 'Bancolombia ahorros 0012-3456-4821', confidence: {},
+  due_date: '2026-11-24', concept: 'Retainer mensual de desarrollo', bank_account: 'Bancolombia ahorros 0012-3456-4821', confidence: FULL_CONFIDENCE,
 };
 const NUBE: InvoiceFields = { ...LAURA, payee_name: 'Nube Sur LLC', amount: 4200, invoice_number: '2044',
   concept: 'Suscripción mensual plataforma de datos', bank_account: 'ACH routing 026009593 cuenta 483920175' };
@@ -58,6 +59,18 @@ describe('explainCheck (AC-27, AC-28, AC-22, R-22)', () => {
     const c = get(run({ bank_account: 'Nequi 300-555-7310' }).d.checks, 'beneficiario_cuenta');
     expect(explainCheck(c, 'es', RECEIVED)).toBe('Cuenta bancaria: la factura termina en 7310 y la registrada en 4821 → no cumple');
     expect(explainCheck(c, 'en', RECEIVED)).toBe('Bank account: the invoice\'s account ends in 7310 and the one on file in 4821 → does not pass');
+  });
+  it('#15 and the Pixel Lab line vs Laura: different endings are named (R-73)', () => {
+    const c = get(run({ bank_account: 'Banco de Bogotá ahorros 112-45009-8' }).d.checks, 'beneficiario_cuenta');
+    expect(explainCheck(c, 'es', RECEIVED)).toBe('Cuenta bancaria: la factura termina en 0098 y la registrada en 4821 → no cumple');
+  });
+  it('a changed account with the same last 4 names both accounts as read, never "1332 y 1332", es and en (R-73)', () => {
+    const { d, i, b } = run({ bank_account: 'Bancolombia ahorros 3456-4821' });
+    const c = get(d.checks, 'beneficiario_cuenta');
+    expect(explainCheck(c, 'es', RECEIVED)).toBe('Cuenta bancaria: la cuenta de la factura («Bancolombia ahorros 3456-4821») no coincide con la registrada («Bancolombia ahorros 0012-3456-4821») → no cumple');
+    expect(explainCheck(c, 'en', RECEIVED)).toBe('Bank account: the invoice\'s account ("Bancolombia ahorros 3456-4821") does not match the one on file ("Bancolombia ahorros 0012-3456-4821") → does not pass');
+    expect(headline(d, i, b, 'es')).toBe('ESCALAR · 2.500 USD a Laura Méndez: cuenta cambiada (la de la factura es «Bancolombia ahorros 3456-4821» y la registrada «Bancolombia ahorros 0012-3456-4821»)');
+    expect(headline(d, i, b, 'en')).toBe('ESCALATE · 2,500 USD to Laura Méndez: changed account (the invoice\'s is "Bancolombia ahorros 3456-4821" and the one on file "Bancolombia ahorros 0012-3456-4821")');
   });
   it('an overridden check reads "no cumple · aprobado por <correo> <canal>", never plain cumple (R-22)', () => {
     const i = inv(NUBE), b = findBeneficiary('Nube Sur LLC', DIRECTORY);
@@ -114,6 +127,10 @@ describe('headline (AC-27, AC-13)', () => {
     const { d, i, b } = run({});
     expect(headline(d, i, b, 'es')).toBe('PAGAR · 2.500 USD a Laura Méndez, retainer de octubre, dentro de reglas');
     expect(headline(d, i, b, 'en')).toBe('PAY · 2,500 USD to Laura Méndez, October retainer, within the rules');
+  });
+  it('an amount the engine cannot trust reads as unknown, never as printed (R-71)', () => {
+    const { d, i, b } = run({ amount: 1e15 });
+    expect(headline(d, i, b, 'es')).toMatch(/^ESCALAR · monto desconocido a Laura Méndez: /);
   });
   it('ESCALAR over the approval threshold, es and en', () => {
     const { d, i, b } = run(NUBE);

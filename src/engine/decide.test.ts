@@ -2,7 +2,8 @@
 import { describe, expect, it } from 'vitest';
 import sql from '../../supabase/migrations/20261017000300_seed_andina.sql?raw';
 import { round2 } from '../lib/money';
-import { bogotaDay, findBeneficiary } from './checks';
+import { FULL_CONFIDENCE, seedConfidence } from './__fixtures__/seed';
+import { bogotaDay, findBeneficiary, validFields } from './checks';
 import { decide, decideWithOverrides, HUMAN_OVERRIDABLE, outcomeOf } from './decide';
 import {
   CHECK_IDS, type Beneficiary, type Check, type CheckId, type Decision, type Invoice, type InvoiceFields,
@@ -24,7 +25,7 @@ const BY = { email: 'roberto@hacketix.com', channel: 'dashboard' as const };
 const fields = (p: Partial<InvoiceFields> = {}): InvoiceFields => ({
   payee_name: 'Laura Méndez', amount: 2500, currency: 'USD', invoice_number: '1042', issue_date: '2026-10-10',
   due_date: '2026-11-24', concept: 'Retainer mensual de desarrollo', bank_account: 'Bancolombia ahorros 0012-3456-4821',
-  confidence: {}, ...p,
+  confidence: FULL_CONFIDENCE, ...p,
 });
 const inv = (p: Partial<InvoiceFields> = {}, received_at = RECEIVED): Invoice =>
   ({ id: 'inv-x', received_at, source: 'pdf', fields: fields(p) });
@@ -130,12 +131,76 @@ describe('reading (AC-14, R-10)', () => {
     expect([d.outcome, check(d, 'lectura').verdict, d.amount_usd]).toEqual(['ESCALAR', 'no_verificado', null]);
   });
   it('a field read with confidence below 0.8 is not trusted', () => {
-    expect(check(run({ confidence: { amount: 0.79 } }), 'lectura').verdict).toBe('no_verificado');
-    expect(check(run({ confidence: { amount: 0.8 } }), 'lectura').verdict).toBe('cumple');
+    expect(check(run({ confidence: { ...FULL_CONFIDENCE, amount: 0.79 } }), 'lectura').verdict).toBe('no_verificado');
+    expect(check(run({ confidence: { ...FULL_CONFIDENCE, amount: 0.8 } }), 'lectura').verdict).toBe('cumple');
   });
   it('zero or negative amount is not a payable reading', () => {
     expect(run({ amount: 0 }).outcome).toBe('ESCALAR');
     expect(check(run({ amount: -2500 }), 'lectura').verdict).toBe('no_verificado');
+  });
+});
+
+// R-71: a field the engine cannot trust is unknown (null for every check), and unknown is never cumple.
+describe('field contract: unknown is never cumple (AC-16, R-71)', () => {
+  const bad = (p: Record<string, unknown>, o?: Opts) => run(p as Partial<InvoiceFields>, o);
+  const expectEscalar = (d: Decision, id: CheckId) => {
+    expect(d.outcome).toBe('ESCALAR');
+    expect([id, check(d, id).verdict]).toEqual([id, 'no_verificado']);
+  };
+  it("due_date 'not-a-date' -> vencimiento no_verificado, ESCALAR (never PAGAR)", () => {
+    const d = bad({ due_date: 'not-a-date' });
+    expectEscalar(d, 'vencimiento');
+    expect(failing(d)).toEqual(['vencimiento']);
+  });
+  it('an impossible calendar date (2026-02-31) is unknown', () => {
+    expectEscalar(bad({ due_date: '2026-02-31' }), 'vencimiento');
+    expectEscalar(bad({ due_date: '2026-11-24T00:00:00Z' }), 'vencimiento');
+  });
+  it('confidence {} -> every field unknown, Lectura no_verificado, ESCALAR', () => {
+    const d = bad({ confidence: {} });
+    expectEscalar(d, 'lectura');
+    for (const id of ['beneficiario_cuenta', 'duplicado_probable', 'vencimiento'] as const) expect(check(d, id).verdict).toBe('no_verificado');
+    expect(d.payment).toBeNull();
+  });
+  it('a missing or non-numeric confidence entry makes only that field unknown', () => {
+    const noBank = Object.fromEntries(Object.entries(FULL_CONFIDENCE).filter(([k]) => k !== 'bank_account'));
+    expect(failing(bad({ confidence: noBank }))).toEqual(['beneficiario_cuenta']);
+    expect(failing(bad({ confidence: { ...FULL_CONFIDENCE, concept: '0.99' } }))).toEqual(['duplicado_probable']);
+    expect(failing(bad({ confidence: { ...FULL_CONFIDENCE, payee_name: 0.79 } }))).toContain('lectura');
+  });
+  it('amount "100" (a string, even if it reads right) -> Lectura no_verificado, ESCALAR', () => {
+    const d = bad({ amount: '100' });
+    expectEscalar(d, 'lectura');
+    expect(d.amount_usd).toBeNull();
+  });
+  it('amount 1e15 -> ESCALAR with amount_usd null, never throws', () => {
+    let d: Decision | undefined;
+    expect(() => { d = bad({ amount: 1e15 }); }).not.toThrow();
+    expectEscalar(d!, 'lectura');
+    expect(d!.amount_usd).toBeNull();
+  });
+  it('amount NaN, Infinity or 0 -> unknown; exactly 1e11 is a valid reading', () => {
+    for (const amount of [NaN, Infinity, 0]) expectEscalar(bad({ amount }), 'lectura');
+    expect(check(bad({ amount: 1e11 }), 'lectura').verdict).toBe('cumple');
+  });
+  it('a policy rate that pushes amount_usd over 1e11 -> amount_usd null, moneda and USD checks no_verificado, ESCALAR', () => {
+    const d = bad({ amount: 1e10, currency: 'COP' }, { rules: { ...RULES, fx_rates: { ...RULES.fx_rates, COP: 100 } } });
+    expect(d.amount_usd).toBeNull();
+    for (const id of ['moneda', 'limite_pago', 'umbral_aprobacion', 'presupuesto_periodo', 'saldo_cuenta'] as const) expectEscalar(d, id);
+    expect(bad({ amount: 1e10, currency: 'COP' }, { rules: { ...RULES, fx_rates: { COP: 1e308 } } }).amount_usd).toBeNull();
+  });
+  it.each(['eur1', 'usd1', 'usd', 'US', ''])('currency %j -> Lectura no_verificado, ESCALAR', (currency) => {
+    expectEscalar(bad({ currency }), 'lectura');
+  });
+  it('currency is trimmed before use', () => expect(bad({ currency: ' USD ' }).outcome).toBe('PAGAR'));
+  it('a blank or non-string text field is unknown', () => {
+    expectEscalar(bad({ payee_name: '   ' }), 'lectura');
+    expectEscalar(bad({ concept: 42 }), 'duplicado_probable');
+    expectEscalar(bad({ bank_account: ' ' }), 'beneficiario_cuenta');
+  });
+  it('validFields nulls each invalid field and keeps the rest', () => {
+    const f = validFields({ ...fields(), issue_date: '2025-02-29', amount: '100' as unknown as number, confidence: { ...FULL_CONFIDENCE, concept: 0.5 } });
+    expect([f.issue_date, f.amount, f.concept, f.payee_name, f.due_date]).toEqual([null, null, null, 'Laura Méndez', '2026-11-24']);
   });
 });
 
@@ -184,6 +249,60 @@ describe('beneficiary (AC-19, D4, R-05)', () => {
     expect(check(d, 'beneficiario_permitido').values).toMatchObject({ directory_name: 'Laura Méndez' });
     expect(check(d, 'beneficiario_cuenta').values).toMatchObject({ invoice_account_last4: '4821', directory_account_last4: '4821' });
     expect(check(d, 'acuerdo').values).toMatchObject({ agreement_type: 'retainer', agreement_amount_usd: 2500, cap_usd: null, period: 'monthly' });
+  });
+});
+
+// R-73: "Cuenta" compares account numbers (digit groups), not text. Lines are the demo documents' printed lines.
+describe('account comparison (AC-19, R-73)', () => {
+  const acct = (payee: string, line: string, dir?: string) => {
+    const directory = dir === undefined ? DIRECTORY : DIRECTORY.map((b) => (b.name === payee ? { ...b, bank_account: dir } : b));
+    return check(run({ payee_name: payee, bank_account: line }, { directory }), 'beneficiario_cuenta');
+  };
+  it.each([
+    ['Laura Méndez', 'Bancolombia ahorros 0012-3456-4821', '0012-3456-4821'],
+    ['Laura Méndez', 'BANCOLOMBIA AHORROS 001234564821', undefined],
+    ['Laura Méndez', 'Cuenta de ahorros Bancolombia No. 0012.3456.4821', undefined],
+    ['Nube Sur LLC', 'ACH routing 026009593 cuenta 483920175', undefined],
+    ['Nube Sur LLC', 'Routing 026009593 Account 483920175', undefined],
+    ['Nube Sur LLC', 'Cuenta 483920175', undefined],
+    ['Forma Studio', 'IBAN ES91 2100 0418 4502 0005 1332', 'ES91 2100 0418 4502 0005 1332'],
+    ['Forma Studio', 'ES9121000418450200051332', undefined],
+    ['Ana Souza', 'Pix chave 11 98765-4302', undefined],
+    ['Ana Souza', 'PIX: ana@souza.com.br', 'pix ANA@SOUZA.COM.BR'],
+  ])('%s: %j is the account on file -> cumple', (payee, line, dir) => {
+    expect(acct(payee, line, dir).verdict).toBe('cumple');
+  });
+  it.each([
+    ['routing number alone', 'Nube Sur LLC', 'ACH routing 026009593', undefined],
+    ['a different number', 'Nube Sur LLC', 'ACH routing 026009593 cuenta 483920176', undefined],
+    ['old account plus a new one', 'Nube Sur LLC', 'Cuenta 483920175, nueva cuenta 991234567', undefined],
+    ['old account plus a new hyphenated one', 'Laura Méndez', 'Bancolombia ahorros 0012-3456-4821 / Nequi 300-555-7310', undefined],
+    ['a partial tail', 'Laura Méndez', 'Bancolombia ahorros 3456-4821', undefined],
+    ['a long number the directory lacks (AC-19 Clarified ii)', 'Nube Sur LLC', 'ACH routing 026009593 cuenta 483920175', '483920175'],
+    ['#15 Nequi instead of Bancolombia', 'Laura Méndez', 'Nequi 300-555-7310', undefined],
+    ['a Pix key that differs', 'Ana Souza', 'Pix ana@souza.com', 'Pix ana@souza.com.br'],
+    ['no digits at all', 'Laura Méndez', 'Bancolombia ahorros', undefined],
+  ])('%s -> no_cumple, cuenta cambiada', (_, payee, line, dir) => {
+    expect(acct(payee, line, dir)).toMatchObject({ verdict: 'no_cumple', values: { reason: 'cuenta cambiada' } });
+  });
+  it('snapshots both accounts as read and the last 4 digits that differ (R-29)', () => {
+    expect(acct('Laura Méndez', 'Nequi 300-555-7310').values).toMatchObject({
+      invoice_account: 'Nequi 300-555-7310', directory_account: 'Bancolombia ahorros 0012-3456-4821',
+      invoice_account_last4: '7310', directory_account_last4: '4821',
+    });
+    expect(acct('Laura Méndez', 'Banco de Bogotá ahorros 112-45009-8').values).toMatchObject({ invoice_account_last4: '0098', directory_account_last4: '4821' });
+    expect(acct('Nube Sur LLC', 'Cuenta 483920175, nueva cuenta 991234567').values.invoice_account_last4).toBe('4567');
+    expect(acct('Nube Sur LLC', 'Routing 026009593 Account 483920175').values).toMatchObject({ invoice_account_last4: '0175', directory_account_last4: '0175' });
+  });
+  // F1: member-controlled text must stay linear; any doubt about a line with a crowd of digit groups is no_cumple.
+  it.each([['001234564821 ', 4000], ['0012-3456-4821 1234567 ', 2500]])('a ~50 KB line of %j x%i is no_cumple, fast', (unit, n) => {
+    const t0 = performance.now();
+    const c = acct('Laura Méndez', unit.repeat(n));
+    expect(c.verdict).toBe('no_cumple');
+    expect(performance.now() - t0).toBeLessThan(250);
+  });
+  it('a partial tail keeps the same last 4 on both sides (the sentence then names both accounts)', () => {
+    expect(acct('Laura Méndez', 'Bancolombia ahorros 3456-4821').values).toMatchObject({ invoice_account_last4: '4821', directory_account_last4: '4821' });
   });
 });
 
@@ -334,7 +453,7 @@ function seedInvoices(now: string): Array<{ inv: Invoice; row: SeedRow }> {
     const at = row.prev_month ? start - 5 * 864e5 : start + ((Date.parse(now) - start) * Number(row.nn)) / 30;
     const received_at = new Date(at).toISOString();
     const day = bogotaDay(received_at);
-    const f = { ...row.fields, issue_date: row.issue === null ? null : addDays(day, row.issue), due_date: row.due === null ? null : addDays(day, row.due), confidence: {} };
+    const f = { ...row.fields, issue_date: row.issue === null ? null : addDays(day, row.issue), due_date: row.due === null ? null : addDays(day, row.due), confidence: seedConfidence(row.fields) };
     return { row, inv: { id: `seed-${row.nn}`, received_at, source: row.source, fields: f } };
   }).sort((a, b) => a.inv.received_at.localeCompare(b.inv.received_at) || a.row.nn.localeCompare(b.row.nn));
 }

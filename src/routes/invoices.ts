@@ -6,10 +6,11 @@ import { decodeCursor, runAgent } from '../agent/loop';
 import { directorio, findBeneficiary } from '../agent/tools';
 import { agentTrace, type StoredDecision } from '../agent/trace';
 import { explainCheck, whatWouldPay } from '../engine/explain';
+import { validFields } from '../engine/checks';
 import type { Invoice, InvoiceFields } from '../engine/types';
 import { documentToText, extractFields } from '../lib/llm';
 import type { AppEnv } from '../lib/auth';
-import { must } from '../lib/supabase';
+import { isUuid, must } from '../lib/supabase';
 import { memberRoutes } from './agent';
 
 // One invoice_current row: the invoice and its latest decision's columns (outcome null = pending).
@@ -97,6 +98,7 @@ export const invoices = memberRoutes()
 
   .get('/:id', async (c) => {
     const { db, companyId, lang } = c.var;
+    if (!isUuid(c.req.param('id'))) return c.json({ error: 'Factura no encontrada' }, 404); // R-74
     const row: Current | null = must(await db.from('invoice_current').select('*').eq('company_id', companyId).eq('id', c.req.param('id')).maybeSingle());
     if (!row) return c.json({ error: 'Factura no encontrada' }, 404);
     const [decisions, directory, company, notification]: [StoredDecision[], Awaited<ReturnType<typeof directorio>>, { is_demo: boolean }, { email_sent: boolean; sent_to: string } | null] = await Promise.all([
@@ -114,9 +116,10 @@ export const invoices = memberRoutes()
       : null;
     const policy = latest?.policy_version == null ? null
       : must(await db.from('policies').select('name, version, created_at').eq('company_id', companyId).eq('version', latest.policy_version).maybeSingle());
-    const invoice = { ...row, fields: row.fields as InvoiceFields };
+    // R-71: "Lo que leí" shows a field the engine cannot trust as unknown, as every check saw it.
+    const invoice = { ...row, fields: (row.fields && validFields(row.fields)) as InvoiceFields };
     return c.json({
-      invoice: row,
+      invoice,
       headline: row[`headline_${lang}`],
       decisions,
       beneficiary: findBeneficiary(row.fields?.payee_name ?? null, directory),

@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { seedConfidence } from '../engine/__fixtures__/seed';
 import sql from '../../supabase/migrations/20261017000300_seed_andina.sql?raw';
 import { bogotaDay } from '../engine/checks';
 import type { Env } from '../env';
@@ -32,7 +33,7 @@ function seedInvoices(companyId: string, only?: string[]) {
     return {
       id: `${companyId}-${r.nn}`, company_id: companyId, source: r.source, file_path: null, raw_text: r.raw_text, archived: false,
       expected_outcome: r.expected_outcome, received_at,
-      fields: { ...r.fields, issue_date: r.issue === null ? null : addDays(day, r.issue), due_date: r.due === null ? null : addDays(day, r.due), confidence: {} },
+      fields: { ...r.fields, issue_date: r.issue === null ? null : addDays(day, r.issue), due_date: r.due === null ? null : addDays(day, r.due), confidence: seedConfidence(r.fields) },
     };
   });
 }
@@ -140,6 +141,16 @@ describe('lee: the reader only when fields are missing (AC-61, AC-13)', () => {
     expect(await runAgent(deps(), 'A', 'pending', 'manual')).toMatchObject({ ESCALAR: 1 });
     expect(ai.run).toHaveBeenCalledOnce();
     const lectura = (decisionsOf('A-13')[0]!.checks as Array<{ id: string; verdict: string }>).find((c) => c.id === 'lectura');
+    expect(lectura?.verdict).toBe('no_verificado');
+  });
+});
+
+describe('lee: a payee_name that is not a string (R-71)', () => {
+  it.each([['a number', 123], ['an array', ['Laura Méndez']], ['an object', {}], ['true', true]])('%s escalates with lectura no_verificado, not an error', async (_, payee) => {
+    db = fakeDb(workspace('A', { only: ['01'] }));
+    (db.tables.invoices![0]!.fields as Record<string, unknown>).payee_name = payee;
+    expect(await runAgent(deps(), 'A', 'pending', 'manual')).toMatchObject({ ESCALAR: 1, errors: 0 });
+    const lectura = (decisionsOf('A-01')[0]!.checks as Array<{ id: string; verdict: string }>).find((c) => c.id === 'lectura');
     expect(lectura?.verdict).toBe('no_verificado');
   });
 });

@@ -1,7 +1,6 @@
 export interface Env {
   AI: Ai;
   KV: KVNamespace;
-  RATE_LIMIT?: RateLimit; // optional until Task 8 binds it
   // public vars (wrangler.toml)
   SUPABASE_URL: string;
   SUPABASE_ANON_KEY: string;

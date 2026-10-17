@@ -1,6 +1,6 @@
 // The 13 checks (D15, AC-16..AC-23). Each is pure: (ctx) => Check. Missing input or rule = 'no_verificado' (AC-18).
-import { round2 } from '../lib/money';
-import type { Beneficiary, Check, CheckId, Invoice, PeriodState, PolicyRules, PreviousInvoice, Verdict } from './types';
+import { MAX_AMOUNT, round2 } from '../lib/money';
+import type { Beneficiary, Check, CheckId, Invoice, InvoiceFields, PeriodState, PolicyRules, PreviousInvoice, Verdict } from './types';
 
 export interface CheckContext {
   invoice: Invoice;
@@ -18,8 +18,8 @@ const month = (iso: string) => bogotaDay(iso).slice(0, 7);
 const addDays = (day: string, n: number) => new Date(Date.parse(`${day}T00:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
 
 // Case, accents and punctuation ignored (AC-19, AC-20).
-const norm = (s: string | null) =>
-  (s ?? '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[.,]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+const norm = (s: unknown) =>
+  (typeof s === 'string' ? s : '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[.,]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
 export const nameKey = (s: string | null) => norm(s).replace(/ (sas|ltda|inc|llc)$/, '');
 const accountKey = (s: string | null) => norm(s).replace(/ /g, '');
 const last4 = (s: string | null) => (s ? s.replace(/\D/g, '').slice(-4) || null : null);
@@ -38,11 +38,31 @@ function earlier({ invoice, beneficiary, period }: CheckContext): PreviousInvoic
     (beneficiary ? p.beneficiary_id === beneficiary.id : !p.beneficiary_id && nameKey(p.payee_name) === nameKey(invoice.fields.payee_name)));
 }
 
+// R-71: a field the engine cannot trust is unknown (null for every check): no confidence entry >= 0.8, or the wrong
+// type or shape. Never repaired: "100" as a string is unknown even when it reads right.
+const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v : null);
+const day = (v: unknown) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`)) &&
+  new Date(`${v}T00:00:00Z`).toISOString().startsWith(v) ? v : null); // 2026-02-31 parses as 03-03: not a real date
+const currency = (v: unknown) => (typeof v === 'string' && /^[A-Z]{3}$/.test(v.trim()) ? v.trim() : null);
+const amount = (v: unknown) => (typeof v === 'number' && v > 0 && v <= MAX_AMOUNT ? v : null); // NaN and Infinity fail too
+export function validFields(f: InvoiceFields): InvoiceFields {
+  const conf: Record<string, unknown> = f.confidence ?? {};
+  const pick = <T>(k: keyof InvoiceFields, ok: (v: unknown) => T | null) => {
+    const c = conf[k];
+    return typeof c === 'number' && c >= 0.8 ? ok(f[k]) : null;
+  };
+  return {
+    ...f, payee_name: pick('payee_name', text), amount: pick('amount', amount), currency: pick('currency', currency),
+    invoice_number: pick('invoice_number', text), issue_date: pick('issue_date', day), due_date: pick('due_date', day),
+    concept: pick('concept', text), bank_account: pick('bank_account', text),
+  };
+}
+
+// Runs on validFields' output: unknown = null.
 const READ = ['payee_name', 'amount', 'currency', 'invoice_number'] as const;
 export function lectura({ invoice: { fields: f } }: CheckContext): Check {
-  const missing = READ.filter((k) => f[k] === null || (f.confidence?.[k] ?? 1) < 0.8);
-  const bad = missing.length > 0 || !(f.amount !== null && f.amount > 0);
-  return make('lectura', bad ? 'no_verificado' : 'cumple', missing.join(', ') || f.amount, null, { missing: missing.join(', ') || null });
+  const missing = READ.filter((k) => f[k] === null);
+  return make('lectura', missing.length ? 'no_verificado' : 'cumple', missing.join(', ') || f.amount, null, { missing: missing.join(', ') || null });
 }
 
 export function beneficiario_permitido({ invoice, beneficiary, rules }: CheckContext): Check {
@@ -52,11 +72,56 @@ export function beneficiario_permitido({ invoice, beneficiary, rules }: CheckCon
     { payee_name: invoice.fields.payee_name, directory_name: beneficiary?.name ?? null });
 }
 
+// R-73 (AC-19 Clarified). The account segment: the last run of whitespace-separated tokens that are only digits once
+// - . / are removed ("ACH routing 026009593 cuenta 483920175" -> 483920175), as digits.
+function segment(s: string): string {
+  const tokens = s.trim().split(/\s+/);
+  let i = tokens.length;
+  while (i > 0 && /^\d+$/.test(tokens[i - 1]!.replace(/[-./]/g, ''))) i--;
+  return tokens.slice(i).join('').replace(/\D/g, '');
+}
+
+// Same account when the directory's segment (or all its digits) is one or more consecutive whole digit groups of the
+// invoice line, and no other long number (6+ digits, groups joined only by separators) the directory lacks is printed.
+// A directory key under 6 digits (Pix email, wallet) is compared as text. last4: what the record shows for the invoice.
+function compareAccounts(inv: string, dir: string): { same: boolean; last4: string | null } {
+  const dirAcct = segment(dir), dirAll = dir.replace(/\D/g, '');
+  if (dirAcct.length < 6) return { same: accountKey(inv) === accountKey(dir), last4: last4(inv) };
+  const g = [...inv.matchAll(/\d+/g)].map((m) => ({ d: m[0], at: m.index, end: m.index + m[0].length }));
+  if (g.length > 40) return { same: false, last4: last4(inv) }; // ponytail: a line with a crowd of digit groups is no_cumple (R-73's conservative side); the stray scan below is O(n) per match
+  const known = new Set(dir.match(/\d+/g));
+  const stray = (a: number, b: number): string[] => {
+    const out: string[] = [];
+    let cur = '';
+    const skip = (i: number) => (i >= a && i <= b) || known.has(g[i]!.d);
+    const flush = () => { if (cur.length >= 6) out.push(cur); cur = ''; };
+    g.forEach((x, i) => {
+      if (i === 0 || skip(i - 1) || !/^[\s\-./]+$/.test(inv.slice(g[i - 1]!.end, x.at))) flush();
+      if (!skip(i)) cur += x.d;
+    });
+    flush();
+    return out;
+  };
+  const runs: Array<[number, number]> = [];
+  for (let a = 0; a < g.length; a++) {
+    for (let b = a, s = ''; b < g.length && s.length < dirAll.length; b++) {
+      s += g[b]!.d;
+      if (s === dirAcct || s === dirAll) runs.push([a, b]);
+    }
+  }
+  if (runs.some(([a, b]) => !stray(a, b).length)) return { same: true, last4: dirAll.slice(-4) };
+  const [a, b] = runs[0] ?? [0, -1];
+  return { same: false, last4: stray(a, b)[0]?.slice(-4) ?? last4(inv) };
+}
+
 export function beneficiario_cuenta({ invoice, beneficiary }: CheckContext): Check {
   const inv = invoice.fields.bank_account, dir = beneficiary?.bank_account ?? null;
-  const v: Verdict = !inv || !dir ? 'no_verificado' : accountKey(inv) === accountKey(dir) ? 'cumple' : 'no_cumple';
-  return make('beneficiario_cuenta', v, last4(inv), last4(dir), {
-    invoice_account_last4: last4(inv), directory_account_last4: last4(dir), reason: v === 'no_cumple' ? 'cuenta cambiada' : null,
+  const cmp = inv && dir ? compareAccounts(inv, dir) : null;
+  const v: Verdict = !cmp ? 'no_verificado' : cmp.same ? 'cumple' : 'no_cumple';
+  const invLast4 = cmp ? cmp.last4 : last4(inv), dirLast4 = dir ? segment(dir).slice(-4) || last4(dir) : null;
+  return make('beneficiario_cuenta', v, invLast4, dirLast4, {
+    invoice_account_last4: invLast4, directory_account_last4: dirLast4, invoice_account: inv, directory_account: dir,
+    reason: v === 'no_cumple' ? 'cuenta cambiada' : null,
   });
 }
 
@@ -137,6 +202,8 @@ export function periodo({ invoice, now }: CheckContext): Check {
 
 export function moneda({ invoice: { fields: f }, rules, amountUsd }: CheckContext): Check {
   const rate = f.currency === 'USD' ? 1 : (rules?.fx_rates?.[f.currency ?? ''] ?? null);
-  const v: Verdict = !f.currency || (!rules?.fx_rates && f.currency !== 'USD') ? 'no_verificado' : rate !== null && rate > 0 ? 'cumple' : 'no_cumple';
+  // A known amount whose USD value is unusable (not finite or above 1e11, R-71) cannot be checked against USD rules.
+  const v: Verdict = !f.currency || (!rules?.fx_rates && f.currency !== 'USD') ? 'no_verificado'
+    : !(rate !== null && rate > 0) ? 'no_cumple' : f.amount !== null && amountUsd === null ? 'no_verificado' : 'cumple';
   return make('moneda', v, f.currency, rate, { amount: f.amount, currency: f.currency, rate, amount_usd: amountUsd });
 }

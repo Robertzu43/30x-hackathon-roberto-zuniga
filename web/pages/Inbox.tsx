@@ -1,11 +1,12 @@
 // Bandeja (AC-29, AC-63, AC-66, AC-70): every invoice with its outcome chip and one-line headline, filters,
-// "Ejecutar agente" (shared run loop, Task 11b), "Nueva factura" (AC-11) and when the agent last ran.
+// "Ejecutar agente" (shared run loop, Task 11b), "Nueva factura" (AC-11), when the agent last ran and «Pregúntale a Thesaurus» (AC-67).
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { findBeneficiary, nameKey } from '../../src/engine/checks';
 import type { Beneficiary } from '../../src/engine/types';
 import type { PageRoute } from '../App';
 import { api } from '../api';
+import AskThesaurus from '../components/AskThesaurus';
 import NewInvoice from '../components/NewInvoice';
 import { OutcomeChip, type Outcome } from '../components/OutcomeChip';
 import { RunProgress, useRunAgent } from '../components/RunProgress';
@@ -118,6 +119,7 @@ export default function Inbox() {
           ))}
         </ul>
       )}
+      <AskThesaurus />
     </section>
   );
 }

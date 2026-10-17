@@ -129,3 +129,32 @@ test('while the tour is shown, the top bar sits above the dim layer and stays on
   expect(rule).toMatch(/position: sticky/);
   expect(Number(rule.match(/z-index: (\d+)/)?.[1])).toBeGreaterThan(Number(css.match(/\.tour \{[^}]*z-index: (\d+)/)?.[1]));
 });
+
+// AC-79: step 1 says where the AI acts and where code decides; the Detalle step names «Leído por IA» and the chat.
+const WHERE = 'Dónde actúa la IA: lee cada factura (Amazon Nova Lite en AWS Bedrock) y responde tus preguntas sobre el registro («Pregúntale a Thesaurus»). Dónde decide el código: las 13 reglas, la tabla de consecuencias y la tasa de cambio del día; solo el código puede escribir PAGAR.';
+
+test('step 1 (Bandeja) carries the AI/code sentence, after the six stages (AC-79, AC-66)', async () => {
+  setup();
+  await screen.findByRole('heading', { name: 'Bandeja' });
+  const text = screen.getByRole('dialog').textContent!;
+  expect(text).toContain(WHERE);
+  expect(text).toContain('percibe → lee → consulta sus herramientas → decide → actúa → rinde cuentas');
+});
+
+test('the Detalle step names «Leído por IA» and «Pregúntale a Thesaurus», in es and en (AC-79)', async () => {
+  setup();
+  for (const title of ['Bandeja', 'Nueva factura', 'Ejecutar agente']) {
+    await screen.findByRole('heading', { name: title });
+    next();
+  }
+  await screen.findByRole('heading', { name: 'Detalle de decisión' });
+  expect(screen.getByRole('dialog').textContent).toMatch(/«Leído por IA».*«Pregúntale a Thesaurus»/);
+  fireEvent.click(screen.getByRole('button', { name: 'to-en' }));
+  await screen.findByRole('heading', { name: 'Decision detail' });
+  expect(screen.getByRole('dialog').textContent).toMatch(/"Read by AI".*"Ask Thesaurus"/);
+  fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+  await screen.findByRole('heading', { name: 'Inbox' });
+  expect(screen.getByRole('dialog').textContent).toContain('Where code decides: the 13 rules');
+});

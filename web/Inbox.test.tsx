@@ -247,3 +247,14 @@ test('a payee outside the directory is one entry labelled as read on its oldest 
   choosePayee('Pixel Lab S.A.S.');
   expect(items()).toHaveLength(2);
 });
+
+test('Bandeja carries «Pregúntale a Thesaurus» below the list; it asks about the whole inbox, no invoice (AC-67)', async () => {
+  const { f } = setup({ 'POST /api/ask': { answer: 'Quedan 3.200 USD del presupuesto de octubre.', provider: 'Amazon Nova Lite (AWS Bedrock)', remaining: 8 } });
+  await screen.findByText(/supera el umbral/);
+  const ask = screen.getByRole('region', { name: 'Pregúntale a Thesaurus' });
+  expect(screen.getAllByRole('list').at(-1)!.compareDocumentPosition(ask) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  fireEvent.change(within(ask).getByLabelText('Tu pregunta sobre el registro'), { target: { value: '¿cuánto queda del presupuesto?' } });
+  fireEvent.click(within(ask).getByRole('button', { name: 'Preguntar' }));
+  expect(await within(ask).findByText('Te quedan 8 preguntas hoy')).toBeTruthy();
+  expect(calls(f, 'POST', '/api/ask').map(([, i]) => JSON.parse(String(i!.body)))).toEqual([{ question: '¿cuánto queda del presupuesto?', lang: 'es' }]);
+});

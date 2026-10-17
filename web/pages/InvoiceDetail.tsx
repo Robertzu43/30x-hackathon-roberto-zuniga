@@ -1,4 +1,4 @@
-// Detalle de decisión (AC-08, AC-26, AC-28, AC-34, AC-64, AC-65, R-22, R-55): every line comes from GET /api/invoices/:id.
+// Detalle de decisión (AC-08, AC-26, AC-28, AC-34, AC-64, AC-65, AC-67, AC-77, R-22, R-55): every line comes from GET /api/invoices/:id.
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import type { StoredDecision, TraceStep } from '../../src/agent/trace';
@@ -8,7 +8,9 @@ import type { PageRoute } from '../App';
 import { api, ApiError } from '../api';
 import { useSession } from '../auth';
 import AgentTrace from '../components/AgentTrace';
+import AskThesaurus from '../components/AskThesaurus';
 import ChecksTable from '../components/ChecksTable';
+import ReadingPanel, { type Reading } from '../components/ReadingPanel';
 import Timeline from '../components/Timeline';
 import { useT } from '../i18n';
 import './detail.css';
@@ -26,6 +28,10 @@ type Detail = {
   trace: TraceStep[];
   question: string | null;
   file_url: string | null;
+  /** AC-77: null when no model read it (seeded, inserted with fields, or the reader was unavailable). */
+  reading?: Reading | null;
+  /** R-97: who read it, decided by the API (never derived here); absent on an older API, treated as 'none'. */
+  reading_status?: 'ai' | 'preloaded' | 'unavailable' | 'none';
 };
 
 const FIELDS = ['payee_name', 'amount', 'currency', 'invoice_number', 'issue_date', 'due_date', 'concept', 'bank_account'] as const;
@@ -61,7 +67,7 @@ export default function InvoiceDetail() {
     const d = new Date(iso);
     return Number.isNaN(d.getTime()) ? iso : new Intl.DateTimeFormat(locale, { dateStyle: 'long', timeZone }).format(d);
   };
-  const shown = (k: (typeof FIELDS)[number], v: string | number) =>
+  const shown = (k: string, v: string | number) =>
     typeof v === 'number' ? money(v, lang) : k.endsWith('_date') ? date(v, 'UTC') : v;
   const pct = new Intl.NumberFormat(locale, { style: 'percent' });
 
@@ -85,7 +91,9 @@ export default function InvoiceDetail() {
 
   const { invoice, file_url: url } = data;
   const payment = latest.outcome === 'PAGAR' ? latest.payment : null;
-  const unreached = invoice.fields?.read_error === 'lector_no_disponible';
+  const status = data.reading_status ?? 'none';
+  const unreached = status === 'unavailable';
+  const reading = status === 'ai' ? data.reading ?? null : null;
   return (
     <section className="detail">
       {back}
@@ -94,7 +102,9 @@ export default function InvoiceDetail() {
       <div className="detail-cols">
         <div>
           <h2>{t('detail.read')}</h2>
+          {reading && <p className="ai-badge">{t('detail.read_by', { provider: reading.provider })}</p>}
           {unreached && <p className="detail-notice">{t('detail.reader_unavailable')}</p>}
+          {status === 'preloaded' && <p className="muted">{t('detail.preloaded')}</p>}
           {invoice.source === 'email' || invoice.source === 'chat' ? (
             invoice.raw_text ? <pre className="detail-doc">{invoice.raw_text}</pre> : <p className="muted">{t('detail.file.none')}</p>
           ) : !url ? (
@@ -107,7 +117,7 @@ export default function InvoiceDetail() {
               <a href={url} target="_blank" rel="noreferrer">{t('detail.file.open')}</a>
             </>
           )}
-          <dl className="detail-fields">
+          {reading ? <ReadingPanel fields={reading.fields} show={shown} /> : <dl className="detail-fields">
             {FIELDS.map((k) => {
               const v = invoice.fields?.[k] ?? null;
               const c = invoice.fields?.confidence?.[k];
@@ -119,7 +129,7 @@ export default function InvoiceDetail() {
                 </div>
               );
             })}
-          </dl>
+          </dl>}
         </div>
         <div>
           <ChecksTable explanations={data.explanations} checks={latest.checks} />
@@ -162,6 +172,7 @@ export default function InvoiceDetail() {
           <Timeline decisions={data.decisions} />
         </div>
       </div>
+      <AskThesaurus invoiceId={id} />
     </section>
   );
 }

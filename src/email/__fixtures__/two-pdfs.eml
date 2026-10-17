@@ -1,0 +1,28 @@
+From: Laura Méndez <laura@mendez.example>
+To: facturas+andina-labs@correo.thesaurus.example
+Subject: Factura adjunta
+Date: Fri, 17 Oct 2026 10:00:00 -0500
+Message-ID: <Factura-adjunta@mendez.example>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="thesaurus-boundary"
+
+--thesaurus-boundary
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+Hola, adjunto mi cuenta de cobro. Saludos, Laura
+--thesaurus-boundary
+Content-Type: application/pdf; name="cuenta-1053.pdf"
+Content-Disposition: attachment; filename="cuenta-1053.pdf"
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjcgQ3VlbnRhIGRlIGNvYnJvICMxMDUzIExhdXJhIE3DqW5kZXogMi41MDAgVVNEIEJh
+bmNvbG9tYmlhIGFob3Jyb3MgMDAxMi0zNDU2LTQ4MjE=
+--thesaurus-boundary
+Content-Type: application/pdf; name="cuenta-1054.pdf"
+Content-Disposition: attachment; filename="cuenta-1054.pdf"
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjcgQ3VlbnRhIGRlIGNvYnJvICMxMDU0IExhdXJhIE3DqW5kZXogMi41MDAgVVNEIEJh
+bmNvbG9tYmlhIGFob3Jyb3MgMDAxMi0zNDU2LTQ4MjE=
+--thesaurus-boundary--

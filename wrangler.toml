@@ -17,6 +17,7 @@ JEV_ENABLED = "false"
 DEMO_EMAIL = "demo@andina-labs.example"
 APP_URL = "https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev"  # approval links built outside a request (cron)
 PORTAL_URL = "https://facturas.30x-hackathon-roberto-zuniga.workers.dev"  # the vendor portal Worker (portal/wrangler.toml, AC-83, AC-86)
+INBOUND_EMAIL_DOMAIN = ""  # email intake (AC-87): facturas+<slug>@<this domain>; set it after Email Routing sends the catch-all here (AC-88)
 FX_PROVIDER = "yahoo"  # first market-rate provider: "yahoo" or "er-api"; the other is the fallback (AC-73)
 
 [triggers]

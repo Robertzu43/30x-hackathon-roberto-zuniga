@@ -11,6 +11,7 @@ export interface Env {
   DEMO_EMAIL: string;
   APP_URL?: string;
   PORTAL_URL: string; // the facturas Worker's origin (AC-86)
+  INBOUND_EMAIL_DOMAIN?: string; // email intake's domain (AC-87); empty until Roberto adds one (AC-88)
   FX_PROVIDER?: string; // 'yahoo' (default) or 'er-api': the first provider of the FX chain (AC-73)
   // secrets (wrangler secret put)
   AWS_SES_ACCESS_KEY_ID: string;

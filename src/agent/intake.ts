@@ -1,5 +1,5 @@
-// The public intake (D34, AC-83..AC-85, AC-38 Amended): a vendor with no account sends an invoice to the company resolved
-// from a public slug. No user JWT exists, so it uses the service-role client and writes only the invoice (origin
+// The public intake (D34, D35, AC-83..AC-85, AC-87, AC-38 Amended): a vendor with no account sends an invoice to the
+// company resolved from a public slug, through the portal or by email (src/email/inbound.ts). No user JWT exists, so it uses the service-role client and writes only the invoice (origin
 // 'portal'), its file under <company_id>/, its status token hash and the intake counters; every query after the slug
 // lookup names that company. The decision is runAgent's, written by record.ts, like the cron. Replies and the status page
 // are templates filled with recorded values (R-90.10): no model writes vendor-facing text.
@@ -16,7 +16,9 @@ import { hashToken } from '../lib/tokens';
 import { runAgent } from './loop';
 import { recordedFields } from './trace';
 
-export interface IntakeInput { slug: string; text?: string; file?: { bytes: ArrayBuffer }; ip: string }
+// ip: the client IP (portal) or the sender's key (email) for the per-key limit; null counts only the company (an email's
+// later invoices: the sender is counted once per email).
+export interface IntakeInput { slug: string; text?: string; file?: { bytes: ArrayBuffer }; ip: string | null }
 export type Bilingual<T> = Record<Lang, T>;
 export type IntakeResult = { ok: true; reply: Bilingual<string[]>; status_path: string }
   | { ok: false; error: 'not_found' | 'file' | 'text' | 'rate_ip' | 'rate_company' | 'failed' };
@@ -75,7 +77,8 @@ const latestDecision = async (db: Db, companyId: string, invoiceId: string): Pro
   must(await db.from('decisions').select('outcome, actor, checks, created_at').eq('company_id', companyId).eq('invoice_id', invoiceId)
     .order('seq', { ascending: false }).limit(1).maybeSingle());
 
-export async function intake(env: Env, budget: Budget, input: IntakeInput): Promise<IntakeResult> {
+// email: set by email intake only (never by the portal's RPC): origin 'email', the From as sender, a body is source 'email'.
+export async function intake(env: Env, budget: Budget, input: IntakeInput, email?: { sender: string | null }): Promise<IntakeResult> {
   const text = typeof input.text === 'string' ? input.text : '';
   const bytes = input.file?.bytes;
   const kind = bytes instanceof ArrayBuffer && bytes.byteLength && bytes.byteLength <= MAX_BYTES
@@ -101,14 +104,15 @@ export async function intake(env: Env, budget: Budget, input: IntakeInput): Prom
   budget.count(); // the reader (R-56)
   const fields = await extractFields(env, doc); // the vendor's note is never read (R-90.5)
   must(await db.from('invoices').insert({
-    id, company_id: company.id, source: kind?.source ?? 'chat', origin: 'portal', file_path: filePath, raw_text: doc?.slice(0, MAX_TEXT) ?? null,
-    fields, sender_note: kind && text.trim() ? text.slice(0, MAX_NOTE) : null,
+    id, company_id: company.id, source: kind?.source ?? (email ? 'email' : 'chat'), origin: email ? 'email' : 'portal', file_path: filePath,
+    raw_text: doc?.slice(0, MAX_TEXT) ?? null, fields, ...(email && { sender: email.sender }),
+    sender_note: !email && kind && text.trim() ? text.slice(0, MAX_NOTE) : null,
   }));
   const token = b64url(crypto.getRandomValues(new Uint8Array(32)));
   must(await db.from('portal_status_tokens').insert({ token_hash: await hashToken(token), company_id: company.id, invoice_id: id }));
   // If the agent cannot run, the invoice stays pending and the cron decides it (R-60); the reply then says «en revisión».
-  await runAgent({ db, env, budget }, company.id, [id], 'ingest', null, 'portal')
-    .catch((e) => console.error('portal: intake not decided', id, e instanceof Error ? e.message : e));
+  await runAgent({ db, env, budget }, company.id, [id], 'ingest', null, email ? 'email' : 'portal')
+    .catch((e) => console.error('intake: not decided', id, e instanceof Error ? e.message : e));
   const name = company.name ?? '';
   const status = statusText(await latestDecision(db, company.id, id), name);
   const unread = fields.read_error === 'lector_no_disponible';

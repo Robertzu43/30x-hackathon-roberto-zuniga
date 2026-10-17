@@ -1,0 +1,10 @@
+From: Laura Méndez <laura@mendez.example>
+To: facturas+andina-labs@correo.thesaurus.example
+Subject: Cuenta en HTML
+Date: Fri, 17 Oct 2026 10:00:00 -0500
+Message-ID: <Cuenta-en-HTML@mendez.example>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+<html><head><style>p{color:red}</style></head><body><p>Cuenta de cobro <b>#1059</b></p><p>Laura M&eacute;ndez &middot; 2.500 USD</p></body></html>

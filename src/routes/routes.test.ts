@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 // Route tests for Task 8b: the app from src/index.ts with fake Supabase clients, never the real Supabase.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { uid } from './__fixtures__/uid';
 import { seedConfidence } from '../engine/__fixtures__/seed';
 import sql from '../../supabase/migrations/20261017000300_seed_andina.sql?raw';
 import { fakeDb } from '../agent/__fixtures__/fake-db';
@@ -121,7 +122,7 @@ function seedInvoices(id: string, only?: string[]) {
     const received_at = new Date(r.prev_month ? start - 5 * 864e5 : start + ((Date.parse(NOW) - start) * Number(r.nn)) / 30).toISOString();
     const day = bogotaDay(received_at);
     return {
-      id: `${id}-${r.nn}`, company_id: id, source: r.source, raw_text: r.raw_text, archived: false, expected_outcome: r.expected_outcome, received_at,
+      id: uid(`${id}-${r.nn}`), company_id: id, source: r.source, raw_text: r.raw_text, archived: false, expected_outcome: r.expected_outcome, received_at,
       file_path: r.source === 'pdf' ? `/demo/invoices/${r.nn}.pdf` : r.source === 'image' ? `/demo/invoices/${r.nn}.png` : null,
       fields: { ...r.fields, issue_date: r.issue === null ? null : addDays(day, r.issue), due_date: r.due === null ? null : addDays(day, r.due), confidence: seedConfidence(r.fields) },
     };
@@ -129,7 +130,7 @@ function seedInvoices(id: string, only?: string[]) {
 }
 const workspace = (only?: string[]) => ({
   policies: [{ id: 'p1', company_id: 'A', version: 1, name: 'Política general', rules: SEED.rules, created_at: '2026-10-01T00:00:00Z' }],
-  beneficiaries: SEED.beneficiaries.map((b: object, i: number) => ({ ...b, id: `A-b${i}`, company_id: 'A', archived: false })),
+  beneficiaries: SEED.beneficiaries.map((b: object, i: number) => ({ ...b, id: uid(`A-b${i}`), company_id: 'A', archived: false })),
   invoices: [...seedInvoices('A', only), ...seedInvoices('B', ['01'])],
 });
 
@@ -197,10 +198,10 @@ describe('invoices (AC-11, AC-29)', () => {
     db = testDb(workspace(['01', '11']));
     await call('POST', '/api/invoices/run');
     const es = await json(await call('GET', '/api/invoices'));
-    expect(es.map((r) => r.id).sort()).toEqual(['A-01', 'A-11']);
-    expect(es.find((r) => r.id === 'A-01')!.headline).toMatch(/^PAGAR · 2\.500 USD a Laura Méndez/);
+    expect(es.map((r) => r.id).sort()).toEqual([uid('A-01'), uid('A-11')]);
+    expect(es.find((r) => r.id === uid('A-01'))!.headline).toMatch(/^PAGAR · 2\.500 USD a Laura Méndez/);
     const en = await json(await call('GET', '/api/invoices', undefined, 'tok-en'));
-    expect(en.find((r) => r.id === 'A-11')!.headline).toMatch(/^ESCALATE · 4,200 USD to Nube Sur LLC/);
+    expect(en.find((r) => r.id === uid('A-11'))!.headline).toMatch(/^ESCALATE · 4,200 USD to Nube Sur LLC/);
   });
 
   it('POST /api/invoices/run decides every pending invoice (trigger manual) and returns the counts', async () => {
@@ -209,7 +210,7 @@ describe('invoices (AC-11, AC-29)', () => {
     expect(r.status).toBe(200);
     expect(await r.json()).toEqual({ PAGAR: 1, FRENAR: 1, ESCALAR: 1, errors: 0, remaining: 0, cursor: null });
     expect(db.tables.agent_runs!.map((x) => [x.company_id, x.trigger])).toEqual([['A', 'manual']]);
-    expect(decisionsOf('B-01')).toEqual([]);
+    expect(decisionsOf(uid('B-01'))).toEqual([]);
   });
 
   it('POST /api/invoices with pasted email text: stores the read fields, runs the agent (ingest) and returns the decision', async () => {
@@ -279,10 +280,10 @@ describe('GET /api/invoices/:id (AC-26, AC-08, AC-64, AC-65)', () => {
   it('returns the timeline, beneficiary, explanations, fixes, policy, trace and the stored question of an ESCALAR', async () => {
     db = testDb(workspace(['11']));
     await call('POST', '/api/invoices/run');
-    const r = await call('GET', '/api/invoices/A-11');
+    const r = await call('GET', `/api/invoices/${uid('A-11')}`);
     expect(r.status).toBe(200);
     const d = (await r.json()) as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
-    expect(d.invoice).toMatchObject({ id: 'A-11', outcome: 'ESCALAR' });
+    expect(d.invoice).toMatchObject({ id: uid('A-11'), outcome: 'ESCALAR' });
     expect(d.headline).toMatch(/^ESCALAR · 4\.200 USD a Nube Sur LLC/);
     expect(d.decisions.map((x: Row) => [x.seq, x.outcome, x.actor])).toEqual([[1, 'ESCALAR', 'agent']]);
     expect(d.beneficiary).toMatchObject({ name: 'Nube Sur LLC' });
@@ -298,10 +299,10 @@ describe('GET /api/invoices/:id (AC-26, AC-08, AC-64, AC-65)', () => {
   it('writes the stored decision policy version into the currency line (R-49) and answers in English for an en user', async () => {
     db = testDb(workspace(['21']));
     await call('POST', '/api/invoices/run');
-    const es = await json<{ explanations: string[]; question: unknown }>(await call('GET', '/api/invoices/A-21'));
+    const es = await json<{ explanations: string[]; question: unknown }>(await call('GET', `/api/invoices/${uid('A-21')}`));
     expect(es.explanations.some((x) => x.includes('v1'))).toBe(true);
     expect(es.question).toBeNull();
-    const en = await json<{ trace: Row[]; headline: string }>(await call('GET', '/api/invoices/A-21', undefined, 'tok-en'));
+    const en = await json<{ trace: Row[]; headline: string }>(await call('GET', `/api/invoices/${uid('A-21')}`, undefined, 'tok-en'));
     expect(en.headline).toMatch(/^PAY ·/);
     expect(en.trace[0]!.text).toMatch(/^I read/);
   });
@@ -323,33 +324,33 @@ describe('GET /api/invoices/:id (AC-26, AC-08, AC-64, AC-65)', () => {
     ['a Storage key with traversal', 'A/../B/x.pdf'],
   ])('returns file_url null for %s', async (_, file_path) => {
     db = testDb(workspace(['13']));
-    db.tables.invoices!.find((i) => i.id === 'A-13')!.file_path = file_path;
-    expect((await json(await call('GET', '/api/invoices/A-13'))).file_url).toBeNull();
+    db.tables.invoices!.find((i) => i.id === uid('A-13'))!.file_path = file_path;
+    expect((await json(await call('GET', `/api/invoices/${uid('A-13')}`))).file_url).toBeNull();
   });
 
   it('returns a seeded demo document as is and a Storage key under the company folder signed', async () => {
     db = testDb(workspace(['13', '14']));
-    db.tables.invoices!.find((i) => i.id === 'A-13')!.file_path = '/demo/invoices/01.png';
-    db.tables.invoices!.find((i) => i.id === 'A-14')!.file_path = 'A/abc.jpg';
-    expect((await json(await call('GET', '/api/invoices/A-13'))).file_url).toBe('/demo/invoices/01.png');
-    expect((await json(await call('GET', '/api/invoices/A-14'))).file_url).toBe('https://signed.test/files/A/abc.jpg?expires=300');
+    db.tables.invoices!.find((i) => i.id === uid('A-13'))!.file_path = '/demo/invoices/01.png';
+    db.tables.invoices!.find((i) => i.id === uid('A-14'))!.file_path = 'A/abc.jpg';
+    expect((await json(await call('GET', `/api/invoices/${uid('A-13')}`))).file_url).toBe('/demo/invoices/01.png');
+    expect((await json(await call('GET', `/api/invoices/${uid('A-14')}`))).file_url).toBe('https://signed.test/files/A/abc.jpg?expires=300');
   });
 
   it('"Lo que leí" shows a field the engine cannot trust as unknown (null), confidence kept (R-71)', async () => {
     db = testDb(workspace(['13']));
-    Object.assign(db.tables.invoices!.find((i) => i.id === 'A-13')!.fields as Row, { due_date: 'not-a-date', amount: '2400' });
-    const d = await json<{ invoice: { fields: Row } }>(await call('GET', '/api/invoices/A-13'));
+    Object.assign(db.tables.invoices!.find((i) => i.id === uid('A-13'))!.fields as Row, { due_date: 'not-a-date', amount: '2400' });
+    const d = await json<{ invoice: { fields: Row } }>(await call('GET', `/api/invoices/${uid('A-13')}`));
     expect(d.invoice.fields).toMatchObject({ due_date: null, amount: null, payee_name: 'Pixel Lab', confidence: { amount: 0.97 } });
   });
   it('a pending invoice has no trace, no question and no explanations', async () => {
     db = testDb(workspace(['13']));
-    const d = await json(await call('GET', '/api/invoices/A-13'));
+    const d = await json(await call('GET', `/api/invoices/${uid('A-13')}`));
     expect(d).toMatchObject({ decisions: [], trace: [], question: null, explanations: [], fixes: [], policy: null, file_url: null });
   });
 
   it("answers 404 for another company's invoice", async () => {
     db = testDb(workspace(['01']));
-    const r = await call('GET', '/api/invoices/B-01');
+    const r = await call('GET', `/api/invoices/${uid('B-01')}`);
     expect(r.status).toBe(404);
   });
 });
@@ -397,8 +398,8 @@ describe('policy (AC-30, AC-31, R-14, R-41)', () => {
   const decided = () => {
     db = testDb(workspace(['01', '04', '11']));
     db.tables.decisions!.push(
-      { id: 'd4', invoice_id: 'A-04', company_id: 'A', seq: 1, outcome: 'FRENAR', actor: 'agent', amount_usd: 9800, checks: [] },
-      { id: 'd11', invoice_id: 'A-11', company_id: 'A', seq: 1, outcome: 'ESCALAR', actor: 'agent', amount_usd: 4200, checks: [], headline_es: 'ESCALAR · 4.200 USD a Nube Sur LLC' },
+      { id: 'd4', invoice_id: uid('A-04'), company_id: 'A', seq: 1, outcome: 'FRENAR', actor: 'agent', amount_usd: 9800, checks: [] },
+      { id: 'd11', invoice_id: uid('A-11'), company_id: 'A', seq: 1, outcome: 'ESCALAR', actor: 'agent', amount_usd: 4200, checks: [], headline_es: 'ESCALAR · 4.200 USD a Nube Sur LLC' },
     );
   };
 
@@ -430,7 +431,7 @@ describe('policy (AC-30, AC-31, R-14, R-41)', () => {
     const out = (await r.json()) as { policy: Row; would_change: Row[] };
     expect(out.policy).toMatchObject({ company_id: 'A', version: 2, name: 'Límite 1.000', rules });
     expect(db.writes.map((w) => w.payload)).toEqual([{ company_id: 'A', name: 'Límite 1.000', rules }]); // no version sent (R-41)
-    expect(out.would_change.map((w) => [w.invoice_id, w.from, w.to])).toEqual([['A-01', null, 'FRENAR'], ['A-11', 'ESCALAR', 'FRENAR']]); // a pending row's from is null (R-68)
+    expect(out.would_change.map((w) => [w.invoice_id, w.from, w.to])).toEqual([[uid('A-01'), null, 'FRENAR'], [uid('A-11'), 'ESCALAR', 'FRENAR']]); // a pending row's from is null (R-68)
     expect(String(out.would_change[0]!.headline)).toMatch(/^FRENAR · 2\.500 USD a Laura Méndez/);
     expect(db.tables.decisions).toHaveLength(2);
     expect(db.rpcs.filter((x) => x.name === 'insert_decision')).toEqual([]);
@@ -456,9 +457,9 @@ describe('policy (AC-30, AC-31, R-14, R-41)', () => {
     const r = await call('POST', '/api/policy/reevaluate');
     expect(r.status).toBe(200);
     expect(await r.json()).toEqual({ PAGAR: 0, FRENAR: 2, ESCALAR: 0, errors: 0, remaining: 0, cursor: null });
-    expect(decisionsOf('A-01').map((d) => d.outcome)).toEqual(['FRENAR']);
-    expect(decisionsOf('A-11').map((d) => d.outcome)).toEqual(['ESCALAR', 'FRENAR']);
-    expect(decisionsOf('A-04')).toHaveLength(1);
+    expect(decisionsOf(uid('A-01')).map((d) => d.outcome)).toEqual(['FRENAR']);
+    expect(decisionsOf(uid('A-11')).map((d) => d.outcome)).toEqual(['ESCALAR', 'FRENAR']);
+    expect(decisionsOf(uid('A-04'))).toHaveLength(1);
     expect(db.tables.agent_runs!.map((x) => [x.company_id, x.trigger])).toEqual([['A', 'reevaluate']]);
   });
 });
@@ -481,7 +482,7 @@ describe('beneficiaries (AC-33)', () => {
     expect(r.status).toBe(201);
     expect(await r.json()).toMatchObject({ ...pixel, company_id: 'A' });
     await call('POST', '/api/invoices/run');
-    const d = await json(await call('GET', '/api/invoices/A-13'));
+    const d = await json(await call('GET', `/api/invoices/${uid('A-13')}`));
     expect((d.explanations as string[]).find((x) => x.startsWith('Beneficiario'))).toMatch(/→ cumple$/);
   });
 
@@ -500,12 +501,12 @@ describe('beneficiaries (AC-33)', () => {
 
   it('PUT /:id edits a beneficiary of the company; another company id answers 404', async () => {
     db = testDb(workspace([]));
-    db.tables.beneficiaries!.push({ id: 'b', company_id: 'B', name: 'De otra' });
-    const r = await call('PUT', '/api/beneficiaries/A-b0', { ...pixel, name: 'Laura Méndez', bank_account: 'Nequi 300-555-7310' });
+    db.tables.beneficiaries!.push({ id: uid('b'), company_id: 'B', name: 'De otra' });
+    const r = await call('PUT', `/api/beneficiaries/${uid('A-b0')}`, { ...pixel, name: 'Laura Méndez', bank_account: 'Nequi 300-555-7310' });
     expect(r.status).toBe(200);
-    expect(await r.json()).toMatchObject({ id: 'A-b0', bank_account: 'Nequi 300-555-7310', updated_at: NOW.replace('Z', '.000Z') });
-    expect((await call('PUT', '/api/beneficiaries/b', pixel)).status).toBe(404);
-    expect(db.tables.beneficiaries!.find((b) => b.id === 'b')!.name).toBe('De otra');
+    expect(await r.json()).toMatchObject({ id: uid('A-b0'), bank_account: 'Nequi 300-555-7310', updated_at: NOW.replace('Z', '.000Z') });
+    expect((await call('PUT', `/api/beneficiaries/${uid('b')}`, pixel)).status).toBe(404);
+    expect(db.tables.beneficiaries!.find((b) => b.id === uid('b'))!.name).toBe('De otra');
   });
 });
 
@@ -527,10 +528,10 @@ describe('GET /api/period (AC-44, R-01)', () => {
     const d = (invoice: string, seq: number, outcome: string, actor = 'agent') =>
       ({ id: `${invoice}-${seq}`, invoice_id: invoice, company_id: 'A', seq, outcome, actor, checks: [{ id: 'lectura' }] });
     db.tables.decisions!.push(
-      d('A-11', 1, 'PAGAR'), // expected ESCALAR: a violation
-      d('A-01', 1, 'ESCALAR'), d('A-01', 2, 'PAGAR', 'human'), // expected PAGAR, a person approved it: not autonomous
-      d('A-04', 1, 'ESCALAR'), d('A-04', 2, 'FRENAR'), // expected FRENAR, reached only after "Reevaluar": not autonomous
-      d('A-13', 1, 'ESCALAR'), d('A-13', 2, 'PAGAR'), // expected ESCALAR, paid after a policy change: not a violation
+      d(uid('A-11'), 1, 'PAGAR'), // expected ESCALAR: a violation
+      d(uid('A-01'), 1, 'ESCALAR'), d(uid('A-01'), 2, 'PAGAR', 'human'), // expected PAGAR, a person approved it: not autonomous
+      d(uid('A-04'), 1, 'ESCALAR'), d(uid('A-04'), 2, 'FRENAR'), // expected FRENAR, reached only after "Reevaluar": not autonomous
+      d(uid('A-13'), 1, 'ESCALAR'), d(uid('A-13'), 2, 'PAGAR'), // expected ESCALAR, paid after a policy change: not a violation
     );
     expect(await json(await call('GET', '/api/period'))).toMatchObject({ violations: 1, autonomy: { n: 0, m: 4 }, autonomy_pct: 0 });
   });
@@ -569,6 +570,35 @@ describe('GET /api/period (AC-44, R-01)', () => {
   });
 });
 
+// R-74: a malformed id is the route's own 404 JSON with no lookup; anything uncaught under /api/* is a JSON 500.
+describe('malformed ids and uncaught errors (R-74)', () => {
+  const lookups = () => db.queries.filter((q) => q.table !== 'company_members').length + db.writes.length +
+    db.rpcs.filter((r) => r.name !== 'rate_limit_hit').length;
+  it.each([
+    ['GET', '/api/invoices/not-a-uuid', undefined, { error: 'Factura no encontrada' }],
+    ['GET', `/api/invoices/${encodeURIComponent("1' or '1'='1")}`, undefined, { error: 'Factura no encontrada' }],
+    ['GET', `/api/invoices/${uid('A-11')}x`, undefined, { error: 'Factura no encontrada' }],
+    ['POST', '/api/invoices/A-11/approve', { seq: 1 }, { error: 'not_found', message: 'Factura no encontrada' }],
+    ['POST', '/api/invoices/123/reject', { seq: 1 }, { error: 'not_found', message: 'Factura no encontrada' }],
+    ['PUT', '/api/beneficiaries/A-b0', { name: 'Laura Méndez' }, { error: 'Beneficiario no encontrado' }],
+  ])('%s %s -> 404 with the route text, no database lookup', async (method, path, body, answer) => {
+    db = testDb(workspace(['11']));
+    const before = lookups();
+    const r = await call(method, path, body);
+    expect([r.status, await r.json()]).toEqual([404, answer]);
+    expect(lookups()).toBe(before);
+  });
+  it('an uncaught error under /api/* -> 500 JSON, logged, never plain text', async () => {
+    db = testDb(workspace(['11']));
+    db.fail.query = (q) => (q.table === 'invoice_current' ? 'connection reset' : undefined);
+    const r = await call('GET', '/api/invoices');
+    expect(r.status).toBe(500);
+    expect(r.headers.get('Content-Type')).toMatch(/^application\/json/);
+    expect(await r.json()).toEqual({ error: 'No pude completar la solicitud; intenta de nuevo.' });
+    expect(vi.mocked(console.error)).toHaveBeenCalled();
+  });
+});
+
 describe('GET /api/agent/last-run (AC-63)', () => {
   it('returns the newest run of the own company or a cron tick, never another company run', async () => {
     db = testDb({ agent_runs: [
@@ -601,11 +631,16 @@ describe('rate limit (AC-43, R-72)', () => {
     expect((await call('POST', '/api/invoices/run', undefined, 'tok-en')).status).toBe(200);
     expect(limitCalls()).toHaveLength(62); // one counted call per member POST, none per GET
   });
+  it('the dashboard Aprobar / Rechazar POSTs count too: the 61st answers 429 (AC-43 covers every member POST)', async () => {
+    db = testDb(workspace(['11']));
+    for (let i = 0; i < 60; i++) expect((await call('POST', `/api/invoices/${uid('A-11')}/approve`, { seq: 9 }, 'tok-d')).status).not.toBe(429);
+    expect((await call('POST', `/api/invoices/${uid('A-11')}/reject`, { seq: 9 }, 'tok-d')).status).toBe(429);
+  });
   it('a refused POST does nothing else: no agent run, no write', async () => {
     db = testDb(workspace(['01']));
     db.rateLimit.refuse = true;
     expect((await call('POST', '/api/invoices/run')).status).toBe(429);
-    expect(decisionsOf('A-01')).toHaveLength(0);
+    expect(decisionsOf(uid('A-01'))).toHaveLength(0);
     expect(db.tables.agent_runs ?? []).toHaveLength(0);
   });
   it.each([['answers an error', 'boom'], ['throws', 'throw']])('the counter %s -> the request goes through and the error is logged', async (_, how) => {
@@ -613,7 +648,7 @@ describe('rate limit (AC-43, R-72)', () => {
     db.rateLimit.fail = how;
     const r = await call('POST', '/api/invoices/run');
     expect(r.status).toBe(200);
-    expect(decisionsOf('A-01')).toHaveLength(1);
+    expect(decisionsOf(uid('A-01'))).toHaveLength(1);
     expect(vi.mocked(console.error)).toHaveBeenCalledWith('rate limit: counter failed, request allowed', expect.anything());
   });
 });
@@ -666,7 +701,7 @@ describe('budgeted, resumable runs over HTTP (AC-70, R-56, R-57, R-59, R-60)', (
 
   it('a forced "Too many subrequests" mid-run answers 200 with what was done, never 500 (R-57)', async () => {
     db = testDb(workspace(['01', '03', '05']));
-    db.fail.period_state = (a) => (a.p_exclude_invoice === 'A-03' ? 'TypeError: Too many subrequests by single Worker invocation.' : undefined);
+    db.fail.period_state = (a) => (a.p_exclude_invoice === uid('A-03') ? 'TypeError: Too many subrequests by single Worker invocation.' : undefined);
     const r = await call('POST', '/api/invoices/run');
     expect(r.status).toBe(200);
     expect(await r.json()).toMatchObject({ PAGAR: 1, errors: 0, remaining: 2, cursor: expect.any(String) });
@@ -762,7 +797,7 @@ describe('budgeted, resumable runs over HTTP (AC-70, R-56, R-57, R-59, R-60)', (
   it('R-68 acceptance: with only pending invoices the preview lists every one with from null, and will_pay is what a reevaluate run pays', async () => {
     db = testDb(workspace());
     const { after, out, listed } = await previewAndReevaluate();
-    const mine = [...after].filter(([id]) => id.startsWith('A-'));
+    const mine = [...after].filter(([id]) => id.startsWith(uid('A-00').slice(0, -4)));
     expect(listed.sort()).toEqual(mine.map(([id, o]) => [id, null, o]).sort());
     expect(listed).toHaveLength(29);
     expect(out.will_pay).toBe(mine.filter(([, o]) => o === 'PAGAR').length);
@@ -781,7 +816,7 @@ describe('budgeted, resumable runs over HTTP (AC-70, R-56, R-57, R-59, R-60)', (
     expect(decide.length).toBeGreaterThan(0);
     db.tables.invoices.push(...pending);
     const { before, after, listed } = await previewAndReevaluate();
-    const mine = [...after].filter(([id, o]) => id.startsWith('A-') && (before.get(id) === null || before.get(id) !== o));
+    const mine = [...after].filter(([id, o]) => id.startsWith(uid('A-00').slice(0, -4)) && (before.get(id) === null || before.get(id) !== o));
     expect(listed.sort()).toEqual(mine.map(([id, o]) => [id, before.get(id), o]).sort());
     expect([...before.values()].filter((o) => o === 'ESCALAR').length).toBeGreaterThan(0);
     expect(listed.some((x) => x[1] === null)).toBe(true);
@@ -791,10 +826,10 @@ describe('budgeted, resumable runs over HTTP (AC-70, R-56, R-57, R-59, R-60)', (
 
   it('R-68: a pending invoice with no read fields is listed with to null, counted in unread_pending and not in will_pay', async () => {
     db = testDb(workspace(['01', '04']));
-    db.tables.invoices!.find((i) => i.id === 'A-04')!.fields = null;
+    db.tables.invoices!.find((i) => i.id === uid('A-04'))!.fields = null;
     const r = await call('PUT', '/api/policy', { rules: { ...SEED.rules, per_payment_limit_usd: 1000 } });
     const out = await json<{ will_pay: number; unread_pending: number; would_change: Array<{ invoice_id: string; from: unknown; to: unknown }> }>(r);
-    expect(out.would_change.map((w) => [w.invoice_id, w.from, w.to])).toEqual([['A-01', null, 'FRENAR'], ['A-04', null, null]]);
+    expect(out.would_change.map((w) => [w.invoice_id, w.from, w.to])).toEqual([[uid('A-01'), null, 'FRENAR'], [uid('A-04'), null, null]]);
     expect(out.unread_pending).toBe(1);
     expect(out.will_pay).toBe(0);
   });

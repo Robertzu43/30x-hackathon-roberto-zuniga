@@ -24,6 +24,9 @@ export const userClient = (env: Env, jwt: string, budget?: Budget): Db =>
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
+// R-74: every row id is a uuid; anything else is answered as not found without asking the database.
+export const isUuid = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+
 // A supabase-js result's data, or its error thrown. A SQL `raise exception 'X'` arrives as message 'X' (ALREADY_DECIDED, ...).
 // Without error, list queries never return null; maybeSingle() callers declare their `| null` themselves.
 export function must<T>(r: { data: T; error: { message: string } | null }): NonNullable<T> {

@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { uid } from './__fixtures__/uid';
 import { seedConfidence } from '../engine/__fixtures__/seed';
 import sql from '../../supabase/migrations/20261017000300_seed_andina.sql?raw';
 import { fakeDb, type FakeDb } from '../agent/__fixtures__/fake-db';
@@ -36,15 +37,15 @@ function workspace(only?: string[]) {
   const invoices = (SEED.invoices as SeedRow[]).filter((r) => !only || only.includes(r.nn)).map((r) => {
     const received_at = new Date(r.prev_month ? start - 5 * 864e5 : start + ((Date.parse(NOW) - start) * Number(r.nn)) / 30).toISOString();
     const day = bogotaDay(received_at);
-    return { id: `A-${r.nn}`, company_id: 'A', source: r.source, raw_text: r.raw_text, archived: false, received_at,
+    return { id: uid(`A-${r.nn}`), company_id: 'A', source: r.source, raw_text: r.raw_text, archived: false, received_at,
       fields: { ...r.fields, issue_date: r.issue === null ? null : addDays(day, r.issue), due_date: r.due === null ? null : addDays(day, r.due), confidence: seedConfidence(r.fields) } };
   });
   return {
     companies: [{ id: 'A', approver_email: APPROVER, is_demo: false }, { id: 'B', approver_email: 'x@b.example', is_demo: false }],
     company_members: [{ company_id: 'A', user_id: 'u1' }, { company_id: 'B', user_id: 'u2' }],
     policies: [{ company_id: 'A', version: 1, rules: SEED.rules }],
-    beneficiaries: SEED.beneficiaries.map((b: object, n: number) => ({ ...b, id: `A-b${n}`, company_id: 'A' })),
-    invoices: [...invoices, { id: 'B-01', company_id: 'B', source: 'email', raw_text: '', archived: false, received_at: NOW, fields: null }],
+    beneficiaries: SEED.beneficiaries.map((b: object, n: number) => ({ ...b, id: uid(`A-b${n}`), company_id: 'A' })),
+    invoices: [...invoices, { id: uid('B-01'), company_id: 'B', source: 'email', raw_text: '', archived: false, received_at: NOW, fields: null }],
   };
 }
 
@@ -105,7 +106,7 @@ afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 describe('GET /api/approve/:token (AC-35, R-55)', () => {
   it('shows the invoice and its latest ESCALAR decision and writes nothing, however often it is opened', async () => {
     await setup(['11']);
-    const { approve } = await links('A-11');
+    const { approve } = await links(uid('A-11'));
     const writes = db.queries.filter((q) => q.op === 'insert').length;
     const rpcs = db.rpcs.length;
     for (let i = 0; i < 2; i++) {
@@ -113,18 +114,18 @@ describe('GET /api/approve/:token (AC-35, R-55)', () => {
       expect(res.status).toBe(200);
       expect(await res.json()).toMatchObject({
         action: 'approve', expires_at: new Date(Date.parse(NOW) + 48 * 3600e3).toISOString(),
-        invoice: { id: 'A-11', source: 'pdf', fields: { payee_name: 'Nube Sur LLC', amount: 4200 } },
+        invoice: { id: uid('A-11'), source: 'pdf', fields: { payee_name: 'Nube Sur LLC', amount: 4200 } },
         decision: { seq: 1, outcome: 'ESCALAR', actor: 'agent' },
       });
     }
     expect(db.queries.filter((q) => q.op === 'insert').length).toBe(writes);
     expect(db.rpcs.length).toBe(rpcs);
-    expect(decisionsOf('A-11')).toHaveLength(1);
+    expect(decisionsOf(uid('A-11'))).toHaveLength(1);
   });
 
   it('a tampered, expired, unknown or malformed token -> "no es válido o venció", nothing written', async () => {
     await setup(['11']);
-    const { approve } = await links('A-11');
+    const { approve } = await links(uid('A-11'));
     const p = (await verifyToken(SECRET, approve))!;
     const tampered = `${approve.slice(0, -2)}${approve.endsWith('AA') ? 'BB' : 'AA'}`;
     const unknown = await signToken(SECRET, { ...p, decision_id: 'dec-999' }); // validly signed, never stored
@@ -136,16 +137,16 @@ describe('GET /api/approve/:token (AC-35, R-55)', () => {
     }
     vi.setSystemTime(Date.parse(NOW) + 48 * 3600e3 + 1);
     expect([(await get(approve)).status, (await answer(approve, 1)).status]).toEqual([404, 404]);
-    expect(humans('A-11')).toEqual([]);
+    expect(humans(uid('A-11'))).toEqual([]);
   });
 
   it('after the invoice was decided -> "ya fue decidida"; after the pair was used -> "ya se usó"', async () => {
     await setup(['11']);
-    const { approve, reject } = await links('A-11');
-    await dashboard('A-11', 'reject', 1);
+    const { approve, reject } = await links(uid('A-11'));
+    await dashboard(uid('A-11'), 'reject', 1);
     expect([(await get(approve)).status, await (await get(reject)).json()]).toEqual([409, DECIDED]);
     await setup(['11']);
-    const pair = await links('A-11');
+    const pair = await links(uid('A-11'));
     await answer(pair.approve, 1);
     expect([(await get(pair.reject)).status, await (await get(pair.reject)).json()]).toEqual([409, USED]);
   });
@@ -154,8 +155,8 @@ describe('GET /api/approve/:token (AC-35, R-55)', () => {
 describe('POST /api/approve/:token (AC-34, AC-36, AC-37, R-02, R-03, R-55)', () => {
   it('approve -> human PAGAR by the approver via link, the failed overridable check kept no_cumple with overridden.by, the pair spent', async () => {
     await setup(['11']);
-    const { approve } = await links('A-11');
-    const esc = latest('A-11')!;
+    const { approve } = await links(uid('A-11'));
+    const esc = latest(uid('A-11'))!;
     const res = await answer(approve, 1, { note: 'ok, es la suscripción', actor_email: 'evil@x.example', channel: 'dashboard' });
     expect(res.status).toBe(200);
     const { decision } = await res.json() as { decision: StoredDecision };
@@ -171,16 +172,16 @@ describe('POST /api/approve/:token (AC-34, AC-36, AC-37, R-02, R-03, R-55)', () 
 
   it('approve then the pair\'s reject link -> 409 "ya se usó", and a second POST of the same link too: one human decision', async () => {
     await setup(['11']);
-    const { approve, reject } = await links('A-11');
+    const { approve, reject } = await links(uid('A-11'));
     expect((await answer(approve, 1)).status).toBe(200);
     for (const r of [await answer(reject, 2), await answer(approve, 2)]) expect([r.status, await r.json()]).toEqual([409, USED]);
-    expect(humans('A-11')).toHaveLength(1);
+    expect(humans(uid('A-11'))).toHaveLength(1);
   });
 
   it('reject -> human FRENAR via link with the escalated checks (which do not produce FRENAR themselves) and no payment', async () => {
     await setup(['15']);
-    const { reject } = await links('A-15');
-    const esc = latest('A-15')!;
+    const { reject } = await links(uid('A-15'));
+    const esc = latest(uid('A-15'))!;
     const res = await answer(reject, 1);
     const { decision } = await res.json() as { decision: StoredDecision };
     expect(decision).toMatchObject({ outcome: 'FRENAR', actor: 'human', actor_email: APPROVER, channel: 'link', payment: null, question_es: null, amount_usd: 2500 });
@@ -192,22 +193,22 @@ describe('POST /api/approve/:token (AC-34, AC-36, AC-37, R-02, R-03, R-55)', () 
 
   it('a token created for ESCALAR seq 1 answers seq 2 after a re-evaluation, against seq 2\'s failing checks', async () => {
     await setup(['11']);
-    const { approve } = await links('A-11');
+    const { approve } = await links(uid('A-11'));
     const nube = db.tables.beneficiaries!.find((b) => b.name === 'Nube Sur LLC')!;
     nube.bank_account = 'ACH routing 026009593 cuenta 000000001'; // the directory changed: the account no longer matches
-    await agent(['A-11'], 'reevaluate');
-    expect(decisionsOf('A-11').map((d) => [d.seq, d.outcome])).toEqual([[1, 'ESCALAR'], [2, 'ESCALAR']]);
+    await agent([uid('A-11')], 'reevaluate');
+    expect(decisionsOf(uid('A-11')).map((d) => [d.seq, d.outcome])).toEqual([[1, 'ESCALAR'], [2, 'ESCALAR']]);
     expect(await (await get(approve)).json()).toMatchObject({ decision: { seq: 2 } });
     const { decision } = await (await answer(approve, 2)).json() as { decision: StoredDecision };
     expect(decision).toMatchObject({ seq: 3, outcome: 'PAGAR' });
     expect(decision.checks.filter((c) => c.overridden).map((c) => c.id).sort()).toEqual(['beneficiario_cuenta', 'umbral_aprobacion']);
-    expect(db.tables.approval_uses).toEqual([expect.objectContaining({ decision_id: decisionsOf('A-11')[0]!.id })]);
+    expect(db.tables.approval_uses).toEqual([expect.objectContaining({ decision_id: decisionsOf(uid('A-11'))[0]!.id })]);
   });
 
   it('a stale form seq -> 409 "cambió", nothing written and the pair still usable', async () => {
     await setup(['11']);
-    const { approve } = await links('A-11');
-    await agent(['A-11'], 'reevaluate');
+    const { approve } = await links(uid('A-11'));
+    await agent([uid('A-11')], 'reevaluate');
     const before = inserts();
     const res = await answer(approve, 1);
     expect([res.status, await res.json()]).toEqual([409, CHANGED]);
@@ -218,40 +219,40 @@ describe('POST /api/approve/:token (AC-34, AC-36, AC-37, R-02, R-03, R-55)', () 
 
   it('a decision appended between the read and the write (ALREADY_DECIDED) -> 409 "cambió" and the pair not spent', async () => {
     await setup(['11']);
-    const { approve } = await links('A-11');
+    const { approve } = await links(uid('A-11'));
     db.fail.insert_decision = () => 'ALREADY_DECIDED';
-    expect([(await answer(approve, 1)).status, humans('A-11')]).toEqual([409, []]);
+    expect([(await answer(approve, 1)).status, humans(uid('A-11'))]).toEqual([409, []]);
     expect(db.tables.approval_uses ?? []).toEqual([]);
   });
 
   it('STALE_PERIOD -> re-reads the period and retries; still stale after 3 retries -> 503, nothing written', async () => {
     await setup(['11']);
-    const { approve } = await links('A-11');
+    const { approve } = await links(uid('A-11'));
     const guard = db.fail.insert_decision!;
     let first = true;
     db.fail.insert_decision = (a) => (first ? ((first = false), 'STALE_PERIOD') : guard(a));
     expect((await answer(approve, 1)).status).toBe(200);
-    expect(humans('A-11')).toHaveLength(1);
+    expect(humans(uid('A-11'))).toHaveLength(1);
     await setup(['11']);
-    const pair = await links('A-11');
+    const pair = await links(uid('A-11'));
     db.fail.insert_decision = () => 'STALE_PERIOD';
     const before = inserts();
     const res = await answer(pair.approve, 1);
-    expect([res.status, inserts() - before, humans('A-11'), db.tables.approval_uses ?? []]).toEqual([503, 4, [], []]);
+    expect([res.status, inserts() - before, humans(uid('A-11')), db.tables.approval_uses ?? []]).toEqual([503, 4, [], []]);
   });
 
   it('the database refusing a human answer (NOT_ESCALATED, FINAL_DECISION) -> 409 "ya fue decidida", the pair not spent', async () => {
     for (const refusal of ['NOT_ESCALATED', 'FINAL_DECISION']) {
       await setup(['11']);
       db.fail.insert_decision = () => refusal;
-      const res = await answer((await links('A-11')).approve, 1);
+      const res = await answer((await links(uid('A-11'))).approve, 1);
       expect([res.status, await res.json(), db.tables.approval_uses ?? []]).toEqual([409, DECIDED, []]);
     }
   });
 
   it('the pair spent by the other link meanwhile (unique decision_id) -> 409 "ya se usó"', async () => {
     await setup(['11']);
-    const { approve } = await links('A-11');
+    const { approve } = await links(uid('A-11'));
     const from = db.from;
     db.from = ((t: string) => (t === 'approval_uses' && db.tables.decisions!.some((d) => d.actor === 'human')
       ? { insert: async () => ({ data: null, error: { code: '23505', message: 'duplicate key' } }) } : from(t))) as typeof db.from;
@@ -261,26 +262,26 @@ describe('POST /api/approve/:token (AC-34, AC-36, AC-37, R-02, R-03, R-55)', () 
 
   it('a company without approver_email -> the link is not valid, nothing written (AC-37: no actor to record)', async () => {
     await setup(['11']);
-    const { approve } = await links('A-11');
+    const { approve } = await links(uid('A-11'));
     db.tables.companies![0]!.approver_email = null;
-    expect([(await answer(approve, 1)).status, humans('A-11')]).toEqual([404, []]);
+    expect([(await answer(approve, 1)).status, humans(uid('A-11'))]).toEqual([404, []]);
   });
 
   it('a missing or bad seq, or a note that is not a short string -> 400, nothing written', async () => {
     await setup(['11']);
-    const { approve } = await links('A-11');
+    const { approve } = await links(uid('A-11'));
     for (const body of [{}, { seq: '1' }, { seq: 1.5 }, { seq: 1, note: 5 }, { seq: 1, note: 'x'.repeat(1001) }]) {
       expect((await post(`/approve/${approve}`, body)).status).toBe(400);
     }
     expect((await approvals.request(`/approve/${approve}`, { method: 'POST', body: 'not json' }, env)).status).toBe(400);
-    expect(humans('A-11')).toEqual([]);
+    expect(humans(uid('A-11'))).toEqual([]);
   });
 });
 
 describe('dashboard answers (AC-34, AC-37, R-03)', () => {
   it('approve: actor_email from the verified session, never from the body; channel dashboard; no approval_uses row', async () => {
     await setup(['11']);
-    const res = await dashboard('A-11', 'approve', 1, { actor_email: 'evil@x.example', channel: 'link' });
+    const res = await dashboard(uid('A-11'), 'approve', 1, { actor_email: 'evil@x.example', channel: 'link' });
     expect(res.status).toBe(200);
     const { decision } = await res.json() as { decision: StoredDecision };
     expect(decision).toMatchObject({ outcome: 'PAGAR', actor: 'human', actor_email: MEMBER, channel: 'dashboard' });
@@ -290,41 +291,41 @@ describe('dashboard answers (AC-34, AC-37, R-03)', () => {
 
   it('a link answer after a dashboard answer -> 409 "ya fue decidida"', async () => {
     await setup(['11']);
-    const { reject } = await links('A-11');
-    await dashboard('A-11', 'approve', 1);
+    const { reject } = await links(uid('A-11'));
+    await dashboard(uid('A-11'), 'approve', 1);
     const res = await answer(reject, 2);
     expect([res.status, await res.json()]).toEqual([409, DECIDED]);
-    expect(humans('A-11')).toHaveLength(1);
+    expect(humans(uid('A-11'))).toHaveLength(1);
   });
 
   it('a dashboard approve after a link approve -> 409 "ya fue decidida"', async () => {
     await setup(['11']);
-    await answer((await links('A-11')).approve, 1);
-    const res = await dashboard('A-11', 'approve', 2);
+    await answer((await links(uid('A-11'))).approve, 1);
+    const res = await dashboard(uid('A-11'), 'approve', 2);
     expect([res.status, await res.json()]).toEqual([409, DECIDED]);
-    expect(humans('A-11')).toHaveLength(1);
+    expect(humans(uid('A-11'))).toHaveLength(1);
   });
 
   it('two concurrent answers -> exactly one human decision, the other 409', async () => {
     await setup(['11']);
-    const res = await Promise.all([dashboard('A-11', 'approve', 1), dashboard('A-11', 'reject', 1)]);
+    const res = await Promise.all([dashboard(uid('A-11'), 'approve', 1), dashboard(uid('A-11'), 'reject', 1)]);
     expect(res.map((r) => r.status).sort()).toEqual([200, 409]);
-    expect(humans('A-11')).toHaveLength(1);
+    expect(humans(uid('A-11'))).toHaveLength(1);
   });
 
   it('reject from the dashboard -> human FRENAR with channel dashboard', async () => {
     await setup(['15']);
-    const { decision } = await (await dashboard('A-15', 'reject', 1, { note: 'cuenta sospechosa' })).json() as { decision: StoredDecision };
+    const { decision } = await (await dashboard(uid('A-15'), 'reject', 1, { note: 'cuenta sospechosa' })).json() as { decision: StoredDecision };
     expect(decision).toMatchObject({ outcome: 'FRENAR', actor: 'human', actor_email: MEMBER, channel: 'dashboard', note: 'cuenta sospechosa' });
   });
 
   it('without a session -> 401; another company\'s invoice -> 404; nothing written', async () => {
     await setup(['11']);
-    expect((await post('/invoices/A-11/approve', { seq: 1 })).status).toBe(401);
-    expect((await dashboard('A-11', 'approve', 1, {}, 'forged')).status).toBe(401);
-    expect((await dashboard('A-11', 'approve', 1, {}, 'other')).status).toBe(404);
+    expect((await post(`/invoices/${uid('A-11')}/approve`, { seq: 1 })).status).toBe(401);
+    expect((await dashboard(uid('A-11'), 'approve', 1, {}, 'forged')).status).toBe(401);
+    expect((await dashboard(uid('A-11'), 'approve', 1, {}, 'other')).status).toBe(404);
     expect((await dashboard('nope', 'reject', 1)).status).toBe(404);
-    expect(humans('A-11')).toEqual([]);
+    expect(humans(uid('A-11'))).toEqual([]);
   });
 });
 
@@ -335,29 +336,29 @@ describe('an archived invoice cannot be answered (AC-34, R-21)', () => {
 
   it('the emailed approve link on an archived invoice -> 404, no human decision, no approval_uses', async () => {
     await setup(['11']);
-    const { approve } = await links('A-11');
-    archive('A-11');
+    const { approve } = await links(uid('A-11'));
+    archive(uid('A-11'));
     const res = await answer(approve, 1);
     expect([res.status, await res.json()]).toEqual([404, NOT_FOUND]);
-    expect(humans('A-11')).toEqual([]);
+    expect(humans(uid('A-11'))).toEqual([]);
     expect(uses()).toBe(0);
   });
 
   it('the dashboard approve and reject on an archived invoice -> 404, no human decision', async () => {
     await setup(['11']);
-    archive('A-11');
+    archive(uid('A-11'));
     for (const action of ['approve', 'reject'] as const) {
-      const res = await dashboard('A-11', action, 1);
+      const res = await dashboard(uid('A-11'), action, 1);
       expect([res.status, await res.json()]).toEqual([404, NOT_FOUND]);
     }
-    expect(humans('A-11')).toEqual([]);
+    expect(humans(uid('A-11'))).toEqual([]);
     expect(uses()).toBe(0);
   });
 
   it('GET on an archived invoice\'s link is not actionable and writes nothing', async () => {
     await setup(['11']);
-    const { approve } = await links('A-11');
-    archive('A-11');
+    const { approve } = await links(uid('A-11'));
+    archive(uid('A-11'));
     const writes = db.queries.filter((q) => q.op === 'insert').length;
     const rpcs = db.rpcs.length;
     const res = await get(approve);
@@ -373,7 +374,7 @@ describe('the video sequence (R-35, AC-34)', () => {
 
   it('approving Nube Sur first re-escalates on the period budget, the override kept; the pair is then spent', async () => {
     await setup();
-    const { approve, reject } = await links('A-11');
+    const { approve, reject } = await links(uid('A-11'));
     const { decision } = await (await answer(approve, 1)).json() as { decision: StoredDecision };
     expect(decision).toMatchObject({ seq: 2, outcome: 'ESCALAR', actor: 'human', channel: 'link' });
     expect(check(decision, 'presupuesto_periodo').verdict).toBe('no_cumple');
@@ -381,16 +382,16 @@ describe('the video sequence (R-35, AC-34)', () => {
     expect(decision.question_es).toMatch(/^Juan, /);
     expect(send).toHaveBeenCalledTimes(11); // the agent's 11 escalation mails; a re-escalation mails nobody (R-16)
     expect([(await answer(reject, 2)).status, (await answer(approve, 2)).status]).toEqual([409, 409]);
-    expect(humans('A-11')).toHaveLength(1);
+    expect(humans(uid('A-11'))).toHaveLength(1);
   });
 
   it('rejecting Laura #15 first releases 2.500, then approving Nube Sur ends in PAGAR', async () => {
     await setup();
     const p0 = await period();
-    expect((await answer((await links('A-15')).reject, 1)).status).toBe(200);
+    expect((await answer((await links(uid('A-15'))).reject, 1)).status).toBe(200);
     const p1 = await period();
     expect(p1.committed_usd).toBeCloseTo(p0.committed_usd - 2500, 2);
-    const { decision } = await (await dashboard('A-11', 'approve', 1)).json() as { decision: StoredDecision };
+    const { decision } = await (await dashboard(uid('A-11'), 'approve', 1)).json() as { decision: StoredDecision };
     expect(decision.outcome).toBe('PAGAR');
     const p2 = await period();
     expect([p2.committed_usd, p2.paid_usd]).toEqual([p1.committed_usd, p1.paid_usd + 4200]);
@@ -402,6 +403,6 @@ describe('mounted on the Worker', () => {
     const { app } = await import('../index');
     await setup(['11']);
     expect(await (await app.request('/api/approve/nope', {}, env)).json()).toEqual(INVALID);
-    expect((await app.request('/api/invoices/A-11/approve', { method: 'POST', body: '{"seq":1}' }, env)).status).toBe(401);
+    expect((await app.request(`/api/invoices/${uid('A-11')}/approve`, { method: 'POST', body: '{"seq":1}' }, env)).status).toBe(401);
   });
 });

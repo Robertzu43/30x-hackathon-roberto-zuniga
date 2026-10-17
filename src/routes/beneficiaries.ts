@@ -2,7 +2,7 @@
 import { z } from 'zod';
 import type { Context } from 'hono';
 import type { AppEnv } from '../lib/auth';
-import { must } from '../lib/supabase';
+import { isUuid, must } from '../lib/supabase';
 import { memberRoutes } from './agent';
 
 const text = z.string().trim().max(200).nullish();
@@ -37,6 +37,7 @@ export const beneficiaries = memberRoutes()
     return c.json(must(await c.var.db.from('beneficiaries').insert({ ...b, company_id: c.var.companyId }).select().single()), 201);
   })
   .put('/:id', async (c) => {
+    if (!isUuid(c.req.param('id'))) return c.json({ error: 'Beneficiario no encontrado' }, 404); // R-74
     const b = await parse(c);
     if (b instanceof Response) return b;
     const row = must(await c.var.db.from('beneficiaries').update({ ...b, updated_at: new Date().toISOString() })

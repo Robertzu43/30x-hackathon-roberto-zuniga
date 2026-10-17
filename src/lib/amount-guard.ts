@@ -13,9 +13,9 @@ const fold = (s: string) => s.replace(/[A-Z]+|[^\0-\x7f]/gu, (ch) => {
   return n.length === ch.length ? n : ch;
 });
 
-// R-81 (C): multi-word signals also match joined by any run of spaces, line breaks, `-`, `_`, `.`, or by nothing.
-// One unbounded run between two literals, never two runs side by side: linear time.
-const J = '[\\s._-]*';
+// R-81 (C): multi-word signals also match joined by any run of spaces, line breaks, `_`, `.`, hyphens (R-82 D: every
+// R-81 minus and U+2010-2012), or by nothing. One unbounded run between two literals, never two side by side: linear time.
+const J = '[\\s._\u2010-\u2014\u2212\uff0d\ufe63-]*';
 const WORDS = new RegExp(`\\b(?:notas?${J}(?:de${J})?credito|credit${J}(?:notes?|memos?)|no${J}(?:cobrar|pagar)|do${J}not${J}pay` +
   `|saldo${J}a${J}favor|credit${J}balance|nc-\\d+)\\b`, 'g');
 // R-80 (3) / R-81: a label, an optional percentage before or after `:`/`=`, then the amount with its optional
@@ -25,11 +25,12 @@ const WORDS = new RegExp(`\\b(?:notas?${J}(?:de${J})?credito|credit${J}(?:notes?
 // after a minus (`2026-10`) voids the token (R-81 F). Longer labels first.
 const TAX = 'iva|impuestos?|igv|sales tax|tax(?:es)?|vat|impoconsumo';
 const MINUS = '[-−–—－﹣]';
-const CUR = '(?:(?!(?:iva|igv|vat|tax)\\b)[a-z]{3}\\b|[$€£])';
+// R-82 (B): a code, a symbol, one to three letters before `$` (US$, COP$, R$), or S/ and S/.
+const CUR = '(?:[a-z]{1,3}\\$|s\\/\\.?|(?!(?:iva|igv|vat|tax)\\b)[a-z]{3}\\b|[$€£])';
 const PCT = '(?:\\(? ?\\d+(?:[.,]\\d+)? ?% ?\\)? ?)';
 const LABELLED = new RegExp(`\\b(?:(?<sub>sub[ -]?total)|(?<taxTotal>total (?:${TAX}))` +
   '|(?<total>total a pagar|valor total|monto total|total due|amount due|grand total|total)' + `|(?<tax>${TAX}))\\b` +
-  `(?: ?${PCT}?[:=]? ?${PCT}?|(?: ?[:=])?(?: ?${CUR})?(?<nl>\\n))(?<open>\\()? ?(?:(?<s1>${MINUS}) ?)?(?:${CUR} ?)?` +
+  `(?: ?${PCT}?[:=]? ?${PCT}?|(?: ?[:=])?(?: ?${CUR})?(?<nl>\\n))(?:${CUR} ?)?(?<open>\\()? ?(?:(?<s1>${MINUS}) ?)?(?:${CUR} ?)?` +
   `(?:(?<s2>${MINUS}) ?)?(?<digits>\\d(?:[\\d.,]*\\d)?)(?<s3>${MINUS}(?!\\d))?(?! ?[\\d%]|${MINUS}\\d)(?: ?${CUR})?` +
   '(?: ?(?<close>\\)))?(?: ?(?<cr>cr)\\b)?', 'g');
 
@@ -37,7 +38,8 @@ const near = (a: number, b: number) => round2(Math.abs(a - b)) <= 0.01;
 
 export function amountGuard(printed: string, amountRead: number | null): Guarded | null {
   // one space for every horizontal run, no blank lines: identical on text and folded, so indexes line up
-  const text = printed.normalize('NFC').replace(/[^\S\n]+/g, ' ').replace(/ ?\n[\n ]*/g, '\n').trim();
+  // R-82 (C): invisible characters removed first, so the signal is printed from the cleaned text
+  const text = printed.replace(/[\u200b-\u200d\u2060\ufeff\u00ad]/g, '').normalize('NFC').replace(/[^\S\n]+/g, ' ').replace(/ ?\n[\n ]*/g, '\n').trim();
   const folded = fold(text);
   const subtotals: number[] = [], taxes: number[] = [], taxTotals: number[] = [], totals: number[] = [];
   const signals: Array<{ at: number; end: number }> = [...folded.matchAll(WORDS)].map((m) => ({ at: m.index, end: m.index + m[0].length }));

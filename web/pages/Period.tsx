@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { screens, thisMonth, useScreen } from '../api';
 import { useT } from '../i18n';
+import PeriodCharts, { type Charts } from '../period/PeriodCharts';
 import './period.css';
 
 
@@ -19,6 +20,12 @@ const SKELETON: Period = {
   by_beneficiary: ['Andina Labs', 'Estudio Kairos', 'Contadores Andinos'].map((beneficiary) => ({ beneficiary, paid_usd: 4200, committed_usd: 4200, count: 1 })),
    autonomy: { n: 1, m: 1 }, autonomy_pct: 100, violations: 0, explained_pct: 100,
 };
+// Same idea for the charts: the real layout with zeroed values, its drawing hidden by period.css while .skeleton is on.
+const SKELETON_CHARTS: Charts = {
+  budget_usd: 10000, burn: [{ day: '2000-01-01', available_usd: 10000 }, { day: '2000-01-02', available_usd: 5800 }],
+  stack: { paid: 1, escalated: 1, available: 1, over: 0 }, outcomes: { PAGAR: 1, FRENAR: 1, ESCALAR: 1, pending: 1 },
+  trend: [{ day: '2000-01-01', autonomy_pct: 0, violations: 0 }, { day: '2000-01-02', autonomy_pct: 0, violations: 0 }],
+};
 
 // UX-19: a select in the app's language, not <input type="month"> (the browser's). ponytail: the last 24 months; widen if asked.
 const lastMonths = (from: string) => Array.from({ length: 24 }, (_, i) => {
@@ -30,10 +37,11 @@ const lastMonths = (from: string) => Array.from({ length: 24 }, (_, i) => {
 export default function Period() {
   const { t, locale } = useT();
   const [month, setMonth] = useState(thisMonth);
-  const screen = useScreen<{ period: Period }>(screens.period(month));
+  const screen = useScreen<{ period: Period; charts: Charts | null }>(screens.period(month));
   const data = screen.data?.period;
   const failed = !data && screen.error !== undefined; // UX-13: any failure (offline, 500) gets the designed message, never the raw text
   const shown = data ?? SKELETON;
+  const charts = data ? screen.data?.charts : SKELETON_CHARTS; // null on an older Worker: the AC-44 page alone
 
   const usd = (n: number | null) => (n === null ? '—' : new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', currencyDisplay: 'code' }).format(n));
 
@@ -88,15 +96,16 @@ export default function Period() {
               <li key={o}>{`${t(`outcome.${o}`)}: ${shown.count_by_outcome[o]}`}</li>
             ))}
           </ul>
+          {charts && <PeriodCharts charts={charts} byBeneficiary={shown.by_beneficiary} />}
           <h2>{t('period.beneficiaries')}</h2>
           {shown.by_beneficiary.length === 0 ? (
-            <div className="period-state empty">
+            <div key="empty" className="period-state empty">
               <p>{t('period.none')}</p>
               <p className="muted">{t('period.none_next')}</p>
               <Link to="/">{t('period.to_inbox')}</Link>
             </div>
           ) : (
-            <div className="table-wrap" role="region" aria-label={t('period.beneficiaries')} tabIndex={0}>
+            <div key="table" className="table-wrap" role="region" aria-label={t('period.beneficiaries')} tabIndex={0}>
               <table>
                 <thead>
                   <tr>

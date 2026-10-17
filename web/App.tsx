@@ -32,7 +32,6 @@ function TopBar({ onTour }: { onTour: () => void }) {
     if (session && !demo) void supabase().then((sb) => sb.auth.updateUser({ data: { lang: l } })); // AC-41: per user
   };
   return (
-    <>
     <header className="topbar">
       <Logo />
       <span className="muted">{t('app.tagline')}</span>
@@ -47,7 +46,7 @@ function TopBar({ onTour }: { onTour: () => void }) {
             <button type="button" onClick={onTour}>{t('topbar.tour')}</button>
             {isTrial(session.user) ? ( // AC-94: an anonymous user has no email to show
               <>
-                {company && <span>{company}</span>}
+                <span className="trial-company">{company ?? t('trial.company')}</span>{/* reserved width: the name arriving never reflows the bar (AC-91 CLS) */}
                 <span className="muted">{t('trial.unsaved')}</span>
                 <button type="button" onClick={save}>{t('trial.save')}</button>
               </>
@@ -56,9 +55,8 @@ function TopBar({ onTour }: { onTour: () => void }) {
           </>
         )}
       </div>
+      {warning && <div className="topbar-panel">{warning}</div>}{/* in the bar: during the tour the bar is sticky and above its overlay */}
     </header>
-    {warning && <div className="topbar-panel">{warning}</div>}
-    </>
   );
 }
 

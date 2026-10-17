@@ -10,4 +10,6 @@
 .save-access-actions { grid-auto-flow: column; justify-content: start; margin-top: 0.5rem; }
 .password { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .password input { flex: 1 1 12rem; width: auto; }
-.topbar-panel { padding: 1rem clamp(1rem, 4vw, 2rem); border-bottom: 1px solid var(--line); }
+.topbar-panel { flex-basis: 100%; }
+body:has(.topbar-panel) .tour { display: none; } /* the tour waits while the warning or «Guardar mi acceso» is open, and comes back on the same step */
+.trial-company { min-width: 11em; }

@@ -249,7 +249,33 @@ describe('status and message pages (AC-84, AC-90)', () => {
     ['unavailable', 'Este portal no está disponible en este momento; inténtalo de nuevo en unos minutos.'],
   ])('%s', async (view, message) => {
     await open({ view }, '/x');
-    expect($('h1').textContent).toBe(message);
+    expect(texts('main h1, main p').join(' ')).toBe(message);
+    expect(message.startsWith($('h1').textContent!)).toBe(true); // Task 32b: the first sentence is the heading, the next step the text
     expect(document.querySelector('form')).toBeNull();
+  });
+
+  it('a two-sentence message: the first sentence is the heading, the next step a paragraph (Task 32b, AC-81)', async () => {
+    await open({ view: 'not_found' }, '/x');
+    expect([$('h1').textContent, $('main p').textContent]).toEqual(['Este enlace de facturas no existe.', 'Pídele el enlace correcto a la empresa que te contrató.']);
+    $<HTMLButtonElement>('button[data-lang=en]').click();
+    expect([$('h1').textContent, $('main p').textContent]).toEqual(['This invoice link does not exist.', 'Ask the company that hired you for the correct link.']);
+  });
+
+  it.each([
+    ['aprobada para pago', 'pay'], ['requiere aprobación de Andina Labs Inc.', 'escalate'], ['rechazada: duplicada', 'stop'],
+    ['rechazada: no cumple las condiciones de pago de Andina Labs Inc.', 'stop'], ['rechazada por Andina Labs Inc.', 'stop'], ['en revisión', null],
+  ])('the status «%s» takes the %s colours of the approved palette (Task 32b, AC-81)', async (es, tone) => {
+    await open({ view: 'status', status: { ...STATUS, status: { es, en: 'x' } } }, TOKEN_PATH);
+    expect($('.status-head').getAttribute('data-tone')).toBe(tone);
+    expect(texts('main h1, main p.company, main h2')).toEqual([es, 'Tu factura a Andina Labs Inc.', 'Lo que leí']); // the order of AC-90 (c) stays
+  });
+});
+
+describe('composer (Task 32b, AC-90 e)', () => {
+  it('the empty message box says what goes in it, in the chosen language', async () => {
+    await open({ view: 'chat', company: 'A' });
+    expect($('textarea').getAttribute('placeholder')).toBe('Mensaje');
+    $<HTMLButtonElement>('button[data-lang=en]').click();
+    expect($('textarea').getAttribute('placeholder')).toBe('Message');
   });
 });

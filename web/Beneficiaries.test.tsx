@@ -225,3 +225,16 @@ test('a 500 offers a retry that loads the profile (AC-91 item 4)', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Intentar de nuevo' }));
   expect((await screen.findByRole('heading', { level: 1 })).textContent).toBe('Laura Méndez');
 });
+
+// AC-99 (R-109): while the profile loads, the loaded markup is drawn from a made-up profile, hidden from people and assistive tech.
+test('while loading, the profile is a skeleton with the loaded markup and one status line (AC-99)', () => {
+  const { container } = at({ 'GET /api/screen/beneficiary/b1': () => new Promise(() => {}) });
+  const skeleton = container.querySelector('.skeleton') as HTMLElement;
+  expect(skeleton.getAttribute('aria-hidden')).toBe('true');
+  expect(skeleton.hasAttribute('inert')).toBe(true);
+  expect(skeleton.querySelector('h1')).toBeTruthy();
+  expect(skeleton.querySelector('.beneficiary-totals')).toBeTruthy();
+  expect(skeleton.querySelector('table')).toBeTruthy();
+  expect(screen.getByRole('status').textContent).toBe('Cargando…');
+  expect(screen.getByRole('link', { name: 'Volver a Beneficiarios' })).toBeTruthy();
+});

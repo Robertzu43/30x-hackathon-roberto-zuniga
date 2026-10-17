@@ -14,6 +14,13 @@ type Profile = {
   history: { received_at: string; amount_usd: number }[];
   last: { invoice_id: string; received_at: string; amount: number | null; currency: string | null; outcome: Outcome | null }[];
 };
+// AC-99 (R-109): the loading screen is the loaded markup with this made-up profile, hidden by .skeleton.
+const SKELETON: Profile = {
+  beneficiary: { id: '', name: 'Andina Labs', country: 'CO', currency: 'COP', route: 'transferencia', bank_account: '0000', agreement: { type: 'retainer', amount_usd: 1000, period: 'monthly' } } as Profile['beneficiary'],
+  totals: { paid_month_usd: 1000, paid_total_usd: 1000, invoices: 1 },
+  history: [1, 1, 1].map((amount_usd) => ({ received_at: '2026-01-01T00:00:00Z', amount_usd })),
+  last: [1, 2, 3].map((n) => ({ invoice_id: `s${n}`, received_at: '2026-01-01T00:00:00Z', amount: 1000, currency: 'USD', outcome: 'PAGAR' as const })),
+};
 
 export default function Beneficiary() {
   const { t, locale } = useT();
@@ -24,11 +31,10 @@ export default function Beneficiary() {
   const state = data ? 'ok' : screen.error === undefined ? 'loading' : screen.error instanceof ApiError && screen.error.status === 404 ? 'missing' : 'failed';
 
   const back = <Link to="/beneficiaries">{t('ben.p.back')}</Link>;
-  if (state !== 'ok' || !data)
+  if (state === 'missing' || state === 'failed')
     return (
       <section className="beneficiary" data-tour="beneficiary">
         {back}
-        {state === 'loading' && <p role="status" className="muted">{t('policy.loading')}</p>}
         {state === 'missing' && (
           <div className="beneficiary-state">
             <p role="alert">{t('ben.p.not_found')}</p>
@@ -44,7 +50,7 @@ export default function Beneficiary() {
       </section>
     );
 
-  const { beneficiary: b, totals, history, last } = data;
+  const { beneficiary: b, totals, history, last } = data ?? SKELETON;
   const num = new Intl.NumberFormat(locale);
   const day = (iso: string) => new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'America/Bogota' }).format(new Date(iso));
   const a = b.agreement;
@@ -62,6 +68,8 @@ export default function Beneficiary() {
   return (
     <section className="beneficiary" data-tour="beneficiary">
       {back}
+      {!data && <p role="status" className="sr-only">{t('policy.loading')}</p>}
+      <div className={data ? 'beneficiary-body' : 'beneficiary-body skeleton'} aria-hidden={data ? undefined : true} inert={!data}>
       <h1><span data-user="">{b.name}</span></h1>
       <dl className="beneficiary-facts">
         <div><dt>{t('ben.col.country')}</dt><dd>{b.country ?? '—'}</dd></div>
@@ -105,6 +113,7 @@ export default function Beneficiary() {
           </div>
         </>
       )}
+      </div>
     </section>
   );
 }

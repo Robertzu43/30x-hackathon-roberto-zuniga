@@ -14,6 +14,7 @@ import '../components/ai.css';
 export const route: PageRoute = { path: '/demo', public: true, fullBleed: true };
 
 const DEMO_PASSWORD = 'andina-demo-2026'; // public by design (D8, AC-46), same as src/routes/demo.ts
+const PORTAL = 'https://facturas.30x-hackathon-roberto-zuniga.workers.dev/andina-labs'; // AC-83's demo portal; ponytail: per-deploy value via /api/config if another company hosts /demo
 const STAGES = ['percibe', 'lee', 'consulta', 'decide', 'actua', 'rinde'];
 // AC-79: the model reads; code consults the tools and decides.
 const TAG: Record<string, 'ai' | 'code'> = { lee: 'ai', consulta: 'code', decide: 'code' };
@@ -89,6 +90,7 @@ export default function Demo() {
         <div className="demo-actions">
           <button type="button" className="primary" disabled={entering} onClick={() => void enter()}>{t(entering ? 'demo.entering' : 'demo.enter')}</button>
           <a href="/demo/happy-path.webm">{t('demo.video')} →</a>
+          <a href={PORTAL}>{t('demo.portal')} →</a>
           {isDemoUser(session?.user, demoEmail) && (
             <button type="button" disabled={run.running || asking} onClick={() => setAsking(true)}>{t('demo.reset')}</button>
           )}

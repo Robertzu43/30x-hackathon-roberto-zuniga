@@ -6,6 +6,7 @@ import Logo from '../components/Logo';
 import { useT } from '../i18n';
 import { runUntilDone, type Progress } from '../runAgent';
 import type { Lang } from '../../src/i18n';
+import './login.css';
 
 export const route: PageRoute = { path: '/login', public: true, fullBleed: true };
 
@@ -59,8 +60,7 @@ export default function Login() {
   return (
     <div className="login">
       <section className="login-intro">
-        <Logo />
-        <h1>{t('login.title')}</h1>
+        <h1><Logo /></h1>{/* the logo is the wordmark: the name is shown once (AC-80) */}
         <p className="login-lead">{t('login.lead')}</p>
       </section>
       <section className="login-form">

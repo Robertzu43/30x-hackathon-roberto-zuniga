@@ -139,3 +139,12 @@ test('an error in the middle of the loop still opens Bandeja', async () => {
   enterCode('123456');
   expect(await screen.findByText('bandeja')).toBeTruthy();
 });
+
+// Task 32b (AC-80, AC-81): the logo is the heading; the brand name is not stacked twice.
+test('the heading is the Thesaurus logo, shown once', () => {
+  setup();
+  const h1 = screen.getByRole('heading', { level: 1, name: 'Thesaurus' });
+  expect(h1.querySelector('img')?.getAttribute('src')).toBe('/brand/thesaurus-logo.svg');
+  expect(screen.getAllByRole('img', { name: 'Thesaurus' })).toHaveLength(1);
+  expect(screen.queryByText('Thesaurus')).toBeNull(); // no second, text-only wordmark
+});

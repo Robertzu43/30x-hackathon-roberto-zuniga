@@ -1,7 +1,7 @@
 /* global process, console, fetch, Buffer, URL, setTimeout, SVGElement, addEventListener, document, window, performance, getComputedStyle, innerWidth, innerHeight, NodeFilter, PerformanceObserver, sessionStorage, localStorage, axe */ // Node script + code that runs in the page
 // The D38 UX gate (AC-91). Usage:
-//   node scripts/ux-gate.mjs --base <url> [--screens inbox,policy|all] [--widths 360,390] [--langs es,en] [--only 6.palette] [--palette]
-//                            [--speed] [--mutate] [--jobs 2] [--route id=/path] [--approve-token t] [--status-token t]
+//   node scripts/ux-gate.mjs --base <url> [--screens inbox,policy|all] [--only 6.palette] [--palette]
+//                            [--mutate] [--route id=/path] [--approve-token t] [--status-token t]
 // Needs Playwright (local node_modules, else the global one) and Chromium (/opt/pw-browsers/chromium, or GATE_CHROMIUM).
 // Writes docs/ux/<screen>-<width>-<lang>.png and docs/ux/gate-<experience>.md; exits 1 when any item failed.
 import { execSync } from 'node:child_process';
@@ -21,6 +21,7 @@ export const FONTS = [
   "'Geist Mono', 'SF Mono', 'JetBrains Mono', ui-monospace, monospace",
 ];
 export const WIDTHS = [360, 390, 768, 1024, 1440];
+const LANGS = ['es', 'en'];
 const HEIGHT = { 360: 800, 390: 844, 768: 1024, 1024: 768, 1440: 900 };
 const CHROMIUM = process.env.GATE_CHROMIUM ?? '/opt/pw-browsers/chromium';
 const DEMO = { email: 'demo@andina-labs.example', password: 'andina-demo-2026' }; // public by design (D8, AC-46); email is read from /api/config
@@ -256,6 +257,7 @@ function judge(m, c) {
 }
 
 // ---- One cell: a fresh context for one screen (or state) at one width and language ----
+const JOBS = 2; // parallel browser contexts
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const wanted = (only, id) => !only || only.some((p) => id.startsWith(p));
 const isLocal = (base) => /^https?:\/\/(127\.0\.0\.1|localhost)[:/]?/.test(base);
@@ -270,7 +272,11 @@ function installRoutes(page, base, { state, guard, delayGets, gate }) {
     if (state === 'offline' && data && !config) { await gate.release; return route.continue(); }
     if (data && !config && state === 'error') return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"gate"}' });
     if (data && !config && state === 'empty' && req.method() === 'GET') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(path in EMPTY_BODY ? EMPTY_BODY[path] : []) });
-    if (guard && req.method() !== 'GET' && req.method() !== 'OPTIONS') { await sleep(600); return route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }); }
+    if (guard && req.method() !== 'GET' && req.method() !== 'OPTIONS') {
+      const held = sleep(600).then(() => route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' })).catch(() => {}); // answered here, never sent to the origin
+      gate.held.push(held);
+      return held;
+    }
     if (delayGets && data && !config && req.method() === 'GET') await sleep(delayGets);
     return route.fallback();
   });
@@ -300,14 +306,14 @@ export async function runCell(browser, job) {
     hasTouch: width <= 390,
     locale: lang === 'es' ? 'es-CO' : 'en-US',
   });
+  let release;
+  const gate = { release: new Promise((r) => (release = r)), held: [] };
   try {
     const page = await context.newPage();
     const logs = [];
     page.on('console', (msg) => ['error', 'warning'].includes(msg.type()) && logs.push(`${msg.type()}: ${msg.text().slice(0, 120)}`));
     page.on('pageerror', (e) => logs.push(`pageerror: ${String(e.message).slice(0, 120)}`));
     await page.addInitScript(INIT, { lang, session: screen.auth === false ? null : opts.session, tour: !!screen.tour });
-    let release;
-    const gate = { release: new Promise((r) => (release = r)) };
     const guard = kind === 'dynamic' && !opts.mutate;
     await installRoutes(page, base, { state, guard, delayGets: kind === 'loading' ? 1500 : 0, gate });
 
@@ -347,8 +353,8 @@ export async function runCell(browser, job) {
     add(P('0.reach', reached !== want, reached !== want ? 1 : 0, reached === want ? `opened ${want}` : `asked for ${want}, got ${reached}`));
     if (!state) {
       const g = await page.evaluate(() => window.__gate);
-      const enforce = opts.speed || !isLocal(base);
-      add(!enforce ? R('7.usable', 'na', usable ?? 0, `${usable === null ? 'not usable' : Math.round(usable) + ' ms'} (enforced on the deployed URL or with --speed)`)
+      const enforce = opts.speed || !isLocal(base); // opts.speed: the fixture tests run on a local URL; no CLI flag
+      add(!enforce ? R('7.usable', 'na', usable ?? 0, `${usable === null ? 'not usable' : Math.round(usable) + ' ms'} (enforced on the deployed URL)`)
         : P('7.usable', usable === null || usable > 2000, usable ?? 99_999, usable === null ? 'heading and primary action never became usable' : `usable at ${Math.round(usable)} ms (limit 2000)`));
       add(P('7.longtask', g.long > 300, Math.round(g.long), `longest task ${Math.round(g.long)} ms (limit 300)`));
       add(P('4.cls', g.cls > 0.01, +g.cls.toFixed(4), `CLS ${g.cls.toFixed(4)} (limit 0.01)`));
@@ -388,6 +394,7 @@ export async function runCell(browser, job) {
     add(R('0.run', 'fail', 1, `the cell crashed: ${String(e.message).split('\n')[0]}`));
     return rows;
   } finally {
+    await Promise.all(gate.held); // no held write may outlive the context: closing it would release it to the origin
     await context.close();
   }
 }
@@ -509,7 +516,7 @@ function args(argv) {
   for (let i = 0; i < argv.length; i++) {
     if (!argv[i].startsWith('--')) continue;
     const k = argv[i].slice(2);
-    if (['palette', 'speed', 'mutate'].includes(k)) a.bool.add(k);
+    if (['palette', 'mutate'].includes(k)) a.bool.add(k);
     else if (k === 'route') { const [id, p] = argv[++i].split('='); a.route[id] = p; } else a[k] = argv[++i];
   }
   return a;
@@ -519,8 +526,6 @@ export async function main(argv) {
   const a = args(argv);
   const base = (a.base ?? process.env.GATE_BASE ?? 'http://127.0.0.1:8787').replace(/\/$/, '');
   const want = !a.screens || a.screens === 'all' ? null : a.screens.split(',');
-  const widths = a.widths ? a.widths.split(',').map(Number) : WIDTHS;
-  const langs = a.langs ? a.langs.split(',') : ['es', 'en'];
   const only = a.bool.has('palette') ? ['6.palette'] : a.only?.split(',');
   const picked = SCREENS.filter((s) => !want || want.includes(s.id) || want.includes(s.base));
   if (!picked.length) throw new Error(`no screen matches ${a.screens}; known: ${SCREENS.map((s) => s.id).join(', ')}`);
@@ -532,14 +537,14 @@ export async function main(argv) {
   }
   const session = picked.some((s) => s.auth !== false && s.exp === 'finance') ? await demoSession(base).catch((e) => { console.error(`ux-gate: ${e.message}`); return null; }) : null;
   const dicts = await loadDicts();
-  const opts = { only, dicts, session, vars, speed: a.bool.has('speed'), mutate: a.bool.has('mutate'), shots: true };
+  const opts = { only, dicts, session, vars, mutate: a.bool.has('mutate'), shots: true };
 
   const cells = [];
   for (const s of picked.map((x) => ({ ...x, path: a.route[x.id] ?? x.path }))) {
     if (s.needs && !vars[s.needs]) { console.log(`ux-gate: ${s.id} skipped (needs --${s.needs.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase())})`); continue; }
-    const set = [[null, widths, 'static'], ...(s.states ?? []).map((st) => [st, widths, 'static'])];
-    for (const [state, ws, kind] of set) for (const lang of langs) for (const width of ws) cells.push({ screen: s, state, width, lang, kind });
-    for (const lang of langs) for (const kind of ['dynamic', 'loading']) if (!only || only.some((p) => (kind === 'dynamic' ? /^(3\.focus|3\.enter|4\.busy)/ : /^4\.loading/).test(p))) cells.push({ screen: s, state: null, width: 390, lang, kind });
+    const set = [null, ...(s.states ?? [])];
+    for (const state of set) for (const lang of LANGS) for (const width of WIDTHS) cells.push({ screen: s, state, width, lang, kind: 'static' });
+    for (const lang of LANGS) for (const kind of ['dynamic', 'loading']) if (!only || only.some((p) => (kind === 'dynamic' ? /^(3\.focus|3\.enter|4\.busy)/ : /^4\.loading/).test(p))) cells.push({ screen: s, state: null, width: 390, lang, kind });
   }
   const browser = await launch();
   const rows = [];
@@ -551,7 +556,7 @@ export async function main(argv) {
       console.log(`${c.screen.id}${c.state ? '-' + c.state : ''} ${c.width}/${c.lang} ${c.kind}: ${r.filter((x) => x.status === 'fail').length} failed`);
     }
   };
-  await Promise.all(Array.from({ length: Number(a.jobs ?? 2) }, worker));
+  await Promise.all(Array.from({ length: JOBS }, worker));
   await browser.close();
 
   const agg = aggregate(rows);

@@ -1,4 +1,4 @@
-/* global URL */
+/* global URL, setTimeout */
 // The gate's own checks (AC-91): a fixture page with one known violation per item, driven by ?bad=<check id>.
 // The clean page must pass every check; each bad variant must fail exactly the check it names.
 import { execFileSync } from 'node:child_process';
@@ -90,9 +90,11 @@ const page = (bad, lang) => {
 };
 
 let server, base, browser;
+const seen = [];
 beforeAll(async () => {
   server = createServer((req, res) => {
     const u = new URL(req.url, 'http://x');
+    if (req.method !== 'GET') seen.push(`${req.method} ${u.pathname}`);
     if (u.pathname === '/f') return void res.writeHead(200, { 'content-type': 'text/html' }).end(page(u.searchParams.get('bad') ?? '', u.searchParams.get('lang') ?? 'es'));
     if (u.pathname === '/api/data') return void res.writeHead(200, { 'content-type': 'application/json' }).end('["Factura A","Factura B"]');
     res.writeHead(404).end();
@@ -142,6 +144,18 @@ describe('clean fixture', () => {
     const rs = await cell('none', { kind: 'dynamic' });
     expect(fails(rs)).toEqual([]);
     expect(['3.focus', '3.enter', '4.busy'].map((id) => status(rs, id))).toEqual(['pass', 'pass', 'pass']);
+  }, 60_000);
+  it('never lets a write reach the server without --mutate, even after the cell closes', async () => {
+    seen.length = 0;
+    await cell('none', { kind: 'dynamic' });
+    await new Promise((r) => setTimeout(r, 1500));
+    expect(seen).toEqual([]);
+  }, 60_000);
+  it('lets the write through with --mutate', async () => {
+    seen.length = 0;
+    await cell('none', { kind: 'dynamic', opts: { dicts: DICTS, speed: true, shots: false, mutate: true } });
+    await new Promise((r) => setTimeout(r, 300));
+    expect(seen).toEqual(['POST /api/act']);
   }, 60_000);
   it('shows a message while loading', async () => {
     expect(fails(await cell('none', { kind: 'loading' }))).toEqual([]);

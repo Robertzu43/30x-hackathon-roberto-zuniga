@@ -27,14 +27,11 @@ Screen ids: finance `login tour inbox new-invoice (file, email, chat) detail-pag
 |---|---|
 | `--base <url>` | the app (finance) or the `facturas` Worker (vendor); default `$GATE_BASE` or `http://127.0.0.1:8787` |
 | `--screens a,b` | ids or base ids (`new-invoice`); default all |
-| `--widths`, `--langs` | narrow the matrix while iterating; the gate itself is all five and both |
 | `--only 3.axe,4` | run only the checks whose id starts with these |
 | `--palette` | only the colour audit (`--only 6.palette`), no screenshots or gate file |
-| `--speed` | enforce item 7 on a local URL too (it is enforced by default on any other URL) |
-| `--mutate` | let the primary-action test and `portal-reply` really send. Default: non-GET requests are held 600 ms and answered `{"ok":true}`, so nothing is written |
+| `--mutate` | let the primary-action test and `portal-reply` really send. Default: non-GET requests never reach the app; they are answered `{"ok":true}` after 600 ms |
 | `--route id=/path` | override a screen's path (for example `ask`, `portal`) |
 | `--approve-token`, `--status-token` | real tokens for `approve` and `status` (`status` is skipped without one) |
-| `--jobs n` | parallel browser contexts, default 2 |
 
 Finance screens sign in as the public demo user (AC-46) by injecting its session. `detail-*` use the demo inbox's invoices by outcome; `detail-unread` is an invoice with no outcome yet.
 

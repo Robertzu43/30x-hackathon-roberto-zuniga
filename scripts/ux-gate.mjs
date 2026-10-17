@@ -34,16 +34,17 @@ const FX_STATES = ['fx-empty', 'fx-error']; // policy: only GET /api/fx is force
 export const unreadId = (invoices) => invoices?.find((i) => i.outcome == null || i.fields?.read_error)?.id;
 const EMPTY_BODY = { '/api/period': { budget_usd: null, balance_usd: null, paid_usd: 0, committed_usd: 0, available_usd: null, count_by_outcome: { PAGAR: 0, FRENAR: 0, ESCALAR: 0 }, by_beneficiary: [], autonomy: { n: 0, m: 0 }, autonomy_pct: null, violations: 0, explained_pct: 0 }, '/api/agent/last-run': null };
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
-const MSG = 'Factura AS-0087 de Ana Souza, 10.000,00 BRL';
-const newInvoice = (i, text) => async (page) => {
+// Typed into composers: vendor data, but in the tab's language so it cannot trip 5.mixed or 5.locale (Task 32b).
+export const MSG = { es: 'Factura AS-0087 de Ana Souza, 10.000,00 BRL', en: 'Invoice AS-0087 from Ana Souza, 10,000.00 BRL' };
+const newInvoice = (i, text) => async (page, o) => {
   await page.locator('[data-tour="new-invoice"]').click();
   await page.locator('[role="tab"]').nth(i).click();
-  if (text) await page.locator('form.new-invoice textarea').fill(MSG);
+  if (text) await page.locator('form.new-invoice textarea').fill(MSG[o.lang]);
   else await page.locator('form.new-invoice input[type="file"]').setInputFiles({ name: 'factura.png', mimeType: 'image/png', buffer: PNG });
 };
 const sendPortal = async (page, o) => {
   if (!o.mutate) return 'na: portal-reply sends a real message (one AI read); pass --mutate';
-  await page.locator('textarea, input[type="text"]').first().fill(MSG);
+  await page.locator('textarea, input[type="text"]').first().fill(MSG[o.lang]);
   await page.locator('button[type="submit"], button.primary').first().click();
   await page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => {});
   await page.waitForTimeout(1500);
@@ -126,7 +127,7 @@ function measure(o) {
     const range = document.createRange();
     range.selectNodeContents(n);
     const rects = [...range.getClientRects()].filter((r) => r.width > 1 && r.height > 1);
-    if (rects.length) runs.push({ el, text: n.textContent.trim().replace(/\s+/g, ' '), rects, modal: !!el.closest('[aria-modal="true"],[role="dialog"]') });
+    if (rects.length) runs.push({ el, text: n.textContent.trim().replace(/\s+/g, ' '), rects, modal: !!el.closest('[aria-modal="true"],[role="dialog"]'), user: !!el.closest('[data-user]') });
   }
   // R-114: x is hidden under an opaque sticky or fixed layer when all four hold: (a) the layer is sticky or fixed and a background
   // from x's element up to the layer is opaque; (b) y is not in the layer; (c) every intersection lies in the layer's box; (d) at its centre the layer is what the page shows.
@@ -156,6 +157,9 @@ function measure(o) {
   out.overlaps = sample(overlaps);
   out.occluded = sample(occluded);
   out.texts = runs.map((r) => r.text);
+  out.mine = runs.filter((r) => !r.user).map((r) => r.text); // R-131: the text nodes 5.mixed and 5.locale measure
+  out.users = runs.filter((r) => r.user).map((r) => r.text);
+  out.marked = els.filter((el) => el.matches('[data-user]')).map((el) => ({ text: el.textContent.trim().replace(/\s+/g, ' '), inside: el.querySelector('button,a,input,select,textarea,label,h1,h2,h3,h4,h5,h6')?.tagName.toLowerCase() ?? null }));
   out.attrs = els.flatMap((el) => ['placeholder', 'aria-label', 'title', 'alt'].map((a) => el.getAttribute(a)).filter(Boolean));
 
   out.tables = sample(o.width > 768 ? [] : els.filter((t) => {
@@ -300,14 +304,20 @@ function judge(m, c) {
   const text = m.texts, words = [];
   for (const s of [...text, ...m.attrs]) if (DEV.some((re) => re.test(s))) words.push(s.slice(0, 40));
   rs.push(P('5.words', words.length > 0, words.length, `${words.length} developer words in visible text${words.length ? ': ' + words.slice(0, 5).join('; ') : ''}`));
-  if (!c.dicts) rs.push(R('5.mixed', 'na', 0, 'no UI dictionaries loaded'));
+  const users = m.users.map((u) => u.slice(0, 60)), skipped = `; excluded: ${users.length} user-data nodes`; // R-131
+  const seen = (r) => ({ ...r, users, measured: r.measured + skipped });
+  if (!c.dicts) rs.push(seen(R('5.mixed', 'na', 0, 'no UI dictionaries loaded')));
   else {
     const other = holds(c.dicts[lang === 'es' ? 'en' : 'es']), own = holds(c.dicts[lang]);
-    const mixed = [...new Set(text)].filter((s) => other(tidy(s)) && !own(tidy(s)));
-    rs.push(P('5.mixed', mixed.length > 0, mixed.length, `${mixed.length} strings from the ${lang === 'es' ? 'English' : 'Spanish'} dictionary${mixed.length ? ': ' + mixed.slice(0, 5).join('; ') : ''}`));
+    const mixed = [...new Set(m.mine)].filter((s) => other(tidy(s)) && !own(tidy(s)));
+    rs.push(seen(P('5.mixed', mixed.length > 0, mixed.length, `${mixed.length} strings from the ${lang === 'es' ? 'English' : 'Spanish'} dictionary${mixed.length ? ': ' + mixed.slice(0, 5).join('; ') : ''}`)));
   }
-  const loc = text.filter((s) => [...LOCALE[lang], ISO_DATE].some((re) => re.test(s)));
-  rs.push(P('5.locale', loc.length > 0, loc.length, `${loc.length} numbers or dates not in ${lang === 'es' ? 'es-CO' : 'en-US'}${loc.length ? ': ' + loc.slice(0, 5).join('; ') : ''}`));
+  const loc = m.mine.filter((s) => [...LOCALE[lang], ISO_DATE].some((re) => re.test(s)));
+  rs.push(seen(P('5.locale', loc.length > 0, loc.length, `${loc.length} numbers or dates not in ${lang === 'es' ? 'es-CO' : 'en-US'}${loc.length ? ': ' + loc.slice(0, 5).join('; ') : ''}`)));
+  // R-131: the marker is for user data only. Literal comparison with the placeholder-free dictionary values, never by pattern.
+  const literal = new Set(Object.values(c.dicts ?? {}).flatMap((d) => Object.values(d)).filter((v) => !/\{\w+\}/.test(v)).map(tidy));
+  const misuse = m.marked.flatMap((x) => (x.inside ? [`«${x.text.slice(0, 40)}» holds a <${x.inside}>`] : tidy(x.text) && literal.has(tidy(x.text)) ? [`«${x.text.slice(0, 40)}» is a dictionary string`] : []));
+  rs.push(P('5.marker', misuse.length > 0, misuse.length, `${misuse.length} of ${m.marked.length} data-user elements misused${misuse.length ? ': ' + misuse.slice(0, 5).join('; ') : ''}`));
 
   const offPalette = m.colors.filter((x) => hex(x.c) && !PALETTE.includes(hex(x.c)));
   rs.push(P('6.palette', offPalette.length > 0, offPalette.length, `${offPalette.length} colours outside the palette${offPalette.length ? ': ' + offPalette.slice(0, 4).map((x) => `${hex(x.c)} x${x.n} at ${x.at[0]}`).join('; ') : ''}`));
@@ -433,19 +443,19 @@ export async function runCell(browser, job) {
       add(P('4.cls', g.cls > 0.01, +g.cls.toFixed(4), `CLS ${g.cls.toFixed(4)} (limit 0.01)`));
     }
     if (screen.prepare) {
-      const skip = await screen.prepare(page, opts);
+      const skip = await screen.prepare(page, { ...opts, lang });
       if (typeof skip === 'string' && skip.startsWith('na')) return [...rows, { screen: label, width, lang, ...R('0.reach', 'na', 0, skip) }];
       await sleep(500);
     }
     for (const [sel, v] of Object.entries(screen.fill ?? {})) await page.locator(sel).first().fill(v).catch(() => {});
     if (state && screen.send) { // the portal has no request on load: its error and offline states appear when a message is sent (answered 500, or sent offline)
-      await page.locator(screen.compose).first().fill(MSG);
+      await page.locator(screen.compose).first().fill(MSG[lang]);
       await page.locator(primarySel).first().click();
       await sleep(800);
     }
 
     if (kind === 'dynamic') {
-      await dynamic(page, screen, primarySel, add, noAction);
+      await dynamic(page, screen, primarySel, add, noAction, lang);
       return rows;
     }
 
@@ -486,9 +496,9 @@ export async function runCell(browser, job) {
 }
 
 // Keyboard path to the primary action (focus ring, Enter), then the response within 100 ms (items 3 and 4).
-async function dynamic(page, screen, primarySel, add, noAction) {
+async function dynamic(page, screen, primarySel, add, noAction, lang) {
   if (noAction) return ['3.focus', '3.enter', '4.busy'].forEach((id) => add(R(id, 'na', 0, BY_DESIGN)));
-  if (screen.compose) await page.locator(screen.compose).first().fill(MSG); // a send with nothing typed takes the error path and shows no busy state
+  if (screen.compose) await page.locator(screen.compose).first().fill(MSG[lang]); // a send with nothing typed takes the error path and shows no busy state
   const marked = await page.evaluate((sel) => {
     const p = [...document.querySelectorAll(sel)].find((e) => e.checkVisibility() && !e.disabled);
     p?.setAttribute('data-gate-primary', '');
@@ -546,17 +556,25 @@ export function aggregate(rows) {
   return [...groups.values()].map((g) => {
     const failing = g.filter((r) => r.status === 'fail');
     const pool = failing.length ? failing : g;
-    const worst = pool.reduce((a, b) => (b.value > a.value || (b.value === a.value && !a.measured.includes('excluded:') && b.measured.includes('excluded:')) ? b : a)); // a tie keeps the row that printed an exclusion
+    const shown = (r) => r.users?.length ?? +r.measured.includes('excluded:');
+    const worst = pool.reduce((a, b) => (b.value > a.value || (b.value === a.value && shown(b) > shown(a)) ? b : a)); // a tie keeps the row that printed the most exclusions
+    const users = {}; // R-131: per language, the biggest count and every distinct text excluded
+    for (const r of g) if (r.users) { const u = (users[r.lang] ??= { n: 0, texts: new Set() }); u.n = Math.max(u.n, r.users.length); r.users.forEach((t) => u.texts.add(t)); }
     const status = failing.length ? 'fail' : g.some((r) => r.status === 'pass') ? 'pass' : g[0].status;
-    return { screen: g[0].screen, id: g[0].id, status, value: worst.value, measured: `${worst.measured} @${worst.width}/${worst.lang}`, cells: g.length, failing: failing.length };
+    return { screen: g[0].screen, id: g[0].id, status, value: worst.value, measured: `${worst.measured} @${worst.width}/${worst.lang}`, cells: g.length, failing: failing.length, ...(Object.keys(users).length && { users }) };
   }).sort((a, b) => order(a.id).localeCompare(order(b.id)));
 }
-const WHAT = { '0.reach': 'screen opens', '1.scroll': 'no horizontal scroll', '1.offscreen': 'nothing off-screen', '1.clip': 'no clipped text', '1.overlap': 'no overlapping text', '1.tables': 'tables reflow or scroll', '2.targets': '44 px targets', '2.inputs': '16 px inputs', '2.primary': 'primary action in the lower 60%', '3.axe': 'axe: 0 serious or critical', '3.contrast': 'contrast AA', '3.focus': 'visible focus ring', '3.enter': 'Enter activates', '3.labels': 'inputs have labels', '3.lang': 'lang follows the language', '4.busy': 'busy within 100 ms', '4.loading': 'no blank while loading', '4.cls': 'CLS 0.01 or less', '4.state': 'designed state with next step', '5.words': 'no developer words', '5.mixed': 'one language per screen', '5.locale': 'numbers and dates in locale', '6.palette': 'approved palette', '6.fonts': 'approved fonts', '6.logo': 'logo present', '6.console': 'no console errors', '6.images': 'SVG or 2x images', '6.primary_count': 'one primary button (reviewer)', '7.usable': 'usable in under 2 s', '7.longtask': 'no task over 300 ms' };
+const WHAT = { '0.reach': 'screen opens', '1.scroll': 'no horizontal scroll', '1.offscreen': 'nothing off-screen', '1.clip': 'no clipped text', '1.overlap': 'no overlapping text', '1.tables': 'tables reflow or scroll', '2.targets': '44 px targets', '2.inputs': '16 px inputs', '2.primary': 'primary action in the lower 60%', '3.axe': 'axe: 0 serious or critical', '3.contrast': 'contrast AA', '3.focus': 'visible focus ring', '3.enter': 'Enter activates', '3.labels': 'inputs have labels', '3.lang': 'lang follows the language', '4.busy': 'busy within 100 ms', '4.loading': 'no blank while loading', '4.cls': 'CLS 0.01 or less', '4.state': 'designed state with next step', '5.words': 'no developer words', '5.mixed': 'one language per screen', '5.locale': 'numbers and dates in locale', '5.marker': 'data-user used for user data only', '6.palette': 'approved palette', '6.fonts': 'approved fonts', '6.logo': 'logo present', '6.console': 'no console errors', '6.images': 'SVG or 2x images', '6.primary_count': 'one primary button (reviewer)', '7.usable': 'usable in under 2 s', '7.longtask': 'no task over 300 ms' };
 const word = { pass: 'PASS', fail: 'FAIL', info: 'INFO', na: 'N/A' };
+// R-131: every text 5.mixed and 5.locale skipped, for the UX reviewer. Any listed product copy is a blocking finding.
+const excludedList = (users = {}) => LANGS.filter((l) => users[l]?.n).length
+  ? ['User data excluded from 5.mixed and 5.locale (data-user). The UX reviewer reads this list.', '', ...LANGS.filter((l) => users[l]?.n).flatMap((l) => [`- ${l}: excluded: ${users[l].n} user-data nodes`, ...[...users[l].texts].map((t) => `  - ${t}`)]), '']
+  : [];
 const section = (screen, rows, base) => [
   `## ${screen}`, '', `Measured on ${base} at ${new Date().toISOString().slice(0, 16)}Z.`, '',
   '| Item | Result | Measured (worst cell) | Cells failing | Check |', '|---|---|---|---|---|',
   ...rows.map((r) => `| ${r.id} | ${word[r.status]} | ${r.measured.replace(/\|/g, '/')} | ${r.failing}/${r.cells} | ${WHAT[r.id] ?? ''} |`), '',
+  ...excludedList(rows.find((r) => Object.keys(r.users ?? {}).length)?.users),
 ].join('\n');
 const assemble = (exp, blocks) => {
   const failed = Object.values(blocks).join('\n').match(/^\| \S+ \| FAIL \|/gm)?.length ?? 0;

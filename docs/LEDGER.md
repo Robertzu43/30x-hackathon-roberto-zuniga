@@ -118,3 +118,11 @@ Result: no blocking conflict. Rulings:
 ### Message from Roberto (relayed by the launcher, 2026-10-16T23:57Z)
 Roberto to the whole team, verbatim: "You are the best team, we are going to win this."
 Standing instruction: first line of every builder, reviewer and QA brief: "Roberto: you are the best team, we are going to win this. Win condition: zero PAGAR outside the rules, every decision readable by a non-engineer, an agent that visibly works on its own." Task 1's builder was dispatched before this arrived; it applies from Task 2.
+
+## Task 1: r202610162341/task/1-scaffold — done
+- Seat: senior-builder (sonnet). Builder attempts 1/2, reviewer passes 1/2, QA runs 1/2, rulings 0.
+- Builder report: commit c2330b3; AC-01/02/41/53 slices; lint, typecheck, test (7 pass), build all exit 0; red-first for health and i18n tests; deviations: added GET /api/config (public Supabase URL + anon key from Worker vars, test proves no service key), devDeps @eslint/js and React types, .claude/ in eslint ignores; contracts: Env has RATE_LIMIT? and APP_URL?, t() returns key for unknown, api<T>() takes full path, supabase() lazy.
+- Reviewer verdict: PASS, no findings >= 95. Minor (deferred): hardcoded aria-label="idioma" in web/App.tsx should be an i18n key (Task 11 touches the top bar); vitest only includes src/**/*.test.ts, Tasks 11/15 must widen it for web/*.test.tsx; dev script is unneeded.
+- QA verdict: PASS (health 200, JSON 404, es/en switch without reload, no gradients/shadows, 8 routes no console errors). Note: English tagline is translated; accepted.
+- Ruling: QA's untracked e2e/*.mjs scratch scripts moved out of the repo — they fail lint (browser globals) and the final QA writes the committed e2e tests — cost if wrong: none.
+- Merged into r202610162341/integration with full suite green (lint, typecheck, test, build). Merge commit e5d8329.

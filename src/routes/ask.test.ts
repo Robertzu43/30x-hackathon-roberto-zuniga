@@ -240,6 +240,39 @@ describe('quotas (AC-67, R-87)', () => {
     expect(quota.keys).toEqual(new Map([['u:user-a', 2]]));
   });
 
+  // R-128: every accepted question counts, whatever comes back; the quota is taken once, before the provider.
+  const order: string[] = [];
+  const traced = () => {
+    order.length = 0;
+    const take = quota.keys.set.bind(quota.keys);
+    vi.spyOn(quota.keys, 'set').mockImplementation((k, v) => { order.push('quota'); return take(k, v); });
+    ai.run.mockImplementation(() => { order.push('provider'); return reply(); });
+  };
+  it('a «no data» answer in the middle still counts: remaining 9, 8, 7, the quota once per question before the provider', async () => {
+    traced();
+    const answers = ['La frené porque supera el límite por pago.', 'No tengo ese dato en el registro.', 'La frené por el límite.'];
+    const remaining = [];
+    for (const answer of answers) {
+      reply = async () => ({ response: { answer } });
+      const r = await ask(ON_04, 'tok-d', { 'CF-Connecting-IP': '203.0.113.1' });
+      expect(r.body.answer).toBe(answer);
+      remaining.push(r.body.remaining);
+    }
+    expect(remaining).toEqual([9, 8, 7]);
+    expect(order).toEqual(['quota', 'provider', 'quota', 'provider', 'quota', 'provider']);
+    expect(adminCalls).toEqual(['rpc:take_question', 'rpc:take_question', 'rpc:take_question']);
+  });
+
+  it('a provider that throws still takes the quota: the next answer says 8', async () => {
+    traced();
+    reply = async () => { throw new Error('boom'); };
+    expect((await ask(ON_04)).body.reason).toBe('failed');
+    expect(order).toEqual(['quota', 'provider']);
+    reply = async () => ({ response: { answer: 'La frené porque supera el límite por pago.' } });
+    expect((await ask(ON_04)).body.remaining).toBe(8);
+    expect(quota.keys).toEqual(new Map([['u:user-a', 2]]));
+  });
+
   it('a quota counter that fails is failed, with 0 model calls', async () => {
     quota.fail = true;
     expect((await ask(ON_04)).body).toEqual({ answer: null, reason: 'failed', message: es['ask.reason.failed'] });

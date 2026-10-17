@@ -384,6 +384,21 @@ test('the highlight is the span the API sends, as printed in the document (AC-77
   expect(fieldRow('Vencimiento').querySelector('mark')?.textContent).toBe('31/10/2026');
 });
 
+// R-130: a cut line arrives with «…» marks and `match` already shifted by the leading one; the web renders it as given.
+test('a snippet with «…» marks highlights exactly the span, marks shown as text (AC-77, R-130)', async () => {
+  const fields = [
+    { name: 'amount', value: 2500, confidence: 0.9, snippet: '\u2026Total a pagar USD 2.500,00', match: [19, 27] },
+    { name: 'bank_account', value: 'Pix chave 11 98765-4302', confidence: 0.9, snippet: '\u2026mi cuenta es Pix chave 11 98765-4302 gracias\u2026', match: [14, 37] },
+  ];
+  mockApi({ [GET]: { ...escalated, reading: { provider: NOVA, fields }, reading_status: 'ai' } });
+  open();
+  await screen.findByText(`Leído por IA · ${NOVA}`);
+  expect(fieldRow('Monto').querySelector('mark')?.textContent).toBe('2.500,00');
+  expect(fieldRow('Monto').querySelector('.reading-snippet')?.textContent).toBe('\u2026Total a pagar USD 2.500,00');
+  expect(fieldRow('Cuenta bancaria').querySelector('mark')?.textContent).toBe('Pix chave 11 98765-4302');
+  expect(fieldRow('Cuenta bancaria').querySelector('.reading-snippet')?.textContent).toBe('\u2026mi cuenta es Pix chave 11 98765-4302 gracias\u2026');
+});
+
 test('no <mark> when match is null or missing, even if the value appears in the snippet (AC-77)', async () => {
   const fields = [
     { name: 'invoice_number', value: '2044', confidence: 0.9, snippet: 'Factura No. 2044', match: null },

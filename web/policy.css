@@ -1,0 +1,47 @@
+/* Política and Beneficiarios (AC-53): flat cards, 1px #eaeaea borders, no shadows. */
+.policy, .beneficiaries { display: grid; gap: 2rem; }
+.policy > h1, .beneficiaries > h1 { margin-bottom: 0; }
+.policy > p, .beneficiaries > p { margin: -1.5rem 0 0; }
+
+.card { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 2rem; }
+.card h2 { font: 400 var(--text-xl) / 1.2 var(--font-serif); letter-spacing: -0.02em; margin: 0 0 1.5rem; }
+.card form { display: grid; gap: 1.25rem; justify-items: start; }
+.card form > * { max-width: 100%; }
+
+.grid { display: grid; gap: 1.25rem 1.5rem; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); width: 100%; }
+.grid label { display: grid; gap: 0.25rem; }
+.grid .hint { display: block; margin-top: 0.25rem; }
+.hint { font-size: var(--text-sm); margin: 0; }
+.mono { font-family: var(--font-mono); font-size: var(--text-sm); }
+
+select, textarea {
+  font: inherit; width: 100%; padding: 0.625rem 0.75rem; border: 1px solid var(--line); border-radius: 4px;
+  background: var(--surface); color: var(--ink);
+}
+input:disabled, select:disabled { background: var(--canvas); color: var(--ink-2); }
+input[aria-invalid='true'], select[aria-invalid='true'] { border-color: #9f2f2d; background: #fdebec; }
+fieldset { border: 1px solid var(--line); border-radius: var(--radius); padding: 1rem 1.25rem 1.25rem; width: 100%; margin: 0; }
+legend { padding: 0 0.5rem; color: var(--ink-2); font-size: var(--text-sm); }
+.switch { display: flex; align-items: center; gap: 0.75rem; color: var(--ink); font-size: var(--text-base); }
+.switch input { width: auto; }
+form + [role='alert'], form [role='status'] { margin: 0; }
+
+.banner { background: #fbf3db; color: #956400; border-radius: 4px; padding: 0.75rem 1rem; margin-bottom: 1rem; }
+.banner p { margin: 0; font-weight: 600; }
+.banner ul { margin: 0.5rem 0 0; padding-left: 1.25rem; }
+.card > button.primary { margin-top: 0.25rem; }
+
+.versions { list-style: none; margin: 0; padding: 0; }
+.versions li { display: flex; gap: 1rem; align-items: baseline; padding: 0.625rem 0; border-bottom: 1px solid var(--line); }
+.versions li:last-child { border-bottom: 0; }
+.versions li strong { flex: 1; font-weight: 500; }
+
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+th { text-align: left; font-weight: 500; color: var(--ink-2); }
+th, td { padding: 0.625rem 0.75rem 0.625rem 0; border-bottom: 1px solid var(--line); vertical-align: baseline; }
+tr:last-child td { border-bottom: 0; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .card { animation: rise 600ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+}

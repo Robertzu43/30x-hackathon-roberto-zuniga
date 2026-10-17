@@ -28,8 +28,9 @@ const illegible = (c: Check) => READ_FIELDS.every((f) => missingOf(c).includes(f
 
 export function agreementText(values: Check['values'], lang: Lang): string {
   const type = values.agreement_type;
-  if (!type) return t(lang, 'agreement.none');
-  return fill(lang, `agreement.${type}`, { ...vars(values, lang), period: values.period === 'monthly' ? t(lang, 'agreement.monthly') : '' });
+  const key = `agreement.${type}`;
+  if (!type || t(lang, key) === key) return t(lang, 'agreement.none'); // t returns the key when it has no entry: unknown types read "sin acuerdo registrado" (R-52)
+  return fill(lang, key, { ...vars(values, lang), period: values.period === 'monthly' ? t(lang, 'agreement.monthly') : '' });
 }
 
 function vars(values: Check['values'], lang: Lang): Record<string, string | null> {

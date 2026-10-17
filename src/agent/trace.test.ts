@@ -96,6 +96,12 @@ describe('agentTrace "Lo que hice" (AC-64, D24, R-29)', () => {
     expect(steps.slice(0, 2).map((s) => s.text)).toEqual(['Leí la imagen y no pude leerla: ilegible.', 'No la encontré en el directorio.']);
     expect(steps[3]?.text).toMatch(/^Decidí ESCALAR: ilegible, /);
   });
+  it('an agreement type with no dictionary entry reads "sin acuerdo registrado", never the raw key (R-52, AC-28)', () => {
+    const i = inv(), d = stored(run(i));
+    const checks = d.checks.map((c) => (c.id === 'acuerdo' ? { ...c, values: { ...c.values, agreement_type: 'weird' } } : c));
+    expect(trace(i, [{ ...d, checks }])[1]?.text).toBe('La encontré en el directorio: sin acuerdo registrado, cuenta terminada en 4821.');
+    expect(trace(i, [{ ...d, checks }], {}, 'en')[1]?.text).toBe('I found the payee in the directory: no agreement on file, account ending in 4821.');
+  });
   it('a field not read is named', () => {
     const i = inv({ amount: null });
     expect(trace(i, [stored(run(i))])[0]?.text).toBe('Leí el PDF y encontré a Laura Méndez, factura #1042; no pude leer el monto.');

@@ -74,6 +74,17 @@ describe('explainCheck (AC-27, AC-28, AC-22, R-22)', () => {
       expect(explainCheck(c, lang, RECEIVED)).not.toMatch(/[{}]|check\.|undefined|NaN/);
     }
   });
+  it('an agreement type with no dictionary entry reads "sin acuerdo registrado" in every verdict, never the raw key (R-52, AC-27)', () => {
+    const acuerdo = { ...get(d.checks, 'acuerdo'), values: { ...get(d.checks, 'acuerdo').values, agreement_type: 'weird' } };
+    const words = { es: 'sin acuerdo registrado', en: 'no agreement on file' };
+    for (const verdict of ['cumple', 'no_cumple', 'no_verificado'] as const) for (const lang of ['es', 'en'] as const) {
+      for (const c of [{ ...acuerdo, verdict }, { ...acuerdo, verdict, overridden: { by: 'ana@x.co', channel: 'link' as const } }]) {
+        const text = explainCheck(c, lang, RECEIVED);
+        expect(text).not.toMatch(/agreement\.|null|undefined/);
+        if (verdict !== 'no_verificado') expect(text).toContain(words[lang]);
+      }
+    }
+  });
   it('a missing value reads "desconocido", not a blank', () => {
     const c: Check = { id: 'limite_pago', verdict: 'no_verificado', actual: '', threshold: '', values: {} };
     expect(explainCheck(c, 'es', RECEIVED)).toBe('Límite por pago: falta el monto en USD o el límite por pago en la política → no se pudo verificar');

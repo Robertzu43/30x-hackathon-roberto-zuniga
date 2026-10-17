@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { scheduled } from './agent/scheduled';
+import { inbound } from './email/inbound';
 import type { Env } from './env';
 import { agent } from './routes/agent';
 import { ask } from './routes/ask';
@@ -38,5 +39,6 @@ app.onError((e, c) => {
 export { app };
 // The vendor portal's RPC entrypoint (AC-85 item 1), bound by portal/wrangler.toml as MAIN.
 export { PortalApi } from './portal-api';
-// fetch serves the API and the SPA; scheduled is the 5-minute cron (AC-62) and the daily FX cron (AC-73), wrangler.toml [triggers].
-export default { fetch: app.fetch, scheduled } satisfies ExportedHandler<Env>;
+// fetch serves the API and the SPA; scheduled is the 5-minute cron (AC-62) and the daily FX cron (AC-73), wrangler.toml [triggers];
+// email is the email intake (AC-87), inert until Email Routing sends a domain here (AC-88).
+export default { fetch: app.fetch, scheduled, email: inbound } satisfies ExportedHandler<Env>;

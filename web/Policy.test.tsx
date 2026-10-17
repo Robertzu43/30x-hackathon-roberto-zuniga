@@ -422,3 +422,9 @@ test('CSS: at 768 px and below the pin inputs are 16 px and the rate rows become
   expect(m).toMatch(/\.fx-table tr \{[^}]*display: flex/);
   expect(rule('.fx-slot')).toMatch(/min-height/);
 });
+
+test('CSS: the rate header hidden on phones uses the standard sr-only pattern (AC-91 item 1)', () => {
+  const m = css.split('@media (max-width: 768px) {')[1]?.split('\n}\n')[0] ?? '';
+  const head = m.match(/\.fx-table thead \{([^}]*)\}/)?.[1] ?? '';
+  for (const d of ['position: absolute', 'width: 1px', 'height: 1px', 'margin: -1px', 'padding: 0', 'overflow: hidden', 'clip: rect(0 0 0 0)', 'white-space: nowrap', 'border: 0', 'font-size: 0']) expect(head).toContain(d);
+});

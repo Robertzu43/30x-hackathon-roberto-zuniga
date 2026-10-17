@@ -1,0 +1,5 @@
+.trial-door { display: grid; gap: 0.75rem; justify-items: start; }
+.trial-door p { margin: 0; }
+.trial-door .error { display: grid; gap: 0.75rem; justify-items: start; }
+.leave-trial { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 1rem 1.25rem; }
+.leave-trial p { flex-basis: 100%; margin: 0; }

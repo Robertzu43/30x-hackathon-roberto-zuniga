@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, expect, test } from 'vitest';
 import App, { pages } from './App';
 import { DEMO_EMAIL, fakeAuth, mockApi, renderAt, signedInAs } from './test/utils';
@@ -72,13 +72,66 @@ test('a seen user is not shown the tour on load', async () => {
   expect(screen.queryByRole('dialog')).toBeNull();
 });
 
-test('the demo user always gets the tour and skipping it stores nothing (R-17)', async () => {
-  signedInAs(DEMO_EMAIL, SEEN);
-  renderAt(<App />);
+// R-62: the shared demo user gets the tour once per click on "Entrar como Andina Labs", never on reload or deep link.
+const enterAsDemo = async () => {
+  mockApi({ 'GET /api/invoices': [], 'GET /api/agent/last-run': null, 'GET /api/demo/overview': new Response('{}', { status: 503 }) });
+  fireEvent.click(await screen.findByRole('button', { name: 'Entrar como Andina Labs' }));
+};
+const reloadAt = (at: string) => {
+  cleanup();
+  renderAt(<App />, { at });
+};
+
+test('"Entrar como Andina Labs" starts the tour on Bandeja; skipping it stores nothing (R-17, R-62)', async () => {
+  renderAt(<App />, { at: '/demo' });
+  await enterAsDemo();
   const dialog = await screen.findByRole('dialog');
+  expect(within(dialog).getByRole('heading', { name: 'Bandeja', level: 2 })).toBeTruthy();
   fireEvent.click(within(dialog).getByRole('button', { name: 'Saltar' }));
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   expect(fakeAuth.updateUser).not.toHaveBeenCalledWith({ data: { tour_seen: true } });
+});
+
+test.each(['/policy', '/period', '/'])('a demo user reloading or deep-linking %s stays there with no tour (R-62)', async (at) => {
+  signedInAs(DEMO_EMAIL, SEEN);
+  renderAt(<App />, { at });
+  await signedInTopBar();
+  await new Promise((r) => setTimeout(r, 50));
+  expect(screen.queryByRole('dialog')).toBeNull();
+  if (at === '/policy') expect(screen.getByRole('heading', { name: 'Política', level: 1 })).toBeTruthy();
+  if (at === '/period') expect(screen.getByRole('heading', { name: 'Periodo', level: 1 })).toBeTruthy();
+});
+
+test('after the click, a reload never restarts the tour; "Ver tutorial" and a new click do (R-62)', async () => {
+  renderAt(<App />, { at: '/demo' });
+  await enterAsDemo();
+  fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Saltar' }));
+  reloadAt('/policy');
+  await signedInTopBar();
+  await new Promise((r) => setTimeout(r, 50));
+  expect(screen.queryByRole('dialog')).toBeNull();
+  expect(screen.getByRole('heading', { name: 'Política', level: 1 })).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Ver tutorial' }));
+  fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Saltar' }));
+  reloadAt('/demo');
+  await enterAsDemo(); // already signed in as the demo user: the same user id signs in again
+  expect(await screen.findByRole('dialog')).toBeTruthy();
+});
+
+test('a signed-out deep link survives sign-in: the code lands on the page asked for', async () => {
+  mockApi({ 'GET /api/invoices': [], 'GET /api/agent/last-run': null, 'POST /api/invoices/run': { PAGAR: 0, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null } });
+  // A returning user (tour already seen): verifyOtp signs in with the stored metadata.
+  fakeAuth.verifyOtp.mockImplementationOnce(async ({ email }) => {
+    signedInAs(email, SEEN);
+    await fakeAuth.updateUser({ data: {} }); // emits the new session to the app
+    return { data: {}, error: null };
+  });
+  renderAt(<App />, { at: '/period' });
+  fireEvent.change(await screen.findByLabelText('Correo'), { target: { value: 'ana@empresa.co' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Enviar código' }));
+  fireEvent.change(await screen.findByLabelText('Código de 6 dígitos'), { target: { value: '123456' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Entrar' }));
+  expect(await screen.findByRole('heading', { name: 'Periodo', level: 1 })).toBeTruthy();
 });
 
 test('the top bar language switch changes the UI without reload and stores it on the user (AC-41)', async () => {
@@ -113,3 +166,21 @@ test('the tour keeps its place across routes: Siguiente from Bandeja reaches Pol
   expect(await screen.findByRole('heading', { name: 'Política', level: 2 }, { timeout: 8000 })).toBeTruthy();
   expect(screen.getByRole('heading', { name: 'Política', level: 1 })).toBeTruthy();
 }, 10000);
+
+test('signing out then signing in as someone else opens Bandeja, not the page the first user left (AC-40)', async () => {
+  mockApi({ 'GET /api/invoices': [], 'GET /api/agent/last-run': null, 'GET /api/policy': [], 'GET /api/company': { id: 'c', name: 'A', approver_email: 'a@a.co', lang: 'es', is_demo: false }, 'POST /api/invoices/run': { PAGAR: 0, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null } });
+  signedInAs('ana@empresa.co', SEEN);
+  renderAt(<App />, { at: '/policy' });
+  await screen.findByRole('heading', { name: 'Política', level: 1 });
+  fireEvent.click(screen.getByRole('button', { name: 'Cerrar sesión' }));
+  fireEvent.change(await screen.findByLabelText('Correo'), { target: { value: 'bea@otra.co' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Enviar código' }));
+  fakeAuth.verifyOtp.mockImplementationOnce(async ({ email }) => {
+    signedInAs(email, SEEN);
+    await fakeAuth.updateUser({ data: {} });
+    return { data: {}, error: null };
+  });
+  fireEvent.change(await screen.findByLabelText('Código de 6 dígitos'), { target: { value: '123456' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Entrar' }));
+  expect(await screen.findByRole('heading', { name: 'Bandeja', level: 1 })).toBeTruthy();
+});

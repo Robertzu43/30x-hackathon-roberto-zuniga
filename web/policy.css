@@ -36,7 +36,6 @@ form + [role='alert'], form [role='status'] { margin: 0; }
 .versions li:last-child { border-bottom: 0; }
 .versions li strong { flex: 1; font-weight: 500; }
 
-.table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
 th { text-align: left; font-weight: 500; color: var(--ink-2); }
 th, td { padding: 0.625rem 0.75rem 0.625rem 0; border-bottom: 1px solid var(--line); vertical-align: baseline; }

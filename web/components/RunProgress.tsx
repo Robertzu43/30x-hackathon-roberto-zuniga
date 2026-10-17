@@ -7,7 +7,7 @@
  *
  * run = { start(), running, progress: {n,m,done} | null, result: RunResult | null }.
  * RunProgress renders, in order: "Decidiendo facturas… n de m" while running; after the run the summed
- * "n PAGAR · n FRENAR · n ESCALAR", the R-57 errors line for `mode`, and a non-2xx error text as is.
+ * "n PAGAR · n FRENAR · n ESCALAR" (en: "n PAY · n STOP · n ESCALATE", R-65), the R-57 errors line for `mode`, and a non-2xx error text as is.
  */
 import { useRef, useState } from 'react';
 import { useT } from '../i18n';

@@ -1,6 +1,6 @@
 import type { Session, User } from '@supabase/supabase-js';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { config, supabase } from './api';
 import { useT } from './i18n';
 
@@ -12,9 +12,17 @@ export const useSession = (): Auth => useContext(AuthCtx);
 export const isDemoUser = (user: User | undefined, demoEmail: string): boolean =>
   !!user?.email && !!demoEmail && user.email.toLowerCase() === demoEmail.toLowerCase();
 
-/** AC-42: first login (tour not seen yet), and every time for the shared demo user (R-17). */
+/** AC-42: on sign-in, a user who has not seen the tour. The shared demo user only through the marker below (R-62). */
 export const shouldStartTour = (user: User, demoEmail: string): boolean =>
-  isDemoUser(user, demoEmail) || user.user_metadata?.tour_seen !== true;
+  !isDemoUser(user, demoEmail) && user.user_metadata?.tour_seen !== true;
+
+/** R-62: "Entrar como Andina Labs" leaves this per-tab marker; the tour takes it once, so a reload or deep link never restarts it. */
+export const DEMO_TOUR = 'demo-tour';
+export const takeDemoTour = (): boolean => {
+  const clicked = sessionStorage.getItem(DEMO_TOUR) !== null;
+  sessionStorage.removeItem(DEMO_TOUR);
+  return clicked;
+};
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [auth, setAuth] = useState<Auth>({ session: null, ready: false, demoEmail: '' });
@@ -50,6 +58,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function RequireAuth({ children }: { children: ReactNode }) {
   const { session, ready } = useSession();
+  const { pathname, search } = useLocation();
   if (!ready) return null;
-  return session ? children : <Navigate to="/login" replace />;
+  // The deep link rides along so sign-in lands on it (R-62).
+  return session ? children : <Navigate to="/login" replace state={{ from: pathname + search }} />;
 }

@@ -42,7 +42,8 @@ h1 {
   background: var(--surface);
   flex-wrap: wrap;
 }
-.topbar-actions { margin-left: auto; display: flex; align-items: center; gap: 0.75rem; font-size: var(--text-sm); }
+.topbar-actions { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; font-size: var(--text-sm); min-width: 0; }
+.topbar-actions .muted { overflow-wrap: anywhere; }
 .topbar .lang { display: flex; gap: 0.25rem; }
 
 button {
@@ -76,11 +77,19 @@ input {
 label { font-size: var(--text-sm); color: var(--ink-2); }
 .error { color: #9f2f2d; background: #fdebec; padding: 0.5rem 0.75rem; border-radius: 4px; margin: 0; }
 
-.screens { display: flex; gap: 1.5rem; padding: 0.75rem 2rem; border-bottom: 1px solid var(--line); font-size: var(--text-sm); }
+.screens { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; padding: 0.75rem 2rem; border-bottom: 1px solid var(--line); font-size: var(--text-sm); }
 .screens a { color: var(--ink-2); text-decoration: none; }
 .screens a.active { color: var(--accent); }
 
 main { max-width: 64rem; margin: 0 auto; padding: 6rem 2rem; }
+.table-wrap { overflow-x: auto; }
+
+/* AC-72 (R-67): at phone width the chrome tightens so nothing scrolls sideways. */
+@media (max-width: 640px) {
+  .topbar, .screens { padding-left: 1rem; padding-right: 1rem; }
+  .topbar-actions { margin-left: 0; }
+  main { padding: 3rem 1rem; }
+}
 
 /* Login (D21, design-taste-frontend): one very large wordmark on a flat tone field, the form beside it. */
 .login { min-height: 100svh; display: grid; grid-template-columns: 1.3fr 1fr; }

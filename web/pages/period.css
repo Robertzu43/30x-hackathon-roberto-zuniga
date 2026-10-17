@@ -4,7 +4,7 @@
 .period h2 { font-size: var(--text-sm); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-2); margin: 2.5rem 0 0.75rem; }
 .period-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 1rem; }
 .period-fig { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: 1.5rem; }
-.period-fig .big { font: 400 var(--text-xl) / 1.1 var(--font-serif); letter-spacing: -0.03em; margin: 0 0 0.5rem; }
+.period-fig .big { font: 400 1.375rem / 1.1 var(--font-serif); /* R-63: "Decisiones explicadas 100 %" on one line in a third-width card */ letter-spacing: -0.03em; margin: 0 0 0.5rem; }
 .period-fig p { margin: 0 0 0.5rem; }
 .period-fig p:last-child { font-size: var(--text-sm); color: var(--ink-2); }
 .period-fig.bad { background: #fdebec; border-color: #9f2f2d; }
@@ -17,3 +17,6 @@
 .period th, .period td { text-align: left; padding: 0.5rem 0; border-bottom: 1px solid var(--line); }
 .period th { font-weight: 500; color: var(--ink-2); }
 .period .num { text-align: right; font-family: var(--font-mono); }
+@media (max-width: 640px) {
+  .period-money dd { font-size: 1.125rem; } /* AC-72: "USD 42.000,00" fits a half-width cell at 390 px */
+}

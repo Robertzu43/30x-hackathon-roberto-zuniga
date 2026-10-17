@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 import { api, ApiError, config } from './api';
 import { mockApi, signedInAs } from './test/utils';
+import { send } from './withField';
 
 test('attaches the session JWT as a bearer token', async () => {
   signedInAs('ana@empresa.co');
@@ -53,5 +54,16 @@ test('sends the tab language as X-Lang on every call', async () => {
   expect(new Headers(fetchMock.mock.calls.at(-1)![1]!.headers).get('X-Lang')).toBe('en');
   sessionStorage.setItem('lang', 'es');
   await api.post('/api/invoices/run');
+  expect(new Headers(fetchMock.mock.calls.at(-1)![1]!.headers).get('X-Lang')).toBe('es');
+});
+
+// R-98: the second client (withField.send, used by Policy and Beneficiaries) carries the tab language too.
+test('withField send carries the tab language as X-Lang for es and en', async () => {
+  const fetchMock = mockApi({ 'PUT /api/policy': {}, 'POST /api/beneficiaries': {} });
+  sessionStorage.setItem('lang', 'en');
+  await send('PUT', '/api/policy', {});
+  expect(new Headers(fetchMock.mock.calls.at(-1)![1]!.headers).get('X-Lang')).toBe('en');
+  sessionStorage.setItem('lang', 'es');
+  await send('POST', '/api/beneficiaries', {});
   expect(new Headers(fetchMock.mock.calls.at(-1)![1]!.headers).get('X-Lang')).toBe('es');
 });

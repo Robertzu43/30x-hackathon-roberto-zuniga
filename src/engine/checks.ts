@@ -62,7 +62,9 @@ export function validFields(f: InvoiceFields): InvoiceFields {
 const READ = ['payee_name', 'amount', 'currency', 'invoice_number'] as const;
 export function lectura({ invoice: { fields: f } }: CheckContext): Check {
   const missing = READ.filter((k) => f[k] === null);
-  return make('lectura', missing.length ? 'no_verificado' : 'cumple', missing.join(', ') || f.amount, null, { missing: missing.join(', ') || null });
+  const unread = f.read_error === 'lector_no_disponible'; // R-75: the reason travels with every later decision (R-77)
+  return make('lectura', missing.length || unread ? 'no_verificado' : 'cumple', missing.join(', ') || f.amount, null,
+    { missing: missing.join(', ') || null, ...(unread ? { reason: 'lector_no_disponible' } : {}) });
 }
 
 export function beneficiario_permitido({ invoice, beneficiary, rules }: CheckContext): Check {

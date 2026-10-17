@@ -65,7 +65,7 @@ export const invoices = memberRoutes()
     const { db, companyId } = c.var;
     const id = crypto.randomUUID();
     let source: Invoice['source'];
-    let text: string;
+    let text: string | null; // null: the vision model gave no answer (R-75)
     let filePath: string | null = null;
     if (c.req.header('Content-Type')?.startsWith('multipart/form-data')) {
       const file = (await c.req.formData().catch(() => null))?.get('file');

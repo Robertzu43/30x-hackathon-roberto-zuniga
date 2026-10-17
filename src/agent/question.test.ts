@@ -98,3 +98,32 @@ describe('escalationQuestion (AC-65, D25)', () => {
     }
   });
 });
+
+// R-75 (AC-13 Clarified item 6): the question, also the e-mail subject and first line of a non-demo company.
+describe('escalationQuestion when the reader was unavailable (AC-13 Clarified, R-75)', () => {
+  const UNREAD: InvoiceFields = { payee_name: null, amount: null, currency: null, invoice_number: null, issue_date: null, due_date: null,
+    concept: null, bank_account: null, confidence: {}, read_error: 'lector_no_disponible' };
+  const unread = (source: Invoice['source']): Invoice => ({ id: 'u', received_at: '2026-10-10T15:00:00Z', source, fields: UNREAD });
+  it.each([['email', 'por correo'], ['chat', 'por chat'], ['pdf', 'en PDF'], ['image', 'en imagen']] as const)('es, %s', (source, how) => {
+    const i = unread(source);
+    expect(ask(i, run(i))).toBe(`Juan, no pude leer una factura que llegó ${how}: el lector de facturas no estaba disponible. ` +
+      'No la pago sin leerla; vuelve a ingresarla más tarde. ¿Rechazo esta copia sin leer?');
+  });
+  it.each([['email', 'by email'], ['chat', 'by chat'], ['pdf', 'as a PDF'], ['image', 'as an image']] as const)('en, %s', (source, how) => {
+    const i = unread(source);
+    expect(ask(i, run(i), 'en')).toBe(`Juan, I could not read an invoice that arrived ${how}: the invoice reader was unavailable. ` +
+      'I will not pay it without reading it; enter it again later. Shall I reject this unread copy?');
+  });
+  it('with no name (R-26) it starts "No pude leer…" / "I could not read…"', () => {
+    const i = unread('email');
+    expect(ask(i, run(i), 'es', 'ops1@blinka.co')).toMatch(/^No pude leer una factura que llegó por correo: /);
+    expect(ask(i, run(i), 'en', 'ops1@blinka.co')).toMatch(/^I could not read an invoice that arrived by email: /);
+  });
+  it('a re-escalation after an approval asks the same question (the reason is kept, R-77)', () => {
+    const i = unread('chat');
+    const d = run(i);
+    const a = decideWithOverrides(d.checks.filter((c) => c.verdict !== 'cumple').map((c) => c.id), { email: 'r@x.co', channel: 'link' }, i, null, RULES, EMPTY, NOW);
+    expect(ask(i, a)).toBe(ask(i, d));
+  });
+});
+

@@ -13,7 +13,6 @@ import type { Decision, Invoice } from '../engine/types';
 import type { Env } from '../env';
 import { adminClient } from '../lib/admin';
 import { requireUser, type AppEnv } from '../lib/auth';
-import { documentToText, extractFields } from '../lib/llm';
 import { isUuid, must, type Db } from '../lib/supabase';
 import { hashToken, verifyToken } from '../lib/tokens';
 
@@ -43,7 +42,7 @@ const approverOf = async (db: Db, companyId: string): Promise<string | null> =>
   (must(await db.from('companies').select('approver_email').eq('id', companyId).single()) as { approver_email: string | null }).approver_email;
 
 interface Answer {
-  env: Env; db: Db; record: Recorder; companyId: string; invoiceId: string; approverEmail: string;
+  db: Db; record: Recorder; companyId: string; invoiceId: string; approverEmail: string;
   by: { email: string; channel: 'link' | 'dashboard' }; action: 'approve' | 'reject'; seq: number; note: string | null;
 }
 
@@ -51,15 +50,15 @@ interface Answer {
 // re-run on fresh period state (R-02, R-21); PAGAR or ESCALAR again (FRENAR on a fresh duplicate or limit breach).
 // Reject: FRENAR by the person, with the escalation's own checks (R-48): no re-check, the budget is released.
 async function answer(a: Answer): Promise<StoredDecision | Refusal> {
-  const { env, db, companyId, invoiceId } = a;
-  const row: (Omit<Invoice, 'fields'> & { fields: Invoice['fields'] | null; raw_text: string | null }) | null =
-    must(await db.from('invoices').select('id, source, received_at, fields, raw_text').eq('company_id', companyId).eq('id', invoiceId).eq('archived', false).maybeSingle());
+  const { db, companyId, invoiceId } = a;
+  const row: (Omit<Invoice, 'fields'> & { fields: Invoice['fields'] | null }) | null =
+    must(await db.from('invoices').select('id, source, received_at, fields').eq('company_id', companyId).eq('id', invoiceId).eq('archived', false).maybeSingle());
   if (!row) return 'not_found';
   const esc = await latestOf(db, companyId, invoiceId);
   if (esc?.outcome !== 'ESCALAR') return 'already_decided';
   if (esc.seq !== a.seq) return 'changed';
-  // The same `lee` as the agent loop: an invoice stored without fields is read from its text.
-  const fields = row.fields ?? await extractFields(env, await documentToText(env, { kind: 'text', text: row.raw_text ?? '' }));
+  // R-77, R-55: what the page showed: the stored fields, else those the escalation recorded. Never a re-read.
+  const fields = recordedFields(row.fields, esc.checks);
   const invoice: Invoice = { id: row.id, received_at: row.received_at, source: row.source, fields };
   const [directory, policy] = await Promise.all([directorio(db, companyId), politica(db, companyId)]);
   const beneficiary = findBeneficiary(fields.payee_name, directory);
@@ -127,7 +126,7 @@ approvals.post('/approve/:token', async (c) => {
   const approver = await approverOf(l.db, l.company_id);
   if (!approver) return refuse(c, 'invalid_token'); // nobody to record as the answering person (AC-37)
   const record = recorder(c.env, l.company_id);
-  const r = await answer({ env: c.env, db: l.db, record, companyId: l.company_id, invoiceId: l.invoice_id, approverEmail: approver,
+  const r = await answer({ db: l.db, record, companyId: l.company_id, invoiceId: l.invoice_id, approverEmail: approver,
     by: { email: approver, channel: 'link' }, action: l.action, seq: body.seq, note: body.note ?? null });
   if (typeof r === 'string') return refuse(c, r);
   // Spends the pair of the token's OWN escalation (R-55 (4)). Written after the decision so a stale form spends nothing.
@@ -150,7 +149,7 @@ for (const action of ['approve', 'reject'] as const) {
     if (!body) return refuse(c, 'bad_request');
     const { db, companyId, user } = c.var;
     if (!user.email) return c.json({ error: 'No autorizado' }, 401);
-    const r = await answer({ env: c.env, db, record: recorder(c.env, companyId), companyId, invoiceId: c.req.param('id'),
+    const r = await answer({ db, record: recorder(c.env, companyId), companyId, invoiceId: c.req.param('id'),
       approverEmail: (await approverOf(db, companyId)) ?? '', by: { email: user.email, channel: 'dashboard' }, action, seq: body.seq, note: body.note ?? null });
     return typeof r === 'string' ? refuse(c, r) : c.json({ decision: r });
   });

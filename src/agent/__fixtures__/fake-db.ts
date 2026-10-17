@@ -62,15 +62,18 @@ export function fakeDb(seed: Record<string, Row[]> = {}) {
     private mode: 'many' | 'single' | 'maybe' = 'many';
     private payload: Row | Row[] | null = null;
     private eqs: Row = {};
+    private embed = false;
     constructor(private table: string) {}
-    select(columns?: string) { void columns; return this; } // column lists are ignored: rows come back whole
+    // Column lists are ignored (rows come back whole), except the embedded latest decision `decisions(...)` that PostgREST
+    // resolves through invoice_current.id -> decisions.invoice_id (checked live, 17 Oct): [latest] or [].
+    select(columns?: string) { this.embed = /\bdecisions\(/.test(columns ?? ''); return this; }
     eq(c: string, v: unknown) { this.eqs[c] = v; this.preds.push((r) => (r[c] ?? (c === 'archived' ? false : undefined)) === v); return this; } // archived defaults to false like the column
     is(c: string, v: null) { this.preds.push((r) => (r[c] ?? null) === v); return this; }
     not(c: string, _op: 'is', v: null) { this.preds.push((r) => (r[c] ?? null) !== v); return this; }
     in(c: string, vs: unknown[]) { this.preds.push((r) => vs.includes(r[c])); return this; }
     gte(c: string, v: string) { this.preds.push((r) => Date.parse(String(r[c])) >= Date.parse(v)); return this; }
-    order(c: string, o?: { ascending?: boolean }) { this.sorts.push([c, o?.ascending !== false]); return this; }
-    limit(n: number) { this.max = n; return this; }
+    order(c: string, o?: { ascending?: boolean; referencedTable?: string }) { if (!o?.referencedTable) this.sorts.push([c, o?.ascending !== false]); return this; }
+    limit(n: number, o?: { referencedTable?: string }) { if (!o?.referencedTable) this.max = n; return this; }
     single() { this.mode = 'single'; return this; }
     maybeSingle() { this.mode = 'maybe'; return this; }
     insert(p: Row | Row[]) { this.payload = p; return this; }
@@ -86,6 +89,7 @@ export function fakeDb(seed: Record<string, Row[]> = {}) {
         return { data: null, error: null };
       }
       let rows = (this.table === 'invoice_current' ? current() : tables[this.table] ?? []).filter((r) => this.preds.every((p) => p(r)));
+      if (this.embed) rows = rows.map((r) => ({ ...r, decisions: latest(r.id) ? [latest(r.id)] : [] }));
       for (const [c, asc] of [...this.sorts].reverse()) {
         rows = [...rows].sort((a, b) => (String(a[c]) < String(b[c]) ? -1 : String(a[c]) > String(b[c]) ? 1 : 0) * (asc ? 1 : -1));
       }

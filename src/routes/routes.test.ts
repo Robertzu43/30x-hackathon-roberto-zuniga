@@ -885,3 +885,64 @@ describe('budgeted, resumable runs over HTTP (AC-70, R-56, R-57, R-59, R-60)', (
     expect(out.will_pay).toBe(0);
   });
 });
+
+// R-75 (AC-13 Clarified): the reader gave no answer -> stored as sent, 201 with ESCALAR «sin leer»; an answer with nothing
+// usable stays «ilegible». No test calls the real model (R-76): every AI.run here is a fake.
+describe('ingest when the reader is unavailable (AC-13 Clarified, R-75)', () => {
+  const QUOTA = () => Promise.reject(new Error('4006: you have used up your daily free allocation of 10,000 neurons'));
+  const HEADLINE = 'ESCALAR · factura sin leer: el lector de facturas no estaba disponible; vuelve a ingresarla más tarde';
+  const UNAVAILABLE = { payee_name: null, amount: null, currency: null, invoice_number: null, issue_date: null, due_date: null,
+    concept: null, bank_account: null, confidence: {}, read_error: 'lector_no_disponible' };
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+  async function ingest(body: unknown) {
+    const r = await call('POST', '/api/invoices', body);
+    expect(r.status).toBe(201);
+    const { invoice, decision } = await json<{ invoice: Row; decision: Row }>(r);
+    return { invoice, decision, stored: db.tables.invoices!.find((i) => i.id === invoice.id)! };
+  }
+
+  it.each([
+    ['a pasted email, the text model out of quota', { source: 'email', text: 'Factura 1050 de Laura Méndez' }, () => ai.run.mockImplementationOnce(QUOTA), 1],
+    ['an image, the vision model out of quota', 'png', () => ai.run.mockImplementationOnce(QUOTA), 1],
+    ['an image, the vision model answering and the text model out of quota', 'png',
+      () => ai.run.mockImplementationOnce(async () => ({ response: 'texto de la imagen' })).mockImplementationOnce(QUOTA), 2],
+  ])('%s: stores the fields as sent, ESCALAR with the «sin leer» texts, never PAGAR', async (_, body, arrange, calls) => {
+    db = testDb(workspace([]));
+    arrange();
+    const { invoice, decision, stored } = await ingest(body === 'png' ? upload(png, 'f.png', 'image/png') : body);
+    expect(stored.fields).toEqual(UNAVAILABLE);
+    expect(ai.run).toHaveBeenCalledTimes(calls); // no automatic retry, no second read
+    expect(decision).toMatchObject({ outcome: 'ESCALAR', headline_es: HEADLINE });
+    expect((decision.checks as Array<{ id: string; values: Row }>).find((c) => c.id === 'lectura')!.values.reason).toBe('lector_no_disponible');
+    const detail = await json<{ invoice: { fields: Row }; explanations: string[]; fixes: string[]; trace: Array<{ text: string }>; question: string }>(await call('GET', `/api/invoices/${invoice.id}`));
+    expect(detail.explanations[0]).toBe('Lectura: el lector de facturas no estaba disponible cuando llegó (límite diario del servicio o falla temporal); no se leyó ningún dato → no se pudo verificar');
+    expect(detail.fixes[0]).toBe('Que vuelvas a ingresar la factura cuando el lector esté disponible y rechaces esta copia sin leer');
+    expect(detail.trace[0]!.text).toMatch(/^Intenté leer (el correo|la imagen), pero el lector de facturas no estaba disponible; no inventé ningún dato\.$/);
+    expect(detail.trace[3]!.text).toBe('Decidí ESCALAR: el lector de facturas no estaba disponible.');
+    expect(detail.invoice.fields.read_error).toBe('lector_no_disponible'); // the «Lo que leí» notice (AC-13 item 7) keys on it
+    expect(detail.question).toMatch(/^Juan, no pude leer una factura que llegó (por correo|en imagen): el lector de facturas no estaba disponible\./);
+  });
+
+  it('an invoice stored without fields and read by "Ejecutar agente" keeps fields null; the detail shows read_error from its decision', async () => {
+    db = testDb(workspace([]));
+    const id = uid('A-rest');
+    db.tables.invoices!.push({ id, company_id: 'A', source: 'chat', raw_text: 'Factura 1050', archived: false, received_at: NOW, fields: null });
+    ai.run.mockImplementationOnce(QUOTA);
+    expect(await json(await call('POST', '/api/invoices/run'))).toMatchObject({ ESCALAR: 1, errors: 0 });
+    expect(db.tables.invoices!.find((i) => i.id === id)!.fields).toBeNull(); // AC-38: record.ts never writes invoices
+    const detail = await json<{ invoice: { fields: Row }; headline: string; trace: Array<{ text: string }> }>(await call('GET', `/api/invoices/${id}`));
+    expect(detail.invoice.fields).toMatchObject({ read_error: 'lector_no_disponible', payee_name: null, amount: null });
+    expect(detail.headline).toBe(HEADLINE);
+    expect(detail.trace[0]!.text).toBe('Intenté leer el chat, pero el lector de facturas no estaba disponible; no inventé ningún dato.');
+  });
+
+  it('the model answering invalid JSON keeps the «ilegible» texts and no read_error', async () => {
+    db = testDb(workspace([]));
+    ai.run.mockImplementationOnce(async () => ({ response: 'lo siento, no puedo' }));
+    const { decision, stored } = await ingest({ source: 'chat', text: 'una foto borrosa' });
+    expect(stored.fields).toMatchObject({ concept: 'ilegible' });
+    expect(stored.fields).not.toHaveProperty('read_error');
+    expect(decision.outcome).toBe('ESCALAR');
+    expect(decision.headline_es).toMatch(/^ESCALAR · monto desconocido a beneficiario desconocido: ilegible y \d+ motivos más$/);
+  });
+});

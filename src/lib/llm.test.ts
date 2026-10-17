@@ -12,6 +12,9 @@ const envWith = (run: (model: string, input: unknown) => Promise<unknown>) =>
   ({ AI: { run }, WORKERS_AI_MODEL: 'text-model', WORKERS_AI_VISION_MODEL: 'vision-model' }) as unknown as Env;
 const model = (out: unknown) => envWith(async () => ({ response: out }));
 const ALL_NULL = { payee_name: null, amount: null, currency: null, invoice_number: null, issue_date: null, due_date: null, concept: 'ilegible', bank_account: null, confidence: {} };
+// R-75: no answer came from the model for this invoice. No concept 'ilegible': the document was never judged.
+const UNAVAILABLE = { ...ALL_NULL, concept: null, read_error: 'lector_no_disponible' };
+const QUOTA = '4006: you have used up your daily free allocation of 10,000 neurons';
 
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
@@ -78,35 +81,50 @@ describe('extractFields (AC-12, AC-13, AC-14)', () => {
   });
 
   it.each([
-    ['the model throws', envWith(async () => { throw new Error('boom'); })],
     ['the answer is not JSON', model('lo siento')],
     ['the answer breaks the schema', model({ ...good, confidence: { amount: 7 } })],
     ['the answer is not an object', model(42)],
-  ])('returns all-null fields with concept ilegible when %s (AC-13)', async (_n, env) => {
+  ])('returns all-null fields with concept ilegible when %s: the model answered (AC-13, R-75)', async (_n, env) => {
     expect(await extractFields(env, 'x')).toEqual(ALL_NULL);
   });
 
-  // 7c live regression: the account's daily Workers AI allocation ran out (error 4006) and every read became a silent
-  // "ilegible". Each failure now logs one reason code, never the document text.
   it.each([
-    ['quota', envWith(async () => { throw new Error('4006: you have used up your daily free allocation of 10,000 neurons'); })],
-    ['model_error', envWith(async () => { throw new Error('boom'); })],
-    ['invalid_json', model('lo siento')],
-    ['schema', model({ ...good, confidence: { amount: 7 } })],
-  ])('logs the reason code %s without the document text (AC-13)', async (code, env) => {
+    ['the daily allocation is used up (429, 4006)', envWith(async () => { throw new Error(QUOTA); })],
+    ['any other model error', envWith(async () => { throw new Error('boom'); })],
+    ['an unknown model', envWith(async () => { throw new Error('5007: No such model @cf/thesaurus/no-existe or task'); })],
+    ['a non-Error rejection', envWith(() => Promise.reject('down'))],
+  ])('returns lector_no_disponible, not ilegible, when %s (AC-13 Clarified, R-75)', async (_n, env) => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(await extractFields(env, 'x')).toEqual(UNAVAILABLE);
+  });
+
+  it('null text (the vision step got no answer) is lector_no_disponible without a second model call (R-75)', async () => {
+    const run = vi.fn();
+    expect(await extractFields(envWith(run), null)).toEqual(UNAVAILABLE);
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  // 7c live regression: the account's daily Workers AI allocation ran out (error 4006) and every read became a silent
+  // "ilegible". Each failure now logs one reason code, never the document text; no answer is logged as unavailable (R-75).
+  it.each([
+    ['quota', 'reader: lector_no_disponible', UNAVAILABLE, envWith(async () => { throw new Error(QUOTA); })],
+    ['model_error', 'reader: lector_no_disponible', UNAVAILABLE, envWith(async () => { throw new Error('boom'); })],
+    ['invalid_json', 'reader: ilegible', ALL_NULL, model('lo siento')],
+    ['schema', 'reader: ilegible', ALL_NULL, model({ ...good, confidence: { amount: 7 } })],
+  ])('logs the reason code %s without the document text (AC-13)', async (code, line, result, env) => {
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
-    expect(await extractFields(env, 'SECRETO factura 1042')).toEqual(ALL_NULL);
-    expect(log).toHaveBeenCalledWith('reader: ilegible', code);
+    expect(await extractFields(env, 'SECRETO factura 1042')).toEqual(result);
+    expect(log).toHaveBeenCalledWith(line, code);
     expect(JSON.stringify(log.mock.calls)).not.toContain('SECRETO');
   });
 
-  it('returns ilegible after 20 s without an answer (AC-13)', async () => {
+  it('returns lector_no_disponible after 20 s without an answer (AC-13, R-75)', async () => {
     vi.useFakeTimers();
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
     const p = extractFields(envWith(() => new Promise(() => {})), 'x');
     await vi.advanceTimersByTimeAsync(20_000);
-    expect(await p).toEqual(ALL_NULL);
-    expect(log).toHaveBeenCalledWith('reader: ilegible', 'timeout');
+    expect(await p).toEqual(UNAVAILABLE);
+    expect(log).toHaveBeenCalledWith('reader: lector_no_disponible', 'timeout');
   });
 
   it('reads the issuer, not the company billed, from the real 01.pdf text (live QA regression)', async () => {
@@ -159,14 +177,31 @@ describe('documentToText (AC-11, AC-12)', () => {
   });
 
   it.each([
-    ['the vision model throws', () => documentToText(envWith(async () => { throw new Error('boom'); }), { kind: 'image', bytes: new ArrayBuffer(2) })],
     ['the PDF is corrupt', () => documentToText(model(null), { kind: 'pdf', bytes: new TextEncoder().encode('not a pdf').buffer as ArrayBuffer })],
     ['bytes are missing', () => documentToText(model(null), { kind: 'pdf' })],
+    ['the vision model answers nothing', () => documentToText(model(null), { kind: 'image', bytes: new ArrayBuffer(2) })],
   ])('returns an empty string when %s, so the reader ends in ilegible (AC-13)', async (_n, call) => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     expect(await call()).toBe('');
   });
 
-  it('logs the vision failure reason, so an image read as ilegible is never silent (AC-13)', async () => {
+  it.each([
+    ['the daily allocation is used up', async () => { throw new Error(QUOTA); }],
+    ['the vision model throws', async () => { throw new Error('boom'); }],
+  ])('returns null (reader unavailable, R-75) when %s on an image', async (_n, run) => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(await documentToText(envWith(run), { kind: 'image', bytes: new ArrayBuffer(2) })).toBeNull();
+  });
+
+  it('returns null after 20 s without a vision answer (R-75)', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const p = documentToText(envWith(() => new Promise(() => {})), { kind: 'image', bytes: new ArrayBuffer(2) });
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(await p).toBeNull();
+  });
+
+  it('logs the vision failure reason, so an unread image is never silent (AC-13)', async () => {
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
     await documentToText(envWith(async () => { throw new Error('4006: daily free allocation of 10,000 neurons'); }), { kind: 'image', bytes: new ArrayBuffer(2) });
     expect(log).toHaveBeenCalledWith('reader: no text', 'quota');

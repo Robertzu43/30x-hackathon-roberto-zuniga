@@ -1,6 +1,6 @@
 // "Lo que hice" (AC-64, D24): the agent's steps, rendered only from what was recorded (R-29): the stored decisions,
 // the invoice, the company's demo flag and the recorded send result. Templates only, no model.
-import { agreementText, asRead, fieldList, fill, list, money, motives } from '../engine/explain';
+import { agreementText, asRead, fieldList, fill, list, money, motives, unread } from '../engine/explain';
 import { validFields } from '../engine/checks';
 import { outcomeOf } from '../engine/decide';
 import type { Check, CheckId, Decision, Invoice, InvoiceFields, Outcome } from '../engine/types';
@@ -29,6 +29,8 @@ export interface StoredDecision {
 // An invoice stored without fields (a REST insert the loop read at `lee`; the loop never writes `invoices`, AC-38) is
 // shown as its decision's checks recorded the reading (R-29): validFields' output, so every recorded value is trusted.
 // Null when there is no decision yet (pending, not read).
+export function recordedFields(fields: InvoiceFields | null, checks: Check[]): InvoiceFields;
+export function recordedFields(fields: InvoiceFields | null, checks: Check[] | null | undefined): InvoiceFields | null;
 export function recordedFields(fields: InvoiceFields | null, checks: Check[] | null | undefined): InvoiceFields | null {
   if (fields || !checks) return fields;
   const c = (id: CheckId) => checks.find((x) => x.id === id);
@@ -39,7 +41,8 @@ export function recordedFields(fields: InvoiceFields | null, checks: Check[] | n
     currency: s(m?.currency), invoice_number: s(c('duplicado_exacto')?.actual), issue_date: null, due_date: s(c('vencimiento')?.actual),
     concept: s(c('duplicado_probable')?.actual), bank_account: s(c('beneficiario_cuenta')?.values.invoice_account),
   };
-  return { ...read, confidence: Object.fromEntries(Object.entries(read).filter(([, v]) => v !== null).map(([k]) => [k, 1])) };
+  const confidence = Object.fromEntries(Object.entries(read).filter(([, v]) => v !== null).map(([k]) => [k, 1]));
+  return { ...read, confidence, ...(unread(checks) ? { read_error: 'lector_no_disponible' as const } : {}) }; // R-75
 }
 
 export interface TraceStep { stage: 'lee' | 'consulta' | 'decide' | 'actua'; text: string }
@@ -53,9 +56,10 @@ export interface TraceArgs {
 
 const READ = ['payee_name', 'amount', 'currency', 'invoice_number'] as const;
 
-function read({ source, fields }: Invoice, lang: Lang): string {
-  const f = validFields(fields); // R-71: what the engine could not trust was not read
+function read({ source, fields }: Invoice, checks: Check[], lang: Lang): string {
   const src = t(lang, `trace.source.${source}`);
+  if (unread(checks)) return fill(lang, 'lector.trace.read', { source: src }); // R-75: the reader gave no answer
+  const f = validFields(fields); // R-71: what the engine could not trust was not read
   const found = [
     f.payee_name && fill(lang, 'trace.payee', { payee: f.payee_name }),
     f.amount !== null && `${money(f.amount, lang)} ${f.currency ?? ''}`.trim(),
@@ -118,7 +122,7 @@ export function agentTrace(a: TraceArgs, lang: Lang): TraceStep[] {
   const why = motives(d.checks, lang, a.invoice.received_at);
   const outcome = t(lang, `outcome.${d.outcome}`);
   return [
-    { stage: 'lee', text: read(a.invoice, lang) },
+    { stage: 'lee', text: read(a.invoice, d.checks, lang) },
     { stage: 'consulta', text: consult(d.checks, lang) },
     { stage: 'consulta', text: fill(lang, 'trace.rules', { total: d.checks.length, counts: counts(d.checks, lang) }) },
     { stage: 'decide', text: fill(lang, why.length ? 'trace.decided_reason' : 'trace.decided', { outcome, reason: list(lang, why) }) },

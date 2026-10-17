@@ -135,13 +135,39 @@ describe('consulta: duplicados (AC-19)', () => {
 });
 
 describe('lee: the reader only when fields are missing (AC-61, AC-13)', () => {
-  it('reads an invoice without fields from its text; a failed read escalates as illegible', async () => {
+  const lecturaOf = (id: string) => (decisionsOf(id)[0]!.checks as Array<{ id: string; verdict: string; values: Record<string, unknown> }>).find((c) => c.id === 'lectura');
+  it('reads an invoice without fields from its text; no answer from the reader escalates «sin leer» and fields stay null (R-75, AC-38)', async () => {
     db = fakeDb(workspace('A', { only: ['13'] }));
     db.tables.invoices![0]!.fields = null;
+    expect(await runAgent(deps(), 'A', 'pending', 'manual')).toMatchObject({ ESCALAR: 1, errors: 0 });
+    expect(ai.run).toHaveBeenCalledOnce(); // no automatic retry
+    expect(lecturaOf('A-13')).toMatchObject({ verdict: 'no_verificado', values: { reason: 'lector_no_disponible' } });
+    expect(decisionsOf('A-13')[0]).toMatchObject({
+      headline_es: 'ESCALAR · factura sin leer: el lector de facturas no estaba disponible; vuelve a ingresarla más tarde',
+      headline_en: 'ESCALATE · unread invoice: the invoice reader was unavailable; enter it again later',
+      question_es: expect.stringMatching(/^Juan, no pude leer una factura que llegó por chat: el lector de facturas no estaba disponible\./),
+    });
+    expect(db.tables.invoices![0]!.fields).toBeNull();
+  });
+  it('a reader that times out after 20 s is «sin leer» too (R-75)', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    db = fakeDb(workspace('A', { only: ['13'] }));
+    db.tables.invoices![0]!.fields = null;
+    ai.run.mockImplementationOnce(() => new Promise(() => {}));
+    const p = runAgent(deps(), 'A', 'pending', 'manual');
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(await p).toMatchObject({ ESCALAR: 1, errors: 0 });
+    expect(lecturaOf('A-13')?.values.reason).toBe('lector_no_disponible');
+  });
+  it('a model answer that is not JSON escalates as «ilegible», with no reason (R-75)', async () => {
+    db = fakeDb(workspace('A', { only: ['13'] }));
+    db.tables.invoices![0]!.fields = null;
+    ai.run.mockImplementationOnce(async () => ({ response: 'lo siento' }) as never);
     expect(await runAgent(deps(), 'A', 'pending', 'manual')).toMatchObject({ ESCALAR: 1 });
-    expect(ai.run).toHaveBeenCalledOnce();
-    const lectura = (decisionsOf('A-13')[0]!.checks as Array<{ id: string; verdict: string }>).find((c) => c.id === 'lectura');
-    expect(lectura?.verdict).toBe('no_verificado');
+    expect(lecturaOf('A-13')).toMatchObject({ verdict: 'no_verificado' });
+    expect(lecturaOf('A-13')?.values).not.toHaveProperty('reason');
+    expect(decisionsOf('A-13')[0]!.headline_es).toMatch(/: ilegible y \d+ motivos más$/);
   });
 });
 
@@ -358,3 +384,70 @@ describe('budgeted, resumable runs (R-56, R-57, AC-70)', () => {
     for (const bad of ['', 'x', btoa('[1]'), btoa('["a","b"]'), btoa('[-1,"a"]'), btoa('{}')]) expect(decodeCursor(bad)).toBeNull();
   });
 });
+
+// R-77 (AC-20, AC-34, AC-61 Clarified): a decided invoice counts with the fields it was decided on, stored or recorded in its
+// latest decision; only an invoice with no fields and no decision calls the reader.
+describe('recorded fields (R-77)', () => {
+  const READ_01 = () => {
+    const f = { ...(seedInvoices('A', ['01'])[0]!.fields as Record<string, unknown>) };
+    return { ...f, subtotal: null, tax: null, confidence: Object.fromEntries(Object.keys(f).filter((k) => k !== 'confidence').map((k) => [k, 0.95])) };
+  };
+  // A REST-inserted invoice (fields null) read by the run and decided PAGAR; its fields live only in the decision's checks.
+  async function restInsertedPaid() {
+    db = fakeDb(workspace('A', { only: ['01'] }));
+    Object.assign(db.tables.invoices![0]!, { fields: null, raw_text: 'Laura Méndez, factura 1042, USD 2.500' });
+    ai.run.mockImplementationOnce(async () => ({ response: READ_01() }) as never);
+    expect(await runAgent(deps(), 'A', 'pending', 'manual')).toMatchObject({ PAGAR: 1 });
+    expect(db.tables.invoices![0]!.fields).toBeNull(); // AC-38: the loop never writes invoices
+    ai.run.mockClear();
+  }
+  const copy = (id: string, f: Record<string, unknown> = {}) => {
+    const orig = seedInvoices('A', ['01'])[0]!;
+    db.tables.invoices!.push({ ...orig, id, received_at: new Date(Date.parse(orig.received_at) + 3600e3).toISOString(), fields: { ...orig.fields, ...f } });
+  };
+  const checkOf = (id: string, check: string) => (decisionsOf(id).at(-1)!.checks as Array<{ id: string; verdict: string }>).find((c) => c.id === check);
+
+  it('a pasted copy of it is FRENAR «duplicado exacto» (AC-20 Clarified)', async () => {
+    await restInsertedPaid();
+    copy('A-copy');
+    expect(await runAgent(deps(), 'A', 'pending', 'manual')).toMatchObject({ FRENAR: 1 });
+    expect(checkOf('A-copy', 'duplicado_exacto')?.verdict).toBe('no_cumple');
+    expect(decisionsOf('A-copy')[0]!.headline_es).toMatch(/duplicado exacto/);
+    expect(ai.run).not.toHaveBeenCalled();
+  });
+
+  it('a copy with the same payee, concept and month and a new number is ESCALAR «posible duplicado» (AC-20 Clarified)', async () => {
+    await restInsertedPaid();
+    copy('A-new', { invoice_number: '1043' });
+    expect(await runAgent(deps(), 'A', 'pending', 'manual')).toMatchObject({ ESCALAR: 1 });
+    expect(checkOf('A-new', 'duplicado_probable')?.verdict).toBe('no_cumple');
+  });
+
+  it('Reevaluar re-decides an ESCALAR stored without fields from its recorded fields, with no model call (AC-34 Clarified)', async () => {
+    db = fakeDb(workspace('A', { only: ['11'] }));
+    await runAgent(deps(), 'A', 'pending', 'manual');
+    db.tables.invoices![0]!.fields = null; // a REST insert decided earlier: the loop never writes invoices (AC-38)
+    ai.run.mockImplementation(async () => ({ response: { ...READ_01(), payee_name: 'Otro' } }) as never); // a re-read would differ
+    const b = new Budget(Infinity);
+    expect(await runAgent(deps(b), 'A', 'pending', 'reevaluate')).toMatchObject({ ESCALAR: 1, errors: 0 });
+    expect(ai.run).not.toHaveBeenCalled();
+    const [first, again] = decisionsOf('A-11');
+    expect(again).toMatchObject({ seq: 2, amount_usd: first!.amount_usd, headline_es: first!.headline_es });
+    expect(b.used).toBe(5 + 4); // no READ counted for it
+    ai.run.mockImplementation(async () => { throw new Error('Workers AI unavailable'); });
+  });
+
+  it('Reevaluar keeps the «sin leer» reason of an invoice the reader never answered for, with no model call (R-75, R-77)', async () => {
+    db = fakeDb(workspace('A', { only: ['13'] }));
+    db.tables.invoices![0]!.fields = null;
+    await runAgent(deps(), 'A', 'pending', 'manual');
+    ai.run.mockClear();
+    expect(await runAgent(deps(), 'A', 'pending', 'reevaluate')).toMatchObject({ ESCALAR: 1 });
+    expect(ai.run).not.toHaveBeenCalled();
+    expect(decisionsOf('A-13').map((d) => d.headline_es)).toEqual([
+      'ESCALAR · factura sin leer: el lector de facturas no estaba disponible; vuelve a ingresarla más tarde',
+      'ESCALAR · factura sin leer: el lector de facturas no estaba disponible; vuelve a ingresarla más tarde',
+    ]);
+  });
+});
+

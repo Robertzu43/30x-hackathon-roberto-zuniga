@@ -26,7 +26,9 @@ const NOW = '2026-10-17T15:00:00Z';
 const SECRET = 'secret';
 const APPROVER = 'juan.perez@andina.example';
 const MEMBER = 'ana.gomez@andina.example';
-const env = { AI: { run: async () => { throw new Error('no AI'); } }, APP_URL: 'https://app.test', APPROVAL_HMAC_SECRET: SECRET } as unknown as Env;
+const noAi = async (): Promise<unknown> => { throw new Error('no AI'); };
+const aiRun = vi.fn(noAi); // a fake: no test calls the real model (R-76)
+const env = { AI: { run: aiRun }, APP_URL: 'https://app.test', APPROVAL_HMAC_SECRET: SECRET } as unknown as Env;
 const send = vi.mocked(sendEmail);
 
 // The seed's invoices of company A, dated as in loop.test.ts (the seed SQL's date rule).
@@ -98,6 +100,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(NOW);
   send.mockClear();
+  aiRun.mockReset().mockImplementation(noAi);
   vi.spyOn(console, 'log').mockImplementation(() => {});
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
@@ -415,3 +418,56 @@ describe('mounted on the Worker', () => {
     expect((await app.request(`/api/invoices/${uid('A-11')}/approve`, { method: 'POST', body: '{"seq":1}' }, env)).status).toBe(401);
   });
 });
+
+// R-77 (AC-34 Clarified): an answer re-checks the fields the page showed (stored, or recorded in the escalation) and never
+// calls the model. R-75 (AC-13 Clarified item 9): an invoice the reader never answered for re-escalates on "Aprobar".
+describe('answers run on recorded fields, never on a re-read (R-77, R-75)', () => {
+  // A re-read would now see another amount: the approval must not use it.
+  const differentRead = () => aiRun.mockImplementation(async () => ({ response: { payee_name: 'Nube Sur LLC', amount: 100, currency: 'USD', invoice_number: '2044',
+    issue_date: null, due_date: null, concept: null, bank_account: null, subtotal: null, tax: null,
+    confidence: { payee_name: 1, amount: 1, currency: 1, invoice_number: 1 } } }));
+
+  it.each(['link', 'dashboard'] as const)('approving by %s an invoice stored without fields acts on the shown 4.200 USD, 0 model calls', async (channel) => {
+    await setup(['11']);
+    const id = uid('A-11');
+    Object.assign(db.tables.invoices!.find((i) => i.id === id)!, { fields: null, raw_text: 'Nube Sur LLC #2044' }); // a REST insert (AC-38)
+    differentRead();
+    const r = channel === 'link' ? await answer((await links(id)).approve, 1) : await dashboard(id, 'approve', 1);
+    expect(r.status).toBe(200);
+    expect(aiRun).not.toHaveBeenCalled();
+    expect(latest(id)).toMatchObject({ actor: 'human', outcome: 'PAGAR', amount_usd: 4200, payment: { amount: 4200, currency: 'USD' } });
+  });
+
+  it('rejecting it makes 0 model calls too', async () => {
+    await setup(['11']);
+    const id = uid('A-11');
+    Object.assign(db.tables.invoices!.find((i) => i.id === id)!, { fields: null, raw_text: 'Nube Sur LLC #2044' });
+    differentRead();
+    expect((await dashboard(id, 'reject', 1)).status).toBe(200);
+    expect(aiRun).not.toHaveBeenCalled();
+    expect(latest(id)).toMatchObject({ outcome: 'FRENAR', actor: 'human' });
+  });
+
+  it('"Aprobar" on an invoice the reader never answered for re-escalates with its «sin leer» reason, link and dashboard; never PAGAR', async () => {
+    await setup([]);
+    const id = uid('A-u');
+    db.tables.invoices!.push({ id, company_id: 'A', source: 'email', raw_text: 'Factura', archived: false, received_at: NOW,
+      fields: { payee_name: null, amount: null, currency: null, invoice_number: null, issue_date: null, due_date: null, concept: null,
+        bank_account: null, confidence: {}, read_error: 'lector_no_disponible' } });
+    await agent('pending', 'manual');
+    const HEADLINE = 'ESCALAR · factura sin leer: el lector de facturas no estaba disponible; vuelve a ingresarla más tarde';
+    expect(latest(id)).toMatchObject({ outcome: 'ESCALAR', headline_es: HEADLINE });
+    expect((await answer((await links(id)).approve, 1)).status).toBe(200);
+    expect(latest(id)).toMatchObject({ seq: 2, actor: 'human', outcome: 'ESCALAR', headline_es: HEADLINE });
+    expect(check(latest(id)!, 'lectura')).toMatchObject({ values: { reason: 'lector_no_disponible' }, overridden: { channel: 'link' } });
+    expect(check(latest(id)!, 'limite_pago').verdict).toBe('no_verificado');
+    expect(latest(id)!.question_es).toMatch(/^Juan, no pude leer una factura que llegó por correo/);
+    expect((await dashboard(id, 'approve', 2)).status).toBe(200);
+    expect(latest(id)).toMatchObject({ seq: 3, outcome: 'ESCALAR', headline_es: HEADLINE });
+    expect((await dashboard(id, 'reject', 3)).status).toBe(200);
+    expect(latest(id)).toMatchObject({ seq: 4, outcome: 'FRENAR', actor: 'human' });
+    expect(decisionsOf(id).map((d) => d.outcome)).not.toContain('PAGAR');
+    expect(aiRun).not.toHaveBeenCalled();
+  });
+});
+

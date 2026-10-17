@@ -27,6 +27,10 @@ export const fieldList = (lang: Lang, fields: string[]) => list(lang, fields.map
 const missingOf = (c: Check) => (c.values.missing ? String(c.values.missing).split(', ') : ['amount']); // null missing = amount <= 0
 const illegible = (c: Check) => READ_FIELDS.every((f) => missingOf(c).includes(f));
 
+// R-75: no answer came from the reader for this invoice; its Lectura check carries the reason, overridden or not.
+const unreadCheck = (c: Check) => c.id === 'lectura' && c.values.reason === 'lector_no_disponible';
+export const unread = (checks: Check[]) => checks.some(unreadCheck);
+
 // R-73: a changed account whose last 4 digits read the same on both sides (or are missing) is named by both accounts
 // as read: no record ever says two identical endings differ. '' or the '_text' template suffix.
 export const asRead = (c: Check) => {
@@ -74,19 +78,20 @@ export function explainCheck(check: Check, lang: Lang, receivedAt: string, polic
   const shown = check.overridden
     ? fill(lang, 'verdict.overridden', { verdict, by: check.overridden.by, channel: t(lang, `channel.${check.overridden.channel}`) })
     : verdict;
-  return `${fill(lang, `check.${check.id}.name`, v)}: ${fill(lang, `check.${check.id}.${check.verdict}${variant}`, v)} → ${shown}`;
+  const body = unreadCheck(check) ? t(lang, 'lector.check') : fill(lang, `check.${check.id}.${check.verdict}${variant}`, v);
+  return `${fill(lang, `check.${check.id}.name`, v)}: ${body} → ${shown}`;
 }
 
 // Checks still blocking the payment: not passing and not unlocked by a person. A FRENAR trigger comes first.
 const blocking = (checks: Check[]) => checks.filter((c) => c.verdict !== 'cumple' && !c.overridden)
   .sort((a, b) => Number(outcomeOf([b]) === 'FRENAR') - Number(outcomeOf([a]) === 'FRENAR'));
 
-export const motives = (checks: Check[], lang: Lang, receivedAt: string) => blocking(checks).map((c) =>
+export const motives = (checks: Check[], lang: Lang, receivedAt: string) => unread(checks) ? [t(lang, 'lector.motive')] : blocking(checks).map((c) =>
   c.id === 'lectura' && illegible(c) ? t(lang, 'motive.lectura.illegible') : fill(lang, `motive.${c.id}.${c.verdict}${asRead(c)}`, checkVars(c, lang, receivedAt)));
 
 // "Qué tendría que pasar para pagarla": one line per blocking check. Spanish lines start with "Que " (R-27).
 export const whatWouldPay = (decision: Pick<Decision, 'checks'>, lang: Lang): string[] =>
-  blocking(decision.checks).map((c) => fill(lang, `fix.${c.id}.${c.verdict}`, vars(c.values, lang)));
+  blocking(decision.checks).map((c) => (unreadCheck(c) ? t(lang, 'lector.fix') : fill(lang, `fix.${c.id}.${c.verdict}`, vars(c.values, lang))));
 
 // "ESCALAR · 4.200 USD a Nube Sur LLC: supera el umbral de aprobación de 2.500 USD".
 export function headline(decision: Pick<Decision, 'outcome' | 'checks'>, invoice: Invoice, beneficiary: Beneficiary | null, lang: Lang): string {
@@ -103,6 +108,7 @@ export function headline(decision: Pick<Decision, 'outcome' | 'checks'>, invoice
     const by = decision.checks.find((c) => c.overridden)?.overridden?.by;
     return fill(lang, by ? 'headline.pay_approved' : 'headline.pay', { ...base, agreement, by });
   }
+  if (unread(decision.checks)) return fill(lang, 'lector.headline', base); // R-75: one reason, no "y n motivos más"
   const [first = '', ...rest] = motives(decision.checks, lang, invoice.received_at);
   const reason = rest.length ? fill(lang, `headline.more.${new Intl.PluralRules(locale(lang)).select(rest.length)}`, { reason: first, n: rest.length }) : first;
   return fill(lang, 'headline.other', { ...base, reason });

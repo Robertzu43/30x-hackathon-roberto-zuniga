@@ -2,10 +2,11 @@
 .inbox-head { display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
 .inbox-head h1 { margin-right: auto; }
 .inbox-actions { display: flex; gap: 0.5rem; align-items: center; }
-.inbox-last-run { font-size: var(--text-sm); margin: 0 0 1rem; }
+.inbox-last-run { font-size: var(--text-sm); margin: 0 0 1rem; min-height: 1.6em; } /* reserved before its request answers */
 
 .inbox-filters { display: flex; gap: 1.5rem; margin: 2rem 0 1rem; flex-wrap: wrap; }
-.inbox-filters label { display: grid; gap: 0.25rem; }
+.inbox-filters label { display: grid; gap: 0.25rem; flex: 1 1 12rem; max-width: 20rem; }
+.inbox-filters select { width: 100%; } /* its width never follows the options that load */
 .inbox select,
 .new-invoice textarea {
   font: inherit;
@@ -60,5 +61,6 @@
 .new-invoice textarea { width: 100%; resize: vertical; }
 
 @media (max-width: 640px) {
+  .inbox-last-run { min-height: 3.2em; }
   .inbox-list a { grid-template-columns: 1fr; gap: 0.25rem; }
 }

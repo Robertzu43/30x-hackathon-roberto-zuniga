@@ -18,7 +18,11 @@ pre.detail-doc { white-space: pre-wrap; font: var(--text-sm) / 1.6 var(--font-mo
 .detail-fields { margin: 1.5rem 0 0; }
 .detail-fields > div { display: grid; grid-template-columns: 9rem 1fr auto; gap: 0.75rem; padding: 0.5rem 0; border-bottom: 1px solid var(--line); }
 .detail-fields dt { font-size: var(--text-sm); color: var(--ink-2); }
-.detail-fields dd { margin: 0; }
+.detail-fields dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 480px) {
+  .detail-fields > div { grid-template-columns: 7rem minmax(0, 1fr); }
+  .detail-fields dd + dd { grid-column: 2; } /* the confidence under the value; the snippet keeps its full row */
+}
 .detail-fields dd.muted { font-size: var(--text-sm); }
 
 .checks li { display: grid; grid-template-columns: 1.5rem 1fr; gap: 0.5rem; padding: 0.5rem 0; border-bottom: 1px solid var(--line); font-size: var(--text-sm); }

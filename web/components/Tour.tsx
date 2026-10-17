@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useT } from '../i18n';
 import { tourSteps } from '../tour-steps';
@@ -77,10 +77,14 @@ export default function Tour({ onDone }: { onDone: () => void }) {
               boxShadow: '0 0 0 9999px rgba(0,0,0,.6)',
             }}
           />
-          <section key={i} className="tour-card" role="dialog" aria-modal="true" aria-labelledby="tour-title" aria-label={t('tour.label')}>
+          <section
+            key={i}
+            className="tour-card"
+            style={{ '--tour-top': `${document.querySelector('.topbar')?.getBoundingClientRect().bottom ?? 0}px` } as CSSProperties}
+            role="dialog" aria-modal="true" aria-labelledby="tour-title" aria-label={t('tour.label')}>
             <p className="muted">{t('tour.count', { n: i + 1, total: tourSteps.length })}</p>
             <h2 id="tour-title">{t(`tour.${step.id}.title`)}</h2>
-            <p>{t(`tour.${step.id}.body`)}</p>
+            <p tabIndex={0}>{t(`tour.${step.id}.body`)}</p>
             <div className="tour-actions">
               <button type="button" className="link" onClick={onDone}>{t('tour.skip')}</button>
               <span />

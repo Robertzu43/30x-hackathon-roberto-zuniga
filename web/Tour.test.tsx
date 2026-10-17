@@ -158,3 +158,38 @@ test('the Detalle step names «Leído por IA» and «Pregúntale a Thesaurus», 
   await screen.findByRole('heading', { name: 'Inbox' });
   expect(screen.getByRole('dialog').textContent).toContain('Where code decides: the 13 rules');
 });
+
+// AC-91 items 1 and 5 (UX pass 1): at 360 px the step 1 card grew under the top bar. The AI/code sentence stays verbatim
+// (AC-79 puts it in step 1); everything else in step 1 is the loop and the 5-minute check, in at most 35 words.
+const WHERE_EN = 'Where the AI acts: it reads each invoice (Amazon Nova Lite on AWS Bedrock) and answers your questions about the record ("Ask Thesaurus"). Where code decides: the 13 rules, the consequence table and the day\'s exchange rate; only code can write PAY.';
+const words = (s: string) => s.split(/\s+/).filter((w) => /[\p{L}\d]/u.test(w)).length;
+
+test('step 1 is the loop, the 5-minute check and the AI/code sentence, with at most 35 other words, in es and en', async () => {
+  setup();
+  await screen.findByRole('heading', { name: 'Bandeja' });
+  const body = () => screen.getByRole('dialog').querySelector('p:not(.muted)')!.textContent!;
+  expect(body()).toContain('cada 5 minutos');
+  expect(words(body().replace(WHERE, ''))).toBeLessThanOrEqual(35);
+  fireEvent.click(screen.getByRole('button', { name: 'to-en' }));
+  await screen.findByRole('heading', { name: 'Inbox' });
+  expect(body()).toContain(WHERE_EN);
+  expect(body()).toContain('perceives → reads → consults its tools → decides → acts → accounts for it');
+  expect(body()).toContain('every 5 minutes');
+  expect(words(body().replace(WHERE_EN, ''))).toBeLessThanOrEqual(35);
+});
+
+test('the card is capped below the top bar; only its text scrolls, so the counter, title and buttons stay on screen', async () => {
+  const bar = document.body.appendChild(Object.assign(document.createElement('header'), { className: 'topbar' }));
+  vi.spyOn(bar, 'getBoundingClientRect').mockReturnValue({ bottom: 212 } as DOMRect);
+  setup();
+  await screen.findByRole('heading', { name: 'Bandeja' });
+  expect(screen.getByRole('dialog').style.getPropertyValue('--tour-top')).toBe('212px');
+  expect(screen.getByRole('dialog').querySelector('p:not(.muted)')!.getAttribute('tabindex')).toBe('0'); // axe scrollable-region-focusable
+  bar.remove();
+  const { readFileSync } = (await import('node:fs' as string)) as { readFileSync(p: string, enc: string): string };
+  const css = readFileSync('web/styles.css', 'utf8');
+  const card = css.match(/\n\.tour-card \{([^}]*)\}/)?.[1] ?? '';
+  expect(card).toMatch(/max-height: calc\(100dvh - var\(--tour-top, 0px\) - 3rem\)/); // 1rem gap above, 2rem bottom offset
+  expect(card).toMatch(/display: flex/);
+  expect(css).toMatch(/\.tour-card > p:not\(\.muted\) \{[^}]*overflow-y: auto/);
+});

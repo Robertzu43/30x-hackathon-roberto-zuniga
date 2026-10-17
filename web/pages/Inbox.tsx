@@ -66,16 +66,16 @@ export default function Inbox() {
           </button>
         </div>
       </header>
-      {lastRun !== undefined && (
-        <p className="muted inbox-last-run">
-          {lastRun === null
+      <p className="muted inbox-last-run">
+        {lastRun === undefined
+          ? null
+          : lastRun === null
             ? t('inbox.last_run.never')
             : t('inbox.last_run', {
                 ago: mins < 1 ? t('inbox.last_run.under_min') : t('inbox.last_run.min', { n: mins }),
                 how: t(lastRun.trigger === 'cron' ? 'inbox.last_run.cron' : 'inbox.last_run.manual'),
               })}
-        </p>
-      )}
+      </p>
       <p className="muted">{t('inbox.reevaluate_note')}</p>
       <RunProgress run={run} mode="pending" />
       {adding && <NewInvoice />}
@@ -97,6 +97,7 @@ export default function Inbox() {
           </select>
         </label>
       </div>
+      <AskThesaurus />
 
       {failed ? (
         <p role="alert" className="error">{t('inbox.load_error')}</p>
@@ -119,7 +120,6 @@ export default function Inbox() {
           ))}
         </ul>
       )}
-      <AskThesaurus />
     </section>
   );
 }

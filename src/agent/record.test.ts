@@ -84,4 +84,13 @@ describe('record.ts, the only writer of decisions, approval_tokens and agent_run
     ]);
     expect(admin.queries.map((q) => q.table)).toEqual(['agent_runs', 'agent_runs']);
   });
+
+  it('a portal or email intake run carries its channel in via; other runs carry none (AC-63 Clarified, R-90)', async () => {
+    await recorder(env, 'A').run('ingest', { PAGAR: 0, FRENAR: 0, ESCALAR: 1 }, 0, 'portal');
+    await recorder(env, 'A').run('ingest', { PAGAR: 1, FRENAR: 0, ESCALAR: 0 }, 0);
+    expect(admin.tables.agent_runs).toEqual([
+      { company_id: 'A', trigger: 'ingest', decided: { PAGAR: 0, FRENAR: 0, ESCALAR: 1 }, errors: 0, via: 'portal' },
+      { company_id: 'A', trigger: 'ingest', decided: { PAGAR: 1, FRENAR: 0, ESCALAR: 0 }, errors: 0 },
+    ]);
+  });
 });

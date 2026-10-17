@@ -10,7 +10,7 @@ import { documentToText, extractFields } from '../lib/llm';
 import { must, type Budget, type Db } from '../lib/supabase';
 import { hashToken, signToken, TOKEN_TTL_MS } from '../lib/tokens';
 import { escalationQuestion } from './question';
-import { recorder, type Counts, type DecisionInput, type Recorder, type Trigger } from './record';
+import { recorder, type Counts, type DecisionInput, type Recorder, type Trigger, type Via } from './record';
 import { recordedFields, type StoredDecision } from './trace';
 import { decide, directorio, duplicados, findBeneficiary, periodo, politica } from './tools';
 
@@ -45,8 +45,9 @@ const stage = (name: string, invoiceId = '') => console.log(`agent ${name}`, inv
 const messageOf = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 // Decides the target invoices after `from`, oldest first, as many as the budget fits (AC-70). Throws only before the
-// first invoice (nothing changed); after that it always answers what it did (R-57).
-export async function runAgent(deps: AgentDeps, companyId: string, invoiceIds: string[] | 'pending', trigger: Trigger, from: Cursor | null = null): Promise<RunResult> {
+// first invoice (nothing changed); after that it always answers what it did (R-57). `via`: the public channel of an
+// intake run, written on its run row (AC-63 Clarified).
+export async function runAgent(deps: AgentDeps, companyId: string, invoiceIds: string[] | 'pending', trigger: Trigger, from: Cursor | null = null, via?: Via): Promise<RunResult> {
   const { db, env, budget } = deps;
   const record = recorder(env, companyId, budget);
   // Only "Reevaluar" re-decides an ESCALAR (R-24); PAGAR and FRENAR are final (D16).
@@ -119,7 +120,7 @@ export async function runAgent(deps: AgentDeps, companyId: string, invoiceIds: s
   }
   stage('rindeCuentas');
   try {
-    await record.run(trigger, counts, errors);
+    await record.run(trigger, counts, errors, via);
   } catch (e) {
     console.error('agent: run not recorded', companyId, messageOf(e)); // the decisions above are real and still reported (R-57)
   }

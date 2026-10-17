@@ -38,6 +38,14 @@ for w in 'revoke insert on public.decisions, public.approval_tokens, public.appr
   umbral_aprobacion beneficiario_permitido beneficiario_cuenta acuerdo duplicado_probable vencimiento periodo lectura; do
   echo "$lock" | grep -qF "$w" || fail "lockdown migration lacks: $w (AC-68, AC-69)"; done
 
+# Task 25 (AC-83..AC-86; AC-07, AC-68 Clarified; R-90): the portal migration's new tables are locked to the service role
+PORTAL=supabase/migrations/20261017000800_portal.sql
+[ -f "$PORTAL" ] || fail "missing $PORTAL"
+portal=$(sed 's/--.*$//' "$PORTAL")
+for t in portal_status_tokens intake_rate_limits; do
+  echo "$portal" | grep -q "alter table public\.$t enable row level security" || fail "RLS not on for $t (AC-07)"; done
+echo "$portal" | grep -qi 'create policy' && fail "a member policy in the portal migration (AC-68 Clarified)"
+
 # ---- Part 2: execute against a real Postgres ----
 INITDB=$(command -v initdb || ls /usr/lib/postgresql/*/bin/initdb 2>/dev/null | sort -V | tail -1)
 [ -x "$INITDB" ] || { echo "schema.test: greps passed; no local Postgres, SQL not executed"; exit 0; }
@@ -187,4 +195,26 @@ R=$(inv '{}')
 as "$UA" "begin; update public.invoices set archived = true where id = '$R'; select pg_sleep(1.5); commit;" >"$D/s3" &
 sleep 0.5; expect svc "$(dec "$R" "$(cur)" "$FRE" 0)" 'ARCHIVED' "insert_decision ignored an archive in flight (R-69)"
 wait; expect "$UA" "select archived from public.invoices where id = '$R'" '^t$' "archive session did not commit: $(cat "$D/s3")"
+# Task 25 (AC-83..AC-86; AC-63, AC-68 Clarified; R-90): channel columns, the locked slug, status tokens and intake counters
+expect "$UA" "select portal_slug from public.companies" '^p-[0-9a-f]{12}$' "random portal slug default (AC-86, R-90)"
+[ "$(sql -c "select count(distinct portal_slug) = count(*) from public.companies")" = t ] || fail "portal slugs not unique"
+expect "$UA" "update public.companies set portal_slug = 'x' where id = '$CA'" 'permission denied' "member edits portal_slug (AC-68 Clarified)"
+expect "$UA" "insert into public.invoices (company_id, source, origin, sender, sender_note) values ('$CA', 'chat', 'portal', 'a@b.co', 'hola') returning origin || '|' || coalesce(sender, 'null') || '|' || coalesce(sender_note, 'null')" '^app\|null\|null$' "member insert not forced to origin app (AC-68 Clarified)"
+expect svc "insert into public.invoices (company_id, source, origin, sender_note) values ('$CA', 'pdf', 'portal', 'hola') returning origin || '|' || sender_note" '^portal\|hola$' "service role lost origin portal"
+expect svc "insert into public.invoices (company_id, source, origin) values ('$CA', 'chat', 'fax')" 'check constraint' "origin outside app/portal/email"
+expect svc "insert into public.invoices (company_id, source, origin, sender_note) values ('$CA', 'pdf', 'portal', repeat('x', 2001))" 'check constraint' "sender_note over 2.000 characters (AC-83)"
+expect "$UA" "select count(*) from public.invoice_current where origin = 'portal'" '^1$' "invoice_current lacks origin (AC-86)"
+expect svc "insert into public.agent_runs (company_id, trigger, via) values ('$CA', 'ingest', 'portal') returning via" '^portal$' "run via portal (AC-63 Clarified)"
+expect svc "insert into public.agent_runs (company_id, trigger, via) values ('$CA', 'ingest', 'fax')" 'check constraint' "via outside portal/email"
+for t in portal_status_tokens intake_rate_limits; do
+  expect "$UA" "select count(*) from public.$t" 'permission denied' "member reads $t (AC-84, AC-85)"; done
+expect "$UA" "insert into public.portal_status_tokens (token_hash, company_id, invoice_id) select 'h', '$CA', id from public.invoices limit 1" 'permission denied' "member writes a status token (AC-68 Clarified)"
+expect "$UA" "select public.intake_hit('invoice', '1.2.3.4', '$CA')" 'permission denied' "member executes intake_hit (AC-85)"
+printf "set role anon;\nselect public.intake_hit('invoice', '1.2.3.4', '%s');\n" "$CA" | sql -f - | grep -q 'permission denied' || fail "anon executes intake_hit (AC-85)"
+expect svc "select string_agg(coalesce(public.intake_hit('invoice', '9.9.9.9', '$CA'), 'ok'), ',') from generate_series(1, 11)" '^(ok,){10}ip$' "11th invoice in an hour from one IP (AC-85)"
+expect svc "select coalesce(public.intake_hit('invoice', '8.8.8.8', '$CA'), 'ok')" '^ok$' "another IP is limited by the first"
+expect svc "select string_agg(coalesce(public.intake_hit('invoice', 'ip-' || n, '$CB'), 'ok'), ',') from generate_series(1, 101) n" '^(ok,){100}company$' "101st invoice of a company in a UTC day (AC-85)"
+expect svc "select string_agg(coalesce(public.intake_hit('status', '9.9.9.9', null), 'ok'), ',') from generate_series(1, 61)" '^(ok,){60}status$' "61st status view in a minute (AC-85)"
+expect svc "select coalesce(public.intake_hit('email', null, '$CA'), 'ok')" 'INVALID_KIND' "unknown kind"
+[ "$(sql -c "select count(*) from public.intake_rate_limits where key like '%9.9.9.9%'")" = 0 ] || fail "raw IP stored in intake_rate_limits"
 echo "schema.test: greps and live Postgres checks passed"

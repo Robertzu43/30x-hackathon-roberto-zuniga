@@ -8,6 +8,8 @@ import { must, type Budget } from '../lib/supabase';
 import type { StoredDecision } from './trace';
 
 export type Trigger = 'cron' | 'ingest' | 'manual' | 'login' | 'reevaluate' | 'reset';
+// The public channel that started an 'ingest' run (AC-63 Clarified); absent for every other run.
+export type Via = 'portal' | 'email';
 export type Counts = Record<Outcome, number>;
 // insert_decision's p_decision; the database sets id, seq, company_id and created_at.
 export type DecisionInput = Pick<StoredDecision, 'outcome' | 'actor' | 'checks' | 'amount_usd' | 'payment' | 'policy_version'
@@ -42,8 +44,8 @@ export function recorder(env: Env, companyId: string | null, budget?: Budget) {
       const { error } = await admin.from('approval_uses').insert({ token_hash: tokenHash, decision_id: decisionId, company_id: companyId });
       if (error) throw new Error(error.code === '23505' ? 'TOKEN_USED' : error.message);
     },
-    async run(trigger: Trigger, decided: Counts | null, errors: number): Promise<void> {
-      must(await admin.from('agent_runs').insert({ company_id: companyId, trigger, decided, errors }));
+    async run(trigger: Trigger, decided: Counts | null, errors: number, via?: Via): Promise<void> {
+      must(await admin.from('agent_runs').insert({ company_id: companyId, trigger, decided, errors, ...(via && { via }) }));
     },
   };
 }

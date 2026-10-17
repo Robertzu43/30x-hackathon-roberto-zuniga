@@ -173,3 +173,59 @@ describe('budgeted ticks and company turns (R-58, AC-62, AC-70)', () => {
     expect(db.tables.agent_runs!.filter((r) => r.company_id === null).every((r) => r.errors === 0 && r.decided === null)).toBe(true);
   });
 });
+
+// AC-73: the daily FX cron (0 11 * * *, 06:00 Bogotá) fetches the five currencies plus every currency pinned in a
+// company's latest policy, through the chain, and stores them; it decides nothing and writes no agent_runs row.
+describe('the daily FX cron (AC-73, R-85.7)', () => {
+  const fx = () => scheduled({ scheduledTime: 0, cron: '0 11 * * *' } as ScheduledController, env);
+  const quote: Record<string, number> = { COP: 3170.68, MXN: 18.479, BRL: 5.0693, ARS: 1517.5, EUR: 0.8895, GBP: 0.75, CLP: 950 };
+  let net: ReturnType<typeof vi.fn>;
+  beforeEach(() => {
+    net = vi.fn(async (u: RequestInfo | URL) => {
+      const c = /USD([A-Z]{3})=X/.exec(String(u))?.[1] ?? '';
+      return new Response(JSON.stringify({ chart: { result: [{ meta: { regularMarketPrice: quote[c] } }] } }));
+    });
+    vi.stubGlobal('fetch', net);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('stores today\'s rows for COP, MXN, BRL, ARS, EUR and the pinned currencies of latest policies only; no run row, no decision', async () => {
+    db = fakeDb({ ...workspace('N', { only: ['01'] }), policies: [
+      { company_id: 'N', version: 1, rules: { fx_rates: { CLP: 0.001 } } }, // an older version: not pinned any more
+      { company_id: 'N', version: 2, rules: { fx_rates: { GBP: 1.3, COP: 0.00025 } } },
+      { company_id: 'M', version: 1, rules: { fx_rates: null } },
+    ] });
+    await fx();
+    expect(db.tables.fx_rates!.map((r) => [r.day, r.currency, r.source])).toEqual(['COP', 'MXN', 'BRL', 'ARS', 'EUR', 'GBP']
+      .map((c) => ['2026-10-17', c, 'Yahoo Finance']));
+    expect(net).toHaveBeenCalledTimes(6);
+    expect(db.tables.agent_runs).toEqual([]);
+    expect(db.tables.decisions).toEqual([]);
+  });
+
+  it('a value 30 % off the newest stored rate is discarded (R-85.4); every provider failing stores nothing and does not throw', async () => {
+    db = fakeDb({ fx_latest: [{ day: '2026-10-16', currency: 'COP', usd_per_unit: 0.00031538976 / 1.3, source: 'Yahoo Finance', fetched_at: '2026-10-16T11:00:00Z' }] });
+    await fx();
+    expect(db.tables.fx_rates!.map((r) => r.currency)).toEqual(['MXN', 'BRL', 'ARS', 'EUR']);
+    db = fakeDb();
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('down', { status: 503 })));
+    await expect(fx()).resolves.toBeUndefined();
+    expect(db.tables.fx_rates ?? []).toEqual([]);
+  });
+
+  it('more pinned currencies than the budget holds: the rest is skipped and logged, never over 40 subrequests', async () => {
+    const many = Object.fromEntries(Array.from({ length: 40 }, (_, n) => [`Q${String.fromCharCode(65 + (n % 26))}${String.fromCharCode(65 + Math.floor(n / 26))}`, 1]));
+    db = fakeDb({ policies: [{ company_id: 'N', version: 1, rules: { fx_rates: many } }] });
+    await fx();
+    expect(db.meter.calls + net.mock.calls.length).toBeLessThanOrEqual(40);
+    expect(vi.mocked(console.error).mock.calls.some((c) => String(c[0]).includes('skipped'))).toBe(true);
+  });
+
+  it('the 5-minute tick fetches nothing', async () => {
+    db = fakeDb(workspace('N', { only: ['01'] }));
+    await scheduled({ scheduledTime: 0, cron: '*/5 * * * *' } as ScheduledController, env);
+    expect(net).not.toHaveBeenCalled();
+    expect(db.tables.agent_runs!.at(-1)).toEqual({ company_id: null, trigger: 'cron', decided: null, errors: 0 });
+  });
+});
+

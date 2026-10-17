@@ -4,6 +4,7 @@ import type { Env } from './env';
 import { agent } from './routes/agent';
 import { beneficiaries } from './routes/beneficiaries';
 import { demo } from './routes/demo';
+import { fx } from './routes/fx';
 import { invoices } from './routes/invoices';
 import { period } from './routes/period';
 import { company, policy } from './routes/policy';
@@ -21,6 +22,7 @@ app.route('/api/beneficiaries', beneficiaries);
 app.route('/api/period', period);
 app.route('/api/agent', agent);
 app.route('/api/demo', demo); // Task 10: public overview (AC-45) and Reiniciar demo (AC-47)
+app.route('/api/fx', fx); // Task 21: stored market rates (AC-73, AC-76)
 app.route('/api', approvals); // Task 9: approval links and dashboard answers
 app.all('/api/*', (c) => c.json({ error: 'not_found' }, 404));
 // R-74: anything uncaught is a logged JSON 500, never Hono's plain-text one.
@@ -30,5 +32,5 @@ app.onError((e, c) => {
 });
 
 export { app };
-// fetch serves the API and the SPA; scheduled is the 5-minute cron (wrangler.toml [triggers], AC-62).
+// fetch serves the API and the SPA; scheduled is the 5-minute cron (AC-62) and the daily FX cron (AC-73), wrangler.toml [triggers].
 export default { fetch: app.fetch, scheduled } satisfies ExportedHandler<Env>;

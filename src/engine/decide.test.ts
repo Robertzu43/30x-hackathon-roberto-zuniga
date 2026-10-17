@@ -2,12 +2,12 @@
 import { describe, expect, it } from 'vitest';
 import sql from '../../supabase/migrations/20261017000300_seed_andina.sql?raw';
 import { round2 } from '../lib/money';
-import { FULL_CONFIDENCE, seedConfidence } from './__fixtures__/seed';
+import { CORNERS, FIXTURE_RATES, FULL_CONFIDENCE, marketAt, SEED as MARKET_SEED, seedConfidence } from './__fixtures__/seed';
 import { bogotaDay, findBeneficiary, validFields } from './checks';
 import { decide, decideWithOverrides, HUMAN_OVERRIDABLE, outcomeOf } from './decide';
 import {
   CHECK_IDS, type Beneficiary, type Check, type CheckId, type Decision, type Invoice, type InvoiceFields,
-  type Outcome, type PeriodState, type PolicyRules,
+  type MarketRate, type MarketRates, type Outcome, type PeriodState, type PolicyRules,
 } from './types';
 
 // The seed migration is the single source of the demo data (Task 3).
@@ -18,6 +18,9 @@ const DIRECTORY: Beneficiary[] = SEED.beneficiaries.map((b: Beneficiary) => ({
 }));
 
 const NOW = '2026-10-17T15:00:00Z'; // 10:00 in Bogotá
+// A stored market rate fetched `hours` before NOW (AC-74).
+const market = (currency: string, usd_per_unit: number, hours: number): MarketRate =>
+  ({ currency, usd_per_unit, source: 'Yahoo Finance', fetched_at: new Date(Date.parse(NOW) - hours * 36e5).toISOString() });
 const RECEIVED = '2026-10-10T15:00:00Z';
 const EMPTY: PeriodState = { committed_usd: 0, paid_usd: 0, previous: [] };
 const BY = { email: 'roberto@hacketix.com', channel: 'dashboard' as const };
@@ -118,9 +121,9 @@ describe('consequence table, one test per row (AC-17, D15)', () => {
     expect([d.outcome, failing(d)]).toEqual(['ESCALAR', ['limite_pago']]);
     expect(check(d, 'limite_pago').verdict).toBe('no_verificado');
   });
-  it('currency without rate -> ESCALAR moneda', () => {
+  it('currency without rate -> ESCALAR, moneda no se pudo verificar (AC-74)', () => {
     const d = run({ amount: 2000, currency: 'GBP' });
-    expect([d.outcome, check(d, 'moneda').verdict, d.amount_usd]).toEqual(['ESCALAR', 'no_cumple', null]);
+    expect([d.outcome, check(d, 'moneda').verdict, d.amount_usd]).toEqual(['ESCALAR', 'no_verificado', null]);
     expect(check(d, 'limite_pago').verdict).toBe('no_verificado');
   });
 });
@@ -213,6 +216,11 @@ describe('policy missing or empty (AC-18, Review Focus 4)', () => {
     expect(d.outcome).toBe('ESCALAR');
     for (const id of RULE_CHECKS) expect([id, check(d, id).verdict]).toEqual([id, 'no_verificado']);
     for (const id of ['lectura', 'beneficiario_cuenta', 'duplicado_probable', 'periodo'] as const) expect([id, check(d, id).verdict]).toEqual([id, 'cumple']);
+  });
+  it('rules null with a fresh market rate -> a non-USD invoice keeps its real Moneda verdict, still never PAGAR (AC-18 Clarified)', () => {
+    const i = inv(cop);
+    const d = decide(i, findBeneficiary(i.fields.payee_name, DIRECTORY), null, EMPTY, NOW, { COP: market('COP', 0.000245, 1) });
+    expect([d.outcome, check(d, 'moneda').verdict, check(d, 'beneficiario_permitido').verdict]).toEqual(['ESCALAR', 'cumple', 'no_verificado']);
   });
   it('rules null with a USD invoice -> moneda is still cumple (needs no rate)', () => {
     const d = run({}, { rules: null });
@@ -376,12 +384,62 @@ describe('conversion (AC-22, D6)', () => {
   it('converts with the policy rate and records the arithmetic', () => {
     const d = run({ payee_name: 'Contadores Andinos S.A.S.', amount: 3673500, currency: 'COP', bank_account: 'Davivienda corriente 4569-8812-0034', concept: 'Contabilidad' });
     expect([d.outcome, d.amount_usd]).toEqual(['PAGAR', 900.01]);
-    expect(check(d, 'moneda').values).toEqual({ amount: 3673500, currency: 'COP', rate: 0.000245, amount_usd: 900.01 });
+    expect(check(d, 'moneda').values).toEqual({ amount: 3673500, currency: 'COP', rate: 0.000245, amount_usd: 900.01, rate_source: 'policy', rate_fetched_at: null });
     expect(d.payment).toEqual({ beneficiary: 'Contadores Andinos SAS', route: 'COP', currency: 'COP', amount: 3673500 });
   });
   it('COP whose USD equivalent exceeds the per-payment limit -> FRENAR (R-07)', () => {
     const d = run({ payee_name: 'Contadores Andinos S.A.S.', amount: 25000000, currency: 'COP', bank_account: 'Davivienda corriente 4569-8812-0034' });
     expect([d.outcome, d.amount_usd]).toEqual(['FRENAR', 6125]);
+  });
+});
+
+// AC-74, R-85: pinned rate, else the newest market rate at most 48 h old (on fetched_at), else none -> ESCALAR.
+describe('rate pick (AC-74)', () => {
+  const contadores = { payee_name: 'Contadores Andinos S.A.S.', amount: 3673500, currency: 'COP', bank_account: 'Davivienda corriente 4569-8812-0034', concept: 'Contabilidad' };
+  const NO_PINS: PolicyRules = { ...RULES, fx_rates: {} };
+  const pick = (rules: PolicyRules, m: Record<string, MarketRate>, p: Partial<InvoiceFields> = contadores) => {
+    const i = inv(p);
+    return decide(i, findBeneficiary(i.fields.payee_name, DIRECTORY), rules, EMPTY, NOW, m);
+  };
+  it('a pin beats the market rate; the record says policy, with no fetched_at', () => {
+    const d = pick({ ...NO_PINS, fx_rates: { COP: 0.000245 } }, { COP: market('COP', 0.0003, 1) });
+    expect([d.outcome, d.amount_usd]).toEqual(['PAGAR', 900.01]);
+    expect(check(d, 'moneda').values).toEqual({ amount: 3673500, currency: 'COP', rate: 0.000245, amount_usd: 900.01, rate_source: 'policy', rate_fetched_at: null });
+  });
+  it('47 h old -> cumple at exactly the stored rate, with its source and fetched_at', () => {
+    const m = market('COP', 0.000245, 47);
+    const d = pick(NO_PINS, { COP: m });
+    expect([d.outcome, d.amount_usd]).toEqual(['PAGAR', 900.01]);
+    expect(check(d, 'moneda').values).toEqual({ amount: 3673500, currency: 'COP', rate: 0.000245, amount_usd: 900.01, rate_source: 'Yahoo Finance', rate_fetched_at: m.fetched_at });
+  });
+  it('exactly 48 h old is still fresh', () => expect(pick(NO_PINS, { COP: market('COP', 0.000245, 48) }).outcome).toBe('PAGAR'));
+  it('49 h old -> ESCALAR, Moneda no_verificado, every USD check unverifiable; the stale row is recorded', () => {
+    const m = market('COP', 0.000245, 49);
+    const d = pick(NO_PINS, { COP: m });
+    expect([d.outcome, d.amount_usd, d.payment]).toEqual(['ESCALAR', null, null]);
+    expect(failing(d)).toEqual(['acuerdo', 'limite_pago', 'moneda', 'presupuesto_periodo', 'saldo_cuenta', 'umbral_aprobacion']);
+    expect(check(d, 'moneda')).toMatchObject({ verdict: 'no_verificado',
+      values: { amount: 3673500, currency: 'COP', rate: null, amount_usd: null, rate_source: 'Yahoo Finance', rate_fetched_at: m.fetched_at } });
+  });
+  it('no row and no pin -> ESCALAR, Moneda no_verificado with no source', () => {
+    const d = pick(NO_PINS, { MXN: market('MXN', 0.054, 1) });
+    expect([d.outcome, check(d, 'moneda').verdict]).toEqual(['ESCALAR', 'no_verificado']);
+    expect(check(d, 'moneda').values).toMatchObject({ rate: null, rate_source: null, rate_fetched_at: null });
+  });
+  it('USD needs no rate: cumple, rate 1, no source', () => {
+    expect(check(pick(NO_PINS, {}, {}), 'moneda')).toMatchObject({ verdict: 'cumple', values: { rate: 1, rate_source: null, rate_fetched_at: null } });
+  });
+  it('a pin that is not a positive number is no pin: the market rate is used', () => {
+    expect(check(pick({ ...NO_PINS, fx_rates: { COP: 0 } }, { COP: market('COP', 0.000245, 1) }), 'moneda').values.rate_source).toBe('Yahoo Finance');
+  });
+  it('approving a stale-rate ESCALAR re-escalates: Moneda is never overridable (R-21)', () => {
+    const i = inv(contadores);
+    const m = { COP: market('COP', 0.000245, 49) };
+    const esc = decide(i, findBeneficiary(i.fields.payee_name, DIRECTORY), NO_PINS, EMPTY, NOW, m);
+    const ids = esc.checks.filter((c) => c.verdict !== 'cumple').map((c) => c.id);
+    const d = decideWithOverrides(ids, BY, i, findBeneficiary(i.fields.payee_name, DIRECTORY), NO_PINS, EMPTY, NOW, m);
+    expect([d.outcome, check(d, 'moneda').verdict, 'overridden' in check(d, 'moneda')]).toEqual(['ESCALAR', 'no_verificado', false]);
+    expect(decideWithOverrides(ids, BY, i, findBeneficiary(i.fields.payee_name, DIRECTORY), NO_PINS, EMPTY, NOW, { COP: market('COP', 0.000245, 1) }).outcome).toBe('PAGAR');
   });
 });
 
@@ -420,7 +478,7 @@ describe('human approval (AC-34, R-02, R-21, R-22)', () => {
     ['moneda', { currency: 'GBP' }, {}],
   ] as const)('%s is never overridable -> still ESCALAR', (id, p, period) => {
     const d = approve([id, 'umbral_aprobacion', 'acuerdo'], { ...nube, ...p }, period);
-    expect([d.outcome, check(d, id).verdict, 'overridden' in check(d, id)]).toEqual(['ESCALAR', 'no_cumple', false]);
+    expect([d.outcome, check(d, id).verdict, 'overridden' in check(d, id)]).toEqual(['ESCALAR', id === 'moneda' ? 'no_verificado' : 'no_cumple', false]);
   });
   it.each(['limite_pago', 'duplicado_exacto'] as CheckId[])('%s is never overridable -> still FRENAR', (id) => {
     const d = approve([id, 'umbral_aprobacion', 'acuerdo'], { ...nube, amount: 9800 }, { previous: [prev({ beneficiary_id: 'id-Nube Sur LLC', invoice_number: '1042' })] });
@@ -440,16 +498,20 @@ describe('human approval (AC-34, R-02, R-21, R-22)', () => {
   });
 });
 
-// ---- Seed replay (AC-10, R-09, R-35, R-36) ----------------------------------------------------------
+// ---- Seed replay (AC-10, AC-75, R-09, R-35, R-36, R-86) ---------------------------------------------------------
+// The seed of migration 000600: a policy with no pinned rates, decided on the 17 Oct market rates and on every corner of
+// the ±20 % box around them (R-86). Its directory and rules, not the 000300 ones the unit tests above use.
 interface SeedRow { nn: string; expected_outcome: Outcome; check: CheckId | null; also: CheckId[]; prev_month?: boolean; issue: number | null; due: number | null; source: Invoice['source']; fields: Omit<InvoiceFields, 'issue_date' | 'due_date' | 'confidence'> }
 interface Done { inv: Invoice; row: SeedRow; beneficiary: Beneficiary | null; outcome: Outcome; amount_usd: number | null }
+const SEED_RULES: PolicyRules = MARKET_SEED.rules;
+const SEED_DIRECTORY: Beneficiary[] = MARKET_SEED.beneficiaries.map((b: Beneficiary) => ({ ...b, id: `id-${b.name}`, agreement: { ...b.agreement, valid_until: '2027-10-17' } }));
 
 const addDays = (day: string, n: number) => new Date(Date.parse(`${day}T00:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
 
 // The seed SQL's date rule, in TypeScript: NN arrives at start(M) + (now - start(M)) × NN/30; prev_month at start(M) - 5 days.
 function seedInvoices(now: string): Array<{ inv: Invoice; row: SeedRow }> {
   const start = Date.parse(`${bogotaDay(now).slice(0, 7)}-01T00:00:00-05:00`);
-  return (SEED.invoices as SeedRow[]).map((row) => {
+  return (MARKET_SEED.invoices as SeedRow[]).map((row) => {
     const at = row.prev_month ? start - 5 * 864e5 : start + ((Date.parse(now) - start) * Number(row.nn)) / 30;
     const received_at = new Date(at).toISOString();
     const day = bogotaDay(received_at);
@@ -469,48 +531,69 @@ function stateFor(inv: Invoice, done: Done[]): PeriodState {
   };
 }
 
-function replay(now: string): Array<Done & { d: Decision }> {
+function replay(now: string, market: MarketRates): Array<Done & { d: Decision }> {
   const done: Array<Done & { d: Decision }> = [];
   for (const { inv, row } of seedInvoices(now)) {
-    const beneficiary = findBeneficiary(inv.fields.payee_name, DIRECTORY);
-    const d = decide(inv, beneficiary, RULES, stateFor(inv, done), now);
+    const beneficiary = findBeneficiary(inv.fields.payee_name, SEED_DIRECTORY);
+    const d = decide(inv, beneficiary, SEED_RULES, stateFor(inv, done), now, market);
     done.push({ inv, row, beneficiary, d, outcome: d.outcome, amount_usd: d.amount_usd });
   }
   return done;
 }
 
-// Any date: mid-month, one minute into a month, the last minute of a 31-day month. The engine takes no env and
+// R-35: approving Nube Sur #2044 re-runs everything with fresh state; only the threshold is overridden (R-02).
+function approveNube(done: Array<Done & { d: Decision }>, state: Done[], now: string, market: MarketRates) {
+  const nube = done.find((x) => x.row.nn === '11')!;
+  const ids = nube.d.checks.filter((c) => c.verdict !== 'cumple').map((c) => c.id).filter((id) => HUMAN_OVERRIDABLE.includes(id));
+  expect(ids).toEqual(['umbral_aprobacion']);
+  return decideWithOverrides(ids, BY, nube.inv, nube.beneficiary, SEED_RULES, stateFor(nube.inv, state), now, market);
+}
+const rejected15 = (done: Done[]) => done.map((x) => (x.row.nn === '15' ? { ...x, outcome: 'FRENAR' as const } : x));
+
+it('the seed pins no rate: the demo decides on market rates (AC-75, R-85.1)', () => expect(SEED_RULES.fx_rates).toEqual({}));
+
+// Any date: mid-month, one minute into a month, the last minute of a 31-day month (R-42). The engine takes no env and
 // no AI binding at all: seeded fields are pre-extracted, so Workers AI being down cannot change an outcome.
-describe.each(['2026-10-17T15:00:00Z', '2026-11-01T05:01:00Z', '2027-04-01T04:59:00Z'])('seed replay at %s', (now) => {
-  const done = replay(now);
+describe.each(['2026-10-17T15:00:00Z', '2026-11-01T05:01:00Z', '2027-04-01T04:59:00Z'])('seed replay at %s, 17 Oct market rates', (now) => {
+  const market = marketAt(now);
+  const done = replay(now, market);
   it.each(done.map((x) => [x.row.nn, x.row.expected_outcome, [x.row.check, ...x.row.also].filter(Boolean).join(', ') || 'all cumple', x] as const))(
     '#%s -> %s (%s)', (_nn, expected, _c, x) => {
       expect(x.d.outcome).toBe(expected);
       expect(failing(x.d)).toEqual([x.row.check, ...x.row.also].filter((c) => c !== null).sort());
     });
-  it('ends the month at committed 42.441,42 and paid 18.502,21 (DATASET.md)', () => {
-    const s = stateFor({ ...done[0]!.inv, id: 'none', received_at: now }, done);
-    expect([s.committed_usd, s.paid_usd]).toEqual([42441.42, 18502.21]);
+  it('every non-USD invoice is converted at the market rate, recorded with its source (AC-74)', () => {
+    for (const x of done.filter((y) => y.inv.fields.currency && y.inv.fields.currency !== 'USD')) {
+      expect(check(x.d, 'moneda').values).toMatchObject({ rate: FIXTURE_RATES[x.inv.fields.currency!], rate_source: 'Yahoo Finance', rate_fetched_at: now });
+    }
   });
-
-  // R-35: approving Nube Sur #2044 re-runs everything with fresh state; only the threshold is overridden (R-02).
-  const nube = done.find((x) => x.row.nn === '11')!;
-  const approveNube = (state: Done[]) => {
-    const failed = nube.d.checks.filter((c) => c.verdict !== 'cumple').map((c) => c.id);
-    const ids = failed.filter((id) => HUMAN_OVERRIDABLE.includes(id));
-    expect(ids).toEqual(['umbral_aprobacion']);
-    return decideWithOverrides(ids, BY, nube.inv, nube.beneficiary, RULES, stateFor(nube.inv, state), now);
-  };
+  it('ends the month at committed 43.205,36 and paid 18.409,39 (DATASET.md)', () => {
+    const s = stateFor({ ...done[0]!.inv, id: 'none', received_at: now }, done);
+    expect([s.committed_usd, s.paid_usd]).toEqual([43205.36, 18409.39]);
+  });
   it('R-35: approving Nube Sur without rejecting #15 re-escalates on presupuesto_periodo', () => {
-    const d = approveNube(done);
+    const d = approveNube(done, done, now, market);
     expect([d.outcome, failing(d)]).toEqual(['ESCALAR', ['presupuesto_periodo', 'umbral_aprobacion']]);
-    expect(check(d, 'presupuesto_periodo').values.total_usd).toBe(42441.42);
+    expect(check(d, 'presupuesto_periodo').values.total_usd).toBe(43205.36);
   });
   it('R-35: rejecting #15 (releases 2.500) then approving Nube Sur -> PAGAR', () => {
-    const afterReject = done.map((x) => (x.row.nn === '15' ? { ...x, outcome: 'FRENAR' as const } : x));
-    const d = approveNube(afterReject);
+    const d = approveNube(done, rejected15(done), now, market);
     expect(d.outcome).toBe('PAGAR');
-    expect([check(d, 'presupuesto_periodo').values.total_usd, check(d, 'saldo_cuenta').values.total_usd]).toEqual([39941.42, 22702.21]);
+    expect([check(d, 'presupuesto_periodo').values.total_usd, check(d, 'saldo_cuenta').values.total_usd]).toEqual([40705.36, 22609.39]);
     expect(check(d, 'umbral_aprobacion')).toMatchObject({ verdict: 'no_cumple', overridden: { by: BY.email, channel: 'dashboard' } });
+  });
+});
+
+// R-86: committed and paid are monotone in each rate, so the 32 corners of the ±20 % box cover every comparison.
+describe.each(CORNERS.map((k) => [Object.entries(k).map(([c, f]) => `${c}×${f}`).join(' '), k] as const))('seed replay at the band corner %s', (_, k) => {
+  const now = '2026-10-17T15:00:00Z';
+  const market = marketAt(now, k);
+  const done = replay(now, market);
+  it('every row: outcome = expected_outcome and non-cumple set = check ∪ also (AC-75, R-36)', () => {
+    for (const x of done) expect([x.row.nn, x.d.outcome, failing(x.d)]).toEqual([x.row.nn, x.row.expected_outcome, [x.row.check, ...x.row.also].filter((c) => c !== null).sort()]);
+  });
+  it('R-35: Nube Sur re-escalates on the budget before #15 is rejected, and is PAGAR after', () => {
+    expect(failing(approveNube(done, done, now, market))).toEqual(['presupuesto_periodo', 'umbral_aprobacion']);
+    expect(approveNube(done, rejected15(done), now, market).outcome).toBe('PAGAR');
   });
 });

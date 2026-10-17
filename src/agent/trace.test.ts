@@ -40,6 +40,13 @@ const escalated = () => {
 };
 
 describe('agentTrace "Lo que hice" (AC-64, D24, R-29)', () => {
+  it('no current rate: step 4 names the rate as the reason, es and en (AC-74)', () => {
+    const i = inv({ payee_name: 'Contadores Andinos S.A.S.', amount: 1500000, currency: 'COP', invoice_number: 'CA-5521', bank_account: 'Davivienda corriente 4569-8812-0034' });
+    const stale = { COP: { currency: 'COP', usd_per_unit: 0.00024876, source: 'Yahoo Finance', fetched_at: '2026-10-14T15:00:00Z' } };
+    const d = stored(decide(i, findBeneficiary(i.fields.payee_name, DIRECTORY), { ...RULES, fx_rates: {} }, EMPTY, NOW, stale));
+    expect(trace(i, [d], { isDemo: true })[3]?.text).toBe('Decidí ESCALAR: no tengo una tasa de cambio vigente para COP.');
+    expect(trace(i, [d], { isDemo: true }, 'en')[3]?.text).toBe('I decided ESCALATE: I have no current exchange rate for COP.');
+  });
   it('PAGAR reproduces D24 verbatim, with its loop stages', () => {
     const i = inv();
     const steps = trace(i, [stored(run(i))]);

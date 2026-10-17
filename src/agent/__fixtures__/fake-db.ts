@@ -6,7 +6,7 @@ import type { Budget } from '../../lib/supabase';
 
 type Row = Record<string, unknown>;
 type Result = { data: unknown; error: { message: string } | null };
-export interface Query { table: string; op: 'select' | 'insert'; eq: Row }
+export interface Query { table: string; op: 'select' | 'insert' | 'upsert'; eq: Row }
 
 const month = (iso: unknown) => bogotaDay(String(iso)).slice(0, 7);
 
@@ -61,6 +61,7 @@ export function fakeDb(seed: Record<string, Row[]> = {}) {
     private max = Infinity;
     private mode: 'many' | 'single' | 'maybe' = 'many';
     private payload: Row | Row[] | null = null;
+    private conflict: string[] | null = null; // upsert: the key columns
     private eqs: Row = {};
     private embed = false;
     constructor(private table: string) {}
@@ -77,15 +78,19 @@ export function fakeDb(seed: Record<string, Row[]> = {}) {
     single() { this.mode = 'single'; return this; }
     maybeSingle() { this.mode = 'maybe'; return this; }
     insert(p: Row | Row[]) { this.payload = p; return this; }
+    upsert(p: Row | Row[], o: { onConflict: string }) { this.payload = p; this.conflict = o.onConflict.split(','); return this; }
     private run(): Result {
       meter.hit();
-      const q: Query = { table: this.table, op: this.payload ? 'insert' : 'select', eq: this.eqs };
+      const q: Query = { table: this.table, op: this.conflict ? 'upsert' : this.payload ? 'insert' : 'select', eq: this.eqs };
       queries.push(q);
       const injected = fail.query?.(q);
       if (injected) return { data: null, error: { message: injected } };
       if (this.payload) {
-        tables[this.table] ??= [];
-        tables[this.table]!.push(...[this.payload].flat());
+        const rows = (tables[this.table] ??= []);
+        for (const p of [this.payload].flat()) {
+          const at = this.conflict ? rows.findIndex((r) => this.conflict!.every((k) => r[k] === p[k])) : -1;
+          if (at >= 0) rows[at] = p; else rows.push(p);
+        }
         return { data: null, error: null };
       }
       let rows = (this.table === 'invoice_current' ? current() : tables[this.table] ?? []).filter((r) => this.preds.every((p) => p(r)));

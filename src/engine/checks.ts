@@ -1,6 +1,11 @@
 // The 13 checks (D15, AC-16..AC-23). Each is pure: (ctx) => Check. Missing input or rule = 'no_verificado' (AC-18).
 import { MAX_AMOUNT, round2 } from '../lib/money';
-import type { Beneficiary, Check, CheckId, Invoice, InvoiceFields, PeriodState, PolicyRules, PreviousInvoice, Verdict } from './types';
+import type { Beneficiary, Check, CheckId, Invoice, InvoiceFields, MarketRates, PeriodState, PolicyRules, PreviousInvoice, Verdict } from './types';
+
+// The rate a decision uses (AC-74) and what the Moneda check records of it (R-29). rate null = no usable rate; a stale
+// market row still names its source and fetched_at, so the record can say how old it was.
+export interface PickedRate { rate: number | null; rate_source: string | null; rate_fetched_at: string | null }
+export const FRESH_MS = 48 * 36e5;
 
 export interface CheckContext {
   invoice: Invoice;
@@ -9,6 +14,7 @@ export interface CheckContext {
   period: PeriodState;
   now: string;
   amountUsd: number | null;
+  fx: PickedRate;
 }
 type Values = Check['values'];
 
@@ -204,10 +210,21 @@ export function periodo({ invoice, now }: CheckContext): Check {
   return make('periodo', got === cur ? 'cumple' : 'no_cumple', got, cur, { invoice_month: got, current_month: cur });
 }
 
-export function moneda({ invoice: { fields: f }, rules, amountUsd }: CheckContext): Check {
-  const rate = f.currency === 'USD' ? 1 : (rules?.fx_rates?.[f.currency ?? ''] ?? null);
+// AC-74: the policy's pinned rate; else the newest market rate if fetched at most 48 h before `now` (R-85.3); else none.
+export function pickRate(currency: string | null, rules: PolicyRules | null, market: MarketRates, now: string): PickedRate {
+  if (currency === 'USD') return { rate: 1, rate_source: null, rate_fetched_at: null };
+  const pin = currency ? rules?.fx_rates?.[currency] : undefined;
+  if (typeof pin === 'number' && pin > 0 && Number.isFinite(pin)) return { rate: pin, rate_source: 'policy', rate_fetched_at: null };
+  const m = currency ? market[currency] : undefined;
+  if (!m) return { rate: null, rate_source: null, rate_fetched_at: null };
+  const fresh = Date.parse(now) - Date.parse(m.fetched_at) <= FRESH_MS && m.usd_per_unit > 0;
+  return { rate: fresh ? m.usd_per_unit : null, rate_source: m.source, rate_fetched_at: m.fetched_at };
+}
+
+// No usable rate is "no se pudo verificar" (AC-74, D15: never a guess); Moneda is not human-overridable (R-21).
+export function moneda({ invoice: { fields: f }, fx, amountUsd }: CheckContext): Check {
   // A known amount whose USD value is unusable (not finite or above 1e11, R-71) cannot be checked against USD rules.
-  const v: Verdict = !f.currency || (!rules?.fx_rates && f.currency !== 'USD') ? 'no_verificado'
-    : !(rate !== null && rate > 0) ? 'no_cumple' : f.amount !== null && amountUsd === null ? 'no_verificado' : 'cumple';
-  return make('moneda', v, f.currency, rate, { amount: f.amount, currency: f.currency, rate, amount_usd: amountUsd });
+  const v: Verdict = !f.currency || fx.rate === null || (f.amount !== null && amountUsd === null) ? 'no_verificado' : 'cumple';
+  return make('moneda', v, f.currency, fx.rate, { amount: f.amount, currency: f.currency, rate: fx.rate, amount_usd: amountUsd,
+    rate_source: fx.rate_source, rate_fetched_at: fx.rate_fetched_at });
 }

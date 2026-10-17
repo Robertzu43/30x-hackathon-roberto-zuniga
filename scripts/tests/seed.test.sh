@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
-# Task 3 seed (AC-03, AC-07, AC-09, AC-10, AC-47, R-05, R-07, R-08, R-09). Part 1 reads the seed JSON in the migration,
+# Task 3 seed (AC-03, AC-07, AC-09, AC-10, AC-47, R-05, R-07, R-08, R-09; Task 21: AC-75, R-86). Part 1 reads the seed JSON
+# of the latest migration that replaces andina_seed (000600: market rates, no pinned rate),
 # DATASET.md and the generated documents. Part 2, when a local Postgres exists, applies every migration over the
 # Supabase stubs of schema.test.sh, signs up two users, replays the seed through a reference model of PLAN Task 4's
 # checks, and runs reset_demo_company twice. Never a delete statement here (CLAUDE.md).
 set -u
 cd "$(dirname "$0")/../.." || exit 1
 fail(){ echo "FAIL: $1"; exit 1; }
-MIG=supabase/migrations/20261017000300_seed_andina.sql DS=docs/demo/DATASET.md
-[ -f "$MIG" ] && [ -f "$DS" ] || fail "missing $MIG or $DS"
-code=$(sed 's/--.*$//' "$MIG")
+SEED3=supabase/migrations/20261017000300_seed_andina.sql MIG=supabase/migrations/20261017000600_fx_rates.sql DS=docs/demo/DATASET.md
+[ -f "$SEED3" ] && [ -f "$MIG" ] && [ -f "$DS" ] || fail "missing $SEED3, $MIG or $DS"
+code=$(sed 's/--.*$//' "$SEED3" "$MIG")
 echo "$code" | grep -qiE '\b(drop|truncate)\b|delete[[:space:]]+from' && fail "destructive SQL in the seed (AC-07)"
-grep -q 'create or replace function public.seed_company(p_company uuid)' "$MIG" || fail "seed_company not replaced"
+grep -q 'create or replace function public.seed_company(p_company uuid)' "$SEED3" || fail "seed_company not replaced"
+grep -q 'create or replace function public.andina_seed(p_company uuid, p_reset boolean)' "$MIG" || fail "000600 does not replace andina_seed (AC-75)"
 grep -q "publicDir: 'web/public'" vite.config.ts || fail "vite.config.ts must serve web/public, or /demo/invoices/* is not deployed (AC-09, R-40)"
 
 # ---- Part 1: the seed JSON, DATASET.md and the documents agree (R-08) ----
@@ -27,8 +29,9 @@ if (inv.length !== 29 || count('PAGAR') !== 15 || count('FRENAR') !== 3 || count
 if (seed.beneficiaries.length !== 8) die('expected 8 beneficiaries');
 const r = seed.rules;
 if (r.period_budget_usd !== 42000 || r.account_balance_usd !== 23000) die('R-35: policy v1 budget 42000, balance 23000 (below budget, R-08)');
+if (JSON.stringify(r.fx_rates) !== '{}') die('AC-75: the seed policy pins no rate (fx_rates {}), so the demo uses market rates');
 const f28 = inv.find((i) => i.nn === '28');
-if (f28.fields.amount !== 4300 || f28.fields.currency !== 'EUR' || f28.also.join() !== 'umbral_aprobacion') die('R-35: #28 Forma Studio 4.300 EUR, also [umbral_aprobacion]');
+if (f28.fields.amount !== 4950 || f28.fields.currency !== 'USD' || f28.also.join() !== 'umbral_aprobacion') die('R-35, R-86: #28 Forma Studio 4.950 USD, also [umbral_aprobacion]');
 const kinds = ['duplicado exacto', 'duplicado con otro número', 'beneficiario nuevo', 'cuenta cambiada', 'sobre el límite por pago',
   'sobre el umbral de aprobación', 'no cuadra con el retainer', 'COP sobre el límite por pago', 'agota el presupuesto del mes',
   'supera el saldo de la cuenta', 'ilegible', 'vencida', 'fuera del periodo'];
@@ -51,7 +54,8 @@ const got = rows.map((c) => `${c[1]} ${c[5]} ${c[7]}`).join('\n');
 const want = inv.map((i) => `${i.nn} ${i.source} ${i.expected_outcome}`).join('\n');
 if (got !== want) die(`DATASET.md rows differ from the seed (R-08):\n${got}\n---\n${want}`);
 const doc = readFileSync(ds, 'utf8');
-for (const t of ['Rechazar', '#15', 'Aprobar', '#2044', '39.941,42', '22.702,21', '42.441,42']) if (!doc.includes(t)) die(`DATASET.md lacks the R-35 happy path ("${t}")`);
+for (const t of ['Rechazar', '#15', 'Aprobar', '#2044', '40.705,36', '22.609,39', '43.205,36']) if (!doc.includes(t)) die(`DATASET.md lacks the R-35 happy path ("${t}")`);
+for (const t of ['±20 %', 'Yahoo Finance']) if (!doc.includes(t)) die(`DATASET.md does not explain the market rates ("${t}", AC-75)`);
 if (/\b(40|20)\.000\b(?!\.)/.test(doc)) die('DATASET.md still cites the old budget 40.000 or balance 20.000 (R-35)');
 JS
 echo "seed.test: static checks passed"
@@ -61,13 +65,15 @@ REPLAY=$(cat <<'JS'
 import { readFileSync } from 'node:fs';
 const seed = JSON.parse(readFileSync(process.argv[1], 'utf8').match(/\$seed\$([\s\S]*?)\$seed\$/)[1]);
 const db = JSON.parse(readFileSync(0, 'utf8'));
+// AC-75: a pinned rate wins; otherwise the 17 Oct market rate (src/engine/__fixtures__/seed.ts FIXTURE_RATES).
+const MARKET = { USD: 1, COP: 0.00031538976, MXN: 0.054115482, BRL: 0.19726589, ARS: 0.00065897858, EUR: 1.1242271 };
 const ymd = (t) => new Date(t).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
 const month = (t) => ymd(t).slice(0, 7), today = ymd(db.now);
 const norm = (s) => s.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, '').replace(/\b(sas|ltda|inc|llc)\b/g, '').replace(/\s+/g, ' ').trim();
 const R = db.rules, done = [];
 let bad = 0;
 for (const inv of db.invoices) {
-  const f = inv.fields, rate = R.fx_rates[f.currency];
+  const f = inv.fields, rate = R.fx_rates?.[f.currency] ?? MARKET[f.currency];
   const usd = f.amount == null || rate == null ? null : Math.round(f.amount * rate * 100) / 100;
   const ben = f.payee_name == null ? null : db.beneficiaries.find((b) => norm(b.name) === norm(f.payee_name)) ?? null;
   const cur = done.filter((d) => month(d.received_at) === month(db.now));
@@ -114,7 +120,7 @@ const month0 = done.filter((d) => month(d.received_at) === month(db.now));
 console.log(`happy: direct ${approve(month0)}; after rejecting #15 ${approve(month0.map((d) => (d.number === '1043' ? { ...d, outcome: 'FRENAR' } : d)))}`);
 JS
 )
-HAPPY='happy: direct ESCALAR 42441.42 22702.21; after rejecting #15 PAGAR 39941.42 22702.21'
+HAPPY='happy: direct ESCALAR 43205.36 22609.39; after rejecting #15 PAGAR 40705.36 22609.39'
 # R-36 + R-35 without Postgres: the same reference model over rows built from the seed JSON with the migration's date rule.
 SYNTH=$(cat <<'JS'
 import { readFileSync } from 'node:fs';

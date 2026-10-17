@@ -37,6 +37,16 @@ for w in 'revoke insert on public.decisions, public.approval_tokens, public.appr
   'create or replace function public.decisions_guard()' PAGAR_OUTSIDE_RULES \
   umbral_aprobacion beneficiario_permitido beneficiario_cuenta acuerdo duplicado_probable vencimiento periodo lectura; do
   echo "$lock" | grep -qF "$w" || fail "lockdown migration lacks: $w (AC-68, AC-69)"; done
+# AC-73, AC-68 Clarified (R-85.5): fx_rates is RLS-on, members read it, no member write policy or privilege exists
+FX=supabase/migrations/20261017000600_fx_rates.sql
+[ -f "$FX" ] || fail "missing $FX"
+fx=$(sed 's/--.*$//' "$FX")
+echo "$fx" | grep -q 'create table public.fx_rates (' || fail "no create table public.fx_rates (AC-73)"
+[ "$(echo "$fx" | grep -c 'alter table public.fx_rates enable row level security')" = 1 ] || fail "RLS not enabled once on fx_rates (AC-73)"
+echo "$fx" | grep -q 'primary key (day, currency)' || fail "fx_rates key is not (day, currency) (AC-73)"
+echo "$fx" | grep -q 'create policy members_select_fx_rates on public.fx_rates for select to authenticated' || fail "no member read policy on fx_rates (AC-73)"
+echo "$fx" | grep -qiE 'on public\.fx_rates for (insert|update|all)' && fail "a member write policy on fx_rates (AC-68, R-85.5)"
+echo "$fx" | grep -q 'revoke all on public.fx_rates from public, anon, authenticated;' || fail "fx_rates privileges not revoked from members (AC-68)"
 
 # ---- Part 2: execute against a real Postgres ----
 INITDB=$(command -v initdb || ls /usr/lib/postgresql/*/bin/initdb 2>/dev/null | sort -V | tail -1)
@@ -187,4 +197,17 @@ R=$(inv '{}')
 as "$UA" "begin; update public.invoices set archived = true where id = '$R'; select pg_sleep(1.5); commit;" >"$D/s3" &
 sleep 0.5; expect svc "$(dec "$R" "$(cur)" "$FRE" 0)" 'ARCHIVED' "insert_decision ignored an archive in flight (R-69)"
 wait; expect "$UA" "select archived from public.invoices where id = '$R'" '^t$' "archive session did not commit: $(cat "$D/s3")"
+# AC-73, AC-68 Clarified: members read fx_rates and fx_latest, write neither; only the service role upserts
+FXROW="('2026-10-16', 'COP', 0.0003, 'Yahoo Finance', '2026-10-16T11:00:00Z'), ('2026-10-17', 'COP', 0.00031538976, 'Yahoo Finance', '2026-10-17T11:00:00Z')"
+expect svc "insert into public.fx_rates (day, currency, usd_per_unit, source, fetched_at) values $FXROW; select count(*) from public.fx_rates" '^2$' "service role writes fx_rates (record.ts)"
+expect svc "insert into public.fx_rates values ('2026-10-17', 'COP', 0.000315, 'open.er-api.com', now()) on conflict (day, currency) do update set usd_per_unit = excluded.usd_per_unit, source = excluded.source returning source" '^open.er-api.com$' "service role upserts by (day, currency) (AC-73)"
+expect "$UA" "select day || '|' || currency || '|' || usd_per_unit || '|' || source from public.fx_latest" '^2026-10-17\|COP\|0.000315\|open.er-api.com$' "member reads the newest rate per currency (AC-73)"
+expect "$UA" "select count(*) from public.fx_rates" '^2$' "member reads fx_rates (AC-73)"
+expect "$UA" "insert into public.fx_rates values ('2026-10-18', 'COP', 1, 'x', now())" 'permission denied' "member inserts fx_rates (AC-68)"
+expect "$UA" "update public.fx_rates set usd_per_unit = 1" 'permission denied' "member updates fx_rates (AC-68)"
+expect "$UA" "insert into public.fx_latest values ('2026-10-18', 'COP', 1, 'x', now())" 'permission denied|cannot insert' "member inserts through fx_latest (AC-68)"
+expect 33333333-3333-4333-8333-333333333333 "select count(*) from public.fx_latest" '^0$' "a signed-in non-member reads fx rates (AC-73)"
+out=$(printf "set role anon;\nselect count(*) from public.fx_rates;\n" | sql -f -); echo "$out" | grep -q 'permission denied' || fail "anon reads fx_rates (got: $out)"
+expect svc "insert into public.fx_rates values ('2026-10-18', 'COP', 0, 'x', now())" 'check constraint' "a rate <= 0 is refused (R-85)"
+is_rows=$(sql -c "select count(*) from public.fx_rates"); [ "$is_rows" = 2 ] || fail "member writes changed fx_rates (got $is_rows rows)"
 echo "schema.test: greps and live Postgres checks passed"

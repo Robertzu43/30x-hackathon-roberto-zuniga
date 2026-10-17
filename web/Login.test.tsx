@@ -195,6 +195,21 @@ test.each([
   expect((screen.getByRole('button', { name: 'Entrar' }) as HTMLButtonElement).disabled).toBe(false);
 });
 
+test.each([
+  ['es', 'Correo', 'Contraseña', 'Entrar con contraseña', 'Entrar', 'La contraseña debe tener al menos 8 caracteres.'],
+  ['en', 'Email', 'Password', 'Sign in with password', 'Sign in', 'The password needs at least 8 characters.'],
+])('%s: a 7-character password is refused in place with 0 signInWithPassword calls (AC-95, R-134)', async (l, email, password, open, enter, message) => {
+  localStorage.setItem('lang', l);
+  const fetchMock = setup();
+  withPassword('ana@empresa.co', '1234567', [open, email, password, enter]);
+  expect((await screen.findByRole('alert')).textContent).toBe(message);
+  expect(fakeAuth.signInWithPassword).not.toHaveBeenCalled();
+  expect(runCalls(fetchMock)).toHaveLength(0);
+  fireEvent.change(screen.getByLabelText(password), { target: { value: '12345678' } });
+  fireEvent.click(screen.getByRole('button', { name: enter }));
+  await waitFor(() => expect(fakeAuth.signInWithPassword).toHaveBeenCalledOnce()); // 8 is enough
+});
+
 test('in English: "Sign in with password" and "Wrong email or password." (AC-95)', async () => {
   localStorage.setItem('lang', 'en');
   refused('Invalid login credentials', { code: 'invalid_credentials', status: 400 });

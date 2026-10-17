@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '../api';
 import { useLeaveGuard } from '../components/LeaveTrialWarning';
 import Logo from '../components/Logo';
-import { PasswordField } from '../components/SaveAccess';
+import { MIN, PasswordField } from '../components/SaveAccess';
 import TrialButton from '../components/TrialButton';
 import { useT } from '../i18n';
 import { runUntilDone, type Progress } from '../runAgent';
@@ -76,6 +76,7 @@ export default function Login() {
   };
   const submitPassword = (e: FormEvent) => {
     e.preventDefault();
+    if (password.length < MIN) return setError(t('door.short_password')); // R-134: refused here, no call, no leave warning
     guard(() => void signInPassword());
   };
 

@@ -20,8 +20,6 @@ test('Bandeja chat counts match the page (demo user)', async ({ browser }: any) 
   const chips: Record<string, number> = {};
   for (const t of await page.locator('.inbox-list li').allInnerTexts()) { const k = (t.match(/\b(PAGAR|FRENAR|ESCALAR|Pendiente)\b/) || ['?'])[0]; chips[k] = (chips[k] || 0) + 1; }
   console.log('PAGE rows:', rows, 'row chips tally:', JSON.stringify(chips));
-  const box = page.getByRole('textbox').filter({ has: page.locator(':scope') }).first();
-  const ask = page.locator('section, div, form').filter({ hasText: 'Pregúntale a Thesaurus' }).last();
   const input = page.getByPlaceholder(/pregunt|Escribe/i).first().or(page.locator('textarea, input[type=text]').first());
   for (const q of ['¿Cuántas facturas están en PAGAR, FRENAR y ESCALAR?']) {
     await input.fill(q);

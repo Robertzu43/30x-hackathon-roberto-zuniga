@@ -4,7 +4,7 @@
  *   guardLeave(user, leave, warn)  the one guard every action that ends the session calls (UI: useLeaveGuard)
  *   startTrial(lang, onProgress)   anonymous sign-in (the signup trigger seeds «Empresa de prueba <n>"), then the first-login pass
  *   enterDemo()                    «Entrar como Andina Labs» (AC-46)
- *   useTrialCompany()              the trial's company name, null until loaded or when not a trial
+ *   useTrialCompany()              the trial's company name, null until loaded, for a user who never was a trial in this tab, or for another user
  */
 import type { User } from '@supabase/supabase-js';
 import { useEffect, useState } from 'react';
@@ -42,9 +42,9 @@ export async function enterDemo(): Promise<boolean> {
 export function useTrialCompany(): string | null {
   const user = useSession().session?.user;
   const trial = isTrial(user);
-  const [name, setName] = useState<string | null>(null);
+  const [found, setFound] = useState<{ id?: string; name: string } | null>(null);
   useEffect(() => {
-    if (trial) void api.get<{ name: string }>('/api/company').then((c) => setName(c.name), () => undefined); // the fallback text stands
+    if (trial) void api.get<{ name: string }>('/api/company').then((c) => setFound({ id: user?.id, name: c.name }), () => undefined); // the fallback text stands
   }, [user?.id, trial]);
-  return trial ? name : null;
+  return found?.id === user?.id ? found?.name ?? null : null; // R-135: stays after «Guardar mi acceso» (same user id, no longer anonymous), never leaks to another user
 }

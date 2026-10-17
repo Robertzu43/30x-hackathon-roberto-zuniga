@@ -278,12 +278,21 @@ test('Rechazar posts the seq with the optional note', async () => {
   expect(JSON.parse(String(post[1]!.body))).toEqual({ seq: 2, note: 'No reconozco este cobro' });
 });
 
-test('a 409 changed shows our own message and reloads the detail (R-55)', async () => {
+test('a 409 changed shows the dashboard text (not the link page\'s «ábrelo de nuevo») and reloads the detail (R-55, R-136)', async () => {
   const fetchMock = mockApi({ [GET]: escalated, 'POST /api/invoices/inv-1/approve': json({ error: 'changed', message: 'x' }, 409) });
   open();
   fireEvent.click(await screen.findByRole('button', { name: 'Aprobar' }));
-  expect(await screen.findByText('Esta factura cambió mientras la mirabas. Ya cargué la versión nueva: revísala antes de responder.')).toBeTruthy();
+  expect(await screen.findByText('Esta factura cambió mientras la tenías abierta. Recarga la página para ver su estado actual.')).toBeTruthy();
+  expect(screen.queryByText(/ábrelo de nuevo/)).toBeNull();
   await waitFor(() => expect(gets(fetchMock)).toBe(2));
+});
+
+test('in English the dashboard 409 changed text is the English one (R-136)', async () => {
+  localStorage.setItem('lang', 'en');
+  mockApi({ [GET]: escalated, 'POST /api/invoices/inv-1/approve': json({ error: 'changed', message: 'x' }, 409) });
+  open();
+  fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+  expect(await screen.findByText('This invoice changed while you had it open. Reload the page to see where it stands now.')).toBeTruthy();
 });
 
 test('a 409 already_decided says so and reloads', async () => {

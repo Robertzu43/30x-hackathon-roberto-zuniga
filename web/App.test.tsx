@@ -1,7 +1,9 @@
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { useLocation } from 'react-router-dom';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { thisMonth } from './api';
 import App, { routes } from './App';
+import { currentSession } from './test/supabase';
 import { DEMO_EMAIL, fakeAuth, mockApi, renderAt, signedInAs } from './test/utils';
 
 const SEEN = { tour_seen: true };
@@ -312,4 +314,37 @@ test('switching the language re-fetches the screen on view with the new X-Lang',
   await waitFor(() => expect(langsOf()).toEqual(['/api/screen/inbox?lang=es es']));
   fireEvent.click(screen.getByRole('button', { name: 'en' }));
   await waitFor(() => expect(langsOf()).toEqual(['/api/screen/inbox?lang=es es', '/api/screen/inbox?lang=en en']));
+});
+
+// AC-94 (R-137): a stored session that takes a while to restore must not bounce a deep link to Bandeja.
+test('with a stored session that resolves late, /policy shows Política and the address never changes (AC-94, R-137)', async () => {
+  signedInAs('ana@empresa.co', SEEN);
+  const stored = currentSession();
+  fakeAuth.onAuthStateChange.mockImplementation((cb) => {
+    setTimeout(() => cb('INITIAL_SESSION', stored), 150);
+    return { data: { subscription: { unsubscribe: () => true } } };
+  });
+  mockApi({ ...INBOX, 'GET /api/screen/policy': { versions: [], company: null, fx: { rates: [] } } });
+  const Where = () => <output data-testid="where">{useLocation().pathname}</output>;
+  const seen: string[] = [];
+  const watch = setInterval(() => seen.push(document.querySelector('[data-testid=where]')?.textContent ?? ''), 10);
+  renderAt(<><App /><Where /></>, { at: '/policy' });
+  expect(await screen.findByRole('heading', { name: 'Política', level: 1 })).toBeTruthy();
+  clearInterval(watch);
+  expect(seen.length).toBeGreaterThan(5); // the restore really was pending while we watched
+  expect(new Set(seen)).toEqual(new Set(['/policy']));
+});
+
+// AC-94 (R-137, D41 door QA UX-07): a trial user who never finished the tour reopens a bookmark; the tour must not carry them to Bandeja.
+test('a deep link with a stored session and an unfinished tour stays on Política: the tour does not auto-start there (AC-94, R-137)', async () => {
+  signedInAs('ana@empresa.co'); // tour_seen not set
+  mockApi({ ...INBOX, 'GET /api/screen/policy': { versions: [], company: null, fx: { rates: [] } } });
+  const Where = () => <output data-testid="where">{useLocation().pathname}</output>;
+  renderAt(<><App /><Where /></>, { at: '/policy' });
+  expect(await screen.findByRole('heading', { name: 'Política', level: 1 })).toBeTruthy();
+  await new Promise((r) => setTimeout(r, 300)); // the tour would have navigated by now
+  expect(document.querySelector('.tour')).toBeNull();
+  expect(screen.getByTestId('where').textContent).toBe('/policy');
+  fireEvent.click(await signedInTopBar('Ver tutorial')); // asked for on purpose, it still starts
+  await waitFor(() => expect(document.querySelector('.tour')).not.toBeNull());
 });

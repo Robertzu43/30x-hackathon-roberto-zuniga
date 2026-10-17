@@ -1,9 +1,20 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { expect, test } from 'vitest';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { beforeEach, expect, test } from 'vitest';
 import App, { pages } from './App';
-import { DEMO_EMAIL, fakeAuth, renderAt, signedInAs } from './test/utils';
+import { DEMO_EMAIL, fakeAuth, mockApi, renderAt, signedInAs } from './test/utils';
 
 const SEEN = { tour_seen: true };
+
+// findBy* can resolve in the gap between the commit that shows the signed-in top bar and the passive effects of that
+// commit (tour start, stored lang). A click landing in that gap is overwritten by those effects, so let them run first.
+const signedInTopBar = async (name = 'Ver tutorial') => {
+  const button = await screen.findByRole('button', { name });
+  await act(async () => {});
+  return button;
+};
+
+// The real Bandeja mounts on /: answer what it loads so it never lands on its error state mid-test.
+beforeEach(() => mockApi({ 'GET /api/invoices': [], 'GET /api/agent/last-run': null }));
 
 test('routes come from web/pages/*.tsx: one page per screen, each with a path and a component', () => {
   expect(pages.map((p) => p.route.path).sort()).toEqual(
@@ -48,7 +59,7 @@ test('a first login starts the tour; "Saltar" stores tour_seen on the user (AC-4
 test('a user who has seen the tour does not get it again; "Ver tutorial" restarts it', async () => {
   signedInAs('ana@empresa.co', SEEN);
   renderAt(<App />);
-  fireEvent.click(await screen.findByRole('button', { name: 'Ver tutorial' }));
+  fireEvent.click(await signedInTopBar());
   expect(await screen.findByRole('dialog')).toBeTruthy();
   expect(screen.getByRole('heading', { name: 'Bandeja', level: 2 })).toBeTruthy();
 });
@@ -73,7 +84,8 @@ test('the demo user always gets the tour and skipping it stores nothing (R-17)',
 test('the top bar language switch changes the UI without reload and stores it on the user (AC-41)', async () => {
   signedInAs('ana@empresa.co', { ...SEEN, lang: 'es' });
   renderAt(<App />);
-  fireEvent.click(await screen.findByRole('button', { name: 'en' }));
+  await signedInTopBar();
+  fireEvent.click(screen.getByRole('button', { name: 'en' }));
   expect(await screen.findByRole('button', { name: 'Show tutorial' })).toBeTruthy();
   await waitFor(() => expect(fakeAuth.updateUser).toHaveBeenCalledWith({ data: { lang: 'en' } }));
 });
@@ -90,14 +102,14 @@ test('the top bar shows who is signed in, and sign-out returns to /login', async
 test('the tour keeps its place across routes: Siguiente from Bandeja reaches Política on /policy', async () => {
   signedInAs('ana@empresa.co', SEEN);
   renderAt(<App />);
-  fireEvent.click(await screen.findByRole('button', { name: 'Ver tutorial' }));
+  fireEvent.click(await signedInTopBar());
   await screen.findByRole('heading', { name: 'Bandeja', level: 2 });
   fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }));
   await screen.findByRole('heading', { name: 'Nueva factura', level: 2 });
   fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }));
   await screen.findByRole('heading', { name: 'Ejecutar agente', level: 2 });
   fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }));
-  // No invoices are mocked here, so Bandeja has no invoice-row anchor and that step is skipped.
+  // The mocked invoice list is empty, so Bandeja has no invoice-row anchor and that step is skipped.
   expect(await screen.findByRole('heading', { name: 'Política', level: 2 }, { timeout: 8000 })).toBeTruthy();
   expect(screen.getByRole('heading', { name: 'Política', level: 1 })).toBeTruthy();
 }, 10000);

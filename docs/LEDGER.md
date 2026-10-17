@@ -398,3 +398,9 @@ AWS tasks are parked until then; everything else continues.
 AWS LOGIN NEEDED: open this on your phone within 10 minutes: https://us-east-2.signin.aws.amazon.com/v1/authorize?response_type=code&client_id=arn%3Aaws%3Asignin%3A%3A%3Adevtools%2Fcross-device&state=a668cb19-6da9-4f38-a71a-168b2841f50e&code_challenge_method=SHA-256&scope=openid&redirect_uri=https%3A%2F%2Fus-east-2.signin.aws.amazon.com%2Fv1%2Fsessions%2Fconfirmation&code_challenge=e-sBBgvdxdf_lF1PEu0VRyGKzcWU_VV8nUfGhJwLs0o
 Then paste the code the browser shows into the cloud session; the session runs: echo '<code>' > /tmp/aws-login-in
 AWS tasks are parked until then; everything else continues.
+
+## Resume 2026-10-17T12:39Z (orchestrator)
+- Step 0 proof: subagent-driven-development heading "The Task Loop"; finishing-a-development-branch heading "Step 6: Cleanup Workspace". Both preloaded.
+- RESUMED at D28-D35 intake 2026-10-17T12:39Z. run_status: PHASE BUILD, HOURS_LEFT 28.4, UNLEDGERED none, RUN_COMPLETE no. FREEZE 2026-10-18T11:00Z, deadline 2026-10-18T17:00Z.
+- D28-D35 written by the launcher from Roberto's messages, 234ae5e (docs/DECISIONS.md on r202610162341/integration). This resolves the safety-check refusal ledgered above; the orchestrator does not edit DECISIONS.md.
+- Ruling: order of work follows D33 and the launcher's brief (D28 FX, D29 visible AI, D34 portal first; D30 logo/taste and D31 UX QA in parallel; D35 after D34; then final delta review, D32 video after the 00:00Z Workers AI reset, QA happy path, merge to main) — cut order if time runs short: D35 live part, D30 taste beyond the logo, D29(c) activity panel; never D28, D29(a)(b), D34, the video — why: stated by the launcher from Roberto — cost if wrong: a cut item returns as a lower-scored feature, not a broken one.

@@ -8,6 +8,8 @@ import Demo from './pages/Demo';
 import Login from './pages/Login';
 import { useSession } from './auth';
 import LeaveTrialWarning, { useLeaveGuard } from './components/LeaveTrialWarning';
+import Timeline from './components/Timeline';
+import type { StoredDecision } from '../src/agent/trace';
 import TrialButton from './components/TrialButton';
 import { currentSession } from './test/supabase';
 import { DEMO_EMAIL, fakeAuth, mockApi, renderAt, signedInAs } from './test/utils';
@@ -145,8 +147,8 @@ test('a trial user landing on Bandeja gets the guided tour (AC-92, AC-42)', asyn
 });
 
 // A screen with one leaving action, as the mounts use it: like «Cerrar sesión», it shows once signed in.
-function Leaver({ onLeave, onSave }: { onLeave: () => void; onSave?: () => void }) {
-  const { guard, warning } = useLeaveGuard(onSave);
+function Leaver({ onLeave }: { onLeave: () => void }) {
+  const { guard, warning } = useLeaveGuard();
   if (!useSession().session) return null;
   return (
     <>
@@ -161,8 +163,7 @@ test('a leaving action by an unsaved trial shows the warning in place, naming th
   anonymous();
   mockApi(COMPANY);
   const leave = vi.fn();
-  const save = vi.fn();
-  renderAt(<Leaver onLeave={leave} onSave={save} />);
+  renderAt(<Leaver onLeave={leave} />);
   fireEvent.click(await screen.findByRole('button', { name: 'Cerrar sesión' }));
   const dialog = await screen.findByRole('alertdialog');
   await waitFor(() => expect(dialog.textContent).toContain(
@@ -170,8 +171,9 @@ test('a leaving action by an unsaved trial shows the warning in place, naming th
   expect(leave).not.toHaveBeenCalled();
   const saveButton = within(dialog).getByRole('button', { name: 'Guardar mi acceso' });
   expect(saveButton.className).toBe('primary');
-  fireEvent.click(saveButton);
-  expect(save).toHaveBeenCalledOnce();
+  fireEvent.click(saveButton); // AC-95: the warning's primary opens «Guardar mi acceso» in its place
+  expect(await screen.findByRole('dialog', { name: 'Guardar mi acceso' })).toBeTruthy();
+  expect(screen.queryByRole('alertdialog')).toBeNull();
   expect(leave).not.toHaveBeenCalled();
 });
 
@@ -212,12 +214,10 @@ test('a user with saved access (or no trial) leaves with no warning (AC-94)', as
 
 test('the warning never shows a blank company: before the name loads it says «tu empresa de prueba»; in English it is English', async () => {
   localStorage.setItem('lang', 'en');
-  renderAt(<LeaveTrialWarning company={null} onLeave={() => {}} onCancel={() => {}} />);
+  renderAt(<LeaveTrialWarning company={null} onSave={() => {}} onLeave={() => {}} onCancel={() => {}} />);
   expect(screen.getByRole('alertdialog').textContent).toContain(
     'If you leave without saving your access, you can\'t come back to "your trial company". Save your access first?');
-  // Until Task 41's dialog exists there is no save button, so keeping the session is the primary.
-  expect(screen.queryByRole('button', { name: 'Save my access' })).toBeNull();
-  expect(screen.getByRole('button', { name: 'Cancel' }).className).toBe('primary');
+  expect(primaries()).toEqual(['Save my access']);
 });
 
 // The mounts (AC-92, AC-94, AC-40 and AC-45 Clarified; R-119, R-120): the door is THE primary on /login and /demo.
@@ -278,4 +278,17 @@ test.each([
   expect(signIn()).not.toHaveBeenCalled();
   fireEvent.click(within(dialog).getByRole('button', { name: 'Salir de todos modos' }));
   await waitFor(() => expect(signIn()).toHaveBeenCalledOnce());
+});
+
+// R-116: the timeline names a guest «Invitado <8 hex>» / "Guest <8 hex>", never the stored invitado:<hex>.
+test.each([
+  ['es', 'Invitado 3f9a1c2b en el tablero'],
+  ['en', 'Guest 3f9a1c2b on the dashboard'],
+])('the timeline names a guest\'s answer in %s (AC-37 Clarified, R-116)', (lang, shown) => {
+  localStorage.setItem('lang', lang);
+  renderAt(<Timeline decisions={[{ id: 'd2', seq: 2, outcome: 'PAGAR', actor: 'human', actor_email: 'invitado:3f9a1c2b', channel: 'dashboard',
+    checks: [], headline_es: null, headline_en: null, question_es: null, question_en: null, policy_version: 1, amount_usd: 4200, payment: null, note: null, created_at: '2026-10-17T15:00:00Z' } as StoredDecision]} />);
+  const row = screen.getByRole('listitem');
+  expect(row.textContent).toContain(shown);
+  expect(row.textContent).not.toContain('invitado:');
 });

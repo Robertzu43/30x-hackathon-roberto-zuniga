@@ -80,6 +80,17 @@ describe('explainCheck (AC-27, AC-28, AC-22, R-22)', () => {
     expect(explainCheck({ ...get(a.checks, 'umbral_aprobacion'), overridden: { by: 'ana@x.co', channel: 'link' } }, 'en', RECEIVED))
       .toBe('Approval threshold: 4,200 USD > 2,500 USD → does not pass · approved by ana@x.co via link');
   });
+  it('a guest\'s override names «Invitado <8 hex>», never the stored invitado:<hex>, es and en (AC-37 Clarified, R-116)', () => {
+    const i = inv(NUBE), b = findBeneficiary('Nube Sur LLC', DIRECTORY);
+    const a = decideWithOverrides(['umbral_aprobacion'], { email: 'invitado:3f9a1c2b', channel: 'dashboard' }, i, b, RULES, EMPTY, NOW);
+    expect(explainCheck(get(a.checks, 'umbral_aprobacion'), 'es', RECEIVED))
+      .toBe('Umbral de aprobación: 4.200 USD > 2.500 USD → no cumple · aprobado por Invitado 3f9a1c2b en el tablero');
+    expect(explainCheck(get(a.checks, 'umbral_aprobacion'), 'en', RECEIVED))
+      .toBe('Approval threshold: 4,200 USD > 2,500 USD → does not pass · approved by Guest 3f9a1c2b on the dashboard');
+    expect(a.outcome).toBe('PAGAR');
+    expect(headline(a, i, b, 'es')).toMatch(/aprobado por Invitado 3f9a1c2b$/);
+    expect(headline(a, i, b, 'en')).toMatch(/approved by Guest 3f9a1c2b$/);
+  });
   it('no sentence leaves a placeholder or a raw key, for every check of real decisions (null policy, traps)', () => {
     const decisions = [run({}).d, run({}, null).d, run({ payee_name: null, amount: null, currency: null, invoice_number: null }).d,
       run({ payee_name: 'Pixel Lab', amount: 1500000, currency: 'COP', due_date: '2026-01-01' }).d];

@@ -63,11 +63,11 @@ export const SCREENS = [
   { id: 'period', exp: 'finance', path: '/period', states: STATES },
   { id: 'approve', exp: 'finance', path: (v) => `/approve/${v.approveToken ?? 'invalid'}`, auth: false },
   { id: 'demo', exp: 'finance', path: '/demo', auth: false },
-  { id: 'portal', exp: 'vendor', path: '/andina-labs', auth: false, states: STATES, primary: 'button[type="submit"], button.primary' },
+  { id: 'portal', exp: 'vendor', path: '/andina-labs', auth: false, states: STATES, primary: 'button[type="submit"], button.primary', compose: 'textarea' }, // compose: typed before 4.busy, an empty send takes the error path
   { id: 'portal-reply', exp: 'vendor', path: '/andina-labs', auth: false, prepare: sendPortal, primary: 'button[type="submit"], button.primary' },
-  { id: 'portal-error', exp: 'vendor', path: '/no-such-portal-gate', auth: false },
+  { id: 'portal-error', exp: 'vendor', path: '/no-such-portal-gate', auth: false, notFound: true }, // designed 404 (R-103)
   { id: 'status', exp: 'vendor', path: (v) => `/estado/${v.statusToken}`, auth: false, states: STATES, needs: 'statusToken' },
-  { id: 'status-invalid', exp: 'vendor', path: '/estado/token-invalido-gate', auth: false },
+  { id: 'status-invalid', exp: 'vendor', path: '/estado/token-invalido-gate', auth: false, notFound: true },
 ];
 
 // ---- Playwright and Chromium ----
@@ -86,6 +86,10 @@ function measure(o) {
     const cls = typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\s+/).join('.') : '';
     return `${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''}${cls} "${(el.innerText ?? '').trim().slice(0, 24)}"`;
   };
+  const srOnly = (el) => { // the standard sr-only pattern (1px box, clipped) is hidden on purpose, not clipped text
+    const cs = getComputedStyle(el), r = el.getBoundingClientRect();
+    return cs.position === 'absolute' && r.width <= 1 && r.height <= 1 && (cs.clip !== 'auto' || cs.clipPath !== 'none');
+  };
   const hasText = (el) => [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
   const clippedBy = (el) => {
     for (let p = el.parentElement; p && p !== document.documentElement; p = p.parentElement) if (getComputedStyle(p).overflowX !== 'visible') return p;
@@ -100,6 +104,7 @@ function measure(o) {
     if (!hasText(el)) return false;
     const cs = getComputedStyle(el);
     const hid = (v) => v === 'hidden' || v === 'clip';
+    if (srOnly(el)) return false;
     return (hid(cs.overflowX) && el.scrollWidth > el.clientWidth + 1) || (hid(cs.overflowY) && el.scrollHeight > el.clientHeight + 1);
   }).map(name));
 
@@ -107,7 +112,7 @@ function measure(o) {
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   for (let n = walker.nextNode(); n; n = walker.nextNode()) {
     const el = n.parentElement;
-    if (!el || !live.has(el) || !n.textContent.trim()) continue;
+    if (!el || !live.has(el) || srOnly(el) || !n.textContent.trim()) continue;
     const range = document.createRange();
     range.selectNodeContents(n);
     const rects = [...range.getClientRects()].filter((r) => r.width > 1 && r.height > 1);
@@ -172,6 +177,8 @@ function measure(o) {
   const root = msg && msg.parentElement && !msg.parentElement.matches('main,body') ? msg.parentElement : msg;
   out.message = root ? { text: root.innerText.trim().slice(0, 300), next: els.filter((el) => root.contains(el) && !el.closest('header,nav,.lang,.lang-switch') && el.matches('button,a[href],[role="button"]')).length } : { text: '', next: 0 };
 
+  out.main = (document.querySelector('main') ?? document.body).innerText.trim().slice(0, 300);
+
   const pr = els.find((el) => el.matches(o.primary));
   if (pr) {
     pr.setAttribute('data-gate-primary', '');
@@ -194,7 +201,9 @@ const LOCALE = {
   en: [/\b\d{1,3}(?:\.\d{3})+(?:,\d+)?\b/, /(?<![\d.,])\d+,\d{2}(?![\d.,])/, /\b(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b/i, /\b\d{1,2} (?:ene|abr|ago|dic)\b/],
 };
 const ISO_DATE = /\b\d{4}-\d{2}-\d{2}\b/;
-const NEXT_STEP = /reintent|recarg|vuelve|int[eé]ntalo|intenta|usa |sube|crea|agrega|a[ñn]ade|revisa|comprueba|conecta|retry|reload|try again|go back|check|use |upload|add |create|connect|refresh/i;
+const NEXT_STEP = /reintent|recarg|vuelve|int[eé]ntalo|intenta|usa |sube|crea|agrega|a[ñn]ade|revisa|comprueba|conecta|p[ií]dele|retry|reload|try again|go back|check|use |upload|add |create|connect|refresh|\bask\b/i;
+const BY_DESIGN = 'sin acción por diseño (R-103)'; // the two designed 404 pages have no action on purpose
+const EXCLUDED_404 = 'excluded: expected 404 (AC-83/AC-84)';
 const hex = (c) => {
   const m = c.match(/rgba?\((\d+), (\d+), (\d+)(?:, ([\d.]+))?\)/);
   return m && (m[4] === undefined || +m[4] > 0) ? '#' + [m[1], m[2], m[3]].map((n) => (+n).toString(16).padStart(2, '0')).join('') : null;
@@ -229,7 +238,8 @@ function judge(m, c) {
     rs.push(P('2.targets', t.length > 0, t.length, `${t.length} of ${m.targets.total} targets under 44 x 44${t.length ? ': ' + t.slice(0, 5).map((x) => `${x.n} ${x.w}x${x.h}`).join('; ') : ''}`));
     const i = m.inputs.small;
     rs.push(P('2.inputs', i.length > 0, i.length, `${i.length} of ${m.inputs.total} inputs under 16 px${i.length ? ': ' + i.map((x) => `${x.n} ${x.px}px`).join('; ') : ''}`));
-    if (!m.primary) rs.push(R('2.primary', 'na', 0, 'no primary action on this screen'));
+    if (c.notFound) rs.push(R('2.primary', 'na', 0, BY_DESIGN));
+    else if (!m.primary) rs.push(R('2.primary', 'na', 0, 'no primary action on this screen'));
     else {
       const low = m.primary.sticky || m.primary.top >= 0.4 * m.primary.ih;
       rs.push(P('2.primary', !low, low ? 0 : Math.round(0.4 * m.primary.ih - m.primary.top), `primary top ${m.primary.top} px of ${m.primary.ih} (lower 60% starts at ${Math.round(0.4 * m.primary.ih)})${m.primary.sticky ? ', sticky' : ''}`));
@@ -293,6 +303,7 @@ const INIT = ({ lang, session, tour }) => {
   new PerformanceObserver((l) => { for (const e of l.getEntries()) if (!e.hadRecentInput) window.__gate.cls += e.value; }).observe({ type: 'layout-shift', buffered: true });
   new PerformanceObserver((l) => { for (const e of l.getEntries()) window.__gate.long = Math.max(window.__gate.long, e.duration); }).observe({ type: 'longtask', buffered: true });
   localStorage.setItem('lang', lang);
+  localStorage.setItem('portal.lang', lang);
   sessionStorage.setItem('lang', lang);
   if (session) localStorage.setItem(session.key, session.value);
   if (tour) sessionStorage.setItem('demo-tour', '1');
@@ -317,15 +328,15 @@ export async function runCell(browser, job) {
   try {
     const page = await context.newPage();
     const logs = [];
-    page.on('console', (msg) => ['error', 'warning'].includes(msg.type()) && logs.push(`${msg.type()}: ${msg.text().slice(0, 120)}`));
-    page.on('pageerror', (e) => logs.push(`pageerror: ${String(e.message).slice(0, 120)}`));
+    page.on('console', (msg) => ['error', 'warning'].includes(msg.type()) && logs.push({ text: `${msg.type()}: ${msg.text().slice(0, 120)}${msg.text().startsWith('Failed to load resource') ? ` <${msg.location().url}>` : ''}`, failedLoad: msg.text().startsWith('Failed to load resource') ? msg.location().url : null }));
+    page.on('pageerror', (e) => logs.push({ text: `pageerror: ${String(e.message).slice(0, 120)}` }));
     await page.addInitScript(INIT, { lang, session: screen.auth === false ? null : opts.session, tour: !!screen.tour });
     const guard = kind === 'dynamic' && !opts.mutate;
     await installRoutes(page, base, { state, guard, delayGets: kind === 'loading' ? 1500 : 0, gate });
 
     const path = typeof screen.path === 'function' ? screen.path(opts.vars) : screen.path;
-    const primarySel = screen.primary ?? 'button.primary';
-    const url = base + path;
+    const primarySel = screen.notFound ? ':not(*)' : screen.primary ?? 'button.primary';
+    const url = base + path + (screen.exp === 'vendor' ? `${path.includes('?') ? '&' : '?'}lang=${lang}` : ''); // the portal never reads the browser language (R-101)
     const nav = await page.goto(url, { waitUntil: kind === 'loading' ? 'domcontentloaded' : state === 'offline' ? 'load' : 'domcontentloaded', timeout: 30_000 }).catch((e) => e);
     if (nav instanceof Error) {
       add(R('0.reach', 'fail', 1, `cannot open ${url}: ${nav.message.split('\n')[0]}`));
@@ -360,8 +371,9 @@ export async function runCell(browser, job) {
     if (!state) {
       const g = await page.evaluate(() => window.__gate);
       const enforce = opts.speed || !isLocal(base); // opts.speed: the fixture tests run on a local URL; no CLI flag
-      add(!enforce ? R('7.usable', 'na', usable ?? 0, `${usable === null ? 'not usable' : Math.round(usable) + ' ms'} (enforced on the deployed URL)`)
-        : P('7.usable', usable === null || usable > 2000, usable ?? 99_999, usable === null ? 'heading and primary action never became usable' : `usable at ${Math.round(usable)} ms (limit 2000)`));
+      const part = screen.notFound ? `; primary action: ${BY_DESIGN}` : '';
+      add(!enforce ? R('7.usable', 'na', usable ?? 0, `${usable === null ? 'not usable' : Math.round(usable) + ' ms'} (enforced on the deployed URL)${part}`)
+        : P('7.usable', usable === null || usable > 2000, usable ?? 99_999, usable === null ? `heading${screen.notFound ? '' : ' and primary action'} never became usable` : `usable at ${Math.round(usable)} ms (limit 2000)${part}`));
       add(P('7.longtask', g.long > 300, Math.round(g.long), `longest task ${Math.round(g.long)} ms (limit 300)`));
       add(P('4.cls', g.cls > 0.01, +g.cls.toFixed(4), `CLS ${g.cls.toFixed(4)} (limit 0.01)`));
     }
@@ -373,18 +385,26 @@ export async function runCell(browser, job) {
     for (const [sel, v] of Object.entries(screen.fill ?? {})) await page.locator(sel).first().fill(v).catch(() => {});
 
     if (kind === 'dynamic') {
-      await dynamic(page, primarySel, add);
+      await dynamic(page, screen, primarySel, add);
       return rows;
     }
 
     const m = await page.evaluate(measure, { width, primary: primarySel });
-    judge(m, { width, lang, dicts: opts.dicts }).forEach(add);
-    if (state) {
-      const t = m.message.text, ok = t.length >= 10 && (m.message.next > 0 || NEXT_STEP.test(t));
-      add(P('4.state', !ok, ok ? 0 : 1, ok ? `${state}: "${t.slice(0, 50)}", ${m.message.next} next-step controls` : `${state}: ${t ? `"${t.slice(0, 50)}"` : 'nothing shown'} and ${m.message.next} next-step controls`));
-    } else add(P('6.console', logs.length > 0, logs.length, `${logs.length} console errors or warnings${logs.length ? ': ' + logs.slice(0, 3).join('; ') : ''}`));
+    judge(m, { width, lang, dicts: opts.dicts, notFound: screen.notFound }).forEach(add);
+    if (state || screen.notFound) {
+      // A designed 404 page needs no control: its sentence is the next step.
+      const t = screen.notFound ? m.message.text || m.main : m.message.text, ok = t.length >= 10 && ((!screen.notFound && m.message.next > 0) || NEXT_STEP.test(t));
+      const what = state ?? '404';
+      add(P('4.state', !ok, ok ? 0 : 1, ok ? `${what}: "${t.slice(0, 50)}", ${m.message.next} next-step controls` : `${what}: ${t ? `"${t.slice(0, 50)}"` : 'nothing shown'} and ${m.message.next} next-step controls`));
+    }
+    if (!state) {
+      // R-103: exactly one line may be excluded, the browser's own 404 for this page's main document, on a designed 404 page.
+      const skip = screen.notFound && nav?.status() === 404 ? logs.findIndex((l) => l.failedLoad === nav.url()) : -1;
+      const left = logs.filter((_, i) => i !== skip).map((l) => l.text);
+      add(P('6.console', left.length > 0, left.length, `${left.length} console errors or warnings${left.length ? ': ' + left.slice(0, 3).join('; ') : ''}${skip >= 0 ? `; ${EXCLUDED_404}` : ''}`));
+    }
     if (wanted(opts.only, '3.axe') || wanted(opts.only, '3.contrast')) {
-      await page.addScriptTag({ content: axeJs() });
+      await page.evaluate(axeJs()); // not addScriptTag: a script-src CSP refuses it (the portal's does); evaluate is not subject to the page's CSP
       const v = await page.evaluate(async () => (await axe.run(document, { resultTypes: ['violations'] })).violations.map((x) => ({ id: x.id, impact: x.impact, nodes: x.nodes.length, at: x.nodes[0]?.target.join(' ') })));
       const hard = v.filter((x) => ['serious', 'critical'].includes(x.impact)), contrast = v.filter((x) => x.id === 'color-contrast');
       add(P('3.axe', hard.length > 0, hard.length, `${hard.length} serious or critical axe violations${hard.length ? ': ' + hard.map((x) => `${x.id} (${x.impact}, ${x.nodes}) ${x.at}`).slice(0, 3).join('; ') : ''}`));
@@ -406,7 +426,9 @@ export async function runCell(browser, job) {
 }
 
 // Keyboard path to the primary action (focus ring, Enter), then the response within 100 ms (items 3 and 4).
-async function dynamic(page, primarySel, add) {
+async function dynamic(page, screen, primarySel, add) {
+  if (screen.notFound) return ['3.focus', '3.enter', '4.busy'].forEach((id) => add(R(id, 'na', 0, BY_DESIGN)));
+  if (screen.compose) await page.locator(screen.compose).first().fill('Factura AS-0087 de Ana Souza, 10.000,00 BRL'); // a send with nothing typed takes the error path and shows no busy state
   const marked = await page.evaluate((sel) => {
     const p = [...document.querySelectorAll(sel)].find((e) => e.checkVisibility() && !e.disabled);
     p?.setAttribute('data-gate-primary', '');

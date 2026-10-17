@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any -- QA e2e file (Playwright is not a repo dependency; env-driven) */
 // QA Task 21 (AC-30): what the deployed Política screen shows. Needs QA_URL and QA_SESSION_FILE.
 import { createRequire } from 'node:module';
 const { test, expect } = createRequire(import.meta.url)('/opt/node22/lib/node_modules/playwright/test');

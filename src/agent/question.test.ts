@@ -32,6 +32,12 @@ describe('escalationQuestion (AC-65, D25)', () => {
     const i = inv({ amount: 1e15 });
     expect(ask(i, run(i))).toContain('por un monto que no pude leer');
   });
+  it('a changed account with the same last 4 names both accounts as read, es and en (R-73, AC-65)', () => {
+    const i = inv({ bank_account: 'ACH routing 026009593 cuenta 3920175' });
+    expect(ask(i, run(i))).toBe('Juan, la factura #2044 de Nube Sur LLC por 4.200 USD trae la cuenta «ACH routing 026009593 cuenta 3920175» y la registrada es «ACH routing 026009593 cuenta 483920175» ' +
+      'y supera tu umbral de aprobación de 2.500 USD. ¿La pago?');
+    expect(ask(i, run(i), 'en')).toContain('carries the account "ACH routing 026009593 cuenta 3920175" and the one on file is "ACH routing 026009593 cuenta 483920175"');
+  });
   it('en version', () => {
     const i = inv();
     expect(ask(i, run(i), 'en')).toBe('Juan, invoice #2044 from Nube Sur LLC for 4,200 USD exceeds your approval threshold of 2,500 USD. Should I pay it?');

@@ -2,7 +2,7 @@
 // per language at decision time and stored (R-28); the Spanish text is the email subject and first line (AC-39).
 import { validFields } from '../engine/checks';
 import { HUMAN_OVERRIDABLE } from '../engine/decide';
-import { fill, list, money, whatWouldPay } from '../engine/explain';
+import { asRead, fill, list, money, whatWouldPay } from '../engine/explain';
 import type { Decision, Invoice } from '../engine/types';
 import { t, type Lang } from '../i18n';
 
@@ -15,7 +15,7 @@ const nameOf = (email: string) => {
 export function escalationQuestion(args: { approverEmail: string; invoice: Invoice; decision: Pick<Decision, 'checks'> }, lang: Lang): string {
   const f = validFields(args.invoice.fields); // R-71
   const failing = args.decision.checks.filter((c) => c.verdict !== 'cumple' && !c.overridden);
-  const motives = failing.map((c) => fill(lang, `question.motive.${c.id}.${c.verdict}`,
+  const motives = failing.map((c) => fill(lang, `question.motive.${c.id}.${c.verdict}${asRead(c)}`,
     Object.fromEntries(Object.entries(c.values).map(([k, v]) => [k, typeof v === 'number' ? money(v, lang) : v]))));
   // R-27: approving cannot unlock these, so the agent says what would and offers to reject.
   const fix = whatWouldPay({ checks: failing.filter((c) => !HUMAN_OVERRIDABLE.includes(c.id)) }, lang)

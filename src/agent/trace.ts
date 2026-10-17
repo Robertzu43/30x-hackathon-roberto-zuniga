@@ -1,6 +1,6 @@
 // "Lo que hice" (AC-64, D24): the agent's steps, rendered only from what was recorded (R-29): the stored decisions,
 // the invoice, the company's demo flag and the recorded send result. Templates only, no model.
-import { agreementText, fieldList, fill, list, money, motives } from '../engine/explain';
+import { agreementText, asRead, fieldList, fill, list, money, motives } from '../engine/explain';
 import { validFields } from '../engine/checks';
 import { outcomeOf } from '../engine/decide';
 import type { Check, CheckId, Decision, Invoice, Outcome } from '../engine/types';
@@ -54,8 +54,9 @@ function consult(checks: Check[], lang: Lang): string {
   const v = (id: CheckId) => checks.find((c) => c.id === id)?.values ?? {};
   const account = v('beneficiario_cuenta');
   if (!v('beneficiario_permitido').directory_name) return t(lang, 'trace.not_in_directory');
-  if (checks.find((c) => c.id === 'beneficiario_cuenta')?.verdict === 'no_cumple') {
-    return fill(lang, 'trace.directory_account', { invoice: account.invoice_account_last4, account: account.directory_account_last4 });
+  const cuenta = checks.find((c) => c.id === 'beneficiario_cuenta');
+  if (cuenta?.verdict === 'no_cumple') {
+    return fill(lang, `trace.directory_account${asRead(cuenta)}`, { ...account, invoice: account.invoice_account_last4, account: account.directory_account_last4 });
   }
   return fill(lang, 'trace.directory', { agreement: agreementText(v('acuerdo'), lang), account: account.directory_account_last4 });
 }

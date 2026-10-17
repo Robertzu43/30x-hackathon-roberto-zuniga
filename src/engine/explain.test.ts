@@ -60,6 +60,18 @@ describe('explainCheck (AC-27, AC-28, AC-22, R-22)', () => {
     expect(explainCheck(c, 'es', RECEIVED)).toBe('Cuenta bancaria: la factura termina en 7310 y la registrada en 4821 → no cumple');
     expect(explainCheck(c, 'en', RECEIVED)).toBe('Bank account: the invoice\'s account ends in 7310 and the one on file in 4821 → does not pass');
   });
+  it('#15 and the Pixel Lab line vs Laura: different endings are named (R-73)', () => {
+    const c = get(run({ bank_account: 'Banco de Bogotá ahorros 112-45009-8' }).d.checks, 'beneficiario_cuenta');
+    expect(explainCheck(c, 'es', RECEIVED)).toBe('Cuenta bancaria: la factura termina en 0098 y la registrada en 4821 → no cumple');
+  });
+  it('a changed account with the same last 4 names both accounts as read, never "1332 y 1332", es and en (R-73)', () => {
+    const { d, i, b } = run({ bank_account: 'Bancolombia ahorros 3456-4821' });
+    const c = get(d.checks, 'beneficiario_cuenta');
+    expect(explainCheck(c, 'es', RECEIVED)).toBe('Cuenta bancaria: la cuenta de la factura («Bancolombia ahorros 3456-4821») no coincide con la registrada («Bancolombia ahorros 0012-3456-4821») → no cumple');
+    expect(explainCheck(c, 'en', RECEIVED)).toBe('Bank account: the invoice\'s account ("Bancolombia ahorros 3456-4821") does not match the one on file ("Bancolombia ahorros 0012-3456-4821") → does not pass');
+    expect(headline(d, i, b, 'es')).toBe('ESCALAR · 2.500 USD a Laura Méndez: cuenta cambiada (la de la factura es «Bancolombia ahorros 3456-4821» y la registrada «Bancolombia ahorros 0012-3456-4821»)');
+    expect(headline(d, i, b, 'en')).toBe('ESCALATE · 2,500 USD to Laura Méndez: changed account (the invoice\'s is "Bancolombia ahorros 3456-4821" and the one on file "Bancolombia ahorros 0012-3456-4821")');
+  });
   it('an overridden check reads "no cumple · aprobado por <correo> <canal>", never plain cumple (R-22)', () => {
     const i = inv(NUBE), b = findBeneficiary('Nube Sur LLC', DIRECTORY);
     const a = decideWithOverrides(['umbral_aprobacion'], { email: 'roberto@hacketix.com', channel: 'dashboard' }, i, b, RULES, EMPTY, NOW);

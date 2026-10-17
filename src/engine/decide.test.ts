@@ -252,6 +252,53 @@ describe('beneficiary (AC-19, D4, R-05)', () => {
   });
 });
 
+// R-73: "Cuenta" compares account numbers (digit groups), not text. Lines are the demo documents' printed lines.
+describe('account comparison (AC-19, R-73)', () => {
+  const acct = (payee: string, line: string, dir?: string) => {
+    const directory = dir === undefined ? DIRECTORY : DIRECTORY.map((b) => (b.name === payee ? { ...b, bank_account: dir } : b));
+    return check(run({ payee_name: payee, bank_account: line }, { directory }), 'beneficiario_cuenta');
+  };
+  it.each([
+    ['Laura Méndez', 'Bancolombia ahorros 0012-3456-4821', '0012-3456-4821'],
+    ['Laura Méndez', 'BANCOLOMBIA AHORROS 001234564821', undefined],
+    ['Laura Méndez', 'Cuenta de ahorros Bancolombia No. 0012.3456.4821', undefined],
+    ['Nube Sur LLC', 'ACH routing 026009593 cuenta 483920175', undefined],
+    ['Nube Sur LLC', 'Routing 026009593 Account 483920175', undefined],
+    ['Nube Sur LLC', 'Cuenta 483920175', undefined],
+    ['Forma Studio', 'IBAN ES91 2100 0418 4502 0005 1332', 'ES91 2100 0418 4502 0005 1332'],
+    ['Forma Studio', 'ES9121000418450200051332', undefined],
+    ['Ana Souza', 'Pix chave 11 98765-4302', undefined],
+    ['Ana Souza', 'PIX: ana@souza.com.br', 'pix ANA@SOUZA.COM.BR'],
+  ])('%s: %j is the account on file -> cumple', (payee, line, dir) => {
+    expect(acct(payee, line, dir).verdict).toBe('cumple');
+  });
+  it.each([
+    ['routing number alone', 'Nube Sur LLC', 'ACH routing 026009593', undefined],
+    ['a different number', 'Nube Sur LLC', 'ACH routing 026009593 cuenta 483920176', undefined],
+    ['old account plus a new one', 'Nube Sur LLC', 'Cuenta 483920175, nueva cuenta 991234567', undefined],
+    ['old account plus a new hyphenated one', 'Laura Méndez', 'Bancolombia ahorros 0012-3456-4821 / Nequi 300-555-7310', undefined],
+    ['a partial tail', 'Laura Méndez', 'Bancolombia ahorros 3456-4821', undefined],
+    ['a long number the directory lacks (AC-19 Clarified ii)', 'Nube Sur LLC', 'ACH routing 026009593 cuenta 483920175', '483920175'],
+    ['#15 Nequi instead of Bancolombia', 'Laura Méndez', 'Nequi 300-555-7310', undefined],
+    ['a Pix key that differs', 'Ana Souza', 'Pix ana@souza.com', 'Pix ana@souza.com.br'],
+    ['no digits at all', 'Laura Méndez', 'Bancolombia ahorros', undefined],
+  ])('%s -> no_cumple, cuenta cambiada', (_, payee, line, dir) => {
+    expect(acct(payee, line, dir)).toMatchObject({ verdict: 'no_cumple', values: { reason: 'cuenta cambiada' } });
+  });
+  it('snapshots both accounts as read and the last 4 digits that differ (R-29)', () => {
+    expect(acct('Laura Méndez', 'Nequi 300-555-7310').values).toMatchObject({
+      invoice_account: 'Nequi 300-555-7310', directory_account: 'Bancolombia ahorros 0012-3456-4821',
+      invoice_account_last4: '7310', directory_account_last4: '4821',
+    });
+    expect(acct('Laura Méndez', 'Banco de Bogotá ahorros 112-45009-8').values).toMatchObject({ invoice_account_last4: '0098', directory_account_last4: '4821' });
+    expect(acct('Nube Sur LLC', 'Cuenta 483920175, nueva cuenta 991234567').values.invoice_account_last4).toBe('4567');
+    expect(acct('Nube Sur LLC', 'Routing 026009593 Account 483920175').values).toMatchObject({ invoice_account_last4: '0175', directory_account_last4: '0175' });
+  });
+  it('a partial tail keeps the same last 4 on both sides (the sentence then names both accounts)', () => {
+    expect(acct('Laura Méndez', 'Bancolombia ahorros 3456-4821').values).toMatchObject({ invoice_account_last4: '4821', directory_account_last4: '4821' });
+  });
+});
+
 describe('duplicates (AC-20, D13, R-06, R-20)', () => {
   it('same number outside the duplicate window is not an exact duplicate', () => {
     expect(run({}, { period: { previous: [prev({ invoice_number: '1042', received_at: '2026-09-09T15:00:00Z' })] } }).outcome).toBe('PAGAR');

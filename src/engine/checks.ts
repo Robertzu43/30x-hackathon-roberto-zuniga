@@ -72,11 +72,55 @@ export function beneficiario_permitido({ invoice, beneficiary, rules }: CheckCon
     { payee_name: invoice.fields.payee_name, directory_name: beneficiary?.name ?? null });
 }
 
+// R-73 (AC-19 Clarified). The account segment: the last run of whitespace-separated tokens that are only digits once
+// - . / are removed ("ACH routing 026009593 cuenta 483920175" -> 483920175), as digits.
+function segment(s: string): string {
+  const tokens = s.trim().split(/\s+/);
+  let i = tokens.length;
+  while (i > 0 && /^\d+$/.test(tokens[i - 1]!.replace(/[-./]/g, ''))) i--;
+  return tokens.slice(i).join('').replace(/\D/g, '');
+}
+
+// Same account when the directory's segment (or all its digits) is one or more consecutive whole digit groups of the
+// invoice line, and no other long number (6+ digits, groups joined only by separators) the directory lacks is printed.
+// A directory key under 6 digits (Pix email, wallet) is compared as text. last4: what the record shows for the invoice.
+function compareAccounts(inv: string, dir: string): { same: boolean; last4: string | null } {
+  const dirAcct = segment(dir), dirAll = dir.replace(/\D/g, '');
+  if (dirAcct.length < 6) return { same: accountKey(inv) === accountKey(dir), last4: last4(inv) };
+  const g = [...inv.matchAll(/\d+/g)].map((m) => ({ d: m[0], at: m.index, end: m.index + m[0].length }));
+  const known = new Set(dir.match(/\d+/g));
+  const stray = (a: number, b: number): string[] => {
+    const out: string[] = [];
+    let cur = '';
+    const skip = (i: number) => (i >= a && i <= b) || known.has(g[i]!.d);
+    const flush = () => { if (cur.length >= 6) out.push(cur); cur = ''; };
+    g.forEach((x, i) => {
+      if (i === 0 || skip(i - 1) || !/^[\s\-./]+$/.test(inv.slice(g[i - 1]!.end, x.at))) flush();
+      if (!skip(i)) cur += x.d;
+    });
+    flush();
+    return out;
+  };
+  const runs: Array<[number, number]> = [];
+  for (let a = 0; a < g.length; a++) {
+    for (let b = a, s = ''; b < g.length && s.length < dirAll.length; b++) {
+      s += g[b]!.d;
+      if (s === dirAcct || s === dirAll) runs.push([a, b]);
+    }
+  }
+  if (runs.some(([a, b]) => !stray(a, b).length)) return { same: true, last4: dirAll.slice(-4) };
+  const [a, b] = runs[0] ?? [0, -1];
+  return { same: false, last4: stray(a, b)[0]?.slice(-4) ?? last4(inv) };
+}
+
 export function beneficiario_cuenta({ invoice, beneficiary }: CheckContext): Check {
   const inv = invoice.fields.bank_account, dir = beneficiary?.bank_account ?? null;
-  const v: Verdict = !inv || !dir ? 'no_verificado' : accountKey(inv) === accountKey(dir) ? 'cumple' : 'no_cumple';
-  return make('beneficiario_cuenta', v, last4(inv), last4(dir), {
-    invoice_account_last4: last4(inv), directory_account_last4: last4(dir), reason: v === 'no_cumple' ? 'cuenta cambiada' : null,
+  const cmp = inv && dir ? compareAccounts(inv, dir) : null;
+  const v: Verdict = !cmp ? 'no_verificado' : cmp.same ? 'cumple' : 'no_cumple';
+  const invLast4 = cmp ? cmp.last4 : last4(inv), dirLast4 = dir ? segment(dir).slice(-4) || last4(dir) : null;
+  return make('beneficiario_cuenta', v, invLast4, dirLast4, {
+    invoice_account_last4: invLast4, directory_account_last4: dirLast4, invoice_account: inv, directory_account: dir,
+    reason: v === 'no_cumple' ? 'cuenta cambiada' : null,
   });
 }
 

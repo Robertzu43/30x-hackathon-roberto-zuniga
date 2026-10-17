@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import type { PolicyRules } from '../../src/engine/types';
 import { api, ApiError, screens, useScreen } from '../api';
+import { isDemoUser, useSession } from '../auth';
+import { DiffList, RuleCard, RuleSentence, type DiffRow } from '../components/PolicyCards';
 import { RunProgress, useRunAgent } from '../components/RunProgress';
 import { useT } from '../i18n';
 import '../policy.css';
@@ -8,7 +10,7 @@ import { failure, send } from '../withField';
 
 
 type Version = { id: string; version: number; name: string; rules: PolicyRules; created_at: string };
-type Change = { invoice_id: string; headline: string; from: string | null; to: string | null }; // null from: pending; null to: pending and not read yet (R-68)
+type Change = DiffRow; // null from: pending; null to: pending and not read yet (R-68); payee, amount, currency, reason: PUT /api/policy (AC-105)
 type Company = { id: string; name: string; approver_email: string | null; lang: 'es' | 'en'; is_demo: boolean; is_trial?: boolean };
 type Failure = ReturnType<typeof failure>;
 type Rate = { currency: string; usd_per_unit: number; units_per_usd: number; source: string; fetched_at: string; stale: boolean };
@@ -26,6 +28,8 @@ const SKELETON = {
   versions: [{ id: 's', version: 1, name: 'Andina Labs', rules: {} as PolicyRules, created_at: '2026-10-17T10:00:00Z' }],
   company: { id: 's', name: 'Andina Labs Inc.', approver_email: 'ana@andina.co', lang: 'es', is_demo: false },
 } as const;
+// the hidden cards read typical values, so each sentence wraps like a loaded one and the cards do not move at the answer (AC-91 item 4)
+const SKELETON_FORM = { name: '', num: Object.fromEntries(NUM.map((k) => [k, '10000'])), fx: {} as Record<string, string>, allowed: true };
 const hidden = { 'aria-hidden': true, inert: true } as const;
 
 // The company answer is loaded by Policy, so every card appears at once and none moves another (UX-09).
@@ -74,7 +78,7 @@ function CompanySection({ initial, skeleton }: { initial: Company; skeleton: boo
               </select>
             </label>
           </div>
-          <button className="primary" disabled={c.is_demo}>{t('policy.company.save')}</button>
+          <button disabled={c.is_demo}>{t('policy.company.save')}</button>
           {saved && <p role="status">{t('policy.company.saved')}</p>}
         </form>
       )}
@@ -138,9 +142,12 @@ export default function Policy() {
   const { t, locale } = useT();
   const screen = useScreen<Screen>(screens.policy());
   const d = screen.data;
+  const { session, demoEmail } = useSession();
+  // the loading card carries the demo or trial note the answer will show, so it moves nothing (AC-91 item 4)
+  const who = { is_demo: isDemoUser(session?.user, demoEmail), is_trial: !!session?.user?.is_anonymous };
   const loadFailed = !d && screen.error !== undefined;
   const versions: readonly Version[] = (d ?? SKELETON).versions;
-  const [f, setF] = useState(toForm());
+  const [f, setF] = useState(SKELETON_FORM);
   const [filled, setFilled] = useState(false);
   if (d && !filled) { // the form starts from the latest version once, at the first answer; later answers only refresh the list
     setFilled(true);
@@ -151,6 +158,7 @@ export default function Policy() {
   const [would, setWould] = useState<Change[] | null>(null);
   const [willPay, setWillPay] = useState(0);
   const [unread, setUnread] = useState(0);
+  const [unchanged, setUnchanged] = useState<number | undefined>();
   const [saving, setSaving] = useState(false);
   const [allVersions, setAllVersions] = useState(false);
   const run = useRunAgent({ first: '/api/policy/reevaluate' });
@@ -170,10 +178,11 @@ export default function Policy() {
     };
     setSaving(true);
     try {
-      const r = await send<{ policy: Version; would_change: Change[]; will_pay?: number; unread_pending: number }>('PUT', '/api/policy', { name: f.name.trim() || undefined, rules });
+      const r = await send<{ policy: Version; would_change: Change[]; will_pay?: number; unread_pending: number; unchanged?: number }>('PUT', '/api/policy', { name: f.name.trim() || undefined, rules });
       setSaved(r.policy.version); // the number the database assigned (R-41), not the one the button showed
       setWould(r.would_change);
       setUnread(r.unread_pending);
+      setUnchanged(r.unchanged);
       setWillPay(r.will_pay ?? r.would_change.filter((w) => w.to === 'PAGAR').length); // R-61
       await screen.reload();
     } catch (x) {
@@ -191,6 +200,15 @@ export default function Policy() {
   const next = (versions[0]?.version ?? 0) + 1;
   const card = d ? { className: 'card' } : { className: 'card skeleton', ...hidden };
   const bad = (k: string) => (err?.field === k ? true : undefined);
+  const numRule = (k: (typeof NUM)[number]) => (
+    <div key={k}>
+      <label>{t(`policy.${k}`)}
+        <input type="number" min="0" step="any" value={f.num[k]} aria-invalid={bad(k)} aria-describedby={`${k}-hint`}
+          onChange={(e) => setF({ ...f, num: { ...f.num, [k]: e.target.value } })} />
+      </label>
+      <RuleSentence rule={k} value={f.num[k]!} />
+    </div>
+  );
   const date = (s: string) => new Date(s).toLocaleDateString(locale, { dateStyle: 'medium' });
 
   return (
@@ -205,27 +223,27 @@ export default function Policy() {
         </div>
       )}
       {!loadFailed && <>
-        <CompanySection initial={(d ?? SKELETON).company} skeleton={!d} />
+        <CompanySection initial={d?.company ?? { ...SKELETON.company, ...who }} skeleton={!d} />
 
-        <section {...card} aria-labelledby="rules-h">
-          <h2 id="rules-h">{t('policy.rules.title')}</h2>
-          <form onSubmit={submit} noValidate>
+        <form onSubmit={submit} noValidate className="rules">
+          <RuleCard group="beneficiaries" skeleton={!d}>
             <label className="switch">
-              <input type="checkbox" checked={f.allowed} onChange={(e) => setF({ ...f, allowed: e.target.checked })} aria-describedby="allowed-hint" />
+              <input type="checkbox" checked={f.allowed} onChange={(e) => setF({ ...f, allowed: e.target.checked })} aria-describedby="allowed_beneficiaries_only-hint" />
               {t('policy.allowed')}
             </label>
-            <p id="allowed-hint" className="muted hint">{t('policy.allowed.hint')}</p>
-            <div className="grid">
-              {NUM.map((k) => (
-                <div key={k}>
-                  <label>{t(`policy.${k}`)}
-                    <input type="number" min="0" step="any" value={f.num[k]} aria-invalid={bad(k)} aria-describedby={`${k}-hint`}
-                      onChange={(e) => setF({ ...f, num: { ...f.num, [k]: e.target.value } })} />
-                  </label>
-                  <span id={`${k}-hint`} className="muted hint">{t(`policy.${k}.hint`)}</span>
-                </div>
-              ))}
-            </div>
+            <RuleSentence rule="allowed_beneficiaries_only" value={f.allowed} />
+            <div className="grid">{numRule('agreement_tolerance_pct')}</div>
+          </RuleCard>
+          <RuleCard group="limits" skeleton={!d}>
+            <div className="grid">{numRule('per_payment_limit_usd')}{numRule('approval_threshold_usd')}</div>
+          </RuleCard>
+          <RuleCard group="budget" skeleton={!d}>
+            <div className="grid">{numRule('period_budget_usd')}{numRule('account_balance_usd')}</div>
+          </RuleCard>
+          <RuleCard group="dates" skeleton={!d}>
+            <div className="grid">{numRule('duplicate_window_days')}{numRule('due_grace_days')}</div>
+          </RuleCard>
+          <RuleCard group="currency" skeleton={!d}>
             <MarketRates pins={pins} rates={d?.fx.rates ?? null} />
             <fieldset>
               <legend>{t('policy.fx.title')}</legend>
@@ -240,14 +258,16 @@ export default function Policy() {
               </div>
             </fieldset>
             <p className="muted hint">{t('policy.fx.source')}</p>
+          </RuleCard>
+          <div className="save" {...(!d && hidden)}>
             <label>{t('policy.name')}
               <input value={f.name} placeholder={versions[0]?.name} maxLength={100} onChange={(e) => setF({ ...f, name: e.target.value })} />
             </label>
             <button className="primary" disabled={saving} aria-busy={saving || undefined}>{t('policy.save', { n: next })}</button>
             {saved !== null && <p role="status">{t('policy.saved', { n: saved })}</p>}
-          </form>
-          {err && <p role="alert" className="error">{err.text}</p>}
-        </section>
+            {err && <p role="alert" className="error">{err.text}</p>}
+          </div>
+        </form>
 
         <section {...card} aria-labelledby="reeval-h">
           <h2 id="reeval-h">{t('policy.reevaluate')}</h2>
@@ -256,16 +276,10 @@ export default function Policy() {
               <p>{header}</p>
               {willPay > 0 && <p>{t('policy.will_pay', { n: willPay })}</p>}
               {unread > 0 && <p>{t('policy.unread_pending', { k: unread })}</p>}
-              {(p > 0 || e > 0) && (
-                <ul>
-                  {would.map((w) => (
-                    <li key={w.invoice_id}>{w.headline} <span className="mono">{w.to ? `${t(w.from ? `outcome.${w.from}` : 'inbox.pending')} → ${t(`outcome.${w.to}`)}` : t('policy.row_unread')}</span></li>
-                  ))}
-                </ul>
-              )}
             </div>
           )}
-          <button className="primary" disabled={run.running} aria-busy={run.running || undefined} onClick={() => void run.start().then(() => setWould(null))}>{t('policy.reevaluate')}</button>
+          {would && <DiffList rows={would} unchanged={unchanged} />}
+          <button disabled={run.running} aria-busy={run.running || undefined} onClick={() => void run.start().then(() => setWould(null))}>{t('policy.reevaluate')}</button>
           <p className="muted hint">{t('policy.reevaluate.note')}</p>
           <RunProgress run={run} mode="reevaluate" />
         </section>

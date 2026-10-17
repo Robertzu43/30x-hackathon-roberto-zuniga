@@ -1,4 +1,4 @@
-/* global URL, setTimeout, console */
+/* global URL, setTimeout, console, process */
 // The gate's own checks (AC-91): a fixture page with one known violation per item, driven by ?bad=<check id>.
 // The clean page must pass every check; each bad variant must fail exactly the check it names.
 import { execFileSync } from 'node:child_process';
@@ -7,7 +7,7 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { aggregate, FONTS, launch, main, MSG, PALETTE, renderGate, runCell, SCREENS, unreadId, writeGate } from './ux-gate.mjs';
+import { aggregate, EMPTY_BODY, FONTS, launch, main, MSG, PALETTE, renderGate, runCell, SCREENS, unreadId, writeGate } from './ux-gate.mjs';
 
 const DICTS = {
   es: { 'f.approve': 'Aprobar', 'f.hello': 'Hola {name}', 'f.title': 'Bandeja', 'f.empty': 'Todavía no hay facturas.', 'f.retry': 'Reintentar', 'f.send': 'Enviar', 'f.save': 'Guardar cambios', 'f.err': 'No pude cargar los datos. Inténtalo de nuevo.', 'f.decide': 'decide', 'f.nopay': 'No puedo mostrar este pago', 'f.nopay.next': 'Pídele a quien te lo envió que lo reenvíe.', 'f.offline': 'Sin conexión. Revisa tu conexión e inténtalo de nuevo.', 'f.failed': 'No se pudo enviar. Inténtalo de nuevo.' },
@@ -136,7 +136,7 @@ const overlapPage = (mode) => `<!doctype html><html lang="es"><head><meta charse
   header{position:sticky;top:0;z-index:2;height:${mode === 'outside' ? 20 : 56}px;padding:0 16px;background:${mode === 'translucent' ? 'rgba(255,255,255,0.5)' : '#ffffff'}}
   header span{position:absolute;left:16px;top:0}
   p{margin:0;padding:0 16px;${mode === 'above' ? 'position:relative;z-index:5' : ''}}
-  </style></head><body><header><span>Cabecera fija</span>${mode === 'same' ? '<span style="top:6px">Otra marca de cabecera</span>' : ''}</header><p>Contenido que pasa por debajo</p><div style="height:2000px"></div><script>scrollTo(0,${mode === 'outside' ? 12 : 56})</script></body></html>`;
+  </style></head><body><header><span>Cabecera fija</span>${mode === 'same' ? '<span style="top:6px">Otra marca de cabecera</span>' : ''}</header><p>Contenido que pasa por debajo</p>${mode === 'srtable' ? '<div style="position:absolute;top:80px;left:0;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)"><table><tr><td style="position:absolute;top:0;left:0">Dato uno</td><td style="position:absolute;top:0;left:0">Dato dos</td></tr></table></div>' : ''}<div style="height:2000px"></div><script>scrollTo(0,${mode === 'outside' ? 12 : 56})</script></body></html>`;
 // Vendor pages for the forced states: the portal chat (POST answers a bubble) and the server-rendered status page (offline notice).
 const portalFixture = (bare) => `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>p</title></head><body><main><h1>Portal</h1><div class="log"></div><form id="f"><label for="m">Mensaje</label><textarea id="m" style="font-size:16px"></textarea><button type="submit" class="primary">Enviar</button></form></main><script>
   const log = document.querySelector('.log');
@@ -158,6 +158,13 @@ const echoFixture = (lang) => `<!doctype html><html lang="${lang}"><head><meta c
   document.getElementById('f').addEventListener('submit', (e) => { e.preventDefault(); const p = document.createElement('p'); p.textContent = document.getElementById('m').value; document.querySelector('.log').append(p); });
   </script></body></html>`;
 
+// AC-91/AC-103: the real charts.css around a chart with its sr-only data table (long cells) and visible text.
+const chartPage = () => `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>c</title><style>${readFileSync('web/charts/charts.css', 'utf8')}</style></head><body><main><h1>Gráfico</h1><figure class="chart" style="position:relative"><figcaption class="chart-title">Pagado por mes</figcaption><p class="chart-summary">Resumen visible del gráfico.</p><table class="chart-sr"><caption>Pagado por mes</caption><thead><tr><th scope="col">Mes</th><th scope="col">Pagado en dólares</th></tr></thead><tbody><tr><th scope="row">Octubre de 2026</th><td>USD 1.800,00 pagados a Laura</td></tr><tr><th scope="row">Septiembre de 2026</th><td>USD 2.400,00 pagados a Pixel Lab</td></tr></tbody></table></figure><p>Texto después del gráfico.</p></main></body></html>`;
+// The beneficiaries list as the real screen reads it: { beneficiaries: [...] }; any other shape never leaves «Cargando…».
+const beneficiariesPage = (url = '/api/screen/beneficiaries') => `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>b</title></head><body><main><h1>Beneficiarios</h1><p id="m" role="status">Cargando…</p></main><script>
+  fetch('${url}').then((r) => r.json()).then((d) => { document.getElementById('m').textContent = d.beneficiaries.length ? d.beneficiaries.length + ' beneficiarios' : 'Todavía no hay beneficiarios.'; }).catch(() => {});
+  </script></body></html>`;
+
 let server, base, browser;
 const seen = [];
 beforeAll(async () => {
@@ -173,6 +180,10 @@ beforeAll(async () => {
     if (u.pathname === '/pe') return void res.writeHead(200, { 'content-type': 'text/html' }).end(echoFixture(u.searchParams.get('lang') === 'en' ? 'en' : 'es'));
     if (u.pathname === '/sf') return void res.writeHead(200, { 'content-type': 'text/html' }).end(statusFixture());
     if (u.pathname === '/gone') return void res.writeHead(u.searchParams.has('spoof') ? 200 : 404, { 'content-type': 'text/html' }).end(gonePage(u));
+    if (u.pathname === '/chart-sr') return void res.writeHead(200, { 'content-type': 'text/html' }).end(chartPage());
+    if (u.pathname === '/bn') return void res.writeHead(200, { 'content-type': 'text/html' }).end(beneficiariesPage(u.searchParams.has('drop') ? '/api/reset' : undefined));
+    if (u.pathname === '/api/screen/beneficiaries') return void res.writeHead(200, { 'content-type': 'application/json' }).end('{"beneficiaries":[{"id":"b1"}]}');
+    if (u.pathname === '/api/reset') return void req.socket.destroy(); // the origin drops the connection: route.fetch() rejects
     if (u.pathname === '/api/demo/overview') return void res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(server.overview ?? { invoices: [] }));
     if (u.pathname === '/api/fx') return void res.writeHead(200, { 'content-type': 'application/json' }).end('{"provider":"gate","rates":[{"c":"USD"}]}');
     if (u.pathname === '/api/data') return void res.writeHead(200, { 'content-type': 'application/json' }).end('["Factura A","Factura B"]');
@@ -278,6 +289,35 @@ describe('one known violation per item', () => {
   it.each(['empty', 'error', 'offline'])('4.state (%s)', async (state) => {
     expect(status(await cell('4.state', { state }), '4.state')).toBe('fail');
   }, 60_000);
+});
+
+describe('chart sr-only table and forced states (46b)', () => {
+  const chart = { id: 'chart', exp: 'test', path: '/chart-sr', primary: ':not(*)' };
+  it('AC-91 item 1: web/charts/charts.css keeps the sr-only data table out of overlap, scroll and offscreen', async () => {
+    const rs = await run(chart);
+    for (const id of ['1.overlap', '1.scroll', '1.offscreen', '1.clip']) expect(status(rs, id), JSON.stringify(rs.find((r) => r.id === id))).toBe('pass');
+  }, 60_000);
+  it('empty beneficiaries answer { beneficiaries: [] }, so the designed message shows, not «Cargando…»', async () => {
+    const rs = await run({ id: 'beneficiaries', exp: 'test', path: '/bn', primary: ':not(*)', states: ['empty'] }, { state: 'empty' });
+    expect(rs.find((x) => x.id === '4.state').measured).toContain('Todavía no hay beneficiarios'); // the fixture has no next-step control, so the verdict itself is not asserted
+  }, 60_000);
+  it('a fake route whose origin fetch fails (context closing) does not crash the run', async () => {
+    const errors = [];
+    const on = (e) => errors.push(String(e));
+    process.on('unhandledRejection', on);
+    const rs = await run({ id: 'reset', exp: 'test', path: '/bn?drop=1', primary: ':not(*)', fake: { path: '/api/reset', patch: () => ({ beneficiaries: [] }) } }, { kind: 'static' }).catch((e) => on(e));
+    await new Promise((r) => setTimeout(r, 300));
+    process.off('unhandledRejection', on);
+    expect(errors).toEqual([]);
+    expect(rs).toBeTruthy();
+  }, 60_000);
+});
+
+describe('empty state answers the real screen shapes (AC-91)', () => {
+  it('beneficiaries and period answer what GET /api/screen/* returns', () => {
+    expect(EMPTY_BODY['/api/screen/beneficiaries']).toEqual({ beneficiaries: [] });
+    expect(EMPTY_BODY['/api/screen/period'].period.count_by_outcome).toEqual({ PAGAR: 0, FRENAR: 0, ESCALAR: 0 });
+  });
 });
 
 describe('policy forced states (AC-91)', () => {
@@ -489,6 +529,10 @@ describe('1.overlap: text under an opaque sticky or fixed layer (R-114)', () => 
     const r = one(await ov('opaque'));
     expect(r.status, JSON.stringify(r)).toBe('pass');
     expect(r.measured).toContain('excluded: occluded by sticky/fixed layer');
+  }, 60_000);
+  it('skips text inside an sr-only table, not only text whose direct parent is sr-only', async () => {
+    const r = one(await ov('srtable'));
+    expect(r.status, JSON.stringify(r)).toBe('pass');
   }, 60_000);
   it.each([['a translucent header', 'translucent'], ['two texts inside the header', 'same'], ['a rectangle outside the layer box', 'outside'], ['content drawn above the header', 'above']])('still fails %s', async (_, mode) => {
     const r = one(await ov(mode));

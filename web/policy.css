@@ -9,6 +9,15 @@
 .card form { display: grid; gap: 1.25rem; justify-items: start; }
 .card form > * { max-width: 100%; min-width: 0; }
 
+/* AC-105: one form holds the five rule cards; the name, the one primary and the save messages close it. */
+.rules { display: grid; gap: 2rem; }
+.rules > * { min-width: 0; }
+.rules .card > * + * { margin-top: 1.25rem; }
+.rules .card h2 + * { margin-top: 0; }
+.save { display: grid; gap: 1.25rem; justify-items: start; }
+.save > * { max-width: 100%; }
+.save label { display: grid; gap: 0.25rem; }
+
 .grid { display: grid; gap: 1.25rem 1.5rem; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); width: 100%; }
 .grid label { display: grid; gap: 0.25rem; }
 .grid .hint { display: block; margin-top: 0.25rem; }
@@ -54,6 +63,15 @@ tr:last-child td { border-bottom: 0; }
 .fx-scroll { overflow-x: auto; max-width: 100%; }
 .fx-table.loading td { color: transparent; background: #f1efe9; user-select: none; }
 .fx-table tr.stale td:last-child { color: #9f2f2d; }
+
+/* AC-105: «qué cambiaría» as a diff list: the invoice, its amount, from-chip to to-chip, the reason; wraps on phones, never a table. */
+.diff { list-style: none; margin: 0 0 1rem; padding: 0; }
+.diff li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 1rem; padding: 0.625rem 0; border-bottom: 1px solid var(--line); }
+.diff li:last-child { border-bottom: 0; }
+.diff a { display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; font-weight: 500; }
+.diff-chips { display: inline-flex; align-items: center; gap: 0.5rem; }
+.diff li > .muted { flex-basis: 100%; }
+.diff + p { margin: 0 0 1rem; }
 
 @media (max-width: 768px) {
   fieldset input { font-size: 1rem; } /* AC-91 item 2: the pins only; the other inputs belong to Tasks 31 and 32 */

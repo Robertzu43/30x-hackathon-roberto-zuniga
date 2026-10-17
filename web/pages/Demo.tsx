@@ -91,7 +91,7 @@ export default function Demo() {
         </div>
         <TrialButton />
         <div className="demo-actions">
-          <button type="button" disabled={entering} onClick={() => guard(() => void enter())}>{t(entering ? 'demo.entering' : 'demo.enter')}</button>
+          <button type="button" disabled={entering} aria-busy={entering} onClick={() => guard(() => void enter())}>{t(entering ? 'demo.entering' : 'demo.enter')}</button>
           <a href="/demo/happy-path.webm">{t('demo.video')} →</a>
           <a href={PORTAL}>{t('demo.portal')} →</a>
           {isDemoUser(session?.user, demoEmail) && (

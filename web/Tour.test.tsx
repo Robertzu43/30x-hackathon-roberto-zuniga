@@ -1,10 +1,12 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
+import { useState } from 'react';
 import { Route, Routes, useLocation } from 'react-router-dom';
 import Tour from './components/Tour';
+import { FirstRunProvider, markFirstRun } from './firstRun';
 import { useT } from './i18n';
 import { tourSteps } from './tour-steps';
-import { renderAt } from './test/utils';
+import { mockApi, renderAt, signedInAs } from './test/utils';
 
 const ALL = ['inbox', 'new-invoice', 'run-agent', 'invoice-row', 'policy', 'beneficiaries', 'period'];
 
@@ -289,4 +291,40 @@ test('after scrolling the block into the room, the spotlight already sits on its
   await waitFor(() => expect(document.querySelector<HTMLElement>('.tour-spotlight')!.style.top).toBe('60px')); // 68 - PAD
   expect(offset).toBe(232); // one scroll, then it stops
   done();
+});
+
+// AC-42 Clarified (D42, R-144): the tour starts on landing while the first-login pass runs, and its spotlight is re-measured
+// after each refresh of the screen data. jsdom has no layout: the row's box is stubbed, and a click stands in for a refresh.
+test('with a pass running, step 1 shows at once; at step 4 a batch refresh re-measures the row\'s spotlight, with no scroll or resize', async () => {
+  signedInAs('ana@empresa.co');
+  markFirstRun();
+  mockApi({ 'POST /api/invoices/run': () => new Promise(() => {}) });
+  let top = 100;
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    return ({ top: this.dataset.tour === 'invoice-row' ? top : 0, left: 40, width: 300, height: 50, bottom: top + 50, right: 340 }) as DOMRect;
+  });
+  function Bandeja() {
+    const [chip, setChip] = useState(0);
+    return (
+      <>
+        {ALL.filter((a) => a !== 'invoice-row').map((a) => <div key={a} data-tour={a} />)}
+        <div data-tour="invoice-row">{chip ? `PAGAR ${chip}` : 'Pendiente'}</div>
+        <button type="button" onClick={() => setChip(chip + 1)}>lote</button>
+      </>
+    );
+  }
+  renderAt(<FirstRunProvider><Routes><Route path="*" element={<Bandeja />} /></Routes><Tour onDone={() => {}} /></FirstRunProvider>);
+  await screen.findByRole('heading', { name: 'Bandeja' });
+  for (const title of ['Nueva factura', 'Ejecutar agente', 'Detalle de decisión']) {
+    next();
+    await screen.findByRole('heading', { name: title });
+  }
+  const spot = () => document.querySelector<HTMLElement>('.tour-spotlight')!.style.top;
+  await waitFor(() => expect(spot()).toBe('92px'));
+  fireEvent.click(screen.getByRole('button', { name: 'lote' })); // the chip changes in place; the box is the same
+  await new Promise((r) => setTimeout(r, 20));
+  expect(spot()).toBe('92px');
+  top = 140; // had something moved the row, the next refresh puts the spotlight back on it
+  fireEvent.click(screen.getByRole('button', { name: 'lote' }));
+  await waitFor(() => expect(spot()).toBe('132px'));
 });

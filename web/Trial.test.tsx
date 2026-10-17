@@ -13,6 +13,7 @@ import type { StoredDecision } from '../src/agent/trace';
 import TrialButton from './components/TrialButton';
 import { currentSession } from './test/supabase';
 import { DEMO_EMAIL, fakeAuth, mockApi, renderAt, signedInAs } from './test/utils';
+import { FIRST_RUN } from './firstRun';
 import { guardLeave, isTrial } from './trial';
 
 // The shared fake has no anonymous sign-in: an anonymous session is the fake one with no email and is_anonymous.
@@ -58,12 +59,8 @@ test('guardLeave: an unsaved trial is warned first; anyone else leaves at once',
   expect(leave).toHaveBeenCalledOnce();
 });
 
-test('one click signs in anonymously once, in the page language, runs the first-login pass, then opens Bandeja (AC-92)', async () => {
-  const f = mockApi({
-    [RUN]: () => (runCalls(f).length === 1
-      ? { PAGAR: 5, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 24, cursor: 'c1' }
-      : { PAGAR: 20, FRENAR: 3, ESCALAR: 1, errors: 0, remaining: 0, cursor: null }),
-  });
+test('one click signs in anonymously once, in the page language, then opens Bandeja before any run answers (AC-92 Amended, AC-107)', async () => {
+  const f = mockApi({ [RUN]: () => new Promise(() => {}) });
   door();
   expect(screen.getByText('Tu propia copia de Andina Labs, privada, sin correo ni contraseña.')).toBeTruthy();
   const button = screen.getByRole('button', { name: 'Probar con mi propia empresa' });
@@ -75,18 +72,44 @@ test('one click signs in anonymously once, in the page language, runs the first-
   expect(await screen.findByText('Bandeja abierta')).toBeTruthy();
   expect(auth.signInAnonymously).toHaveBeenCalledOnce();
   expect(auth.signInAnonymously).toHaveBeenCalledWith({ options: { data: { lang: 'es' } } });
-  expect(runCalls(f)).toHaveLength(2);
+  expect(runCalls(f)).toHaveLength(0); // the shell runs the pass after landing
+  expect(sessionStorage.getItem(FIRST_RUN)).toBe('1');
 });
 
-test('the run shows «Decidiendo tus facturas pendientes… n de m» while it decides (AC-92, AC-40)', async () => {
+test('while the sign-in runs the door reads «Creando tu empresa de prueba…», never «n de m» (AC-92 Amended)', async () => {
   let release!: () => void;
   const held = new Promise<void>((r) => (release = r));
-  mockApi({ [RUN]: async () => (await held, { PAGAR: 2, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null }) });
+  const signIn = auth.signInAnonymously as (o: unknown) => Promise<unknown>;
+  auth.signInAnonymously = vi.fn(async (o: unknown) => (await held, signIn(o)));
+  mockApi({ [RUN]: () => new Promise(() => {}) });
   door();
   fireEvent.click(screen.getByRole('button', { name: 'Probar con mi propia empresa' }));
-  expect(await screen.findByRole('button', { name: 'Decidiendo tus facturas pendientes… 0 de …' })).toBeTruthy();
+  const busy = screen.getByRole('button', { name: 'Creando tu empresa de prueba…' });
+  expect(busy.getAttribute('aria-busy')).toBe('true');
   release();
   expect(await screen.findByText('Bandeja abierta')).toBeTruthy();
+  expect(screen.queryByText(/ de /)).toBeNull();
+});
+
+// AC-92 Amended, AC-107 evidence: the whole app, from the door to Bandeja with the tour, and the pass running there.
+test('from the door: Bandeja and the tour before any run answers, then the pass runs on Bandeja and ends in its summary (AC-92, AC-107)', async () => {
+  let release: (v: unknown) => void = () => {};
+  const f = mockApi({
+    [RUN]: () => new Promise((r) => (release = r)),
+    'GET /api/screen/inbox?lang=es': { invoices: [{ id: 'i1', outcome: null, headline: null, received_at: '2026-10-10T15:00:00Z', fields: { payee_name: 'Nubia Diseño' }, origin: 'app' }],
+      last_run: null, portal: null, beneficiaries: [], dashboard: null },
+    'GET /api/company': { id: 'c1', name: 'Empresa de prueba 7', approver_email: null, lang: 'es', is_demo: false, is_trial: true },
+    'GET /api/agent/activity': { items: [] },
+  });
+  renderAt(<App />, { at: '/login' });
+  fireEvent.click(await screen.findByRole('button', { name: 'Probar con mi propia empresa' }));
+  expect(await screen.findByRole('dialog')).toBeTruthy(); // tour step 1, on landing
+  expect(screen.getByRole('heading', { level: 1, name: 'Bandeja' })).toBeTruthy();
+  expect(await screen.findByText('Decidiendo tus facturas pendientes… 0 de …. Las cifras se actualizan con cada decisión.')).toBeTruthy();
+  expect(runCalls(f)).toHaveLength(1);
+  release({ PAGAR: 1, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null });
+  expect(await screen.findByText('1 PAGAR · 0 FRENAR · 0 ESCALAR')).toBeTruthy();
+  expect(auth.signInAnonymously).toHaveBeenCalledOnce();
 });
 
 test('in English: the English door, and the language stored on the user is en (AC-92, AC-41)', async () => {

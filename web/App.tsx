@@ -6,6 +6,7 @@ import { isDemoUser, RequireAuth, shouldStartTour, takeDemoTour, useSession } fr
 import { useLeaveGuard } from './components/LeaveTrialWarning';
 import Logo from './components/Logo';
 import Tour from './components/Tour';
+import { FirstRunProvider } from './firstRun';
 import { useT } from './i18n';
 import { isTrial } from './trial';
 
@@ -20,8 +21,7 @@ export const routes: PageRoute[] = [
   { path: '/beneficiaries', nav: 'screen.beneficiaries', load: () => import('./pages/Beneficiaries'), data: screens.beneficiaries },
   { path: '/period', nav: 'screen.period', load: () => import('./pages/Period'), data: () => screens.period() },
   { path: '/invoices/:id', load: () => import('./pages/InvoiceDetail') },
-  // Task 50 mounts the beneficiary profile here; until then the directory.
-  { path: '/beneficiaries/:id', load: async () => ({ default: () => <Navigate to="/beneficiaries" replace /> }) },
+  { path: '/beneficiaries/:id', load: () => import('./pages/Beneficiary') },
   { path: '/login', public: true, fullBleed: true, load: () => import('./pages/Login') },
   { path: '/demo', public: true, fullBleed: true, load: () => import('./pages/Demo') },
   { path: '/approve/:token', public: true, load: () => import('./pages/Approve') },
@@ -137,7 +137,7 @@ export default function App() {
   const onPublic = pages.find((p) => matchPath(p.route.path, pathname))?.route.public;
 
   return (
-    <>
+    <FirstRunProvider>{/* the first-login pass belongs to the shell: navigation never stops or restarts it (AC-107) */}
       <Routes>
         {pages.map(({ route, Page }) => {
           const loaded = <PageBoundary key={route.path}><Suspense fallback={<Loading />}><Page /></Suspense></PageBoundary>;
@@ -147,6 +147,6 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       {touring && user && !onPublic && <Tour onDone={endTour} />}
-    </>
+    </FirstRunProvider>
   );
 }

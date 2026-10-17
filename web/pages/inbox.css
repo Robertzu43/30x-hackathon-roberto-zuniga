@@ -1,0 +1,64 @@
+/* Bandeja, Nueva factura and the outcome chip (AC-29, AC-53): flat, warm monochrome, pastel chips only. */
+.inbox-head { display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+.inbox-head h1 { margin-right: auto; }
+.inbox-actions { display: flex; gap: 0.5rem; align-items: center; }
+.inbox-last-run { font-size: var(--text-sm); margin: 0 0 1rem; }
+
+.inbox-filters { display: flex; gap: 1.5rem; margin: 2rem 0 1rem; flex-wrap: wrap; }
+.inbox-filters label { display: grid; gap: 0.25rem; }
+.inbox select,
+.new-invoice textarea {
+  font: inherit;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.inbox-list { list-style: none; padding: 0; margin: 0; border-top: 1px solid var(--line); }
+.inbox-list a {
+  display: grid;
+  grid-template-columns: 7rem 1fr auto;
+  gap: 1rem;
+  align-items: baseline;
+  padding: 1rem 0.5rem;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  text-decoration: none;
+}
+.inbox-list a:hover { background: var(--surface); }
+.inbox-list time { font-size: var(--text-sm); font-family: var(--font-mono); }
+
+.chip {
+  justify-self: start;
+  border-radius: 9999px;
+  padding: 0.125rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.chip-PAGAR { background: #edf3ec; color: #346538; }
+.chip-FRENAR { background: #fdebec; color: #9f2f2d; }
+.chip-ESCALAR { background: #fbf3db; color: #956400; }
+.chip-pending { background: #f1f1ef; color: var(--ink-2); }
+
+.new-invoice {
+  display: grid;
+  gap: 1rem;
+  margin: 1.5rem 0;
+  padding: 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.new-invoice [role='tablist'] { display: flex; gap: 0.25rem; }
+.new-invoice [role='tab'][aria-selected='true'] { background: var(--ink); color: #fff; border-color: var(--ink); }
+.new-invoice label { display: grid; gap: 0.5rem; }
+.new-invoice textarea { width: 100%; resize: vertical; }
+
+@media (max-width: 640px) {
+  .inbox-list a { grid-template-columns: 1fr; gap: 0.25rem; }
+}

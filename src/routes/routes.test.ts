@@ -5,12 +5,15 @@ import sql from '../../supabase/migrations/20261017000300_seed_andina.sql?raw';
 import { fakeDb } from '../agent/__fixtures__/fake-db';
 import { bogotaDay } from '../engine/checks';
 import type { Env } from '../env';
+import type { Budget as BudgetT } from '../lib/supabase';
 
 type Row = Record<string, unknown>;
 type Db = ReturnType<typeof testDb>;
 let db: Db;
-vi.mock('../lib/supabase', async (orig) => ({ ...(await orig<typeof import('../lib/supabase')>()), userClient: () => db }));
-vi.mock('../lib/admin', () => ({ adminClient: () => db }));
+// Both clients count on the request's Budget, as the real ones do through Budget.fetch (R-56).
+const counting = (budget?: BudgetT) => { if (budget) db.meter.budget = budget; return db; };
+vi.mock('../lib/supabase', async (orig) => ({ ...(await orig<typeof import('../lib/supabase')>()), userClient: (_e: Env, _j: string, b?: BudgetT) => counting(b) }));
+vi.mock('../lib/admin', () => ({ adminClient: (_e: Env, b?: BudgetT) => counting(b) }));
 vi.mock('../lib/email', async (orig) => ({ ...(await orig<typeof import('../lib/email')>()), sendEmail: vi.fn(async () => ({ sent: true })) }));
 const { app } = await import('../index');
 
@@ -48,6 +51,7 @@ function testDb(seed: Record<string, Row[]> = {}) {
     let returning = false;
     let one: false | 'single' | 'maybe' = false;
     const run = () => {
+      base.meter.hit();
       const rows = (base.tables[table] ??= []);
       if (op === 'insert' && table === 'policies' && conflict.policies) {
         return { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint "policies_company_id_version_key"' } };
@@ -80,14 +84,15 @@ function testDb(seed: Record<string, Row[]> = {}) {
   return {
     ...base, writes, uploads, conflict,
     from: (t: string) => Object.assign(base.from(t), { insert: (p: Row | Row[]) => write(t, 'insert', p), update: (p: Row) => write(t, 'update', p) }),
-    auth: { getUser: async (jwt: string) => (USERS[jwt] ? { data: { user: USERS[jwt] }, error: null } : { data: { user: null }, error: { message: 'invalid JWT' } }) },
+    auth: { getUser: async (jwt: string) => (base.meter.hit(), USERS[jwt] ? { data: { user: USERS[jwt] }, error: null } : { data: { user: null }, error: { message: 'invalid JWT' } }) },
     storage: {
       from: (bucket: string) => ({
         upload: async (path: string, body: ArrayBuffer, o?: { contentType?: string }) => {
+          base.meter.hit();
           uploads.push({ bucket, path, contentType: o?.contentType, size: body.byteLength });
           return { data: { path }, error: null };
         },
-        createSignedUrl: async (path: string, expiresIn: number) => ({ data: { signedUrl: `https://signed.test/${bucket}/${path}?expires=${expiresIn}` }, error: null }),
+        createSignedUrl: async (path: string, expiresIn: number) => (base.meter.hit(), { data: { signedUrl: `https://signed.test/${bucket}/${path}?expires=${expiresIn}` }, error: null }),
       }),
     },
   };
@@ -131,6 +136,20 @@ const pdfFixture = async () => {
   const { readFile } = (await import('node:fs/promises' as string)) as { readFile(u: URL): Promise<Uint8Array> };
   return new Uint8Array(await readFile(new URL('../lib/__fixtures__/simple.pdf', import.meta.url)));
 };
+// The browser's call loop (R-60): the first endpoint, then the continuation with the cursor until it is null.
+async function runAll(first = '/api/invoices/run', next = first) {
+  const sum = { PAGAR: 0, FRENAR: 0, ESCALAR: 0, errors: 0, calls: 0 };
+  let cursor: string | null = null;
+  do {
+    const r = await call('POST', sum.calls ? next : first, sum.calls ? { cursor } : undefined);
+    expect(r.status).toBe(200);
+    const out = await json<typeof sum & { cursor: string | null }>(r);
+    for (const k of ['PAGAR', 'FRENAR', 'ESCALAR', 'errors'] as const) sum[k] += out[k];
+    sum.calls++;
+    cursor = out.cursor;
+  } while (cursor && sum.calls < 20);
+  return sum;
+}
 const FORMAT = 'Formato no admitido: sube un PDF, PNG o JPG de hasta 10 MB';
 
 beforeEach(() => {
@@ -174,7 +193,7 @@ describe('invoices (AC-11, AC-29)', () => {
     db = testDb(workspace(['01', '04', '11']));
     const r = await call('POST', '/api/invoices/run');
     expect(r.status).toBe(200);
-    expect(await r.json()).toEqual({ PAGAR: 1, FRENAR: 1, ESCALAR: 1, errors: 0 });
+    expect(await r.json()).toEqual({ PAGAR: 1, FRENAR: 1, ESCALAR: 1, errors: 0, remaining: 0, cursor: null });
     expect(db.tables.agent_runs!.map((x) => [x.company_id, x.trigger])).toEqual([['A', 'manual']]);
     expect(decisionsOf('B-01')).toEqual([]);
   });
@@ -416,7 +435,7 @@ describe('policy (AC-30, AC-31, R-14, R-41)', () => {
     await call('PUT', '/api/policy', { rules });
     const r = await call('POST', '/api/policy/reevaluate');
     expect(r.status).toBe(200);
-    expect(await r.json()).toEqual({ PAGAR: 0, FRENAR: 2, ESCALAR: 0, errors: 0 });
+    expect(await r.json()).toEqual({ PAGAR: 0, FRENAR: 2, ESCALAR: 0, errors: 0, remaining: 0, cursor: null });
     expect(decisionsOf('A-01').map((d) => d.outcome)).toEqual(['FRENAR']);
     expect(decisionsOf('A-11').map((d) => d.outcome)).toEqual(['ESCALAR', 'FRENAR']);
     expect(decisionsOf('A-04')).toHaveLength(1);
@@ -473,7 +492,7 @@ describe('beneficiaries (AC-33)', () => {
 describe('GET /api/period (AC-44, R-01)', () => {
   it('on the full seed: Violaciones 0, Autonomía = (expected PAGAR + expected FRENAR) / total, explained 100', async () => {
     db = testDb(workspace());
-    await call('POST', '/api/invoices/run');
+    expect(await runAll()).toMatchObject({ PAGAR: 15, FRENAR: 3, ESCALAR: 11, errors: 0 });
     const p = await json(await call('GET', '/api/period'));
     const all = SEED.invoices as SeedRow[];
     const auto = all.filter((r) => r.expected_outcome !== 'ESCALAR').length;
@@ -535,5 +554,143 @@ describe('rate limit (AC-43)', () => {
     expect(limit).toHaveBeenLastCalledWith({ key: 'user-a' });
     expect((await call('GET', '/api/invoices', undefined, 'tok-a', limited)).status).toBe(200);
     expect((await call('POST', '/api/invoices/run', undefined, 'tok-en', limited)).status).toBe(200);
+  });
+});
+
+const { runAgent } = await import('../agent/loop');
+const { Budget } = await import('../lib/supabase');
+const tools = await import('../agent/tools');
+const send = vi.mocked((await import('../lib/email')).sendEmail);
+
+describe('budgeted, resumable runs over HTTP (AC-70, R-56, R-57, R-59, R-60)', () => {
+  const rate = { limit: vi.fn(async () => ({ success: true })) };
+  const metered = { ...env, RATE_LIMIT: rate } as unknown as Env;
+  // Every subrequest of one request: Supabase calls (fake db), Workers AI, emails and the rate-limit binding.
+  const usage = () => db.meter.calls + ai.run.mock.calls.length + send.mock.calls.length + rate.limit.mock.calls.length;
+  async function counted(method: string, path: string, body?: unknown) {
+    const before = usage();
+    const r = await call(method, path, body, 'tok-a', metered);
+    return { r, n: usage() - before };
+  }
+  // The browser's call loop with each call's count.
+  async function countedLoop(path: string) {
+    const per: number[] = [];
+    let cursor: string | null = null;
+    do {
+      const { r, n } = await counted('POST', path, per.length ? { cursor } : undefined);
+      expect(r.status).toBe(200);
+      per.push(n);
+      ({ cursor } = await json<{ cursor: string | null }>(r));
+    } while (cursor && per.length < 20);
+    return per;
+  }
+  const outcomes = () => Object.fromEntries(db.tables.invoices!.filter((i) => i.company_id === 'A')
+    .map((i) => [i.id, decisionsOf(String(i.id)).map((d) => d.outcome)]));
+  const NOT_RUN = 'No pude ejecutar el agente ahora. Las facturas siguen pendientes; lo intentaré solo en la próxima revisión automática (cada 5 minutos).';
+
+  it('29 seeded pending invoices, every escalation mailed: every call <= 40 counted subrequests, the cursor loop decides all 29 as one unbounded run would, every ESCALAR has its token pair', async () => {
+    db = testDb(workspace());
+    await runAgent({ db: db as never, env, budget: new Budget(Infinity) }, 'A', 'pending', 'manual');
+    const reference = outcomes();
+    db = testDb(workspace());
+    const mailed = send.mock.calls.length;
+    const per = await countedLoop('/api/invoices/run');
+    expect(Math.max(...per)).toBeLessThanOrEqual(40);
+    expect(per.length).toBe(6); // 4 mailed escalations fit in one call
+    expect(outcomes()).toEqual(reference);
+    expect(Object.values(reference).flat()).toHaveLength(29);
+    const escalated = db.tables.decisions!.filter((d) => d.outcome === 'ESCALAR').map((d) => d.invoice_id);
+    expect(escalated).toHaveLength(11);
+    for (const id of escalated) expect(db.tables.approval_tokens!.filter((t) => t.invoice_id === id)).toHaveLength(2);
+    expect(send.mock.calls.length - mailed).toBe(11);
+    expect(db.tables.agent_runs!.filter((x) => x.company_id === 'A')).toHaveLength(6); // one row per call (AC-63)
+  });
+
+  it('a forced "Too many subrequests" mid-run answers 200 with what was done, never 500 (R-57)', async () => {
+    db = testDb(workspace(['01', '03', '05']));
+    db.fail.period_state = (a) => (a.p_exclude_invoice === 'A-03' ? 'TypeError: Too many subrequests by single Worker invocation.' : undefined);
+    const r = await call('POST', '/api/invoices/run');
+    expect(r.status).toBe(200);
+    expect(await r.json()).toMatchObject({ PAGAR: 1, errors: 0, remaining: 2, cursor: expect.any(String) });
+  });
+
+  it('"Reevaluar" with the cursor re-decides every pending and ESCALAR invoice exactly once, each call <= 40', async () => {
+    db = testDb(workspace());
+    await runAll();
+    const open = db.tables.decisions!.filter((d) => d.outcome === 'ESCALAR').map((d) => String(d.invoice_id)).sort();
+    const before = db.rpcs.length;
+    const per = await countedLoop('/api/policy/reevaluate');
+    expect(per.length).toBeGreaterThan(1);
+    expect(Math.max(...per)).toBeLessThanOrEqual(40);
+    const again = db.rpcs.slice(before).filter((x) => x.name === 'insert_decision').map((x) => String(x.args.p_invoice_id)).sort();
+    expect(again).toEqual(open);
+    expect(db.tables.agent_runs!.filter((x) => x.trigger === 'reevaluate')).toHaveLength(per.length);
+  });
+
+  it.each(['/api/invoices/run', '/api/policy/reevaluate'])('%s with a bad cursor -> 400 "Cursor no válido", nothing decided', async (path) => {
+    db = testDb(workspace(['01']));
+    for (const cursor of ['nope', 42, btoa('[1]')]) {
+      const r = await call('POST', path, { cursor });
+      expect(r.status).toBe(400);
+      expect(await r.json()).toEqual({ error: 'Cursor no válido' });
+    }
+    expect(db.rpcs).toEqual([]);
+    expect(db.tables.agent_runs).toEqual([]);
+  });
+
+  it.each(['/api/invoices/run', '/api/policy/reevaluate'])('%s that cannot read the policy before the first invoice -> 503 with the R-57 text, nothing written', async (path) => {
+    db = testDb(workspace(['01']));
+    db.fail.query = (q) => (q.table === 'policies' ? 'down' : undefined);
+    const r = await call('POST', path);
+    expect(r.status).toBe(503);
+    expect(await r.json()).toEqual({ error: NOT_RUN });
+    expect(db.tables.decisions).toEqual([]);
+    expect(db.tables.agent_runs).toEqual([]);
+  });
+
+  it('POST /api/invoices answers 201 with decision null when the agent cannot run; a PNG ingest stays <= 40 (R-57, R-60)', async () => {
+    db = testDb(workspace([]));
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+    const { r: ok, n } = await counted('POST', '/api/invoices', upload(png, 'f.png', 'image/png'));
+    expect(ok.status).toBe(201);
+    expect(n).toBeLessThanOrEqual(40);
+    db.fail.query = (q) => (q.table === 'companies' ? 'down' : undefined);
+    const r = await call('POST', '/api/invoices', { source: 'email', text: 'De: Laura Méndez\nFactura 1051, USD 2.500' });
+    expect(r.status).toBe(201);
+    const { invoice, decision } = await json<{ invoice: Row; decision: Row | null }>(r);
+    expect(decision).toBeNull();
+    expect(invoice).toMatchObject({ outcome: null });
+  });
+
+  it('PUT /api/policy: the would_change preview of 31 pending and escalated invoices is complete in one response, <= 40 counted, equal to the per-invoice computation (R-59)', async () => {
+    db = testDb(workspace());
+    await runAgent({ db: db as never, env, budget: new Budget(Infinity) }, 'A', 'pending', 'manual');
+    const fresh = seedInvoices('A').slice(0, 20).map((i) => ({ ...i, id: `${i.id}-n`, fields: { ...i.fields, invoice_number: `${(i.fields as { invoice_number?: string }).invoice_number}-n` } }));
+    db.tables.invoices!.push(...fresh);
+    const rules = { ...SEED.rules, per_payment_limit_usd: 1000, duplicate_window_days: 45 };
+    // Today's computation: period state and duplicates read per invoice.
+    const previous = SEED.rules;
+    const directory = await tools.directorio(db as never, 'A');
+    const rows = (await db.from('invoice_current').select('*').eq('company_id', 'A').order('received_at').order('id')).data as Array<Row & { id: string; outcome: string | null; fields: object | null }>;
+    const reopen = rows.filter((x) => (x.outcome === null || x.outcome === 'ESCALAR') && x.fields);
+    expect(reopen.length).toBeGreaterThanOrEqual(30);
+    const window = { duplicate_window_days: 45 };
+    const expected = [];
+    for (const row of reopen) {
+      const inv = row as never as Parameters<typeof tools.periodo>[2];
+      const b = tools.findBeneficiary(inv.fields.payee_name, directory);
+      const period = { ...await tools.periodo(db as never, 'A', inv), previous: await tools.duplicados(db as never, 'A', inv, window, directory) };
+      const to = tools.decide(inv, b, rules, period, NOW).outcome;
+      const from = row.outcome ?? tools.decide(inv, b, previous, period, NOW).outcome;
+      if (from !== to) expected.push([row.id, from, to]);
+    }
+    const { r, n } = await counted('PUT', '/api/policy', { rules });
+    expect(r.status).toBe(200);
+    expect(n).toBeLessThanOrEqual(40);
+    const out = await json<{ would_change: Array<{ invoice_id: string; from: string; to: string }> }>(r);
+    expect(out.would_change.map((w) => [w.invoice_id, w.from, w.to])).toEqual(expected);
+    expect(expected.length).toBeGreaterThan(10);
+    const current = new Map(rows.map((x) => [x.id, x.outcome]));
+    expect(expected.some((e) => current.get(String(e[0])) === null) && expected.some((e) => current.get(String(e[0])) === 'ESCALAR')).toBe(true);
   });
 });

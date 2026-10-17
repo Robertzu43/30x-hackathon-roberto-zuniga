@@ -4,15 +4,16 @@ import type { User } from '@supabase/supabase-js';
 import { createMiddleware } from 'hono/factory';
 import type { Env } from '../env';
 import type { Lang } from '../i18n';
-import { must, userClient, type Db } from './supabase';
+import { Budget, must, userClient, type Db } from './supabase';
 
-export type AppEnv = { Bindings: Env; Variables: { user: User; companyId: string; lang: Lang; db: Db } };
+export type AppEnv = { Bindings: Env; Variables: { user: User; companyId: string; lang: Lang; db: Db; budget: Budget } };
 
 export const requireUser = createMiddleware<AppEnv>(async (c, next) => {
   const deny = () => c.json({ error: 'No autorizado' }, 401);
   const jwt = /^Bearer (\S+)$/.exec(c.req.header('Authorization') ?? '')?.[1];
   if (!jwt) return deny();
-  const db = userClient(c.env, jwt);
+  const budget = new Budget(); // the request's subrequest counter, from its first Supabase call (R-56)
+  const db = userClient(c.env, jwt, budget);
   const { data, error } = await db.auth.getUser(jwt);
   if (error || !data.user) return deny();
   const member: { company_id: string } | null =
@@ -22,5 +23,6 @@ export const requireUser = createMiddleware<AppEnv>(async (c, next) => {
   c.set('companyId', member.company_id);
   c.set('lang', data.user.user_metadata?.lang === 'en' ? 'en' : 'es');
   c.set('db', db);
+  c.set('budget', budget);
   await next();
 });

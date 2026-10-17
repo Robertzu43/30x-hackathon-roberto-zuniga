@@ -10,6 +10,7 @@ import { pathToFileURL } from 'node:url';
 
 export const DEMO_PASSWORD = 'andina-demo-2026'; // public by design (D8); same constant as src/routes/demo.ts
 const PER_PAGE = 1000;
+const MAX_CALLS = 20; // R-60
 
 // One source of truth: the DEMO_EMAIL var the Worker signs in with. Missing = stop, never guess another user.
 export const demoEmailFrom = (toml) => {
@@ -40,9 +41,20 @@ export async function main({ admin, anon, fetch, appUrl, demoEmail, approverEmai
   // Service role: members cannot write is_demo or any column of the demo row (R-15, R-31); this script is its writer.
   must(await admin.from('companies').update({ is_demo: true, approver_email: approverEmail, name: 'Andina Labs Inc.' }).eq('id', company_id), 'companies');
   const { session } = must(await anon.auth.signInWithPassword({ email: demoEmail, password: DEMO_PASSWORD }), 'demo sign-in');
-  const res = await fetch(`${appUrl}/api/invoices/run`, { method: 'POST', headers: { Authorization: `Bearer ${session.access_token}` } });
-  if (!res.ok) throw new Error(`POST /api/invoices/run answered ${res.status}`);
-  const counts = await res.json();
+  // The same call loop as the browser (R-60): each call decides what fits; go on with its cursor until it is null, it
+  // makes no progress, or 20 calls. Only a non-2xx fails the script.
+  const counts = { PAGAR: 0, FRENAR: 0, ESCALAR: 0, errors: 0 };
+  let cursor = null;
+  for (let call = 0; call < MAX_CALLS; call++) {
+    const res = await fetch(`${appUrl}/api/invoices/run`, {
+      method: 'POST', headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(cursor ? { cursor } : {}),
+    });
+    if (!res.ok) throw new Error(`POST /api/invoices/run answered ${res.status}`);
+    const out = await res.json();
+    for (const k of Object.keys(counts)) counts[k] += out[k] ?? 0;
+    if (!out.cursor || out.cursor === cursor) break;
+    cursor = out.cursor;
+  }
   log(`demo company ${company_id} ready: ${JSON.stringify(counts)}`);
   return counts;
 }

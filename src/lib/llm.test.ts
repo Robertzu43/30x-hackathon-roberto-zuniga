@@ -55,6 +55,14 @@ describe('extractFields (AC-12, AC-13, AC-14)', () => {
     expect((await extractFields(model({ ...good, amount: 1000, subtotal: 840.005, tax: 159.99 }), 'x')).amount).toBe(1000);
   });
 
+  it('keeps the amount when the difference is exactly one cent (AC-14)', async () => {
+    expect((await extractFields(model({ ...good, amount: 2500.01, subtotal: 2000, tax: 500 }), 'x')).amount).toBe(2500.01);
+  });
+
+  it('makes the amount null when the difference is two cents (AC-14)', async () => {
+    expect((await extractFields(model({ ...good, amount: 2500.02, subtotal: 2000, tax: 500 }), 'x')).amount).toBeNull();
+  });
+
   it('drops a malformed date or currency instead of guessing', async () => {
     const out = await extractFields(model({ ...good, due_date: '30/11/2026', currency: 'dollars' }), 'x');
     expect([out.due_date, out.currency]).toEqual([null, null]);

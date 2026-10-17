@@ -7,8 +7,6 @@ import type { InvoiceFields } from '../engine/types';
 import { EXTRACT_SYSTEM, INVOICE_SCHEMA, VISION_PROMPT } from '../prompts/extract';
 import { parseAmount, round2 } from './money';
 
-export { INVOICE_SCHEMA };
-
 const TIMEOUT_MS = 20_000;
 const MIN_CONFIDENCE = 0.8; // R-10
 const ILEGIBLE: InvoiceFields = {
@@ -74,7 +72,7 @@ export async function extractFields(env: Env, text: string): Promise<InvoiceFiel
     const raw = out?.response;
     const a = Answer.parse(typeof raw === 'string' ? JSON.parse(raw) : raw);
     const [amount, subtotal, tax] = [a.amount, a.subtotal, a.tax].map(toNumber);
-    const consistent = subtotal == null || tax == null || amount == null || Math.abs(round2(subtotal + tax) - amount) <= 0.01;
+    const consistent = subtotal == null || tax == null || amount == null || round2(Math.abs(round2(subtotal + tax) - amount)) <= 0.01;
     const sure = (k: string) => (a.confidence[k] ?? 0) >= MIN_CONFIDENCE;
     const keep = <T>(k: string, v: T): T | null => (sure(k) ? v : null);
     return {

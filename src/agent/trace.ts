@@ -1,6 +1,6 @@
 // "Lo que hice" (AC-64, D24): the agent's steps, rendered only from what was recorded (R-29): the stored decisions,
 // the invoice, the company's demo flag and the recorded send result. Templates only, no model.
-import { agreementText, asRead, fieldList, fill, list, money, motives, unread } from '../engine/explain';
+import { agreementText, asRead, fieldList, fill, list, money, motives, readReason, reasonText } from '../engine/explain';
 import { validFields } from '../engine/checks';
 import { outcomeOf } from '../engine/decide';
 import type { Check, CheckId, Decision, Invoice, InvoiceFields, Outcome } from '../engine/types';
@@ -42,7 +42,11 @@ export function recordedFields(fields: InvoiceFields | null, checks: Check[] | n
     concept: s(c('duplicado_probable')?.actual), bank_account: s(c('beneficiario_cuenta')?.values.invoice_account),
   };
   const confidence = Object.fromEntries(Object.entries(read).filter(([, v]) => v !== null).map(([k]) => [k, 1]));
-  return { ...read, confidence, ...(unread(checks) ? { read_error: 'lector_no_disponible' as const } : {}) }; // R-75
+  const reason = readReason(checks);
+  if (!reason) return { ...read, confidence };
+  // R-75, R-80: the reason, and the guard's values (the Lectura values but `missing` and `reason`)
+  const detail = Object.fromEntries(Object.entries(c('lectura')!.values).filter(([k]) => k !== 'missing' && k !== 'reason'));
+  return { ...read, confidence, read_error: reason, ...(reason === 'lector_no_disponible' ? {} : { read_detail: detail }) };
 }
 
 export interface TraceStep { stage: 'lee' | 'consulta' | 'decide' | 'actua'; text: string }
@@ -58,8 +62,9 @@ const READ = ['payee_name', 'amount', 'currency', 'invoice_number'] as const;
 
 function read({ source, fields }: Invoice, checks: Check[], lang: Lang): string {
   const src = t(lang, `trace.source.${source}`);
-  if (unread(checks)) return fill(lang, 'lector.trace.read', { source: src }); // R-75: the reader gave no answer
   const f = validFields(fields); // R-71: what the engine could not trust was not read
+  const reason = reasonText(checks, 'trace.read', lang, { source: src }, f); // R-75, R-80: why no amount was taken
+  if (reason) return reason;
   const found = [
     f.payee_name && fill(lang, 'trace.payee', { payee: f.payee_name }),
     f.amount !== null && `${money(f.amount, lang)} ${f.currency ?? ''}`.trim(),

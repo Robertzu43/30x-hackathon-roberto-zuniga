@@ -127,3 +127,32 @@ describe('escalationQuestion when the reader was unavailable (AC-13 Clarified, R
   });
 });
 
+
+// R-80 (AC-14 Clarified): the question, also the e-mail subject and first line of a non-demo company (R-26 for the name).
+describe('escalationQuestion when the amount guard fired (AC-14 Clarified, R-80)', () => {
+  const NOTA = inv({ amount: null, read_error: 'nota_credito', read_detail: { signal: 'Total: (USD 500,00)' } });
+  const CUADRA = inv({ amount: null, read_error: 'total_no_cuadra', read_detail: { subtotal: 100, tax: 19, sum: 119, totals: '150', amount_read: 150 } });
+  const LEI = inv({ amount: null, read_error: 'total_no_cuadra', read_detail: { subtotal: null, tax: null, sum: null, totals: '2500; 300', amount_read: 250 } });
+  it('nota_credito, es and en', () => {
+    expect(ask(NOTA, run(NOTA))).toBe('Juan, la factura #2044 de Nube Sur LLC parece una nota crédito: dice «Total: (USD 500,00)». No la pago; ¿la rechazo?');
+    expect(ask(NOTA, run(NOTA), 'en')).toBe('Juan, invoice #2044 from Nube Sur LLC looks like a credit note: it says "Total: (USD 500,00)". I will not pay it; shall I reject it?');
+  });
+  it('total_no_cuadra, es and en', () => {
+    expect(ask(CUADRA, run(CUADRA))).toBe('Juan, la factura #2044 de Nube Sur LLC no cuadra: 100,00 + 19,00 = 119,00, pero el total dice 150,00. No la pago así; ¿la rechazo?');
+    expect(ask(CUADRA, run(CUADRA), 'en')).toBe('Juan, invoice #2044 from Nube Sur LLC does not add up: 100.00 + 19.00 = 119.00, but the total says 150.00. I will not pay it like this; shall I reject it?');
+    expect(ask(LEI, run(LEI))).toBe('Juan, la factura #2044 de Nube Sur LLC no cuadra: leí 250,00, pero el total impreso es 2.500,00, 300,00. No la pago así; ¿la rechazo?');
+    expect(ask(LEI, run(LEI), 'en')).toBe('Juan, invoice #2044 from Nube Sur LLC does not add up: I read 250.00, but the printed total is 2,500.00, 300.00. I will not pay it like this; shall I reject it?');
+  });
+  it('with no name (R-26) and nothing read', () => {
+    const i = inv({ amount: null, payee_name: null, invoice_number: null, read_error: 'nota_credito', read_detail: { signal: 'no cobrar' } });
+    expect(ask(i, run(i), 'es', 'ops1@blinka.co')).toBe('La factura sin número de un beneficiario que no pude leer parece una nota crédito: dice «no cobrar». No la pago; ¿la rechazo?');
+    expect(ask(i, run(i), 'en', 'ops1@blinka.co')).toBe('Invoice no number from a payee I could not read looks like a credit note: it says "no cobrar". I will not pay it; shall I reject it?');
+  });
+  it('a re-escalation after an approval asks the same question', () => {
+    const d = run(CUADRA);
+    const a = decideWithOverrides(d.checks.filter((c) => c.verdict !== 'cumple').map((c) => c.id), { email: 'r@x.co', channel: 'link' },
+      CUADRA, findBeneficiary('Nube Sur LLC', DIRECTORY), RULES, EMPTY, NOW);
+    expect(a.outcome).toBe('ESCALAR');
+    expect(ask(CUADRA, a)).toBe(ask(CUADRA, d));
+  });
+});

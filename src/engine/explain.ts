@@ -2,7 +2,7 @@
 import { t, type Lang } from '../i18n';
 import { validFields } from './checks';
 import { outcomeOf } from './decide';
-import type { Beneficiary, Check, Decision, Invoice } from './types';
+import type { Beneficiary, Check, Decision, Invoice, InvoiceFields, ReadError } from './types';
 
 const locale = (lang: Lang) => (lang === 'es' ? 'es-CO' : 'en-US');
 const date = (lang: Lang, iso: string, o: Intl.DateTimeFormatOptions) => {
@@ -27,9 +27,30 @@ export const fieldList = (lang: Lang, fields: string[]) => list(lang, fields.map
 const missingOf = (c: Check) => (c.values.missing ? String(c.values.missing).split(', ') : ['amount']); // null missing = amount <= 0
 const illegible = (c: Check) => READ_FIELDS.every((f) => missingOf(c).includes(f));
 
-// R-75: no answer came from the reader for this invoice; its Lectura check carries the reason, overridden or not.
-const unreadCheck = (c: Check) => c.id === 'lectura' && c.values.reason === 'lector_no_disponible';
-export const unread = (checks: Check[]) => checks.some(unreadCheck);
+// R-75, R-80: why the amount was not read (no answer from the reader, or the amount guard). The Lectura check carries
+// it, overridden or not, so every later decision says it (R-77).
+const reasonCheck = (c: Check) => c.id === 'lectura' && typeof c.values.reason === 'string';
+export const readReason = (checks: Check[]) => checks.find(reasonCheck)?.values.reason as ReadError | undefined;
+const money2 = (n: number, lang: Lang) => new Intl.NumberFormat(locale(lang), { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+
+// One sentence of that reason: "lector.<what>", "nota_credito.<what>" or "total_no_cuadra.<what>[.3a|.3b]" (R-80: the
+// line-item sum, or the amount read). f: the trusted read fields, for the payee and number. Null when there is none.
+export function reasonText(checks: Check[], what: 'headline' | 'check' | 'fix' | 'motive' | 'trace.read' | 'question', lang: Lang,
+  extra: Record<string, string | null> = {}, f?: InvoiceFields): string | null {
+  const v = checks.find(reasonCheck)?.values;
+  if (!v) return null;
+  const amt = (x: unknown) => (typeof x === 'number' ? money2(x, lang) : null);
+  const variant = v.reason !== 'total_no_cuadra' ? '' : v.subtotal == null ? '.3b' : '.3a';
+  const vars: Record<string, string | null> = {
+    signal: v.signal == null ? null : String(v.signal), subtotal: amt(v.subtotal), tax: amt(v.tax), sum: amt(v.sum), amount_read: amt(v.amount_read),
+    totals: String(v.totals ?? '').split('; ').filter(Boolean).map((x) => money2(Number(x), lang)).join(', '),
+    payee: f?.payee_name ?? t(lang, 'value.unread_payee'),
+    number: f?.invoice_number ? `#${f.invoice_number}` : t(lang, 'value.no_number'), ...extra,
+  };
+  vars.why = variant && fill(lang, `total_no_cuadra.why${variant}`, vars);
+  const prefix = v.reason === 'lector_no_disponible' ? 'lector' : String(v.reason);
+  return fill(lang, `${prefix}.${what}${what === 'check' ? variant : ''}`, vars);
+}
 
 // R-73: a changed account whose last 4 digits read the same on both sides (or are missing) is named by both accounts
 // as read: no record ever says two identical endings differ. '' or the '_text' template suffix.
@@ -78,24 +99,25 @@ export function explainCheck(check: Check, lang: Lang, receivedAt: string, polic
   const shown = check.overridden
     ? fill(lang, 'verdict.overridden', { verdict, by: check.overridden.by, channel: t(lang, `channel.${check.overridden.channel}`) })
     : verdict;
-  const body = unreadCheck(check) ? t(lang, 'lector.check') : fill(lang, `check.${check.id}.${check.verdict}${variant}`, v);
-  return `${fill(lang, `check.${check.id}.name`, v)}: ${body} → ${shown}`;
+  const body = reasonText([check], 'check', lang, { verdict: shown }) ?? `${fill(lang, `check.${check.id}.${check.verdict}${variant}`, v)} → ${shown}`;
+  return `${fill(lang, `check.${check.id}.name`, v)}: ${body}`;
 }
 
 // Checks still blocking the payment: not passing and not unlocked by a person. A FRENAR trigger comes first.
 const blocking = (checks: Check[]) => checks.filter((c) => c.verdict !== 'cumple' && !c.overridden)
   .sort((a, b) => Number(outcomeOf([b]) === 'FRENAR') - Number(outcomeOf([a]) === 'FRENAR'));
 
-export const motives = (checks: Check[], lang: Lang, receivedAt: string) => unread(checks) ? [t(lang, 'lector.motive')] : blocking(checks).map((c) =>
+export const motives = (checks: Check[], lang: Lang, receivedAt: string) => readReason(checks) ? [reasonText(checks, 'motive', lang)!] : blocking(checks).map((c) =>
   c.id === 'lectura' && illegible(c) ? t(lang, 'motive.lectura.illegible') : fill(lang, `motive.${c.id}.${c.verdict}${asRead(c)}`, checkVars(c, lang, receivedAt)));
 
 // "Qué tendría que pasar para pagarla": one line per blocking check. Spanish lines start with "Que " (R-27).
 export const whatWouldPay = (decision: Pick<Decision, 'checks'>, lang: Lang): string[] =>
-  blocking(decision.checks).map((c) => (unreadCheck(c) ? t(lang, 'lector.fix') : fill(lang, `fix.${c.id}.${c.verdict}`, vars(c.values, lang))));
+  blocking(decision.checks).map((c) => reasonText([c], 'fix', lang) ?? fill(lang, `fix.${c.id}.${c.verdict}`, vars(c.values, lang)));
 
 // "ESCALAR · 4.200 USD a Nube Sur LLC: supera el umbral de aprobación de 2.500 USD".
 export function headline(decision: Pick<Decision, 'outcome' | 'checks'>, invoice: Invoice, beneficiary: Beneficiary | null, lang: Lang): string {
-  const { amount, currency, payee_name } = validFields(invoice.fields); // R-71: an untrusted value is never printed as read
+  const read = validFields(invoice.fields); // R-71: an untrusted value is never printed as read
+  const { amount, currency, payee_name } = read;
   const base = {
     outcome: t(lang, `outcome.${decision.outcome}`),
     amount: amount === null ? t(lang, 'value.unknown_amount') : `${money(amount, lang)} ${currency ?? ''}`.trim(),
@@ -108,8 +130,9 @@ export function headline(decision: Pick<Decision, 'outcome' | 'checks'>, invoice
     const by = decision.checks.find((c) => c.overridden)?.overridden?.by;
     return fill(lang, by ? 'headline.pay_approved' : 'headline.pay', { ...base, agreement, by });
   }
-  if (unread(decision.checks)) return fill(lang, 'lector.headline', base); // R-75: one reason, no "y n motivos más"
+  const reason = reasonText(decision.checks, 'headline', lang, { outcome: base.outcome }, read); // R-75, R-80: one reason, no "y n motivos más"
+  if (reason) return reason;
   const [first = '', ...rest] = motives(decision.checks, lang, invoice.received_at);
-  const reason = rest.length ? fill(lang, `headline.more.${new Intl.PluralRules(locale(lang)).select(rest.length)}`, { reason: first, n: rest.length }) : first;
-  return fill(lang, 'headline.other', { ...base, reason });
+  const why = rest.length ? fill(lang, `headline.more.${new Intl.PluralRules(locale(lang)).select(rest.length)}`, { reason: first, n: rest.length }) : first;
+  return fill(lang, 'headline.other', { ...base, reason: why });
 }

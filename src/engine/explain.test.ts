@@ -227,3 +227,65 @@ describe('reader unavailable: lector_no_disponible (AC-13 Clarified, R-75)', () 
     expect(headline(r.d, r.i, r.b, 'es')).toMatch(/^ESCALAR · monto desconocido a beneficiario desconocido: ilegible y \d+ motivos más$/);
   });
 });
+
+// R-80 (AC-14 Clarified): the amount guard stopped the amount. ESCALAR, never FRENAR, never PAGAR, in the exact es/en texts.
+describe('amount guard: nota_credito and total_no_cuadra (AC-14 Clarified, R-80)', () => {
+  const guarded = (read_error: InvoiceFields['read_error'], read_detail: InvoiceFields['read_detail'], f: Partial<InvoiceFields> = {}): Invoice =>
+    ({ id: 'g', received_at: RECEIVED, source: 'email', fields: { ...LAURA, amount: null, read_error, read_detail, ...f } });
+  const CUADRA = guarded('total_no_cuadra', { subtotal: 100, tax: 19, sum: 119, totals: '150', amount_read: 150 });
+  const LEI = guarded('total_no_cuadra', { subtotal: null, tax: null, sum: null, totals: '2500; 300', amount_read: 250 });
+  const NOTA = guarded('nota_credito', { signal: 'Total: (USD 500,00)' });
+  const at = (i: Invoice) => decide(i, findBeneficiary(i.fields.payee_name, DIRECTORY), RULES, EMPTY, NOW);
+
+  it.each([CUADRA, LEI, NOTA])('ESCALAR with Lectura no_verificado carrying the reason and values; the USD checks unknown', (i) => {
+    const d = at(i);
+    expect(d.outcome).toBe('ESCALAR');
+    expect(get(d.checks, 'lectura')).toMatchObject({ verdict: 'no_verificado', values: { reason: i.fields.read_error, ...i.fields.read_detail } });
+    for (const id of ['limite_pago', 'presupuesto_periodo', 'saldo_cuenta', 'umbral_aprobacion'] as const) expect(get(d.checks, id).verdict).toBe('no_verificado');
+    expect(d.checks).toHaveLength(13);
+  });
+  it('a read_error with an amount still in the fields (an untrusted insert): the amount is unknown to every check', () => {
+    const d = at(guarded('nota_credito', { signal: 'no cobrar' }, { amount: 500 }));
+    expect([get(d.checks, 'lectura').verdict, get(d.checks, 'limite_pago').verdict, d.amount_usd]).toEqual(['no_verificado', 'no_verificado', null]);
+  });
+  it('headlines, es and en, with no "y n motivos más"', () => {
+    expect(headline(at(NOTA), NOTA, null, 'es')).toBe('ESCALAR · la factura de Laura Méndez parece una nota crédito: dice «Total: (USD 500,00)»; no es un cobro y no la pago');
+    expect(headline(at(NOTA), NOTA, null, 'en')).toBe('ESCALATE · the document from Laura Méndez looks like a credit note: it says "Total: (USD 500,00)"; it is not a charge and I will not pay it');
+    expect(headline(at(CUADRA), CUADRA, null, 'es')).toBe('ESCALAR · el total de la factura de Laura Méndez no cuadra: 100,00 + 19,00 = 119,00, pero el total dice 150,00');
+    expect(headline(at(CUADRA), CUADRA, null, 'en')).toBe('ESCALATE · the total on the invoice from Laura Méndez does not add up: 100.00 + 19.00 = 119.00, but the total says 150.00');
+    expect(headline(at(LEI), LEI, null, 'es')).toBe('ESCALAR · el total de la factura de Laura Méndez no cuadra: leí 250,00, pero el total impreso es 2.500,00, 300,00');
+    expect(headline(at(LEI), LEI, null, 'en')).toBe('ESCALATE · the total on the invoice from Laura Méndez does not add up: I read 250.00, but the printed total is 2,500.00, 300.00');
+  });
+  it('an unread payee is «un beneficiario que no pude leer» / "a payee I could not read"', () => {
+    const i = guarded('nota_credito', { signal: 'no cobrar' }, { payee_name: null });
+    expect(headline(at(i), i, null, 'es')).toBe('ESCALAR · la factura de un beneficiario que no pude leer parece una nota crédito: dice «no cobrar»; no es un cobro y no la pago');
+    expect(headline(at(i), i, null, 'en')).toMatch(/^ESCALATE · the document from a payee I could not read looks like/);
+  });
+  it('the Lectura rows, es and en', () => {
+    const row = (i: Invoice, lang: 'es' | 'en') => explainCheck(get(at(i).checks, 'lectura'), lang, RECEIVED);
+    expect(row(NOTA, 'es')).toBe('Lectura: el documento dice «Total: (USD 500,00)»; no tomo su monto como un cobro → no se pudo verificar');
+    expect(row(NOTA, 'en')).toBe('Reading: the document says "Total: (USD 500,00)"; I do not take its amount as a charge → could not be verified');
+    expect(row(CUADRA, 'es')).toBe('Lectura: subtotal 100,00 + impuestos 19,00 = 119,00, total impreso 150,00 → no cuadra, no se pudo verificar');
+    expect(row(CUADRA, 'en')).toBe('Reading: subtotal 100.00 + taxes 19.00 = 119.00, printed total 150.00 → does not add up, could not be verified');
+    expect(row(LEI, 'es')).toBe('Lectura: leí el monto 250,00, pero el total impreso es 2.500,00, 300,00 → no se pudo verificar');
+    expect(row(LEI, 'en')).toBe('Reading: I read the amount 250.00, but the printed total is 2,500.00, 300.00 → could not be verified');
+  });
+  it('the «qué tendría que pasar» Lectura line, es and en', () => {
+    expect(whatWouldPay(at(NOTA), 'es')[0]).toBe('Que no se pague: una nota crédito se descuenta de una factura, no se paga. Recházala; si de verdad es un cobro, que el proveedor envíe una factura sin esa señal');
+    expect(whatWouldPay(at(NOTA), 'en')[0]).toBe('That it is not paid: a credit note is deducted from an invoice, not paid. Reject it; if it really is a charge, the vendor sends an invoice without that signal');
+    expect(whatWouldPay(at(CUADRA), 'es')[0]).toBe('Que el proveedor envíe la factura con un total que cuadre; rechaza esta');
+    expect(whatWouldPay(at(LEI), 'en')[0]).toBe('That the vendor sends the invoice with a total that adds up; reject this one');
+  });
+  it('an approval overrides Lectura but re-escalates, keeping the reason and the headline; never PAGAR', () => {
+    for (const i of [CUADRA, LEI, NOTA]) {
+      const d = at(i);
+      const a = decideWithOverrides(d.checks.filter((c) => c.verdict !== 'cumple').map((c) => c.id), { email: 'r@x.co', channel: 'dashboard' },
+        i, findBeneficiary(i.fields.payee_name, DIRECTORY), RULES, EMPTY, NOW);
+      expect(a.outcome).toBe('ESCALAR');
+      expect(get(a.checks, 'lectura').values.reason).toBe(i.fields.read_error);
+      expect(headline(a, i, null, 'es')).toBe(headline(d, i, null, 'es'));
+    }
+    const a = decideWithOverrides(['lectura'], { email: 'r@x.co', channel: 'dashboard' }, CUADRA, null, RULES, EMPTY, NOW);
+    expect(explainCheck(get(a.checks, 'lectura'), 'es', RECEIVED)).toBe('Lectura: subtotal 100,00 + impuestos 19,00 = 119,00, total impreso 150,00 → no cuadra, no se pudo verificar · aprobado por r@x.co en el tablero');
+  });
+});

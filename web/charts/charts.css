@@ -1,0 +1,61 @@
+/* Chart primitives (AC-106, R-123). Only the approved palette: status pairs for outcomes, ink for a single measure.
+   Text always wears the text tokens; colour is on the marks. Nothing moves: the charts appear at rest. */
+.chart { margin: 0; }
+.chart-title { font-weight: 600; font-size: var(--text-sm); }
+.chart-unit { color: var(--ink-2); font-weight: 400; }
+.chart-body { display: flex; flex-direction: column; margin: 0.5rem 0; }
+.chart-empty { margin: auto 0; padding: 1rem; text-align: center; color: var(--ink-2); font-size: var(--text-sm); border: 1px dashed var(--line); border-radius: var(--radius); }
+.chart-summary, .chart-note { margin: 0.5rem 0 0; color: var(--ink-2); font-size: var(--text-sm); }
+.chart-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+.tone-pagar { background: #346538; }
+.tone-frenar { background: #9f2f2d; }
+.tone-escalar { background: #956400; }
+.tone-pending { background: #6d6c69; }
+.tone-ink { background: #111111; }
+.tone-track { background: #eaeaea; }
+
+.chart-legend, .chart-parts { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; margin: 0.5rem 0 0; padding: 0; list-style: none; font-size: var(--text-sm); }
+.chart-legend li, .chart-parts li { display: flex; align-items: center; gap: 0.5rem; }
+.chart-swatch { width: 0.75rem; height: 0.75rem; border-radius: 2px; flex: none; }
+.chart-parts b { font-weight: 600; }
+
+/* Stacked columns: a 2px surface gap between segments, 4px round data end, square at the baseline. */
+.chart-cols { display: flex; align-items: flex-end; justify-content: space-between; gap: 2px; height: calc(var(--h) - 1.5rem); border-bottom: 1px solid var(--line); }
+.chart-col { flex: 1; max-width: 24px; display: flex; flex-direction: column-reverse; gap: 2px; }
+.chart-col span { flex-basis: 0; min-height: 2px; }
+.chart-col span:last-child { border-radius: 4px 4px 0 0; }
+.chart-axis { display: flex; justify-content: space-between; margin-top: 0.25rem; font-size: 0.75rem; color: var(--ink-2); }
+
+/* Horizontal bars: label, bar, value at the tip. Narrow screens stack the label over the bar. */
+.chart-hbars { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.chart-hbars li { display: grid; grid-template-columns: minmax(5rem, 30%) 1fr; gap: 0.5rem; align-items: center; font-size: var(--text-sm); }
+.chart-hlabel { overflow-wrap: anywhere; }
+.chart-htracks { display: grid; gap: 2px; }
+.chart-hrow { display: flex; align-items: center; gap: 0.5rem; }
+.chart-hbar { height: 16px; border-radius: 0 4px 4px 0; min-width: 2px; flex: none; max-width: calc(100% - 5rem); }
+.chart-hvalue { white-space: nowrap; }
+@media (max-width: 480px) { .chart-hbars li { grid-template-columns: 1fr; gap: 0.25rem; } }
+
+/* Lines: 2px, round joins; the end dot is HTML so it stays round under a stretched viewBox, with a 2px surface ring. */
+.chart-line { position: relative; margin-top: 1.5rem; height: calc(var(--h) - 3rem); border-bottom: 1px solid var(--line); }
+.chart-spark { margin: 0; height: var(--h); border: 0; }
+.chart-line svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.chart-path { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.chart-path-muted { stroke: var(--ink-2); }
+.chart-ref { stroke: var(--ink-2); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.chart-dot { position: absolute; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: var(--ink); box-shadow: 0 0 0 2px var(--surface); }
+.chart-ymax, .chart-reflabel { position: absolute; left: 0; font-size: 0.75rem; color: var(--ink-2); transform: translateY(-100%); }
+.chart-ymax { top: 0; }
+
+.chart-seg { display: flex; gap: 2px; height: 16px; }
+.chart-seg span { flex-basis: 0; min-width: 2px; }
+.chart-seg span:first-child { border-radius: 4px 0 0 4px; }
+.chart-seg span:last-child { border-radius: 0 4px 4px 0; }
+
+.chart-kpi { display: flex; flex-direction: column; gap: 0.25rem; padding: 1rem; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.chart-kpi-label { font-size: var(--text-sm); color: var(--ink-2); }
+.chart-kpi-value { font-size: var(--text-xl); font-weight: 600; line-height: 1.2; }
+.chart-kpi-value .chart-unit { font-size: var(--text-sm); }
+.chart-kpi-na { color: var(--ink-2); font-size: var(--text-base); font-weight: 400; }
+.chart-kpi-hint { font-size: var(--text-sm); color: var(--ink-2); }

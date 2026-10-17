@@ -74,8 +74,8 @@ export const SCREENS = [
   { id: 'status-invalid', exp: 'vendor', path: '/estado/token-invalido-gate', auth: false, notFound: true },
   // D39-D41 (AC-91 Clarified). `session: 'trial'` screens share the run's one anonymous user. The prepare selectors follow AC-94/AC-95's copy; adjust with --route if Task 40/41 names differ.
   { id: 'trial', exp: 'finance', path: '/', session: 'trial' },
-  { id: 'login-password', exp: 'finance', path: '/login', auth: false, prepare: clickButton(/contraseña|password/i) },
-  { id: 'save-access', exp: 'finance', path: '/', session: 'trial', prepare: clickButton(/guardar mi acceso|save my access/i), primary: '[role="dialog"] button.primary' },
+  { id: 'login-password', exp: 'finance', path: '/login', auth: false, prepare: clickButton(/contraseña|password/i), fill: { '#login-email': 'gate@example.test', '#login-password': 'gate-password' } }, // filled: an empty form stops at the browser's own check, with no busy state
+  { id: 'save-access', exp: 'finance', path: '/', session: 'trial', prepare: clickButton(/guardar mi acceso|save my access/i), primary: '.save-access button.primary', fill: { '#save-email': 'gate@example.test', '#save-password': 'gate-password' } }, // without --mutate the save request is held and never sent
   { id: 'leave-trial', exp: 'finance', path: '/', session: 'trial', prepare: clickButton(/cerrar sesión|sign out/i) },
   { id: 'beneficiary', exp: 'finance', path: (v) => `/beneficiaries/${v.beneficiary}`, needs: 'beneficiary', na: 'the demo has no beneficiary' },
   { id: 'beneficiary-empty', base: 'beneficiary', exp: 'finance', path: (v) => `/beneficiaries/${v.beneficiary}`, needs: 'beneficiary', na: 'the demo has no beneficiary', fake: { path: '/api/screen/beneficiary/', patch: (j) => ({ ...j, totals: { paid_month_usd: 0, paid_total_usd: 0, invoices: 0 }, history: [], last: [] }) } }, // the real profile with no payments

@@ -1,5 +1,6 @@
 // Record sentences (AC-27, AC-28, D7): fixed templates filled with stored values, never written by a model.
-import { t, type Lang } from '../i18n';
+import { format, t, type Lang } from '../i18n';
+import { en as trialEn, es as trialEs } from '../i18n/features/trial-record';
 import { validFields } from './checks';
 import { outcomeOf } from './decide';
 import type { Beneficiary, Check, Decision, Invoice, InvoiceFields, ReadError } from './types';
@@ -26,6 +27,11 @@ export const money = (n: number, lang: Lang) =>
 // Template with every {placeholder} filled; a value that is not there prints "desconocido" / "unknown".
 export const fill = (lang: Lang, key: string, vars: Record<string, string | number | null | undefined> = {}) =>
   t(lang, key).replace(/\{(\w+)\}/g, (_, k: string) => String(vars[k] ?? t(lang, 'value.unknown')));
+
+// R-116: a guest's answer is stored as invitado:<8 hex> and named «Invitado <8 hex>» / "Guest <8 hex>".
+const trial = { es: trialEs, en: trialEn };
+export const actorName = (email: string | null, lang: Lang) =>
+  email?.startsWith('invitado:') ? format(trial[lang], 'trial_record.guest', { id: email.slice(9) }) : email;
 
 export const list = (lang: Lang, items: string[]) => new Intl.ListFormat(locale(lang), { type: 'conjunction' }).format(items);
 // Bogotá month name of an ISO timestamp (R-45: the budget month is the invoice's arrival month).
@@ -118,7 +124,7 @@ export function explainCheck(check: Check, lang: Lang, receivedAt: string, polic
     : check.id === 'beneficiario_permitido' && !check.values.directory_name ? '_open' : '';
   const verdict = t(lang, `verdict.${check.verdict}`);
   const shown = check.overridden
-    ? fill(lang, 'verdict.overridden', { verdict, by: check.overridden.by, channel: t(lang, `channel.${check.overridden.channel}`) })
+    ? fill(lang, 'verdict.overridden', { verdict, by: actorName(check.overridden.by, lang), channel: t(lang, `channel.${check.overridden.channel}`) })
     : verdict;
   const body = reasonText([check], 'check', lang, { verdict: shown }) ?? `${fill(lang, `check.${check.id}.${check.verdict}${variant}`, v)} → ${shown}`;
   return `${fill(lang, `check.${check.id}.name`, v)}: ${body}`;
@@ -150,7 +156,7 @@ export function headline(decision: Pick<Decision, 'outcome' | 'checks'>, invoice
     const known = `headline.agreement.${type}`; // t returns the key itself when it has no entry: null or unknown types read "sin acuerdo registrado" (R-52)
     const agreement = fill(lang, t(lang, known) === known ? 'headline.agreement.none' : known, { month: monthName(lang, invoice.received_at) });
     const by = decision.checks.find((c) => c.overridden)?.overridden?.by;
-    return fill(lang, by ? 'headline.pay_approved' : 'headline.pay', { ...base, agreement, by });
+    return fill(lang, by ? 'headline.pay_approved' : 'headline.pay', { ...base, agreement, by: by && actorName(by, lang) });
   }
   const reason = reasonText(decision.checks, 'headline', lang, { outcome: base.outcome }, read); // R-75, R-80: one reason, no "y n motivos más"
   if (reason) return reason;

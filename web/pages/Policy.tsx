@@ -9,7 +9,7 @@ import { failure, send } from '../withField';
 
 type Version = { id: string; version: number; name: string; rules: PolicyRules; created_at: string };
 type Change = { invoice_id: string; headline: string; from: string | null; to: string | null }; // null from: pending; null to: pending and not read yet (R-68)
-type Company = { id: string; name: string; approver_email: string; lang: 'es' | 'en'; is_demo: boolean };
+type Company = { id: string; name: string; approver_email: string | null; lang: 'es' | 'en'; is_demo: boolean; is_trial?: boolean };
 type Failure = ReturnType<typeof failure>;
 type Rate = { currency: string; usd_per_unit: number; units_per_usd: number; source: string; fetched_at: string; stale: boolean };
 
@@ -46,7 +46,7 @@ function CompanySection({ initial, skeleton }: { initial: Company; skeleton: boo
     setErr(null);
     setSaved(false);
     try {
-      setC(await api.put<Company>('/api/company', { name: c.name, approver_email: c.approver_email, lang: c.lang }));
+      setC(await api.put<Company>('/api/company', { name: c.name, approver_email: c.is_trial ? undefined : c.approver_email, lang: c.lang }));
       setSaved(true);
     } catch (x) {
       setErr(failure(x));
@@ -58,12 +58,14 @@ function CompanySection({ initial, skeleton }: { initial: Company; skeleton: boo
       {c && (
         <form onSubmit={submit} noValidate>
           {c.is_demo && <p className="muted">{t('policy.company.demo')}</p>}
+          {c.is_trial && <p id="trial-approver" className="muted">{t('trial.approver')}</p>}
           <div className="grid">
             <label>{t('policy.company.name')}
               <input value={c.name} disabled={c.is_demo} onChange={(e) => setC({ ...c, name: e.target.value })} />
             </label>
             <label>{t('policy.company.email')}
-              <input type="email" value={c.approver_email} disabled={c.is_demo} onChange={(e) => setC({ ...c, approver_email: e.target.value })} />
+              <input type="email" value={c.approver_email ?? ''} disabled={c.is_demo} readOnly={c.is_trial} aria-describedby={c.is_trial ? 'trial-approver' : undefined}
+                onChange={(e) => setC({ ...c, approver_email: e.target.value })} />
             </label>
             <label>{t('policy.company.lang')}
               <select value={c.lang} disabled={c.is_demo} onChange={(e) => setC({ ...c, lang: e.target.value as Company['lang'] })}>

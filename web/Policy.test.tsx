@@ -214,6 +214,24 @@ test('a normal company saves name, approver email and language; a 400 shows its 
   expect(body(puts[1]![1]!)).toEqual({ name: 'Andina Labs Inc.', approver_email: 'pagos@andina.co', lang: 'en' });
 });
 
+test.each([
+  ['es', 'Correo del aprobador', 'Guardar empresa', 'Las empresas de prueba no envían correos; las escalaciones esperan en el tablero.', 'Empresa guardada.'],
+  ['en', 'Approver email', 'Save company', 'Trial companies send no email; escalations wait on the dashboard.', 'Company saved.'],
+])('a trial company: the approver field is read-only with why, and a save never sends it (AC-93, R-115) %s', async (lang, label, saveLabel, why, saved) => {
+  localStorage.setItem('lang', lang);
+  const trial = { ...company, name: 'Empresa de prueba 7', approver_email: null, is_trial: true };
+  const f = setup({ 'GET /api/company': trial, 'PUT /api/company': (init: RequestInit) => ({ ...trial, ...body(init) }) });
+  renderAt(<Policy />);
+  const email = (await screen.findByLabelText(label)) as HTMLInputElement;
+  expect(email.readOnly).toBe(true);
+  expect(email.value).toBe('');
+  expect(screen.getByText(why)).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: saveLabel }));
+  expect(await screen.findByText(saved)).toBeTruthy();
+  const put = f.mock.calls.find(([u, i]) => u === '/api/company' && i?.method === 'PUT')!;
+  expect(body(put[1]!)).toEqual({ name: 'Empresa de prueba 7', lang: 'es' });
+});
+
 const pending = (n: number, to: string | null = 'PAGAR') => Array.from({ length: n }, (_, i) => ({ invoice_id: `p${i}`, headline: `Factura ${i}`, from: null, to }));
 const put = (r: Record<string, unknown>) => setup({ 'PUT /api/policy': { policy: { ...versions[0], version: 3 }, will_pay: 0, unread_pending: 0, ...r } });
 const saveEs = async () => { renderAt(<Policy />); await limit(); save(); };

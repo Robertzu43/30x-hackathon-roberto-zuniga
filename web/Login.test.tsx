@@ -1,9 +1,10 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { expect, test } from 'vitest';
 import { Route, Routes } from 'react-router-dom';
 import { routes } from './App';
 import Login from './pages/Login';
-import { fakeAuth, mockApi, renderAt } from './test/utils';
+import { currentSession } from './test/supabase';
+import { fakeAuth, mockApi, renderAt, signedInAs } from './test/utils';
 
 function setup() {
   const fetchMock = mockApi({ 'POST /api/invoices/run': { PAGAR: 3, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null } });
@@ -148,4 +149,76 @@ test('the heading is the Thesaurus logo, shown once', () => {
   expect(h1.querySelector('img')?.getAttribute('src')).toBe('/brand/thesaurus-logo.svg');
   expect(screen.getAllByRole('img', { name: 'Thesaurus' })).toHaveLength(1);
   expect(screen.queryByText('Thesaurus')).toBeNull(); // no second, text-only wordmark
+});
+
+// AC-95: «Entrar con contraseña» (secondary) opens the same workspace with no OTP; AC-40's code flow is unchanged.
+const withPassword = (email: string, password: string, [open, emailLabel, passwordLabel, enter] = ['Entrar con contraseña', 'Correo', 'Contraseña', 'Entrar']) => {
+  fireEvent.click(screen.getByRole('button', { name: open }));
+  fireEvent.change(screen.getByLabelText(emailLabel), { target: { value: email } });
+  fireEvent.change(screen.getByLabelText(passwordLabel), { target: { value: password } });
+  fireEvent.click(screen.getByRole('button', { name: enter }));
+};
+const refused = (message: string, extra: object) => fakeAuth.signInWithPassword.mockResolvedValueOnce({ data: {}, error: Object.assign(new Error(message), extra) });
+const primaries = () => [...document.querySelectorAll('button.primary')].map((b) => b.textContent);
+
+test('«Entrar con contraseña» is secondary; it opens an email + password form whose «Entrar» is the one primary (AC-95, R-120)', () => {
+  setup();
+  const open = screen.getByRole('button', { name: 'Entrar con contraseña' });
+  expect(open.className).not.toContain('primary');
+  expect(primaries()).toEqual(['Probar con mi propia empresa']);
+  fireEvent.click(open);
+  expect(screen.getByLabelText('Contraseña')).toBeTruthy();
+  expect(primaries()).toEqual(['Entrar']);
+  expect(screen.queryByRole('button', { name: 'Enviar código' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Volver' }));
+  expect(screen.getByRole('button', { name: 'Enviar código' })).toBeTruthy();
+});
+
+test('email + password signs in with no code, decides what is pending once, then opens Bandeja (AC-95)', async () => {
+  const fetchMock = setup();
+  withPassword(' ana@empresa.co ', 'secreta-123');
+  expect(await screen.findByText('bandeja')).toBeTruthy();
+  expect(fakeAuth.signInWithPassword).toHaveBeenCalledWith({ email: 'ana@empresa.co', password: 'secreta-123' });
+  expect(fakeAuth.signInWithOtp).not.toHaveBeenCalled();
+  expect(runCalls(fetchMock)).toHaveLength(1);
+});
+
+test.each([
+  ['wrong credentials', () => refused('Invalid login credentials', { code: 'invalid_credentials', status: 400 }), 'Correo o contraseña incorrectos.'],
+  ['a network failure', () => fakeAuth.signInWithPassword.mockRejectedValueOnce(new TypeError('Failed to fetch')), 'No pude entrar ahora; intenta de nuevo.'],
+])('%s shows its message and stays on the form (AC-95)', async (_, arrange, message) => {
+  arrange();
+  const fetchMock = setup();
+  withPassword('ana@empresa.co', 'secreta-123');
+  expect((await screen.findByRole('alert')).textContent).toBe(message);
+  expect(runCalls(fetchMock)).toHaveLength(0);
+  expect((screen.getByRole('button', { name: 'Entrar' }) as HTMLButtonElement).disabled).toBe(false);
+});
+
+test('in English: "Sign in with password" and "Wrong email or password." (AC-95)', async () => {
+  localStorage.setItem('lang', 'en');
+  refused('Invalid login credentials', { code: 'invalid_credentials', status: 400 });
+  setup();
+  withPassword('ana@empresa.co', 'secreta-123', ['Sign in with password', 'Email', 'Password', 'Sign in']);
+  expect((await screen.findByRole('alert')).textContent).toBe('Wrong email or password.');
+});
+
+test('the password has a show/hide toggle here too', () => {
+  setup();
+  fireEvent.click(screen.getByRole('button', { name: 'Entrar con contraseña' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Mostrar contraseña' }));
+  expect((screen.getByLabelText('Contraseña') as HTMLInputElement).type).toBe('text');
+});
+
+test('an unsaved trial signing in with a password for another account is warned first (AC-94, R-119)', async () => {
+  signedInAs('', { tour_seen: true });
+  Object.assign(currentSession()!.user, { id: '3f9a1c2b-0000-4000-8000-000000000000', email: '', is_anonymous: true });
+  mockApi({ 'GET /api/company': { id: 'c1', name: 'Empresa de prueba 7', approver_email: null, lang: 'es', is_demo: false, is_trial: true } });
+  renderAt(<Routes><Route path="/login" element={<Login />} /><Route path="/" element={<p>bandeja</p>} /></Routes>, { at: '/login' });
+  await screen.findByRole('button', { name: 'Volver a mi empresa de prueba' });
+  withPassword('ana@empresa.co', 'secreta-123');
+  const warning = await screen.findByRole('alertdialog');
+  expect(fakeAuth.signInWithPassword).not.toHaveBeenCalled();
+  fireEvent.click(within(warning).getByRole('button', { name: 'Salir de todos modos' }));
+  await waitFor(() => expect(fakeAuth.signInWithPassword).toHaveBeenCalledOnce());
 });

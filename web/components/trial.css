@@ -3,3 +3,13 @@
 .trial-door .error { display: grid; gap: 0.75rem; justify-items: start; }
 .leave-trial { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 1rem 1.25rem; }
 .leave-trial p { flex-basis: 100%; margin: 0; }
+.save-access { display: grid; gap: 0.75rem; max-width: 28rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 1.25rem; }
+.save-access h2 { margin: 0; font-size: var(--text-base); }
+.save-access p { margin: 0; }
+.save-access form, .save-access-actions { display: grid; gap: 0.5rem; }
+.save-access-actions { grid-auto-flow: column; justify-content: start; margin-top: 0.5rem; }
+.password { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.password input { flex: 1 1 12rem; width: auto; }
+.topbar-panel { flex-basis: 100%; }
+body:has(.topbar-panel) .tour { display: none; } /* the tour waits while the warning or «Guardar mi acceso» is open, and comes back on the same step */
+.trial-company { min-width: 11em; }

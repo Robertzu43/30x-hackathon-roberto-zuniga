@@ -424,6 +424,20 @@ describe('"Leído por IA" reading (AC-77)', () => {
     expect(by.due_date).toMatchObject({ value: '2026-12-01', snippet: null, match: null }); // not printed: never invented
   });
 
+  // AC-102, R-124: the document panel's marks are code's offsets into raw_text itself; null only when no text is stored.
+  it('doc_marks: [start, end) into raw_text for each shown value found in it, sorted; null with no stored text', async () => {
+    db = testDb(workspace(['01', '13']));
+    const text = 'De: Laura Méndez\nFactura 1050, USD 2.500, Bancolombia ahorros 0012-3456-4821';
+    const { invoice } = await json<{ invoice: Row }>(await call('POST', '/api/invoices', { source: 'email', text }));
+    type Marks = { doc_marks: Array<{ field: string; start: number; end: number }> | null };
+    const marks = async (id: unknown) => (await json<Marks>(await call('GET', `/api/invoices/${id}`))).doc_marks;
+    expect((await marks(invoice.id))!.map((m) => [m.field, text.slice(m.start, m.end)])).toEqual([
+      ['payee_name', 'Laura Méndez'], ['invoice_number', '1050'], ['currency', 'USD'], ['amount', '2.500'], ['bank_account', 'Bancolombia ahorros 0012-3456-4821']]);
+    const seeded = String(db.tables.invoices!.find((i) => i.id === uid('A-13'))!.raw_text);
+    expect((await marks(uid('A-13')))!.find((m) => m.field === 'payee_name')).toMatchObject({ start: seeded.indexOf('Pixel Lab') });
+    expect(await marks(uid('A-01'))).toBeNull(); // a seeded PDF stored no text
+  });
+
   it('the provider is the one recorded at read time, not the current model var', async () => {
     db = testDb(workspace([]));
     const { invoice } = await json<{ invoice: Row }>(await call('POST', '/api/invoices', { source: 'chat', text: 'Laura Méndez 1050' }));
@@ -854,7 +868,7 @@ describe('GET /api/screen/* and Detalle: one RPC per screen, the same data as th
     const beneficiaries = (await old('/api/beneficiaries') as Row[]).map(({ id, name }) => ({ id, name }));
     expect(beneficiaries.length).toBeGreaterThan(1);
     expect(m.body).toEqual({ invoices: await old('/api/invoices'), last_run: await old('/api/agent/last-run'), portal: await old('/api/portal-link'),
-      beneficiaries, dashboard: null });
+      beneficiaries, dashboard: expect.objectContaining({ kpis: expect.any(Object) }) }); // its values: the D39 describe below
     expect((m.body.beneficiaries as Row[])[0]).toEqual({ id: 'a0', name: 'Aaa Primero' });
     expect((m.body.invoices as Row[]).map((r) => r.company_id)).toEqual(['A', 'A', 'A']);
     expect(db.rpcs.filter((r) => r.name === 'screen_inbox').at(-1)!.args).toEqual({ p_lang: 'es' });
@@ -877,7 +891,7 @@ describe('GET /api/screen/* and Detalle: one RPC per screen, the same data as th
     await runAll();
     const m = await measure('/api/screen/period');
     expect(m).toMatchObject({ calls: 2, rpcs: ['screen_period'], queries: 0 });
-    expect(m.body).toEqual({ period: await old('/api/period'), charts: null });
+    expect(m.body).toEqual({ period: await old('/api/period'), charts: expect.objectContaining({ stack: expect.any(Object) }) });
     expect((await old('/api/screen/period?month=2026-09')).period).toEqual(await old('/api/period?month=2026-09'));
     const bad = await measure('/api/screen/period?month=octubre');
     expect([bad.res.status, bad.body, bad.rpcs]).toEqual([400, { error: 'Mes no válido: usa AAAA-MM' }, []]);
@@ -920,6 +934,183 @@ describe('GET /api/screen/* and Detalle: one RPC per screen, the same data as th
       expect([none.status, await none.json()]).toEqual([401, { error: 'No autorizado' }]);
     }
     expect((await call('GET', `/api/invoices/${uid('A-01')}`, undefined, 'tok-none')).status).toBe(404);
+  });
+});
+
+// D39 (AC-101, AC-103, AC-104, R-124): one hand-computed company. NOW is 2026-10-17 10:00 in Bogotá; the month is 2026-10 and
+// the last 30 days are 2026-09-18..2026-10-17. Every figure below is worked out by hand from these rows, not by the code.
+describe('D39 screen data on a hand-computed company (AC-101, AC-103, AC-104, R-124)', () => {
+  const conf = { payee_name: 1, amount: 1, currency: 1, due_date: 1 };
+  const LAURA = uid('A-lau');
+  const inv = (n: string, payee: string, amount: number, currency: string, received_at: string, due_date: string | null, extra: Row = {}) =>
+    ({ id: uid(`A-${n}`), company_id: 'A', source: 'chat', raw_text: null, archived: false, received_at, expected_outcome: null,
+      fields: { payee_name: payee, amount, currency, invoice_number: n, issue_date: null, due_date, concept: null, bank_account: null, confidence: conf }, ...extra });
+  const dec = (n: string, outcome: string, amount_usd: number, created_at: string, extra: Row = {}) =>
+    ({ id: `d-${n}`, invoice_id: uid(`A-${n}`), company_id: 'A', seq: 1, outcome, actor: 'agent', amount_usd, created_at, checks: [], ...extra });
+  const company = (budget = 10000) => {
+    const d = testDb({
+      policies: [{ id: 'p1', company_id: 'A', version: 1, name: 'Política general', rules: { ...SEED.rules, period_budget_usd: budget }, created_at: '2026-09-01T00:00:00Z' }],
+      beneficiaries: [{ id: LAURA, company_id: 'A', name: 'Laura Méndez', country: 'CO', currency: 'USD', archived: false },
+        { id: uid('A-nube'), company_id: 'A', name: 'Nube Sur LLC', country: 'US', archived: false },
+        { id: uid('A-for'), company_id: 'A', name: 'Forma Studio', country: 'ES', archived: false },
+        { id: uid('A-old'), company_id: 'A', name: 'Antiguo', country: 'PE', archived: true },
+        { id: uid('B-b'), company_id: 'B', name: 'De otra', country: 'CL', archived: false }],
+      invoices: [
+        inv('i1', 'Laura Méndez', 1000, 'USD', '2026-10-02T15:00:00Z', '2026-11-30', { expected_outcome: 'PAGAR' }),
+        inv('i2', 'Forma Studio', 500, 'EUR', '2026-10-17T13:00:00Z', '2026-10-20', { expected_outcome: 'PAGAR' }),
+        inv('i3', 'Nube Sur LLC', 4200, 'USD', '2026-10-05T15:00:00Z', '2026-10-22', { expected_outcome: 'ESCALAR' }),
+        inv('i4', 'Nube Sur Llc.', 9800, 'USD', '2026-10-10T15:00:00Z', '2026-10-18', { expected_outcome: 'FRENAR' }),
+        inv('i5', 'laura mendez', 300, 'USD', '2026-10-16T15:00:00Z', '2026-10-24'),
+        inv('i6', 'Laura Méndez', 2000, 'USD', '2026-09-20T15:00:00Z', null),
+        inv('i7', 'Pixel Lab', 2400, 'USD', '2026-10-12T15:00:00Z', null, { expected_outcome: 'ESCALAR' }),
+        inv('i8', 'Laura Méndez', 999, 'USD', '2026-10-15T15:00:00Z', '2026-10-19', { archived: true }),
+        inv('i9', 'Forma Studio', 100, 'EUR', '2026-10-12T16:00:00Z', null, { expected_outcome: 'FRENAR' }),
+        inv('i10', 'Proveedor Nuevo', 50, 'USD', '2026-10-03T15:00:00Z', '2026-10-16'),
+        { ...inv('b1', 'De otra', 777, 'USD', '2026-10-17T13:00:00Z', '2026-10-18'), id: uid('B-b1'), company_id: 'B' },
+      ],
+      decisions: [
+        dec('i1', 'PAGAR', 1000, '2026-10-02T15:01:00Z'), dec('i2', 'PAGAR', 540, '2026-10-17T13:01:00Z'),
+        dec('i3', 'ESCALAR', 4200, '2026-10-05T15:01:00Z', { question_es: '¿Pago a Nube Sur?', question_en: 'Pay Nube Sur?' }),
+        dec('i4', 'FRENAR', 9800, '2026-10-10T15:01:00Z'), dec('i6', 'PAGAR', 2000, '2026-09-20T15:01:00Z'),
+        dec('i7', 'ESCALAR', 2400, '2026-10-12T15:01:00Z', { question_es: '¿Pago a Pixel Lab?', question_en: 'Pay Pixel Lab?' }),
+        dec('i9', 'PAGAR', 108, '2026-10-12T16:01:00Z'), dec('i10', 'PAGAR', 50, '2026-10-03T15:01:00Z'),
+        { ...dec('b1', 'PAGAR', 777, '2026-10-17T13:01:00Z'), invoice_id: uid('B-b1'), company_id: 'B' },
+      ],
+    });
+    return d;
+  };
+  const get = async <T = Row>(path: string, token = 'tok-a') => { const r = await call('GET', path, undefined, token); return { status: r.status, body: await json<T>(r) }; };
+
+  it('inbox dashboard: every KPI and series (AC-101)', async () => {
+    db = company();
+    const { body } = await get<{ dashboard: Row }>('/api/screen/inbox?lang=es');
+    const day = (d: string, o: Partial<Record<'PAGAR' | 'FRENAR' | 'ESCALAR' | 'pending', number>> = {}) => ({ day: d, PAGAR: 0, FRENAR: 0, ESCALAR: 0, pending: 0, ...o });
+    const days = Array.from({ length: 30 }, (_, i) => addDays('2026-09-18', i));
+    const filled: Record<string, ReturnType<typeof day>> = {
+      '2026-09-20': day('2026-09-20', { PAGAR: 1 }), '2026-10-02': day('2026-10-02', { PAGAR: 1 }), '2026-10-03': day('2026-10-03', { PAGAR: 1 }),
+      '2026-10-05': day('2026-10-05', { ESCALAR: 1 }), '2026-10-10': day('2026-10-10', { FRENAR: 1 }), '2026-10-12': day('2026-10-12', { ESCALAR: 1, PAGAR: 1 }),
+      '2026-10-16': day('2026-10-16', { pending: 1 }), '2026-10-17': day('2026-10-17', { PAGAR: 1 }),
+    };
+    expect(body.dashboard).toEqual({
+      kpis: { to_pay_today_usd: 540, to_pay_today_count: 1, awaiting_count: 2, awaiting_usd: 6600, stopped_month_count: 1, autonomy_pct: 50, autonomy_n: 3, autonomy_m: 6 },
+      by_day: days.map((d) => filled[d] ?? day(d)),
+      by_currency: [{ currency: 'USD', usd: 1050 }, { currency: 'EUR', usd: 648 }],
+      by_country: [{ country: 'CO', usd: 1000 }, { country: 'ES', usd: 648 }, { country: null, usd: 50 }],
+      due_soon: [
+        { invoice_id: uid('A-i2'), payee: 'Forma Studio', amount: 500, currency: 'EUR', amount_usd: 540, due_date: '2026-10-20', outcome: 'PAGAR' },
+        { invoice_id: uid('A-i3'), payee: 'Nube Sur LLC', amount: 4200, currency: 'USD', amount_usd: 4200, due_date: '2026-10-22', outcome: 'ESCALAR' },
+        { invoice_id: uid('A-i5'), payee: 'laura mendez', amount: 300, currency: 'USD', amount_usd: null, due_date: '2026-10-24', outcome: null },
+      ],
+      due_soon_total: 3,
+      approvals: [
+        { invoice_id: uid('A-i3'), payee: 'Nube Sur LLC', amount: 4200, currency: 'USD', question_es: '¿Pago a Nube Sur?', question_en: 'Pay Nube Sur?', decided_at: '2026-10-05T15:01:00Z' },
+        { invoice_id: uid('A-i7'), payee: 'Pixel Lab', amount: 2400, currency: 'USD', question_es: '¿Pago a Pixel Lab?', question_en: 'Pay Pixel Lab?', decided_at: '2026-10-12T15:01:00Z' },
+      ],
+      approvals_total: 2,
+    });
+    const { body: period } = await get<{ period: Row }>('/api/screen/period');
+    const k = (body.dashboard as { kpis: Row }).kpis;
+    expect([k.autonomy_pct, k.autonomy_n, k.autonomy_m]).toEqual([period.period.autonomy_pct, (period.period.autonomy as Row).n, (period.period.autonomy as Row).m]); // the same number (AC-44)
+    expect(period.period.paid_usd).toBe(1050 + 648); // the currency bars sum to Pagado
+  });
+
+  it('inbox dashboard caps: 3 approvals oldest first and 5 due soon by due date, each with its total', async () => {
+    db = company();
+    for (let i = 0; i < 6; i++) {
+      db.tables.invoices!.push(inv(`x${i}`, 'Forma Studio', 10, 'USD', `2026-10-0${i + 1}T12:00:00Z`, `2026-10-${18 + (5 - i)}`));
+      db.tables.decisions!.push(dec(`x${i}`, 'ESCALAR', 10, `2026-10-0${i + 1}T12:01:00Z`));
+    }
+    const d = (await get<{ dashboard: { approvals: Row[]; approvals_total: number; due_soon: Row[]; due_soon_total: number } }>('/api/screen/inbox')).body.dashboard;
+    expect([d.approvals.map((a) => a.invoice_id), d.approvals_total]).toEqual([[uid('A-x0'), uid('A-x1'), uid('A-x2')], 8]);
+    expect([d.due_soon.map((a) => a.due_date), d.due_soon_total]).toEqual([['2026-10-18', '2026-10-19', '2026-10-20', '2026-10-20', '2026-10-21'], 9]);
+  });
+
+  it('period charts: burn-down, stack, outcomes and trend (AC-103)', async () => {
+    db = company();
+    const { body } = await get<{ period: Row; charts: Row }>('/api/screen/period');
+    const at = (from: number, to: number, v: number | null) => Array.from({ length: to - from + 1 }, (_, i) => ({ day: `2026-10-${String(from + i).padStart(2, '0')}`, available_usd: v }));
+    expect(body.charts).toEqual({
+      budget_usd: 10000,
+      burn: [...at(1, 1, 10000), ...at(2, 2, 9000), ...at(3, 4, 8950), ...at(5, 11, 4750), ...at(12, 16, 2242), ...at(17, 17, 1702), ...at(18, 31, null)],
+      stack: { paid: 1698, escalated: 6600, available: 1702, over: 0 },
+      outcomes: { PAGAR: 4, FRENAR: 1, ESCALAR: 2, pending: 1 },
+      trend: [
+        { day: '2026-10-02', autonomy_pct: 17, violations: 0 }, { day: '2026-10-05', autonomy_pct: 17, violations: 0 },
+        { day: '2026-10-10', autonomy_pct: 33, violations: 0 }, { day: '2026-10-12', autonomy_pct: 33, violations: 1 },
+        { day: '2026-10-17', autonomy_pct: 50, violations: 1 },
+      ],
+    });
+    const p = body.period;
+    expect([p.paid_usd, p.committed_usd, p.available_usd, p.autonomy_pct, p.violations]).toEqual([1698, 8298, 1702, 50, 1]); // the stack and the last points agree with AC-44
+  });
+
+  it('period charts over budget: Disponible 0 and the excess; a past month has no empty days; no budget leaves the burn empty', async () => {
+    db = company(5000);
+    const over = (await get<{ charts: { stack: Row; burn: Row[] } }>('/api/screen/period')).body.charts;
+    expect(over.stack).toEqual({ paid: 1698, escalated: 6600, available: 0, over: 3298 });
+    expect(over.burn.at(16)).toEqual({ day: '2026-10-17', available_usd: -3298 });
+    const sep = (await get<{ charts: { burn: Row[]; outcomes: Row } }>('/api/screen/period?month=2026-09')).body.charts;
+    expect([sep.burn.length, sep.burn.at(-1), sep.outcomes]).toEqual([30, { day: '2026-09-30', available_usd: 3000 }, { PAGAR: 1, FRENAR: 0, ESCALAR: 0, pending: 0 }]);
+    db.tables.policies![0]!.rules = { ...SEED.rules, period_budget_usd: undefined };
+    const none = (await get<{ charts: { budget_usd: unknown; burn: Row[]; stack: Row } }>('/api/screen/period')).body.charts;
+    expect([none.budget_usd, none.burn.every((b) => b.available_usd === null), none.stack]).toEqual([null, true, { paid: 1698, escalated: 6600, available: null, over: null }]);
+  });
+
+  it('beneficiary profile: the AC-19 name rule, totals, history in arrival order, the last 5 newest first (AC-104)', async () => {
+    db = company();
+    const { status, body } = await get(`/api/screen/beneficiary/${LAURA}`);
+    expect(status).toBe(200);
+    expect(body).toEqual({
+      beneficiary: db.tables.beneficiaries!.find((b) => b.id === LAURA),
+      totals: { paid_month_usd: 1000, paid_total_usd: 3000, invoices: 3 },
+      history: [{ received_at: '2026-09-20T15:00:00Z', amount_usd: 2000 }, { received_at: '2026-10-02T15:00:00Z', amount_usd: 1000 }],
+      last: [
+        { invoice_id: uid('A-i5'), received_at: '2026-10-16T15:00:00Z', amount: 300, currency: 'USD', outcome: null },
+        { invoice_id: uid('A-i1'), received_at: '2026-10-02T15:00:00Z', amount: 1000, currency: 'USD', outcome: 'PAGAR' },
+        { invoice_id: uid('A-i6'), received_at: '2026-09-20T15:00:00Z', amount: 2000, currency: 'USD', outcome: 'PAGAR' },
+      ],
+    });
+    const empty = (await get(`/api/screen/beneficiary/${uid('A-for')}`)).body;
+    expect(empty.totals).toEqual({ paid_month_usd: 648, paid_total_usd: 648, invoices: 2 });
+  });
+
+  it('beneficiary profile: the sparkline keeps the last 12 PAGAR, the list 5; no invoices is zeros and empty lists', async () => {
+    db = company();
+    for (let i = 0; i < 14; i++) {
+      db.tables.invoices!.push(inv(`n${i}`, 'NUBE SUR, LLC', 100 + i, 'USD', `2026-08-${String(i + 1).padStart(2, '0')}T12:00:00Z`, null));
+      db.tables.decisions!.push(dec(`n${i}`, 'PAGAR', 100 + i, `2026-08-${String(i + 1).padStart(2, '0')}T12:01:00Z`));
+    }
+    const b = (await get<{ history: Row[]; last: Row[]; totals: Row }>(`/api/screen/beneficiary/${uid('A-nube')}`)).body;
+    expect(b.history.map((h) => h.amount_usd)).toEqual([102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113]);
+    expect(b.last.map((l) => l.invoice_id)).toEqual([uid('A-i4'), uid('A-i3'), uid('A-n13'), uid('A-n12'), uid('A-n11')]);
+    expect(b.totals).toEqual({ paid_month_usd: 0, paid_total_usd: 1491, invoices: 16 });
+    db.tables.beneficiaries!.push({ id: uid('A-new'), company_id: 'A', name: 'Sin Facturas', archived: false });
+    expect((await get(`/api/screen/beneficiary/${uid('A-new')}`)).body).toMatchObject({ totals: { paid_month_usd: 0, paid_total_usd: 0, invoices: 0 }, history: [], last: [] });
+  });
+
+  it('beneficiary profile: one RPC; another company\'s id, an archived, unknown or malformed id is 404; no session 401', async () => {
+    db = company();
+    const before = db.rpcs.length;
+    await get(`/api/screen/beneficiary/${LAURA}`);
+    expect(db.rpcs.slice(before).map((r) => [r.name, r.args])).toEqual([['screen_beneficiary', { p_id: LAURA }]]);
+    for (const id of [uid('B-b'), uid('A-old'), uid('A-none')]) expect(await get(`/api/screen/beneficiary/${id}`)).toEqual({ status: 404, body: { error: 'Beneficiario no encontrado' } });
+    const n = db.rpcs.length;
+    expect(await get('/api/screen/beneficiary/not-a-uuid')).toEqual({ status: 404, body: { error: 'Beneficiario no encontrado' } });
+    expect(db.rpcs.length).toBe(n);
+    expect((await call('GET', `/api/screen/beneficiary/${LAURA}`, undefined, null)).status).toBe(401);
+    expect((await get(`/api/screen/beneficiary/${LAURA}`, 'tok-none')).status).toBe(404);
+  });
+
+  it('a company with no invoices: zero KPIs, 30 empty days, empty series and lists; null autonomy', async () => {
+    db = testDb({ policies: [{ id: 'p1', company_id: 'A', version: 1, name: 'P', rules: SEED.rules, created_at: '2026-09-01T00:00:00Z' }] });
+    const d = (await get<{ dashboard: Row & { by_day: Row[] } }>('/api/screen/inbox')).body.dashboard;
+    expect({ ...d, by_day: d.by_day.length }).toEqual({
+      kpis: { to_pay_today_usd: 0, to_pay_today_count: 0, awaiting_count: 0, awaiting_usd: 0, stopped_month_count: 0, autonomy_pct: null, autonomy_n: 0, autonomy_m: 0 },
+      by_day: 30, by_currency: [], by_country: [], due_soon: [], due_soon_total: 0, approvals: [], approvals_total: 0,
+    });
+    expect(d.by_day.every((x) => x.PAGAR === 0 && x.FRENAR === 0 && x.ESCALAR === 0 && x.pending === 0)).toBe(true);
+    const c = (await get<{ charts: Row }>('/api/screen/period')).body.charts;
+    expect([c.stack, c.outcomes, c.trend]).toEqual([{ paid: 0, escalated: 0, available: 42000, over: 0 }, { PAGAR: 0, FRENAR: 0, ESCALAR: 0, pending: 0 }, []]);
   });
 });
 

@@ -3,9 +3,11 @@ import { matchPath, Navigate, NavLink, Route, Routes, useLocation, useNavigate }
 import type { Lang } from '../src/i18n';
 import { cacheOwner, prefetch, screens, supabase } from './api';
 import { isDemoUser, RequireAuth, shouldStartTour, takeDemoTour, useSession } from './auth';
+import { useLeaveGuard } from './components/LeaveTrialWarning';
 import Logo from './components/Logo';
 import Tour from './components/Tour';
 import { useT } from './i18n';
+import { isTrial } from './trial';
 
 /**
  * The screens, in nav order. Each page is its own chunk, fetched on navigation (AC-99); `data` is its one screen request
@@ -40,6 +42,7 @@ function TopBar({ onTour }: { onTour: () => void }) {
   const { t, lang, setLang } = useT();
   const { session, demoEmail } = useSession();
   const navigate = useNavigate();
+  const { guard, save, warning, company } = useLeaveGuard(); // AC-94 (R-119): signing out an unsaved trial warns first
   // Leave first, so the session ending finds us on /login: RequireAuth's own redirect would carry this page as `from` (R-62) to the next user.
   const signOut = () => {
     navigate('/login', { replace: true });
@@ -63,11 +66,18 @@ function TopBar({ onTour }: { onTour: () => void }) {
         {session && (
           <>
             <button type="button" onClick={onTour}>{t('topbar.tour')}</button>
-            <span className="muted">{session.user.email}</span>
-            <button type="button" onClick={signOut}>{t('topbar.sign_out')}</button>
+            {isTrial(session.user) ? ( // AC-94: an anonymous user has no email to show
+              <>
+                <span className="trial-company" data-user={company ? '' : undefined}>{company ?? t('trial.company')}</span>{/* reserved width: the name arriving never reflows the bar (AC-91 CLS) */}
+                <span className="muted">{t('trial.unsaved')}</span>
+                <button type="button" onClick={save}>{t('trial.save')}</button>
+              </>
+            ) : <span className="muted">{session.user.email}</span>}
+            <button type="button" onClick={() => guard(signOut)}>{t('topbar.sign_out')}</button>
           </>
         )}
       </div>
+      {warning && <div className="topbar-panel">{warning}</div>}{/* in the bar: during the tour the bar is sticky and above its overlay */}
     </header>
   );
 }

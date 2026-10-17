@@ -40,8 +40,10 @@ h1 {
   padding: 1rem 2rem;
   border-bottom: 1px solid var(--line);
   background: var(--surface);
+  flex-wrap: wrap;
 }
-.topbar .lang { margin-left: auto; display: flex; gap: 0.25rem; }
+.topbar-actions { margin-left: auto; display: flex; align-items: center; gap: 0.75rem; font-size: var(--text-sm); }
+.topbar .lang { display: flex; gap: 0.25rem; }
 
 button {
   font: inherit;
@@ -55,9 +57,84 @@ button {
 }
 button[aria-pressed='true'] { background: var(--ink); color: #fff; border-color: var(--ink); }
 button:active { transform: scale(0.98); }
+button:disabled { opacity: 0.6; cursor: default; }
+button.primary { background: var(--ink); color: #fff; border-color: var(--ink); padding: 0.625rem 1rem; font-size: var(--text-base); }
+button.primary:hover:not(:disabled) { background: #333; }
+button.link { border: 0; background: none; padding: 0; color: var(--ink-2); text-decoration: underline; text-underline-offset: 3px; }
+button.link[aria-pressed='true'] { background: none; color: var(--ink); text-decoration: none; font-weight: 600; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+input {
+  font: inherit;
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--ink);
+}
+label { font-size: var(--text-sm); color: var(--ink-2); }
+.error { color: #9f2f2d; background: #fdebec; padding: 0.5rem 0.75rem; border-radius: 4px; margin: 0; }
 
 .screens { display: flex; gap: 1.5rem; padding: 0.75rem 2rem; border-bottom: 1px solid var(--line); font-size: var(--text-sm); }
 .screens a { color: var(--ink-2); text-decoration: none; }
 .screens a.active { color: var(--accent); }
 
 main { max-width: 64rem; margin: 0 auto; padding: 6rem 2rem; }
+
+/* Login (D21, design-taste-frontend): one very large wordmark on a flat tone field, the form beside it. */
+.login { min-height: 100svh; display: grid; grid-template-columns: 1.3fr 1fr; }
+.login-intro {
+  background: #f1efe9;
+  padding: clamp(2rem, 6vw, 6rem);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 1.5rem;
+}
+.login-intro h1 { font-size: clamp(3.5rem, 10vw, 10rem); line-height: 0.9; letter-spacing: -0.045em; margin: 0; }
+.login-lead { font-size: clamp(1.125rem, 1.7vw, 1.5rem); line-height: 1.4; max-width: 30ch; margin: 0; }
+.login-form {
+  padding: clamp(2rem, 6vw, 6rem);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2rem;
+  max-width: 34rem;
+}
+.login-form form { display: grid; gap: 0.75rem; }
+.login-form form p { margin: 0 0 0.5rem; }
+.lang-switch { display: flex; gap: 0.5rem; align-items: center; color: var(--ink-2); }
+@media (max-width: 760px) {
+  .login { grid-template-columns: 1fr; }
+  .login-intro { justify-content: flex-start; }
+}
+
+/* Tour (AC-42). The spotlight's inline style in Tour.tsx carries the only shadow in web/ (AC-53). */
+.tour { position: fixed; inset: 0; z-index: 1000; }
+.tour-waiting { background: rgba(0, 0, 0, 0.6); }
+.tour-spotlight { position: fixed; border-radius: var(--radius); pointer-events: none; }
+.tour-card {
+  position: fixed;
+  left: 50%;
+  bottom: 2rem;
+  transform: translateX(-50%);
+  width: min(32rem, calc(100vw - 2rem));
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 1.5rem 1.75rem;
+}
+.tour-card h2 { font: 400 var(--text-xl) / 1.2 var(--font-serif); letter-spacing: -0.02em; margin: 0.25rem 0 0.5rem; }
+.tour-card p { margin: 0 0 1rem; }
+.tour-card p.muted { margin: 0; font-size: var(--text-sm); }
+.tour-actions { display: flex; gap: 0.5rem; align-items: center; }
+.tour-actions span { flex: 1; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .tour-card { animation: tour-in 400ms cubic-bezier(0.16, 1, 0.3, 1); }
+  .login-intro > *, .login-form { animation: rise 600ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .login-lead { animation-delay: 80ms; }
+  .login-form { animation-delay: 160ms; }
+}
+@keyframes tour-in { from { opacity: 0; transform: translate(-50%, 12px); } }
+@keyframes rise { from { opacity: 0; transform: translateY(12px); } }

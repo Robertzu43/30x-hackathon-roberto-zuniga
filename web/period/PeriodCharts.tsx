@@ -50,7 +50,7 @@ export default function PeriodCharts({ charts: c, byBeneficiary }: { charts: Cha
         {/* last: its height grows with the number of beneficiaries, so nothing below it can jump (AC-91 CLS) */}
         <HBars title={t('periodviz.bene')} unit="USD"
           series={[{ label: t('periodviz.paid'), tone: 'ink' }, { label: t('periodviz.committed'), tone: 'pending' }]}
-          rows={byBeneficiary.map((b) => ({ label: b.beneficiary || t('period.unread'), values: [b.paid_usd, b.committed_usd] }))} />
+          rows={byBeneficiary.map((b) => ({ label: b.beneficiary || t('period.unread'), values: [b.paid_usd, b.committed_usd], user: !!b.beneficiary }))} />
       </div>
     </>
   );

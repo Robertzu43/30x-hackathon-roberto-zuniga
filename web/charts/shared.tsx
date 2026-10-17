@@ -16,8 +16,8 @@ export function useFmt() {
 export const DEFAULT_HEIGHT = 160;
 
 /** Title + unit, one-sentence summary (visible and the aria-label), a body that keeps its height, and an optional text table. */
-export function Frame({ title, unit, summary, empty, height = DEFAULT_HEIGHT, legend, table, children }: {
-  title: string; unit: string; summary: string; empty: boolean; height?: number;
+export function Frame({ title, unit, summary, summaryNode, empty, height = DEFAULT_HEIGHT, legend, table, children }: {
+  title: string; unit: string; summary: string; summaryNode?: ReactNode; empty: boolean; height?: number; // summaryNode: same sentence with names marked (R-142)
   legend?: Series[]; table?: { head: string[]; rows: string[][] }; children: ReactNode;
 }) {
   const { t } = useT();
@@ -30,7 +30,7 @@ export function Frame({ title, unit, summary, empty, height = DEFAULT_HEIGHT, le
       {!empty && legend && legend.length > 1 && (
         <ul className="chart-legend">{legend.map((s) => <li key={s.label}><i className={`chart-swatch tone-${s.tone}`} aria-hidden="true" />{s.label}</li>)}</ul>
       )}
-      {!empty && <p className="chart-summary">{summary}</p>}
+      {!empty && <p className="chart-summary">{summaryNode ?? summary}</p>}
       {!empty && table && (
         <table className="chart-sr">
           <caption>{title}</caption>

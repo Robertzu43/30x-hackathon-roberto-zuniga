@@ -275,3 +275,33 @@ describe('agentTrace when the amount guard fired (AC-14 Clarified, R-80, R-77)',
     expect(trace(i, [d, h])[5]?.text).toMatch(/el resultado es ESCALAR: parece una nota crédito, no un cobro\.$/);
   });
 });
+
+describe('"Lo que hice" step 1 names the channel (AC-86, R-90)', () => {
+  const via = (origin: 'app' | 'portal' | 'email', source: Invoice['source'] = 'pdf', sender: string | null = null) =>
+    ({ ...inv({}, source), origin, sender });
+  const first = (i: ReturnType<typeof via>, lang: 'es' | 'en' = 'es') => trace(i, [stored(run(i))], {}, lang)[0]?.text;
+
+  it('a portal PDF, image and message, in es and en', () => {
+    expect(first(via('portal'))).toBe('Leí el PDF que llegó por el portal de proveedores y encontré a Laura Méndez, 2.500 USD, factura #1042.');
+    expect(first(via('portal'), 'en')).toBe('I read the PDF that came through the vendor portal and found Laura Méndez, 2,500 USD, invoice #1042.');
+    expect(first(via('portal', 'image'))).toMatch(/^Leí la imagen que llegó por el portal de proveedores y encontré/);
+    expect(first(via('portal', 'chat'))).toMatch(/^Leí el mensaje que llegó por el portal de proveedores y encontré/);
+    expect(first(via('portal', 'chat'), 'en')).toMatch(/^I read the message that came through the vendor portal and found/);
+  });
+
+  it('an email names its sender, and a file names the email it came in', () => {
+    expect(first(via('email', 'email', 'ana@nubesur.co'))).toBe('Leí el correo que envió ana@nubesur.co y encontré a Laura Méndez, 2.500 USD, factura #1042.');
+    expect(first(via('email', 'email', 'ana@nubesur.co'), 'en')).toMatch(/^I read the email sent by ana@nubesur\.co and found Laura/);
+    expect(first(via('email', 'pdf', 'ana@nubesur.co'))).toMatch(/^Leí el PDF del correo que envió ana@nubesur\.co y encontré/);
+    expect(first(via('email', 'image', 'ana@nubesur.co'), 'en')).toMatch(/^I read the image from the email sent by ana@nubesur\.co and found/);
+  });
+
+  it('an app invoice, or one without origin, reads as before', () => {
+    expect(first(via('app'))).toBe('Leí el PDF y encontré a Laura Méndez, 2.500 USD, factura #1042.');
+  });
+
+  it('the unread path names the channel too', () => {
+    const i = { ...via('portal'), fields: { ...LAURA, payee_name: null, amount: null, currency: null, invoice_number: null, confidence: {}, read_error: 'lector_no_disponible' as const } };
+    expect(first(i)).toBe('Intenté leer el PDF que llegó por el portal de proveedores, pero el lector de facturas no estaba disponible; no inventé ningún dato.');
+  });
+});

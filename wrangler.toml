@@ -10,6 +10,10 @@ RESEND_FROM = "onboarding@resend.dev"
 SUPABASE_URL = "https://dhjumvswohajnusdifim.supabase.co"  # public
 SUPABASE_ANON_KEY = "sb_publishable_qKF4nId7_l5TJ78gSEAgWQ_bfZiFx4K"     # public by design; RLS protects data
 WORKERS_AI_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"  # product LLM; change here, not in code
+WORKERS_AI_VISION_MODEL = "@cf/meta/llama-3.2-11b-vision-instruct"
+SES_REGION = "us-east-2"
+JEV_ENABLED = "false"
+DEMO_EMAIL = "demo@andina-labs.example"
 
 [ai]
 binding = "AI"  # Workers AI: no key, authorised by the account
@@ -23,4 +27,4 @@ run_worker_first = ["/api/*"]
 binding = "KV"
 id = "715b34210bab409e81ef707e105f0334"
 
-# Secrets (wrangler secret put): RESEND_API_KEY, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_POOLER_URL. Optional: TYPESAFE_API_KEY, ANTHROPIC_API_KEY
+# Secrets (wrangler secret put): AWS_SES_ACCESS_KEY_ID, AWS_SES_SECRET_ACCESS_KEY, SES_FROM_EMAIL, SUPABASE_SERVICE_ROLE_KEY, APPROVAL_HMAC_SECRET. Legacy: RESEND_API_KEY, SUPABASE_POOLER_URL. Optional: TYPESAFE_API_KEY, ANTHROPIC_API_KEY

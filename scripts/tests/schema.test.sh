@@ -77,6 +77,14 @@ echo "$trial" | grep -qiE 'grant update[^;]*is_trial' && fail "is_trial in a mem
 U='User'   # split so this file does not match its own search
 grep -rnIE "delete$U|delete[[:space:]]+from[[:space:]]+auth\.users" supabase scripts src web e2e portal 2>/dev/null && fail "an Auth user deletion exists (AC-96, CLAUDE.md)"
 
+# Task 42 (AC-98, R-122): one read function per screen; none is security definer
+SCREEN=supabase/migrations/20261017001000_screen_functions.sql
+[ -f "$SCREEN" ] || fail "missing $SCREEN"
+screen=$(sed 's/--.*$//' "$SCREEN")
+echo "$screen" | grep -qi 'security definer' && fail "a screen function is security definer (AC-98, R-122)"
+for f in screen_company screen_inbox screen_period screen_beneficiaries screen_policy screen_detail screen_demo_overview; do
+  echo "$screen" | grep -q "create function public\.$f(" || fail "no function public.$f (AC-98)"; done
+
 # ---- Part 2: execute against a real Postgres ----
 INITDB=$(command -v initdb || ls /usr/lib/postgresql/*/bin/initdb 2>/dev/null | sort -V | tail -1)
 [ -x "$INITDB" ] || { echo "schema.test: greps passed; no local Postgres, SQL not executed"; exit 0; }
@@ -298,4 +306,40 @@ got=$(for i in $(seq 1 31); do take "qa:ingest:t39"; done | tail -2 | tr '\n' ' 
 [ "$(take "ingest:$T1")" = '{"remaining": 29}' ] || fail "ingest:<user id> key not counted apart (AC-96)"
 expect svc "select n from public.ai_usage where key = 'global' and day = (now() at time zone 'utc')::date" '^1$' "ingests counted on the question cap (AC-96)"
 expect svc "select public.take_question('ingest')" 'BAD_KEY' "a bare ingest key"
+# AC-98, R-122: every screen_* function is security invoker, stable (read-only), executable by authenticated only; each
+# finds the company from auth.uid()'s membership, so RLS and the member's own company decide every row
+scr="pronamespace = 'public'::regnamespace and proname like 'screen\\_%'"
+[ "$(sql -c "select count(*) from pg_proc where $scr")" = 7 ] || fail "expected 7 screen_* functions (AC-98)"
+bad=$(sql -c "select string_agg(proname, ',') from pg_proc where $scr and (prosecdef or provolatile <> 's' or has_function_privilege('anon', oid, 'execute')
+  or has_function_privilege('service_role', oid, 'execute') or not has_function_privilege('authenticated', oid, 'execute'))")
+[ -z "$bad" ] || fail "not security invoker, stable and authenticated-only: $bad (AC-98, R-122)"
+out=$(printf "set role anon;\nselect public.screen_inbox('es');\n" | sql -f -); echo "$out" | grep -q 'permission denied' || fail "anon executes screen_inbox (got: $out)"
+expect "$UA" "select count(*) from jsonb_array_elements(public.screen_inbox('es') -> 'invoices') e where e ->> 'company_id' = '$CA'" "^$(as "$UA" "select count(*) from public.invoice_current where company_id = '$CA'")$" "screen_inbox misses A's invoices (AC-98)"
+expect "$UA" "select count(*) from jsonb_array_elements(public.screen_inbox('es') -> 'invoices') e where e ->> 'company_id' <> '$CA'" '^0$' "screen_inbox shows another company's rows (AC-98)"
+expect "$UB" "select count(*) from jsonb_array_elements(public.screen_inbox('es') -> 'invoices') e where e ->> 'company_id' = '$CA'" '^0$' "B's screen_inbox shows A's rows (AC-04, AC-98)"
+expect "$UA" "select (public.screen_inbox('en') -> 'invoices' -> 0) ? 'headline'" '^t$' "screen_inbox rows lack the headline (AC-98)"
+expect "$UA" "select public.screen_inbox('es') ->> 'portal_slug' = portal_slug from public.companies where id = '$CA'" '^t$' "screen_inbox portal_slug (AC-98)"
+expect "$UA" "select (public.screen_inbox('es') -> 'last_run' ->> 'at')::timestamptz = max(created_at) from public.agent_runs" '^t$' "screen_inbox last_run is not A's or the cron's newest (AC-63, AC-98)"
+expect "$UA" "select public.screen_detail('${I}1') -> 'invoice' ->> 'id'" "^${I}1$" "screen_detail of an own invoice (AC-98)"
+expect "$UA" "select jsonb_array_length(public.screen_detail('${I}1') -> 'decisions')" '^2$' "screen_detail decisions (AC-98)"
+expect "$UB" "select public.screen_detail('${I}1') is null" '^t$' "B reads A's detail (AC-04, AC-98)"
+expect "$UA" "select jsonb_array_length(public.screen_period() -> 'current') = (select count(*) from public.invoice_current where company_id = '$CA')" '^t$' "screen_period rows (AC-98)"
+expect "$UA" "select count(*) from jsonb_array_elements(public.screen_period() -> 'decisions') e where e ->> 'invoice_id' not like 'a0000000-%' and e ->> 'invoice_id' not in (select id::text from public.invoices where company_id = '$CA')" '^0$' "screen_period decisions of another company (AC-98)"
+expect "$UA" "select jsonb_array_length(public.screen_beneficiaries() -> 'beneficiaries') = (select count(*) from public.beneficiaries where company_id = '$CA' and not archived)" '^t$' "screen_beneficiaries (AC-98)"
+expect "$UA" "select (public.screen_policy() -> 'company' ->> 'id') || '|' || jsonb_array_length(public.screen_policy() -> 'versions')" "^$CA\\|$(as "$UA" "select count(*) from public.policies where company_id = '$CA'")$" "screen_policy (AC-98)"
+expect "$UA" "select jsonb_typeof(public.screen_policy() -> 'fx')" '^array$' "screen_policy fx (AC-98)"
+expect "$UA" "select public.screen_demo_overview('es') is null" '^t$' "screen_demo_overview answers a non-demo company (AC-45)"
+expect "$UB" "select jsonb_array_length(public.screen_demo_overview('es') -> 'invoices') > 0 and public.screen_demo_overview('es') ? 'period'" '^t$' "screen_demo_overview of the demo company (AC-45, AC-98)"
+NM=66666666-6666-4666-8666-666666666666   # signed in, member of no company
+expect "$NM" "select coalesce(public.screen_inbox('es'), public.screen_period(), public.screen_beneficiaries(), public.screen_policy(), public.screen_detail('${I}1'), public.screen_demo_overview('es')) is null" '^t$' "a non-member reads a screen (AC-98)"
+# R-132: screen_inbox's top-level beneficiaries is GET /api/beneficiaries' directory as { id, name }: non-archived, ordered by
+# name, the caller's company only (RLS), never null
+sql -c "insert into public.beneficiaries (company_id, name, archived) values ('$CA', 'Zz Archivado', true)" >/dev/null || fail "archived beneficiary fixture"
+ben="public.screen_inbox('es') -> 'beneficiaries'"
+expect "$UA" "select $ben = (select jsonb_agg(jsonb_build_object('id', b.id, 'name', b.name) order by b.name) from public.beneficiaries b where b.company_id = '$CA' and not b.archived)" '^t$' "screen_inbox beneficiaries are not A's non-archived directory by name (R-132)"
+expect "$UA" "select count(*) from jsonb_array_elements($ben) e where e ->> 'name' = 'Zz Archivado' or (select array_agg(k order by k) from jsonb_object_keys(e) k) <> '{id,name}'" '^0$' "screen_inbox beneficiaries carry an archived row or a field beyond id and name (R-132)"
+expect "$UA" "select jsonb_array_length($ben) > 1" '^t$' "screen_inbox beneficiaries empty for A (R-132)"
+expect "$UB" "select count(*) from jsonb_array_elements($ben) e where (e ->> 'id')::uuid in (select id from public.beneficiaries where company_id = '$CA')" '^0$' "B's screen_inbox shows A's beneficiaries (AC-04, R-132)"
+out=$(printf "begin;\nupdate public.beneficiaries set archived = true where company_id = '$CA';\nset role authenticated;\nset request.jwt.claim.sub = '$UA';\nselect $ben;\nrollback;\n" | sql -f -)
+[ "$out" = '[]' ] || fail "screen_inbox beneficiaries of a company with no directory is not [] (got: $out) (R-132)"
 echo "schema.test: greps and live Postgres checks passed"

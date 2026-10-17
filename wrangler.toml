@@ -20,6 +20,10 @@ PORTAL_URL = "https://facturas.30x-hackathon-roberto-zuniga.workers.dev"  # the 
 INBOUND_EMAIL_DOMAIN = ""  # email intake (AC-87): facturas+<slug>@<this domain>; set it after Email Routing sends the catch-all here (AC-88)
 FX_PROVIDER = "yahoo"  # first market-rate provider: "yahoo" or "er-api"; the other is the fallback (AC-73)
 
+# D40, AC-99: run the Worker near its back end (Supabase), so each screen's one RPC is a short round trip.
+[placement]
+mode = "smart"
+
 [triggers]
 crons = ["*/5 * * * *", "0 11 * * *"]  # the agent decides pending invoices with nobody logged in (D23, AC-62); daily FX at 06:00 Bogotá (AC-73)
 

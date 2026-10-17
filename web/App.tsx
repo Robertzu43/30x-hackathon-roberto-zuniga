@@ -46,7 +46,7 @@ function TopBar({ onTour }: { onTour: () => void }) {
             <button type="button" onClick={onTour}>{t('topbar.tour')}</button>
             {isTrial(session.user) ? ( // AC-94: an anonymous user has no email to show
               <>
-                <span className="trial-company">{company ?? t('trial.company')}</span>{/* reserved width: the name arriving never reflows the bar (AC-91 CLS) */}
+                <span className="trial-company" data-user={company ? '' : undefined}>{company ?? t('trial.company')}</span>{/* reserved width: the name arriving never reflows the bar (AC-91 CLS) */}
                 <span className="muted">{t('trial.unsaved')}</span>
                 <button type="button" onClick={save}>{t('trial.save')}</button>
               </>

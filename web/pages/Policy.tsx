@@ -272,7 +272,7 @@ export default function Policy() {
             <ol className="versions" aria-labelledby="versions-h">
               {(allVersions ? versions : versions.slice(0, 10)).map((v) => (
                 <li key={v.id}>
-                  <strong>{v.name}</strong>
+                  <strong data-user="">{v.name}</strong>
                   <span className="mono">{t('policy.version', { n: v.version })}</span>
                   <span className="muted">{date(v.created_at)}</span>
                 </li>

@@ -1,6 +1,7 @@
 // «Leído por IA» fields (AC-77, R-88, R-107): each value the AI read, the model's confidence, and the line of the document where code
 // found the value (src/lib/snippet.ts), with the value highlighted. The snippet never comes from the model.
 import { useT } from '../i18n';
+import { printedAsRead } from './User';
 import './ai.css';
 
 export type ReadField = {
@@ -32,9 +33,9 @@ export default function ReadingPanel({ fields, show }: { fields: ReadField[]; sh
             return (
               <div key={f.name}>
                 <dt>{t(`detail.field.${f.name}`)}</dt>
-                <dd>{show(f.name, f.value!)}</dd>
+                <dd data-user={printedAsRead(f.name, f.value!) ? '' : undefined}>{show(f.name, f.value!)}</dd>
                 {typeof c === 'number' && c >= 0 && c <= 1 && <dd className="muted">{t('detail.ai_confidence', { pct: pct(c) })}</dd>}
-                <dd className="reading-snippet">
+                <dd className="reading-snippet" data-user={f.snippet ? '' : undefined}>
                   {!f.snippet ? t('detail.snippet_none') : s ? (
                     <>{f.snippet.slice(0, s[0])}<mark>{f.snippet.slice(s[0], s[1])}</mark>{f.snippet.slice(s[1])}</>
                   ) : f.snippet}

@@ -4,6 +4,7 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useT } from '../i18n';
+import { tu } from './User';
 import './new-invoice.css';
 
 const TABS = ['file', 'email', 'chat'] as const;
@@ -59,7 +60,7 @@ export default function NewInvoice() {
           <label className="file-pick">
             <input type="file" aria-label={t('inbox.new.file')} accept="application/pdf,image/png,image/jpeg" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
             <span className="file-button" aria-hidden="true">{t('inbox.new.choose')}</span>
-            <span className="muted">{file ? t('inbox.new.chosen', { name: file.name }) : t('inbox.new.none_chosen')}</span>
+            <span className="muted">{file ? tu(t('inbox.new.chosen'), { name: file.name }) : t('inbox.new.none_chosen')}</span>
           </label>
         </div>
       ) : (

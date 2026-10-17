@@ -52,6 +52,7 @@ test('the trial top bar shows the company, «Acceso sin guardar» and «Guardar 
   renderAt(<App />);
   await waitFor(() => expect(topBar().textContent).toContain('Empresa de prueba 7'));
   expect(topBar().textContent).toContain('Acceso sin guardar');
+  expect(within(topBar()).getByText('Empresa de prueba 7').hasAttribute('data-user')).toBe(true); // R-131: the name is data, not copy
   expect(within(topBar()).getByRole('button', { name: 'Guardar mi acceso' })).toBeTruthy();
   expect(topBar().textContent).not.toMatch(/null|undefined/);
   for (const span of topBar().querySelectorAll('span')) expect(span.textContent!.trim()).not.toBe('');

@@ -1508,7 +1508,16 @@ describe('budgeted, resumable runs over HTTP (AC-70, R-56, R-57, R-59, R-60)', (
     expect(out.unread_pending).toBe(1);
     expect(out.will_pay).toBe(0);
     expect(out.would_change[1]).toMatchObject({ payee: null, amount: null, currency: null, reason: null });
-    expect(out.unchanged).toBe(1); // A-01 moved; the unread A-04 stays pending, so it counts as unchanged (and is still listed, R-68)
+    expect(out.unchanged).toBe(0); // A-01 moved and the unread A-04 is a listed row: every listed row changes, none is also counted unchanged (AC-105, R-61)
+  });
+
+  it('AC-105, R-61: an unread invoice is a listed row and an ESCALAR that stays the same is the only one counted unchanged', async () => {
+    db = testDb(workspace(['04', '11']));
+    db.tables.invoices!.find((i) => i.id === uid('A-04'))!.fields = null;
+    db.tables.decisions!.push({ id: 'd11', invoice_id: uid('A-11'), company_id: 'A', seq: 1, outcome: 'ESCALAR', actor: 'agent', amount_usd: 4200, checks: [] });
+    const out = await json<{ would_change: Array<{ invoice_id: string; to: unknown }>; unchanged: number }>(await call('PUT', '/api/policy', { rules: SEED.rules }));
+    expect(out.would_change.map((w) => [w.invoice_id, w.to])).toEqual([[uid('A-04'), null]]);
+    expect(out.unchanged).toBe(1);
   });
 });
 

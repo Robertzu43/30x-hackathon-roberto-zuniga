@@ -84,8 +84,8 @@ export const policy = memberRoutes()
     }
     // The banner's "el agente pagará <n> factura(s)" counts pending rows too (AC-31, R-68).
     const will_pay = would_change.filter((w) => w.to === 'PAGAR').length;
-    // Evaluated invoices that keep their outcome; an unread one stays pending, so it counts here too (AC-105).
-    const unchanged = evaluated.length - would_change.filter((w) => w.to !== null).length;
+    // Evaluated invoices that keep their outcome; every listed row changes (an unread pending one included), so none is counted twice (AC-105, R-61).
+    const unchanged = evaluated.length - would_change.length;
     return c.json({ policy: saved, would_change, will_pay, unread_pending, unchanged });
   })
 

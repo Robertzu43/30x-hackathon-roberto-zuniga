@@ -9,6 +9,15 @@ const date = (lang: Lang, iso: string, o: Intl.DateTimeFormatOptions) => {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? iso : new Intl.DateTimeFormat(locale(lang), o).format(d);
 };
+// "17 oct 2026 10:00" / "Oct 17, 2026 10:00" in Bogotá (AC-74), built from parts: es-CO alone prints "17 de oct de 2026".
+const dateTime = (lang: Lang, iso: string) => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const p = Object.fromEntries(new Intl.DateTimeFormat(locale(lang), { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit',
+    minute: '2-digit', hourCycle: 'h23', timeZone: 'America/Bogota' }).formatToParts(d).map((x) => [x.type, x.value]));
+  const month = String(p.month).replace(/\.$/, '');
+  return lang === 'es' ? `${p.day} ${month} ${p.year} ${p.hour}:${p.minute}` : `${month} ${p.day}, ${p.year} ${p.hour}:${p.minute}`;
+};
 
 // Whole amounts without decimals (2.500), others with two (367,50).
 export const money = (n: number, lang: Lang) =>
@@ -59,6 +68,18 @@ export const asRead = (c: Check) => {
   return c.id === 'beneficiario_cuenta' && c.verdict === 'no_cumple' && (!a || !b || a === b) ? '_text' : '';
 };
 
+// AC-74: a Moneda check decided after Task 21 records rate_source; with no usable rate its motive, fix and question are
+// «no tengo una tasa de cambio vigente». Older checks have no rate_source and keep their texts (R-29). '' or '_rate'.
+export const noRate = (c: Check) =>
+  c.id === 'moneda' && c.verdict === 'no_verificado' && 'rate_source' in c.values && c.values.rate === null && !!c.values.currency ? '_rate' : '';
+// The Moneda line: market, pinned, USD or a pre-Task-21 policy rate; with no usable rate, a stale row or none.
+const monedaVariant = (c: Check) => noRate(c) ? (c.values.rate_fetched_at ? '_stale' : '_missing')
+  : c.verdict !== 'cumple' ? '' : c.values.currency === 'USD' ? '_usd' : c.values.rate_source === 'policy' ? '_pin' : c.values.rate_source ? '_market' : '';
+// Without a rate there is no USD amount, so the USD checks are unverifiable only because of it: the rate is the reason.
+const USD_CHECKS = ['acuerdo', 'limite_pago', 'umbral_aprobacion', 'presupuesto_periodo', 'saldo_cuenta'];
+const consequence = (checks: Check[]) => (c: Check) =>
+  c.verdict === 'no_verificado' && USD_CHECKS.includes(c.id) && checks.some((m) => noRate(m));
+
 export function agreementText(values: Check['values'], lang: Lang): string {
   const type = values.agreement_type;
   const key = `agreement.${type}`;
@@ -70,7 +91,8 @@ function vars(values: Check['values'], lang: Lang): Record<string, string | null
   const out: Record<string, string | null> = {};
   for (const [k, v] of Object.entries(values)) {
     out[k] = v === null ? null
-      : k === 'rate' ? new Intl.NumberFormat(locale(lang), { maximumFractionDigits: 10 }).format(Number(v))
+      : k === 'rate' ? new Intl.NumberFormat(locale(lang), { maximumSignificantDigits: 15 }).format(Number(v)) // every stored digit (AC-74)
+      : k === 'rate_fetched_at' ? dateTime(lang, String(v))
       : ['due_date', 'today', 'valid_until'].includes(k) ? date(lang, `${v}T00:00:00Z`, { dateStyle: 'long', timeZone: 'UTC' })
       : ['invoice_month', 'current_month'].includes(k) ? date(lang, `${v}-01T00:00:00Z`, { month: 'long', year: 'numeric', timeZone: 'UTC' })
       : typeof v === 'number' ? money(v, lang) : v;
@@ -92,8 +114,7 @@ const checkVars = (c: Check, lang: Lang, receivedAt: string, policyVersion?: num
 // "Límite por pago: 2.500 USD ≤ 5.000 USD → cumple"; overridden: "… → no cumple · aprobado por <correo> <canal>" (R-22).
 export function explainCheck(check: Check, lang: Lang, receivedAt: string, policyVersion?: number | null): string {
   const v = checkVars(check, lang, receivedAt, policyVersion);
-  const variant = check.verdict !== 'cumple' ? asRead(check)
-    : check.id === 'moneda' && check.values.currency === 'USD' ? '_usd'
+  const variant = check.id === 'moneda' ? monedaVariant(check) : check.verdict !== 'cumple' ? asRead(check)
     : check.id === 'beneficiario_permitido' && !check.values.directory_name ? '_open' : '';
   const verdict = t(lang, `verdict.${check.verdict}`);
   const shown = check.overridden
@@ -103,16 +124,17 @@ export function explainCheck(check: Check, lang: Lang, receivedAt: string, polic
   return `${fill(lang, `check.${check.id}.name`, v)}: ${body}`;
 }
 
-// Checks still blocking the payment: not passing and not unlocked by a person. A FRENAR trigger comes first.
-const blocking = (checks: Check[]) => checks.filter((c) => c.verdict !== 'cumple' && !c.overridden)
-  .sort((a, b) => Number(outcomeOf([b]) === 'FRENAR') - Number(outcomeOf([a]) === 'FRENAR'));
+// Checks still blocking the payment: not passing and not unlocked by a person. A FRENAR trigger comes first, then a
+// missing rate (AC-74), without the USD checks it alone left unverifiable.
+export const blocking = (checks: Check[]) => checks.filter((c) => c.verdict !== 'cumple' && !c.overridden && !consequence(checks)(c))
+  .sort((a, b) => Number(outcomeOf([b]) === 'FRENAR') - Number(outcomeOf([a]) === 'FRENAR') || Number(!!noRate(b)) - Number(!!noRate(a)));
 
 export const motives = (checks: Check[], lang: Lang, receivedAt: string) => readReason(checks) ? [reasonText(checks, 'motive', lang)!] : blocking(checks).map((c) =>
-  c.id === 'lectura' && illegible(c) ? t(lang, 'motive.lectura.illegible') : fill(lang, `motive.${c.id}.${c.verdict}${asRead(c)}`, checkVars(c, lang, receivedAt)));
+  c.id === 'lectura' && illegible(c) ? t(lang, 'motive.lectura.illegible') : fill(lang, `motive.${c.id}.${c.verdict}${asRead(c)}${noRate(c)}`, checkVars(c, lang, receivedAt)));
 
 // "Qué tendría que pasar para pagarla": one line per blocking check. Spanish lines start with "Que " (R-27).
 export const whatWouldPay = (decision: Pick<Decision, 'checks'>, lang: Lang): string[] =>
-  blocking(decision.checks).map((c) => reasonText([c], 'fix', lang) ?? fill(lang, `fix.${c.id}.${c.verdict}`, vars(c.values, lang)));
+  blocking(decision.checks).map((c) => reasonText([c], 'fix', lang) ?? fill(lang, `fix.${c.id}.${c.verdict}${noRate(c)}`, vars(c.values, lang)));
 
 // "ESCALAR · 4.200 USD a Nube Sur LLC: supera el umbral de aprobación de 2.500 USD".
 export function headline(decision: Pick<Decision, 'outcome' | 'checks'>, invoice: Invoice, beneficiary: Beneficiary | null, lang: Lang): string {

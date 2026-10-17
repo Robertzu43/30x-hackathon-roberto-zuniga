@@ -4,7 +4,8 @@ import { agreementText, asRead, fieldList, fill, list, money, motives, readReaso
 import { validFields } from '../engine/checks';
 import { outcomeOf } from '../engine/decide';
 import type { Check, CheckId, Decision, Invoice, InvoiceFields, Outcome } from '../engine/types';
-import { t, type Lang } from '../i18n';
+import { format, t, type Lang } from '../i18n';
+import { en as portalEn, es as portalEs } from '../i18n/features/portal';
 
 // One row of `decisions` (also the decision columns of `invoice_current`).
 export interface StoredDecision {
@@ -51,8 +52,11 @@ export function recordedFields(fields: InvoiceFields | null, checks: Check[] | n
 
 export interface TraceStep { stage: 'lee' | 'consulta' | 'decide' | 'actua'; text: string }
 
+// The channel it came through (AC-86): invoices.origin and sender, as invoice_current carries them.
+export type TraceInvoice = Invoice & { origin?: 'app' | 'portal' | 'email'; sender?: string | null };
+
 export interface TraceArgs {
-  invoice: Invoice;
+  invoice: TraceInvoice;
   decisions: StoredDecision[]; // timeline, oldest first
   isDemo: boolean;
   notification: { email_sent: boolean; sent_to: string } | null; // the approval_tokens row of the escalation, if any
@@ -60,8 +64,20 @@ export interface TraceArgs {
 
 const READ = ['payee_name', 'amount', 'currency', 'invoice_number'] as const;
 
-function read({ source, fields }: Invoice, checks: Check[], lang: Lang): string {
+const portal = { es: portalEs, en: portalEn };
+
+// "el PDF", or with its channel: "el PDF que llegó por el portal de proveedores", "el correo que envió <remitente>".
+function sourceText({ source, origin, sender }: TraceInvoice, lang: Lang): string {
   const src = t(lang, `trace.source.${source}`);
+  const p = portal[lang];
+  if (origin === 'portal') return format(p, 'trace.via.portal', { source: source === 'chat' ? p['trace.source.message']! : src });
+  if (origin !== 'email') return src;
+  return format(p, source === 'pdf' || source === 'image' ? 'trace.via.email_file' : 'trace.via.email', { source: src, sender: sender ?? t(lang, 'value.unknown') });
+}
+
+function read(invoice: TraceInvoice, checks: Check[], lang: Lang): string {
+  const src = sourceText(invoice, lang);
+  const { fields } = invoice;
   const f = validFields(fields); // R-71: what the engine could not trust was not read
   const reason = reasonText(checks, 'trace.read', lang, { source: src }, f); // R-75, R-80: why no amount was taken
   if (reason) return reason;

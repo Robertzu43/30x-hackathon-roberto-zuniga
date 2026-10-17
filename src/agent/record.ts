@@ -1,13 +1,16 @@
 // The record writer (R-32, AC-38, AC-68): the only code that writes `decisions` (through insert_decision),
-// `approval_tokens`, `approval_uses` and `agent_runs`. Members cannot write them, so it uses the service-role client; to stay inside the
+// `approval_tokens`, `approval_uses`, `agent_runs` and `fx_rates` (rows from src/lib/fx.ts only, R-85.5). Members cannot write them, so it uses the service-role client; to stay inside the
 // caller's authority it re-reads the invoice before each invoice write and refuses another company's invoice.
 import type { Outcome } from '../engine/types';
 import type { Env } from '../env';
 import { adminClient } from '../lib/admin';
+import type { Rate } from '../lib/fx';
 import { must, type Budget } from '../lib/supabase';
 import type { StoredDecision } from './trace';
 
 export type Trigger = 'cron' | 'ingest' | 'manual' | 'login' | 'reevaluate' | 'reset';
+// The public channel that started an 'ingest' run (AC-63 Clarified); absent for every other run.
+export type Via = 'portal' | 'email';
 export type Counts = Record<Outcome, number>;
 // insert_decision's p_decision; the database sets id, seq, company_id and created_at.
 export type DecisionInput = Pick<StoredDecision, 'outcome' | 'actor' | 'checks' | 'amount_usd' | 'payment' | 'policy_version'
@@ -42,9 +45,20 @@ export function recorder(env: Env, companyId: string | null, budget?: Budget) {
       const { error } = await admin.from('approval_uses').insert({ token_hash: tokenHash, decision_id: decisionId, company_id: companyId });
       if (error) throw new Error(error.code === '23505' ? 'TOKEN_USED' : error.message);
     },
-    async run(trigger: Trigger, decided: Counts | null, errors: number): Promise<void> {
-      must(await admin.from('agent_runs').insert({ company_id: companyId, trigger, decided, errors }));
+    async run(trigger: Trigger, decided: Counts | null, errors: number, via?: Via): Promise<void> {
+      must(await admin.from('agent_runs').insert({ company_id: companyId, trigger, decided, errors, ...(via && { via }) }));
+    },
+    // Market rates (AC-73, AC-38 (a)): only rows fetchChain built from a provider response, never request data. Shared by
+    // every company, so no ownership check; upserted per (day, currency), never deleted.
+    async fxRates(rows: Rate[]): Promise<void> {
+      if (rows.length) must(await admin.from('fx_rates').upsert(rows, { onConflict: 'day,currency' }));
     },
   };
 }
 export type Recorder = ReturnType<typeof recorder>;
+
+// AC-67, R-87: the «Pregúntale a Thesaurus» quota, its only write (AC-38). take_question (security definer, service role
+// only) counts the key and the deployment for the UTC day before the model call.
+export type Quota = { remaining: number } | { reason: 'user_cap' | 'ai_quota' };
+export const takeQuestion = async (env: Env, key: string, budget?: Budget): Promise<Quota> =>
+  must(await adminClient(env, budget).rpc('take_question', { p_key: key }));

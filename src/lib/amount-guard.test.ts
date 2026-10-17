@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 // R-80 (AC-14 Clarified): the amount guard over the document text. Fakes only, no model (R-76).
 import { describe, expect, it } from 'vitest';
-import sql from '../../supabase/migrations/20261017000300_seed_andina.sql?raw';
+import sql from '../../supabase/migrations/20261017000600_fx_rates.sql?raw'; // the current seed and its documents (AC-75)
 import type { Env } from '../env';
 import { amountGuard } from './amount-guard';
 import { documentToText } from './llm';

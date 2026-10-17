@@ -1,6 +1,6 @@
 // Política and the company section (AC-30, AC-31, AC-32; R-14, R-31, R-34, R-41).
 import { z } from 'zod';
-import { decide, directorio, findBeneficiary, periodFrom, previousFrom } from '../agent/tools';
+import { decide, directorio, findBeneficiary, periodFrom, previousFrom, tasas } from '../agent/tools';
 import { recordedFields } from '../agent/trace';
 import { headline } from '../engine/explain';
 import type { Check, Invoice, Outcome, PolicyRules } from '../engine/types';
@@ -45,9 +45,10 @@ export const policy = memberRoutes()
     if (error?.code === '23505') return c.json({ error: RACE }, 409); // unique (company_id, version): a concurrent save won
     if (error) throw new Error(error.message);
 
-    const [rows, directory] = await Promise.all([
+    const [rows, directory, market] = await Promise.all([
       db.from('invoice_current').select('*').eq('company_id', companyId).order('received_at').order('id').then(must) as Promise<Current[]>,
       directorio(db, companyId),
+      tasas(db), // AC-74, R-85.6: the stored market rates, as "Reevaluar" uses them; the preview never fetches
     ]);
     // A decided invoice stored without fields is simulated from its decision's reading; only a never-decided one is unread.
     const ids = rows.filter((r) => !r.fields && r.decision_id).map((r) => r.decision_id);
@@ -67,7 +68,7 @@ export const policy = memberRoutes()
       const invoice = { ...row, fields: row.fields } as Invoice;
       const beneficiary = findBeneficiary(invoice.fields.payee_name, directory);
       const period = { ...periodFrom(rows, invoice), previous: previousFrom(rows, invoice, window, directory) };
-      const next = decide(invoice, beneficiary, rules, period, now);
+      const next = decide(invoice, beneficiary, rules, period, now, market);
       const from = row.outcome;
       Object.assign(row, { outcome: next.outcome, amount_usd: next.amount_usd });
       if (from !== next.outcome) would_change.push({ invoice_id: row.id, headline: headline(next, invoice, beneficiary, lang), from, to: next.outcome });

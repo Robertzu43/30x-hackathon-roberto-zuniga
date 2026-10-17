@@ -217,3 +217,23 @@ test('the /demo, Login and vendor portal styles use only approved palette colour
   const off = Object.entries(files).flatMap(([f, text]) => (text.match(/#[0-9a-f]{3}(?:[0-9a-f]{3})?\b/gi) ?? []).map(long).filter((h) => !PALETTE.includes(h)).map((h) => `${f} ${h}`));
   expect(off).toEqual([]);
 });
+
+// AC-99 (R-109): while the overview loads, the rows and the figures are drawn in their loaded markup with placeholders, hidden.
+test('while loading, the inbox rows and the period figures are a skeleton with the loaded markup', () => {
+  mockApi({ 'GET /api/demo/overview': () => new Promise(() => {}) });
+  const { container } = app();
+  for (const sel of ['ul.demo-rows.skeleton', '.demo-period dl.skeleton']) {
+    const el = container.querySelector(sel) as HTMLElement;
+    expect(el.getAttribute('aria-hidden')).toBe('true');
+    expect(el.hasAttribute('inert')).toBe(true);
+  }
+  expect(container.querySelectorAll('ul.demo-rows.skeleton li').length).toBeGreaterThan(0);
+  expect(screen.getByText('Cargando la bandeja…').getAttribute('role')).toBe('status');
+});
+
+test('the skeleton is gone once the overview arrives', async () => {
+  mockApi({ 'GET /api/demo/overview': overview });
+  const { container } = app();
+  await screen.findByText('1.800 USD a Estudio Kairos, retainer de octubre, dentro de reglas');
+  expect(container.querySelector('.skeleton')).toBeNull();
+});

@@ -1,6 +1,5 @@
 import { useState, type FormEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import type { PageRoute } from '../App';
 import { supabase } from '../api';
 import { useLeaveGuard } from '../components/LeaveTrialWarning';
 import Logo from '../components/Logo';
@@ -11,7 +10,6 @@ import { runUntilDone, type Progress } from '../runAgent';
 import type { Lang } from '../../src/i18n';
 import './login.css';
 
-export const route: PageRoute = { path: '/login', public: true, fullBleed: true };
 
 /**
  * AC-40: email -> one-time code -> Bandeja. A language picked here is stored on the user once the code is accepted (AC-41).

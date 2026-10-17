@@ -104,3 +104,27 @@ test('a failure after the link was shown keeps the approve heading: the summary 
   await screen.findByRole('alert');
   expect(screen.getByRole('heading', { level: 1, name: 'Aprobar este pago' })).toBeTruthy();
 });
+
+// AC-99 (R-109): while the link loads, its summary is drawn in the loaded markup with placeholders, hidden.
+test('while loading, the summary is a skeleton with the loaded markup', () => {
+  mockApi({ [`GET ${URL_}`]: () => new Promise(() => {}) });
+  const { container } = show();
+  const skeleton = container.querySelector('.approve .skeleton') as HTMLElement;
+  expect(skeleton.getAttribute('aria-hidden')).toBe('true');
+  expect(skeleton.hasAttribute('inert')).toBe(true);
+  expect(skeleton.querySelector('dl.approve-read')).toBeTruthy();
+  expect(skeleton.querySelector('ul.approve-broken')).toBeTruthy();
+  expect(screen.getByRole('status').textContent).toBe('Cargando…');
+});
+
+test('the skeleton is gone once the link answers, and on a dead link', async () => {
+  mockApi({ [`GET ${URL_}`]: view() });
+  const ok = show();
+  await screen.findByRole('button', { name: 'Confirmar' });
+  expect(ok.container.querySelector('.skeleton')).toBeNull();
+  ok.unmount();
+  mockApi({ [`GET ${URL_}`]: err(404, 'not_found') });
+  const dead = show();
+  await screen.findByRole('alert');
+  expect(dead.container.querySelector('.skeleton')).toBeNull();
+});

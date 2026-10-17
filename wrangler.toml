@@ -16,9 +16,10 @@ SES_REGION = "us-east-2"
 JEV_ENABLED = "false"
 DEMO_EMAIL = "demo@andina-labs.example"
 APP_URL = "https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev"  # approval links built outside a request (cron)
+FX_PROVIDER = "yahoo"  # first market-rate provider: "yahoo" or "er-api"; the other is the fallback (AC-73)
 
 [triggers]
-crons = ["*/5 * * * *"]  # the agent decides pending invoices with nobody logged in (D23, AC-62)
+crons = ["*/5 * * * *", "0 11 * * *"]  # the agent decides pending invoices with nobody logged in (D23, AC-62); daily FX at 06:00 Bogotá (AC-73)
 
 [ai]
 binding = "AI"  # Workers AI: no key, authorised by the account

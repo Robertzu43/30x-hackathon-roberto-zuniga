@@ -84,4 +84,20 @@ describe('record.ts, the only writer of decisions, approval_tokens and agent_run
     ]);
     expect(admin.queries.map((q) => q.table)).toEqual(['agent_runs', 'agent_runs']);
   });
+
+  it('upserts market rates by (day, currency): a second fetch the same day replaces the row, nothing is deleted (AC-73, AC-38 (a))', async () => {
+    const r = recorder(env, null);
+    const cop = { day: '2026-10-17', currency: 'COP', usd_per_unit: 0.00031538976, source: 'Yahoo Finance', fetched_at: '2026-10-17T11:00:00.000Z' };
+    await r.fxRates([cop, { ...cop, currency: 'MXN', usd_per_unit: 0.054115482 }]);
+    await r.fxRates([{ ...cop, usd_per_unit: 0.0003155, source: 'open.er-api.com', fetched_at: '2026-10-17T15:00:00.000Z' }]);
+    expect(admin.tables.fx_rates).toEqual([
+      { ...cop, usd_per_unit: 0.0003155, source: 'open.er-api.com', fetched_at: '2026-10-17T15:00:00.000Z' },
+      { ...cop, currency: 'MXN', usd_per_unit: 0.054115482 },
+    ]);
+    expect(admin.queries.filter((q) => q.table === 'fx_rates').map((q) => q.op)).toEqual(['upsert', 'upsert']);
+  });
+  it('no rows -> no request', async () => {
+    await recorder(env, null).fxRates([]);
+    expect(admin.queries).toEqual([]);
+  });
 });

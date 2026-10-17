@@ -16,6 +16,7 @@ export class Budget {
   count = (n = 1) => { this.used += n; };
   left = () => this.limit - this.used;
   fetch: typeof fetch = (input, init) => { this.count(); return fetch(input, init); };
+  readonly fxTried = new Set<string>(); // currencies whose FX provider chain already ran in this invocation (AC-73)
 }
 
 export const userClient = (env: Env, jwt: string, budget?: Budget): Db =>

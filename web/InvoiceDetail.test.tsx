@@ -1,6 +1,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { expect, test } from 'vitest';
 import InvoiceDetail, { route } from './pages/InvoiceDetail';
+import { sentence } from './test/text';
 import { mockApi, renderAt, signedInAs } from './test/utils';
 
 const IDS = ['lectura', 'beneficiario_permitido', 'beneficiario_cuenta', 'acuerdo', 'duplicado_exacto', 'duplicado_probable',
@@ -79,7 +80,7 @@ test('renders the headline and one row per check (13), never a check id or raw k
   expect(rows[7]!.textContent).toContain('frase de la regla 8 → no cumple');
   expect(document.body.textContent).not.toMatch(/umbral_aprobacion|payee_name|detail\.|outcome\./);
   expect(screen.getByText('Que una persona apruebe el monto sobre el umbral')).toBeTruthy();
-  expect(screen.getByText(/Política: Política general · versión 1 ·/)).toBeTruthy();
+  expect(screen.getByText(sentence(/Política: Política general · versión 1 ·/))).toBeTruthy();
 });
 
 test('"Lo que hice" sits between the headline and the two columns, numbered, each step with its stage (AC-64)', async () => {
@@ -129,7 +130,7 @@ test('ESCALAR shows the stored question above Aprobar and Rechazar; Aprobar post
   within(card).getByRole('button', { name: 'Rechazar' });
   expect(q.compareDocumentPosition(approve) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   fireEvent.click(approve);
-  await waitFor(() => expect(screen.getByText('ana@blinka.example en el tablero')).toBeTruthy());
+  await waitFor(() => expect(screen.getByText(sentence('ana@blinka.example en el tablero'))).toBeTruthy());
   const post = fetchMock.mock.calls.find(([u]) => u === '/api/invoices/inv-1/approve')!;
   expect(JSON.parse(String(post[1]!.body))).toEqual({ seq: 2 });
   expect(screen.queryByRole('button', { name: 'Aprobar' })).toBeNull();
@@ -224,7 +225,7 @@ test('English renders the English labels and en-US formats (AC-28)', async () =>
   for (const h of ['What I did', 'What I read', 'What I decided', 'History']) expect(screen.getByRole('heading', { name: h })).toBeTruthy();
   const block = screen.getByRole('region', { name: 'Payment order' });
   expect(within(block).getByText('Amount').nextElementSibling!.textContent).toBe('4,200');
-  expect(screen.getByText('ana@blinka.example on the dashboard')).toBeTruthy();
+  expect(screen.getByText(sentence('ana@blinka.example on the dashboard'))).toBeTruthy();
   expect(screen.getAllByText('Agent')).toHaveLength(2);
 });
 
@@ -478,7 +479,7 @@ test('a portal invoice shows «Portal de proveedores» and the vendor message', 
 test('an email invoice shows «Correo de <remitente>»; an app invoice shows no origin and no message', async () => {
   mockApi({ [GET]: { ...escalated, invoice: { ...escalated.invoice, origin: 'email', sender: 'cobros@nubesur.example', sender_note: null } } });
   const view = open();
-  expect(await screen.findByText('Correo de cobros@nubesur.example')).toBeTruthy();
+  expect(await screen.findByText(sentence('Correo de cobros@nubesur.example'))).toBeTruthy();
   expect(screen.queryByRole('region', { name: 'Mensaje del proveedor' })).toBeNull();
   view.unmount();
   mockApi({ [GET]: { ...escalated, invoice: { ...escalated.invoice, origin: 'app', sender: null, sender_note: null } } });
@@ -498,7 +499,7 @@ test('origin in English', async () => {
 test('the origin line and the headline wrap a long unbreakable sender or payee', async () => {
   mockApi({ [GET]: { ...escalated, invoice: { ...escalated.invoice, origin: 'email', sender: 'cuentasporcobrar@distribuidoracolombiana.com.co' } } });
   open();
-  expect((await screen.findByText(/cuentasporcobrar@/)).className).toContain('detail-origin');
+  expect((await screen.findByText(/cuentasporcobrar@/)).closest('p')!.className).toContain('detail-origin');
   const { readFileSync } = (await import('node:fs' as string)) as { readFileSync(p: string, enc: string): string };
   expect(readFileSync('web/pages/detail.css', 'utf8')).toMatch(/\n\.detail h1, \.detail-origin \{[^}]*overflow-wrap: anywhere/);
 });

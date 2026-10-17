@@ -1,14 +1,15 @@
 // «Comparte este enlace con tus proveedores» (AC-86) and the origin label of a portal or email invoice. «Copiar enlace»
 // behaves like the portal's (R-102): clipboard, «Copiado» for 2 s announced politely, press-and-hold text if refused.
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useT } from '../i18n';
+import { tu } from './User';
 
 export type PortalLink = { portal_url: string; email_address: string | null };
 
 type T = ReturnType<typeof useT>['t'];
-export const originLabel = (t: T, i: { origin?: string; sender?: string | null }): string | null =>
+export const originLabel = (t: T, i: { origin?: string; sender?: string | null }): ReactNode =>
   i.origin === 'portal' ? t('inbox.origin.portal')
-  : i.origin === 'email' ? (i.sender ? t('inbox.origin.email', { sender: i.sender }) : t('inbox.origin.email_unknown'))
+  : i.origin === 'email' ? (i.sender ? tu(t('inbox.origin.email'), { sender: i.sender }) : t('inbox.origin.email_unknown'))
   : null;
 
 export default function PortalLinkCard({ link }: { link: PortalLink | 'error' }) {

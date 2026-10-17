@@ -26,6 +26,7 @@ const NOW = '2026-10-17T15:00:00Z';
 const SECRET = 'secret';
 const APPROVER = 'juan.perez@andina.example';
 const MEMBER = 'ana.gomez@andina.example';
+const GUEST = '3f9a1c2b-0d4e-4f00-8a00-000000000001'; // an anonymous (trial) user of company A (D41)
 const noAi = async (): Promise<unknown> => { throw new Error('no AI'); };
 const aiRun = vi.fn(noAi); // a fake: no test calls the real model (R-76)
 const env = { AI: { run: aiRun }, APP_URL: 'https://app.test', APPROVAL_HMAC_SECRET: SECRET } as unknown as Env;
@@ -44,7 +45,7 @@ function workspace(only?: string[]) {
   });
   return {
     companies: [{ id: 'A', approver_email: APPROVER, is_demo: false }, { id: 'B', approver_email: 'x@b.example', is_demo: false }],
-    company_members: [{ company_id: 'A', user_id: 'u1' }, { company_id: 'B', user_id: 'u2' }],
+    company_members: [{ company_id: 'A', user_id: 'u1' }, { company_id: 'B', user_id: 'u2' }, { company_id: 'A', user_id: GUEST }, { company_id: 'A', user_id: 'u4' }],
     policies: [{ company_id: 'A', version: 1, rules: SEED.rules }],
     beneficiaries: SEED.beneficiaries.map((b: object, n: number) => ({ ...b, id: uid(`A-b${n}`), company_id: 'A' })),
     invoices: [...invoices, { id: uid('B-01'), company_id: 'B', source: 'email', raw_text: '', archived: false, received_at: NOW, fields: null }],
@@ -56,6 +57,8 @@ async function setup(only?: string[]) {
   db = Object.assign(fakeDb(workspace(only)), {
     auth: { getUser: async (jwt: string) => (jwt === 'good' ? { data: { user: { id: 'u1', email: MEMBER, user_metadata: {} } }, error: null }
       : jwt === 'other' ? { data: { user: { id: 'u2', email: 'x@b.example', user_metadata: {} } }, error: null }
+      : jwt === 'guest' ? { data: { user: { id: GUEST, email: '', is_anonymous: true, user_metadata: {} } }, error: null }
+      : jwt === 'noemail' ? { data: { user: { id: 'u4', email: '', is_anonymous: false, user_metadata: {} } }, error: null }
         : { data: { user: null }, error: { message: 'invalid JWT' } }) },
   });
   db.fail.insert_decision = (a) => {
@@ -358,6 +361,21 @@ describe('dashboard answers (AC-34, AC-37, R-03)', () => {
     await setup(['15']);
     const { decision } = await (await dashboard(uid('A-15'), 'reject', 1, { note: 'cuenta sospechosa' })).json() as { decision: StoredDecision };
     expect(decision).toMatchObject({ outcome: 'FRENAR', actor: 'human', actor_email: MEMBER, channel: 'dashboard', note: 'cuenta sospechosa' });
+  });
+
+  it.each(['approve', 'reject'] as const)('%s by an anonymous user stores the guest identity invitado:<8 hex> from the JWT, never the body (R-116, AC-93)', async (action) => {
+    await setup(['11']);
+    const res = await dashboard(uid('A-11'), action, 1, { actor_email: 'evil@x.example' }, 'guest');
+    expect(res.status).toBe(200);
+    const { decision } = await res.json() as { decision: StoredDecision };
+    expect(decision).toMatchObject({ actor: 'human', actor_email: 'invitado:3f9a1c2b', channel: 'dashboard' });
+    if (action === 'approve') expect(check(decision, 'umbral_aprobacion').overridden).toEqual({ by: 'invitado:3f9a1c2b', channel: 'dashboard' });
+  });
+
+  it('a signed-in user with no email who is not anonymous -> 401, nothing written (AC-37)', async () => {
+    await setup(['11']);
+    expect((await dashboard(uid('A-11'), 'approve', 1, {}, 'noemail')).status).toBe(401);
+    expect(humans(uid('A-11'))).toEqual([]);
   });
 
   it('without a session -> 401; another company\'s invoice -> 404; nothing written', async () => {

@@ -168,7 +168,7 @@ is(){ out=$(sql -c "$1"); [ "$out" = "$2" ] || fail "$3 (got: $out, want: $2)"; 
 sql <<'STUBS' >/dev/null || fail "supabase stubs"
 create role anon nologin; create role authenticated nologin; create role service_role nologin bypassrls;
 create schema auth; create schema storage;
-create table auth.users (id uuid primary key, email text);
+create table auth.users (id uuid primary key, email text, is_anonymous boolean not null default false);
 create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
 create table storage.buckets (id text primary key, name text, public boolean);
 create table storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text, name text);

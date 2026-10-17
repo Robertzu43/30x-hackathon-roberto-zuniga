@@ -154,6 +154,7 @@ function paintChat() {
   ui.fileInput.setAttribute('aria-label', tr('portal.attach'));
   ui.remove.setAttribute('aria-label', tr('portal.remove_file'));
   ui.label.textContent = tr('portal.message_label');
+  ui.text.setAttribute('placeholder', tr('portal.message_label'));
   ui.send.textContent = tr('portal.send');
   renderLog();
 }
@@ -165,13 +166,18 @@ const paintOffline = () => {
   offline.hidden = navigator.onLine !== false;
 };
 
+// The status words' meaning picks the outcome colours (approved palette): the words come from these same templates.
+const TONES = { approved: 'pay', needs_approval: 'escalate', duplicate: 'stop', terms: 'stop', rejected: 'stop' };
+const tone = (s) => Object.entries(TONES).find(([k]) => (boot.t.es[`portal.status.${k}`] ?? '').replace('{company}', s.company) === s.status.es)?.[1];
+
 function paintStatus() {
   const s = boot.status;
   paintOffline();
   const when = new Intl.DateTimeFormat(lang === 'es' ? 'es-CO' : 'en-US', { dateStyle: 'long', timeStyle: 'short' }).format(new Date(s.updated_at));
+  const head = el('header', { class: 'status-head' }, el('h1', { text: s.status[lang] }), el('p', { class: 'company', text: tr('portal.status_title', { company: s.company }) }));
+  if (tone(s)) head.dataset.tone = tone(s);
   main.replaceChildren(offline, el('article', { class: 'card' },
-    el('h1', { text: s.status[lang] }),
-    el('p', { class: 'company', text: tr('portal.status_title', { company: s.company }) }),
+    head,
     el('h2', { text: tr('portal.status_read') }),
     el('ul', {}, ...s.read[lang].map((text) => el('li', { text }))),
     el('p', { class: 'meta', text: tr('portal.updated', { date: when }) })));
@@ -188,9 +194,10 @@ function paint() {
     document.title = `${boot.status.status[lang]} · Thesaurus`;
     paintStatus();
   } else {
-    const text = tr(MESSAGE_VIEWS[boot.view] || 'portal.error.unavailable');
+    // The first sentence is the heading; the next step («Pídele…», «Revisa…») reads as text under it.
+    const [first, ...next] = tr(MESSAGE_VIEWS[boot.view] || 'portal.error.unavailable').split(/(?<=\.) /);
     document.title = 'Thesaurus';
-    main.replaceChildren(el('article', { class: 'card' }, el('h1', { text })));
+    main.replaceChildren(el('article', { class: 'message' }, el('h1', { text: first }), ...(next.length ? [el('p', { text: next.join(' ') })] : [])));
   }
 }
 

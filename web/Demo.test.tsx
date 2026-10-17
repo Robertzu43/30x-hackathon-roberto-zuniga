@@ -4,6 +4,9 @@ import { Route, Routes } from 'react-router-dom';
 import { expect, test } from 'vitest';
 import Demo from './pages/Demo';
 import { DEMO_EMAIL, fakeAuth, mockApi, renderAt, signedInAs } from './test/utils';
+import gate from '../scripts/ux-gate.mjs?raw';
+import portalHtml from '../portal/public/index.html?raw';
+import portalJs from '../portal/public/app.js?raw';
 
 const row = (id: string, outcome: string | null, es: string | null, en: string | null) =>
   ({ id, outcome, headline_es: es, headline_en: en, headline: es });
@@ -191,4 +194,26 @@ test('the AI/code sentence and tags in English (AC-79)', async () => {
   expect(await screen.findByText(WHERE_EN)).toBeTruthy();
   expect(tags()).toMatchObject({ reads: 'AI', 'consults its tools': 'code', decides: 'code' });
   expect(screen.getByText('Ask Thesaurus', { selector: 'strong' }).closest('p')!.querySelector('.ai-tag')?.textContent).toBe('AI');
+});
+
+// Task 32b (AC-81, AC-83): one primary, then a clear route to the video and to the vendor portal of the demo company.
+test('one primary action, then links to the video and to Andina Labs\' vendor portal (AC-81, AC-83)', () => {
+  mockApi({ 'GET /api/demo/overview': overview });
+  app();
+  expect(document.querySelectorAll('button.primary')).toHaveLength(1);
+  expect(screen.getByRole('link', { name: /Abrir el portal de proveedores/ }).getAttribute('href')).toBe('https://facturas.30x-hackathon-roberto-zuniga.workers.dev/andina-labs');
+  fireEvent.click(screen.getByRole('button', { name: 'English' }));
+  expect(screen.getByRole('link', { name: /Open the vendor portal/ })).toBeTruthy();
+});
+
+// AC-81, AC-53 Clarified (R-99, R-100): the screens of Task 32b carry no colour outside the approved palette (the gate's own list).
+test('the /demo, Login and vendor portal styles use only approved palette colours (AC-81)', async () => {
+  const PALETTE = gate.match(/export const PALETTE = (\[[^\]]+\])/)![1]!.match(/#[0-9a-f]{6}/g)!;
+  // CSS is read from disk: a `?raw` CSS import is empty under vitest (css processing off).
+  const { readFileSync } = (await import('node:fs' as string)) as { readFileSync: (f: string, e: 'utf8') => string };
+  const css = (f: string) => readFileSync(new URL(f, import.meta.url).pathname, 'utf8');
+  const files: Record<string, string> = { demoCss: css('./pages/demo.css'), loginCss: css('./pages/login.css'), portalCss: css('../portal/public/styles.css'), portalJs, portalHtml };
+  const long = (h: string) => (h.length === 4 ? '#' + [...h.slice(1)].map((c) => c + c).join('') : h).toLowerCase();
+  const off = Object.entries(files).flatMap(([f, text]) => (text.match(/#[0-9a-f]{3}(?:[0-9a-f]{3})?\b/gi) ?? []).map(long).filter((h) => !PALETTE.includes(h)).map((h) => `${f} ${h}`));
+  expect(off).toEqual([]);
 });

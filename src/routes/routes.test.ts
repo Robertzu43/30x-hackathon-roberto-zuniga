@@ -24,7 +24,9 @@ const SEED = JSON.parse(sql.match(/\$seed\$([\s\S]*?)\$seed\$/)?.[1] ?? 'null');
 const NOW = '2026-10-17T15:00:00Z';
 const USERS: Record<string, { id: string; user_metadata: Row }> = {
   'tok-a': { id: 'user-a', user_metadata: {} }, 'tok-en': { id: 'user-en', user_metadata: { lang: 'en' } }, 'tok-d': { id: 'user-d', user_metadata: {} },
-};
+  // D41: anonymous users of the trial company T
+  'tok-t': { id: 'user-t', user_metadata: {}, is_anonymous: true }, 'tok-t-en': { id: 'user-t-en', user_metadata: { lang: 'en' }, is_anonymous: true },
+} as Record<string, { id: string; user_metadata: Row }>;
 
 // What the reader's model "reads" from any uploaded or pasted document: a Laura Méndez retainer that passes all 13 checks.
 const READ = { payee_name: 'Laura Méndez', amount: 2500, currency: 'USD', invoice_number: '1050', issue_date: '2026-10-17', due_date: '2026-12-01',
@@ -36,11 +38,13 @@ const env = { AI: ai, APP_URL: 'https://app.test', APPROVAL_HMAC_SECRET: 'secret
 // fake-db (src/agent) plus what only the routes use: auth, storage, and insert/update returning rows.
 function testDb(seed: Record<string, Row[]> = {}) {
   const base = fakeDb({
-    company_members: [{ company_id: 'A', user_id: 'user-a' }, { company_id: 'A', user_id: 'user-en' }, { company_id: 'D', user_id: 'user-d' }],
+    company_members: [{ company_id: 'A', user_id: 'user-a' }, { company_id: 'A', user_id: 'user-en' }, { company_id: 'D', user_id: 'user-d' },
+      { company_id: 'T', user_id: 'user-t' }, { company_id: 'T', user_id: 'user-t-en' }],
     companies: [
       { id: 'A', name: 'Andina', approver_email: 'juan.perez@a.example', lang: 'es', is_demo: false },
       { id: 'B', name: 'Otra', approver_email: 'b@b.example', lang: 'es', is_demo: false },
       { id: 'D', name: 'Andina Labs Inc.', approver_email: 'roberto@demo.example', lang: 'es', is_demo: true },
+      { id: 'T', name: 'Empresa de prueba 7', approver_email: null, lang: 'es', is_demo: false, is_trial: true },
     ],
     ...seed,
   });
@@ -49,7 +53,17 @@ function testDb(seed: Record<string, Row[]> = {}) {
   const conflict = { policies: false };
   // rate_limit_hit of migration 20261017000500, per user (the JWT's) and minute; refuse/fail inject its answers.
   const rateLimit = { hits: new Map<string, number>(), refuse: false, fail: '' };
+  // take_question of migration 20261017000900 for ingest keys: 30 per key and UTC day (scripts/tests/schema.test.sh runs the SQL).
+  const taken = new Map<string, number>();
   async function rpc(name: string, args: Row = {}, jwt?: string) {
+    if (name === 'take_question') {
+      base.meter.hit();
+      base.rpcs.push({ name, args });
+      const n = taken.get(String(args.p_key)) ?? 0;
+      if (n >= 30) return { data: { reason: 'user_cap' }, error: null };
+      taken.set(String(args.p_key), n + 1);
+      return { data: { remaining: 29 - n }, error: null };
+    }
     if (name !== 'rate_limit_hit') return base.rpc(name, args);
     base.meter.hit();
     base.rpcs.push({ name, args });
@@ -1090,7 +1104,7 @@ describe('budgeted, resumable runs over HTTP (AC-70, R-56, R-57, R-59, R-60)', (
     const { r: ok, n } = await counted('POST', '/api/invoices', upload(png, 'f.png', 'image/png'));
     expect(ok.status).toBe(201);
     expect(n).toBeLessThanOrEqual(40);
-    db.fail.query = (q) => (q.table === 'companies' ? 'down' : undefined);
+    db.fail.query = (q) => (q.table === 'policies' ? 'down' : undefined); // the agent's policy read; companies is read first by the trial check (AC-96)
     const r = await call('POST', '/api/invoices', { source: 'email', text: 'De: Laura Méndez\nFactura 1051, USD 2.500' });
     expect(r.status).toBe(201);
     const { invoice, decision } = await json<{ invoice: Row; decision: Row | null }>(r);
@@ -1287,5 +1301,71 @@ describe('ingest: the amount guard with the reader unavailable (AC-14 Clarified,
     const { invoice } = await json<{ invoice: Row }>(r);
     expect(db.tables.invoices!.find((i) => i.id === invoice.id)!.fields).toMatchObject({ amount: 2500 });
     expect(db.tables.invoices!.find((i) => i.id === invoice.id)!.fields).not.toHaveProperty('read_error');
+  });
+});
+
+describe('trial companies (D41; AC-93, AC-96; R-115, R-116, R-117)', () => {
+  const trial = (only: string[] = []) => ({
+    policies: [{ id: 'pt', company_id: 'T', version: 1, name: 'Política general', rules: SEED.rules, created_at: '2026-10-01T00:00:00Z' }],
+    beneficiaries: SEED.beneficiaries.map((b: object, i: number) => ({ ...b, id: uid(`T-b${i}`), company_id: 'T', archived: false })),
+    invoices: [...seedInvoices('T', only), ...seedInvoices('A', ['01'])],
+  });
+  const takes = () => db.rpcs.filter((r) => r.name === 'take_question');
+  const paste = (token: string) => call('POST', '/api/invoices', { source: 'chat', text: 'Factura 1050, USD 2.500' }, token);
+
+  it('the 31st POST /api/invoices of a trial user in a UTC day -> 429, counted first: no upload, no insert, no model call', async () => {
+    db = testDb(trial());
+    for (let i = 0; i < 30; i++) expect((await paste('tok-t')).status).toBe(201);
+    expect(takes().map((r) => r.args)).toEqual(Array(30).fill({ p_key: 'ingest:user-t' }));
+    const invoices = db.tables.invoices!.length;
+    ai.run.mockClear();
+    const r = await call('POST', '/api/invoices', upload(await pdfFixture(), 'factura.pdf', 'application/pdf'), 'tok-t');
+    expect(r.status).toBe(429);
+    expect(await r.json()).toEqual({ error: 'Llegaste al límite de 30 facturas por día en tu empresa de prueba. Se renueva a las 19:00, hora de Bogotá.' });
+    expect(db.tables.invoices!.length).toBe(invoices);
+    expect(db.uploads).toEqual([]);
+    expect(ai.run).not.toHaveBeenCalled();
+  });
+
+  it('the 429 is in the user language', async () => {
+    db = testDb(trial());
+    for (let i = 0; i < 30; i++) await paste('tok-t-en');
+    const r = await paste('tok-t-en');
+    expect(r.status).toBe(429);
+    expect(await r.json()).toEqual({ error: 'You reached the limit of 30 invoices a day in your trial company. It renews at 19:00 Bogotá time (00:00 UTC).' });
+  });
+
+  it('a user whose company is not a trial is not capped: no ingest count is taken', async () => {
+    db = testDb(workspace([]));
+    for (let i = 0; i < 31; i++) expect((await paste('tok-a')).status).toBe(201);
+    expect(takes()).toEqual([]);
+  });
+
+  it('GET /api/company tells the web the company is a trial; PUT with approver_email -> 403 and changes nothing', async () => {
+    db = testDb();
+    expect(await json(await call('GET', '/api/company', undefined, 'tok-t'))).toMatchObject({ id: 'T', is_trial: true, approver_email: null });
+    const r = await call('PUT', '/api/company', { name: 'Mía', approver_email: 'yo@example.com' }, 'tok-t');
+    expect(r.status).toBe(403);
+    expect(await r.json()).toEqual({ error: 'Las empresas de prueba no envían correos.' });
+    const en = await call('PUT', '/api/company', { approver_email: 'yo@example.com' }, 'tok-t-en');
+    expect(await en.json()).toEqual({ error: 'Trial companies send no email.' });
+    expect(db.writes).toEqual([]);
+  });
+
+  it('PUT /api/company without approver_email still saves a trial company\'s name and language', async () => {
+    db = testDb();
+    const r = await call('PUT', '/api/company', { name: 'Mi empresa', lang: 'en' }, 'tok-t');
+    expect(r.status).toBe(200);
+    expect(await r.json()).toMatchObject({ id: 'T', name: 'Mi empresa', lang: 'en', approver_email: null, is_trial: true });
+  });
+
+  it('a trial ESCALAR: no mail, no token, and step 5 of "Lo que hice" says why (AC-64 Clarified)', async () => {
+    db = testDb(trial(['11']));
+    send.mockClear();
+    await call('POST', '/api/invoices/run', undefined, 'tok-t');
+    expect(send).not.toHaveBeenCalled();
+    expect(db.tables.approval_tokens ?? []).toEqual([]);
+    const d = await json<{ trace: Array<{ text: string }> }>(await call('GET', `/api/invoices/${uid('T-11')}`, undefined, 'tok-t'));
+    expect(d.trace[4]?.text).toBe('Empresa de prueba: la pregunta quedó en el tablero, sin correo.');
   });
 });

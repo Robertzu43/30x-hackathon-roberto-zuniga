@@ -336,6 +336,16 @@ describe('actua (AC-24, AC-25, AC-39, R-15, R-16, R-25, R-29)', () => {
     expect(decisionsOf('A-11')[0]!.question_es).toMatch(/¿La pago\?$/);
   });
 
+  it('a trial company never gets tokens or mail, even with an approver_email written around the API (R-115, AC-93)', async () => {
+    const w = workspace('A', { only: ['11'] });
+    w.companies = [{ ...w.companies[0]!, is_trial: true } as (typeof w.companies)[0]];
+    db = fakeDb(w);
+    expect(await runAgent(deps(), 'A', 'pending', 'manual')).toMatchObject({ ESCALAR: 1, errors: 0 });
+    expect(send).not.toHaveBeenCalled();
+    expect(db.tables.approval_tokens ?? []).toEqual([]);
+    expect(decisionsOf('A-11')[0]!.question_es).toMatch(/¿La pago\?$/);
+  });
+
   it('re-evaluating an ESCALAR appends against its seq and sends no second mail (R-16)', async () => {
     db = fakeDb(workspace('A', { only: ['11'] }));
     await runAgent(deps(), 'A', 'pending', 'manual');

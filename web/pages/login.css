@@ -1,0 +1,12 @@
+/* Login (AC-80, AC-81; design-taste-frontend): the logo set large as the heading on the tone field, the form alone in its
+   column with the language switch in the corner, as on /demo. Overrides the older login rules in web/styles.css. */
+.login .login-intro h1 { font-size: inherit; line-height: 0; margin: 0; }
+.login .login-intro .logo { width: min(100%, 36rem); height: auto; }
+.login .login-form { position: relative; }
+.login .login-form > .lang-switch { position: absolute; top: 1.5rem; right: 1.5rem; }
+@media (max-width: 760px) {
+  .login .login-intro { padding-top: 5rem; }
+  .login .login-intro .logo { width: min(100%, 18rem); }
+  .login .login-form { padding-top: 2rem; gap: 1.5rem; }
+  .login .login-form > .lang-switch { position: static; }
+}

@@ -13,7 +13,7 @@ import type { Lang } from '../i18n';
 import * as trialText from '../i18n/features/trial-record';
 import { documentToText, extractFields, type ReadFields } from '../lib/llm';
 import { requireAuth, type AppEnv, type AuthEnv } from '../lib/auth';
-import { locate } from '../lib/snippet';
+import { docMarks, locate, READ } from '../lib/snippet';
 import { isUuid, must, type Db } from '../lib/supabase';
 import { memberRoutes } from './agent';
 
@@ -41,8 +41,7 @@ const BAD_TEXT = 'Pega un texto de 1 a 20.000 caracteres.'; // R-84
 const PastedSource = z.object({ source: z.enum(['email', 'chat']) });
 const PastedText = z.string().max(20000).refine((t) => t.trim().length > 0);
 const SIGNED_URL_SECONDS = 300; // AC-08
-// "Lo que leí" fields in screen order (AC-12, AC-77).
-export const READ = ['payee_name', 'amount', 'currency', 'invoice_number', 'issue_date', 'due_date', 'concept', 'bank_account'] as const;
+export { READ };
 const NOT_RUN = 'No pude ejecutar el agente ahora. Las facturas siguen pendientes; lo intentaré solo en la próxima revisión automática (cada 5 minutos).';
 
 // "Ejecutar agente" and "Reevaluar" (R-60): one budgeted call after the optional {cursor} (AC-70). The browser calls again
@@ -181,6 +180,7 @@ export async function invoiceDetail({ db }: { db: Db }, id: string, lang: Lang) 
     trace: agentTrace({ invoice, decisions, isDemo: company.is_demo, isTrial: company.is_trial, notification }, lang),
     question: latest?.outcome === 'ESCALAR' ? latest[`question_${lang}`] : null,
     file_url: fileUrl,
+    doc_marks: docMarks(row.raw_text, invoice.fields), // AC-102: offsets into raw_text, from code (R-88, R-124)
     ...readingOf(row.fields, decisions.find((d) => d.actor === 'agent'), invoice.fields, row.raw_text),
   };
 }

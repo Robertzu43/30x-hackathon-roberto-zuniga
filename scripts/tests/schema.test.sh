@@ -84,6 +84,14 @@ screen=$(sed 's/--.*$//' "$SCREEN")
 echo "$screen" | grep -qi 'security definer' && fail "a screen function is security definer (AC-98, R-122)"
 for f in screen_company screen_inbox screen_period screen_beneficiaries screen_policy screen_detail screen_demo_overview; do
   echo "$screen" | grep -q "create function public\.$f(" || fail "no function public.$f (AC-98)"; done
+# Task 45 (D39; AC-101, AC-103, AC-104, R-124, R-132): create or replace keeps 001000's signatures; one new function
+DASH=supabase/migrations/20261017001100_dashboard_functions.sql
+[ -f "$DASH" ] || fail "missing $DASH"
+dash=$(sed 's/--.*$//' "$DASH")
+echo "$dash" | grep -qi 'security definer' && fail "a D39 screen function is security definer (AC-98, R-122)"
+for w in 'create or replace function public.screen_period() returns jsonb' 'create or replace function public.screen_inbox(p_lang text) returns jsonb' \
+  'create function public.screen_beneficiary(p_id uuid) returns jsonb' 'grant execute on function public.screen_beneficiary(uuid) to authenticated;'; do
+  echo "$dash" | grep -qF "$w" || fail "dashboard migration lacks: $w (AC-98, AC-104)"; done
 
 # ---- Part 2: execute against a real Postgres ----
 INITDB=$(command -v initdb || ls /usr/lib/postgresql/*/bin/initdb 2>/dev/null | sort -V | tail -1)
@@ -309,7 +317,7 @@ expect svc "select public.take_question('ingest')" 'BAD_KEY' "a bare ingest key"
 # AC-98, R-122: every screen_* function is security invoker, stable (read-only), executable by authenticated only; each
 # finds the company from auth.uid()'s membership, so RLS and the member's own company decide every row
 scr="pronamespace = 'public'::regnamespace and proname like 'screen\\_%'"
-[ "$(sql -c "select count(*) from pg_proc where $scr")" = 7 ] || fail "expected 7 screen_* functions (AC-98)"
+[ "$(sql -c "select count(*) from pg_proc where $scr")" = 8 ] || fail "expected 8 screen_* functions (AC-98, AC-104)"
 bad=$(sql -c "select string_agg(proname, ',') from pg_proc where $scr and (prosecdef or provolatile <> 's' or has_function_privilege('anon', oid, 'execute')
   or has_function_privilege('service_role', oid, 'execute') or not has_function_privilege('authenticated', oid, 'execute'))")
 [ -z "$bad" ] || fail "not security invoker, stable and authenticated-only: $bad (AC-98, R-122)"
@@ -342,4 +350,19 @@ expect "$UA" "select jsonb_array_length($ben) > 1" '^t$' "screen_inbox beneficia
 expect "$UB" "select count(*) from jsonb_array_elements($ben) e where (e ->> 'id')::uuid in (select id from public.beneficiaries where company_id = '$CA')" '^0$' "B's screen_inbox shows A's beneficiaries (AC-04, R-132)"
 out=$(printf "begin;\nupdate public.beneficiaries set archived = true where company_id = '$CA';\nset role authenticated;\nset request.jwt.claim.sub = '$UA';\nselect $ben;\nrollback;\n" | sql -f -)
 [ "$out" = '[]' ] || fail "screen_inbox beneficiaries of a company with no directory is not [] (got: $out) (R-132)"
+# Task 45 (AC-101, AC-103, AC-104, R-132): Bandeja carries Periodo's rows next to its unchanged keys; each decision has its
+# time (the trend's day); the profile answers only the caller's company's non-archived beneficiary
+expect "$UA" "select (select array_agg(k order by k) from jsonb_object_keys(public.screen_inbox('es')) k)::text" '^\{beneficiaries,invoices,last_run,period,portal_slug\}$' "screen_inbox keys (AC-98, R-132)"
+expect "$UA" "select public.screen_inbox('es') -> 'period' = public.screen_period()" '^t$' "screen_inbox lacks Periodo's rows (AC-101)"
+expect "$UA" "select count(*) from jsonb_array_elements(public.screen_period() -> 'decisions') e where (e ->> 'created_at')::timestamptz is distinct from
+  (select d.created_at from public.decisions d where d.invoice_id = (e ->> 'invoice_id')::uuid and d.seq = (e ->> 'seq')::int)" '^0$' "screen_period decisions lack created_at (AC-103)"
+expect "$UA" "select jsonb_array_length(public.screen_period() -> 'decisions') > 0" '^t$' "screen_period has no decisions to check (AC-103)"
+BA=$(sql -c "select id from public.beneficiaries where company_id = '$CA' and not archived order by name limit 1")
+AR=$(sql -c "select id from public.beneficiaries where company_id = '$CA' and archived limit 1")
+[ -n "$BA" ] && [ -n "$AR" ] || fail "beneficiary fixtures for screen_beneficiary"
+expect "$UA" "select (public.screen_beneficiary('$BA') -> 'beneficiary' ->> 'id') || '|' || (public.screen_beneficiary('$BA') -> 'period' = public.screen_period())" "^$BA\|true$" "own beneficiary profile (AC-104)"
+expect "$UB" "select public.screen_beneficiary('$BA') is null" '^t$' "B reads A's beneficiary profile (AC-04, AC-104)"
+expect "$UA" "select public.screen_beneficiary('$AR') is null and public.screen_beneficiary(gen_random_uuid()) is null" '^t$' "archived or unknown beneficiary profile (AC-104)"
+expect "$NM" "select public.screen_beneficiary('$BA') is null" '^t$' "a non-member reads a beneficiary profile (AC-104)"
+out=$(printf "set role anon;\nselect public.screen_beneficiary('$BA');\n" | sql -f -); echo "$out" | grep -q 'permission denied' || fail "anon executes screen_beneficiary (got: $out)"
 echo "schema.test: greps and live Postgres checks passed"

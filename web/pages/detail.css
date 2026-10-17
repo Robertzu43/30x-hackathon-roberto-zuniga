@@ -1,0 +1,45 @@
+/* Detalle de decisión (AC-26, AC-53): flat, warm monochrome, 1px #eaeaea lines, pastel marks only for verdicts. */
+.detail h2 { font: 400 var(--text-xl) / 1.2 var(--font-serif); letter-spacing: -0.02em; margin: 2.5rem 0 1rem; }
+.detail-back { display: inline-block; margin-bottom: 1.5rem; font-size: var(--text-sm); color: var(--ink-2); }
+.detail ol, .detail ul { list-style: none; margin: 0; padding: 0; }
+
+.detail-trace li { display: grid; grid-template-columns: 1.5rem 5.5rem 1fr; gap: 0.75rem; padding: 0.625rem 0; border-bottom: 1px solid var(--line); }
+.trace-n { font-family: var(--font-mono); color: var(--ink-2); }
+.trace-stage { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.05em; }
+
+.detail-cols { display: grid; grid-template-columns: 1fr 1.2fr; gap: 3rem; align-items: start; }
+@media (max-width: 860px) { .detail-cols { grid-template-columns: 1fr; } }
+
+.detail-doc { display: block; width: 100%; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); margin-bottom: 0.5rem; }
+iframe.detail-doc { height: 32rem; }
+pre.detail-doc { white-space: pre-wrap; font: var(--text-sm) / 1.6 var(--font-mono); padding: 1rem; max-height: 32rem; overflow: auto; }
+
+.detail-fields { margin: 1.5rem 0 0; }
+.detail-fields > div { display: grid; grid-template-columns: 9rem 1fr auto; gap: 0.75rem; padding: 0.5rem 0; border-bottom: 1px solid var(--line); }
+.detail-fields dt { font-size: var(--text-sm); color: var(--ink-2); }
+.detail-fields dd { margin: 0; }
+.detail-fields dd.muted { font-size: var(--text-sm); }
+
+.checks li { display: grid; grid-template-columns: 1.5rem 1fr; gap: 0.5rem; padding: 0.5rem 0; border-bottom: 1px solid var(--line); font-size: var(--text-sm); }
+.checks .mark { width: 1.25rem; height: 1.25rem; border-radius: 4px; display: grid; place-items: center; font-size: 0.75rem; font-weight: 700; }
+.checks .cumple .mark { background: #edf3ec; color: #346538; }
+.checks .no_cumple .mark { background: #fdebec; color: #9f2f2d; }
+.checks .no_verificado .mark { background: #fbf3db; color: #956400; }
+.checks .overridden .mark { background: #e1f3fe; color: #1f6c9f; }
+
+.detail-fixes li { padding: 0.5rem 0; border-bottom: 1px solid var(--line); }
+
+.detail-card { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 1.5rem; margin-top: 2rem; }
+.detail-card h2 { margin-top: 0; }
+.detail-question { font: 400 1.25rem / 1.4 var(--font-serif); margin: 0 0 1.25rem; }
+.detail-card label { display: grid; gap: 0.25rem; }
+.detail-actions { display: flex; gap: 0.5rem; margin-top: 1rem; }
+.detail-actions button { padding: 0.625rem 1rem; font-size: var(--text-base); }
+.detail .error { margin-top: 2rem; }
+
+.timeline li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.75rem; padding: 0.625rem 0; border-bottom: 1px solid var(--line); }
+.timeline p { flex-basis: 100%; margin: 0; font-size: var(--text-sm); }
+.chip { font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.125rem 0.5rem; border-radius: 9999px; }
+.chip.PAGAR { background: #edf3ec; color: #346538; }
+.chip.FRENAR { background: #fdebec; color: #9f2f2d; }
+.chip.ESCALAR { background: #fbf3db; color: #956400; }

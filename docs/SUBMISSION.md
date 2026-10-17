@@ -24,7 +24,11 @@ La empresa configura sus reglas en un formulario: límite por pago, umbral de ap
 SEGURIDAD POR DISEÑO
 El reto descalifica un pago fuera de las reglas, así que no depende de que el código se porte bien:
 1. El LLM solo lee. Solo la función pura decide() puede producir PAGAR, y solo si los 13 controles cumplen. Ningún modelo ni prompt escribe un pago.
-2. La base de datos rechaza un PAGAR fuera de las reglas, incluso si el Worker tuviera un error.
+2. La base de datos rechaza un PAGAR fuera de las reglas, incluso si el Worker tuviera un error. Una nota de honestidad: si alguien ejecuta en toda la base la consulta literal de AC-16 sin filtro, obtiene 1. Esa fila es un PAGAR falso que QA escribió a propósito por la API REST de la base, con `actor = 'agent'`, el 2026-10-17 a las 00:32 UTC y antes del bloqueo, para demostrar que ese hueco existía. El agente nunca la escribió y ningún pago salió de ella. El bloqueo es la migración `20261017000250_thesaurus_lockdown`, aplicada el 2026-10-17 a las 00:55 UTC. Las dos consultas que lo prueban, para el editor SQL de Supabase:
+   Consulta 1, desde el bloqueo (resultado esperado: 0):
+   select count(*) from decisions where actor='agent' and outcome='PAGAR' and created_at >= '2026-10-17 00:55:00+00' and exists (select 1 from jsonb_array_elements(checks) c where c->>'verdict' <> 'cumple');
+   Consulta 2, toda la tabla sin filtro (resultado esperado: dos filas, ambas anteriores a las 00:55 UTC y de empresas de prueba `qa-r202610162341`: `f2063d3d-a8a4-4bd4-9116-d22c93f18124` y `823dc753…`):
+   select d.id, d.created_at, co.approver_email from decisions d join companies co on co.id = d.company_id where d.actor='agent' and d.outcome='PAGAR' and case when jsonb_typeof(d.checks) <> 'array' then true else jsonb_array_length(d.checks) < 13 or exists (select 1 from jsonb_array_elements(d.checks) e where e->>'verdict' is distinct from 'cumple' or e ? 'overridden') end order by d.created_at;
 3. Ningún usuario puede escribir decisiones: solo el agente del servidor. Ni siquiera la cuenta pública de la demo.
 4. El registro es de solo adición: una aprobación humana es una fila nueva, nada se edita ni se borra. PAGAR y FRENAR son finales.
 5. Los enlaces de aprobación van firmados, vencen a las 48 horas y se usan una sola vez; abrirlos no actúa, solo el botón Confirmar.

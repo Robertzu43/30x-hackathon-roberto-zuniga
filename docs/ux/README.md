@@ -44,7 +44,8 @@ Measured per screen, width and language: `1.scroll 1.offscreen 1.clip 1.overlap 
 - The logo is any visible `[data-logo]`, `.logo`, image or element whose alt or aria-label contains "logo".
 - A designed state marks its message with `role="alert"`, `role="status"` or class `error`, `empty`, `state`; the container of that message must hold the next step (a button or link, or a verb such as "recarga" or "retry").
 - `5.words` flags null, undefined, NaN, [object Object], dotted keys, stack traces, and error codes only as such: after "error", "HTTP", "status" or "code", or as a standalone 400, 401, 403, 404, 405, 408, 409, 422, 429, 500, 502, 503 or 504. An amount such as "160 USD" is not flagged.
-- `5.mixed` compares visible text nodes with the other language's UI dictionary (`src/i18n/es.ts`, `en.ts`, `features/*.ts`); stored data is not in the dictionary, so it is excepted.
+- `5.mixed` (R-113) compares visible text nodes, trimmed, whitespace collapsed, case ignored, with the UI dictionaries (`src/i18n/es.ts`, `en.ts`, `features/*.ts`). A node is flagged only when it equals a value of the other language's dictionary and no value of the screen's own language: «decide» is in both and passes, «Aprobar» on an en button fails. No minimum word count, no allowlist. Stored data is not in the dictionary, so it is excepted.
+- `1.overlap` (R-114, every screen) does not count a pair where one text is hidden under an opaque sticky or fixed layer: the layer holds only that text, the whole intersection lies inside the layer's box, and `elementFromPoint` at its centre is the layer or a descendant. Printed as «excluded: occluded by sticky/fixed layer». Two texts in the same layer, and a translucent layer, still fail.
 - Approved palette and fonts: the colours and the three font stacks of `web/styles.css` at 6d34830 (`PALETTE` and `FONTS` in the script; the test compares them with that commit).
 
 ## Vendor portal specifics (AC-91 Clarified R-103, AC-90 Clarified R-101)
@@ -57,3 +58,9 @@ Measured per screen, width and language: `1.scroll 1.offscreen 1.clip 1.overlap 
   - `6.console` excludes exactly one line: `Failed to load resource` whose URL is the page's own main document, when the main response status is 404. The row ends with «excluded: expected 404 (AC-83/AC-84)». Any other line fails, a 404 for a subresource included.
   - `4.state` runs on the page itself and needs no control: the sentence must hold a next-step verb (`pídele/ask`, `revisa/check`, ...).
   - `2.primary`, `3.focus`, `3.enter`, `4.busy` and the primary-action part of `7.usable` report N/A with «sin acción por diseño (R-103)», never FAIL.
+
+## Approve with an invalid link, and the vendor forced states (R-112, QA of Task 25)
+
+- `approve` with an invalid or expired token: `6.console` excludes exactly one line, only when it is a `Failed to load resource` error for `/api/approve/<the token in the page's own URL>`, the gate saw that response as 404, and the page shows the heading «No puedo mostrar este pago» (the en heading is the en entry of the same dictionary key) with a next step. The row ends with «excluded: expected 404 (invalid link)». A second line, any other status or URL, or the same line on another screen still fails. With no control in main, `2.primary`, `3.focus`, `3.enter`, `4.busy` and the primary part of `7.usable` are N/A with «sin acción por diseño (R-103)».
+- `portal` `error`: the gate types a message and sends it; the POST is answered 500 by the gate (it never reaches the app) and `4.state` checks the message and its next step. `offline`: the same send with the context offline. `empty`: N/A «sin estado vacío por diseño».
+- `status` (server-rendered) `empty` and `error`: N/A «servidor: sin petición que fallar» (the real failure page is the designed 503, covered by `status-invalid`). `offline`: the context goes offline and `4.state` checks the page's «Sin conexión» notice (the `offline` event).

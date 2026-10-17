@@ -10,8 +10,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { aggregate, FONTS, launch, main, PALETTE, renderGate, runCell, SCREENS, unreadId, writeGate } from './ux-gate.mjs';
 
 const DICTS = {
-  es: { 'f.title': 'Bandeja', 'f.empty': 'Todavía no hay facturas.', 'f.retry': 'Reintentar', 'f.send': 'Enviar', 'f.save': 'Guardar cambios', 'f.err': 'No pude cargar los datos. Inténtalo de nuevo.' },
-  en: { 'f.title': 'Inbox', 'f.empty': 'There are no invoices yet.', 'f.retry': 'Retry', 'f.send': 'Send', 'f.save': 'Save changes', 'f.err': 'I could not load the data. Please try again.' },
+  es: { 'f.title': 'Bandeja', 'f.empty': 'Todavía no hay facturas.', 'f.retry': 'Reintentar', 'f.send': 'Enviar', 'f.save': 'Guardar cambios', 'f.err': 'No pude cargar los datos. Inténtalo de nuevo.', 'f.decide': 'decide', 'f.nopay': 'No puedo mostrar este pago', 'f.nopay.next': 'Pídele a quien te lo envió que lo reenvíe.', 'f.offline': 'Sin conexión. Revisa tu conexión e inténtalo de nuevo.', 'f.failed': 'No se pudo enviar. Inténtalo de nuevo.' },
+  en: { 'f.title': 'Inbox', 'f.empty': 'There are no invoices yet.', 'f.retry': 'Retry', 'f.send': 'Send', 'f.save': 'Save changes', 'f.err': 'I could not load the data. Please try again.', 'f.decide': 'decide', 'f.nopay': "I can't show this payment", 'f.nopay.next': 'Ask the sender to send it again.', 'f.offline': 'You are offline. Check your connection and try again.', 'f.failed': 'It could not be sent. Please try again.' },
 };
 const SVG = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='8' height='8'><rect width='8' height='8' fill='%23111111'/></svg>";
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
@@ -65,6 +65,8 @@ const page = (bad, lang) => {
   ${bad === '5.words:404' ? '<p>404</p>' : ''}
   ${bad === '5.words:trace' ? '<p>at render (https://x.test/app.js:10:5)</p>' : ''}
   ${bad === '5.mixed' ? `<p>${DICTS.es['f.save']}</p>` : ''}
+  ${bad === '5.mixed:short' ? `<button type="button">${DICTS.es['f.send']}</button>` : ''}
+  ${bad === '5.mixed:both' ? `<p>  ${DICTS.en['f.decide'].toUpperCase()} </p>` : ''}
   ${bad === '5.locale' ? '<p>Total 1,234.50</p>' : ''}
   ${bad === '6.palette' ? '<p class="pal">Color</p>' : ''}
   ${bad === '6.fonts' ? '<p class="fnt">Fuente</p>' : ''}
@@ -109,6 +111,40 @@ const gonePage = (u) => {
   return `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"><title>g</title></head><body><header><svg data-logo role="img" aria-label="Logo" width="32" height="32"><rect width="32" height="32" fill="#111111"/></svg></header><main><h1>${text}</h1>${u.searchParams.has('sub') ? '<img src="/missing.png" width="8" height="8" alt="">' : ''}</main>${u.searchParams.has('spoof') ? "<script>console.error('Failed to load resource: the server responded with a status of 404 (Not Found)')</script>" : ''}</body></html>`;
 };
 
+// R-112: the approve screen. ?s= is the status of GET /api/approve/<token>; ?wrong shows another heading, ?ctl adds a primary button,
+// ?x logs a second error, ?n skips the main request and ?o asks another URL instead.
+const approvePage = (u, token) => {
+  const q = u.searchParams, lang = q.get('lang') === 'en' ? 'en' : 'es', t = DICTS[lang];
+  return `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"><title>a</title></head><body><header><svg data-logo role="img" aria-label="Logo" width="32" height="32"><rect width="32" height="32" fill="#111111"/></svg></header><main><h1>${q.has('wrong') ? t['f.title'] : t['f.nopay']}</h1><p>${t['f.nopay.next']}</p>${q.has('ctl') ? `<button class="primary" type="button">${t['f.retry']}</button>` : ''}</main><script>
+  const u = '/api/approve/' + ${JSON.stringify(token)};
+  ${q.has('n') ? '' : 'fetch(u + location.search);'}
+  ${q.has('o') ? "fetch(u + '-other' + location.search);" : ''}
+  ${q.has('x') ? "console.error('boom');" : ''}
+  </script></body></html>`;
+};
+// R-114: a sticky header (?mode: opaque, translucent, same layer, outside its box, content above it) over content scrolled under it.
+const overlapPage = (mode) => `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>o</title><style>
+  body{margin:0;font:16px/1.6 ${FONTS[0]};color:#111111;background:#ffffff}
+  header{position:sticky;top:0;z-index:2;height:${mode === 'outside' ? 20 : 56}px;padding:0 16px;background:${mode === 'translucent' ? 'rgba(255,255,255,0.5)' : '#ffffff'}}
+  header span{position:absolute;left:16px;top:0}
+  p{margin:0;padding:0 16px;${mode === 'above' ? 'position:relative;z-index:5' : ''}}
+  </style></head><body><header><span>Cabecera fija</span>${mode === 'same' ? '<span style="top:6px">Otra marca de cabecera</span>' : ''}</header><p>Contenido que pasa por debajo</p><div style="height:2000px"></div><script>scrollTo(0,${mode === 'outside' ? 12 : 56})</script></body></html>`;
+// Vendor pages for the forced states: the portal chat (POST answers a bubble) and the server-rendered status page (offline notice).
+const portalFixture = (bare) => `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>p</title></head><body><main><h1>Portal</h1><div class="log"></div><form id="f"><label for="m">Mensaje</label><textarea id="m" style="font-size:16px"></textarea><button type="submit" class="primary">Enviar</button></form></main><script>
+  const log = document.querySelector('.log');
+  const bubble = (t) => { log.innerHTML = '<article class="bubble error"><p>' + t + '</p></article>'; };
+  document.getElementById('f').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (navigator.onLine === false) return bubble(${JSON.stringify(bare ? 'Algo salió mal.' : DICTS.es['f.offline'])});
+    const r = await fetch(location.pathname, { method: 'POST' }).catch(() => null);
+    if (!r || !r.ok) bubble(${JSON.stringify(bare ? 'Algo salió mal.' : DICTS.es['f.failed'])});
+  });
+  </script></body></html>`;
+const statusFixture = () => `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>s</title></head><body><main><p class="state" role="status" hidden>${DICTS.es['f.offline']}</p><h1>Recibida</h1></main><script>
+  const n = document.querySelector('.state');
+  for (const e of ['online', 'offline']) addEventListener(e, () => { n.hidden = navigator.onLine !== false; });
+  </script></body></html>`;
+
 let server, base, browser;
 const seen = [];
 beforeAll(async () => {
@@ -117,6 +153,11 @@ beforeAll(async () => {
     if (req.method !== 'GET') seen.push(`${req.method} ${u.pathname}`);
     if (u.pathname === '/f') return void res.writeHead(200, { 'content-type': 'text/html', ...(u.searchParams.has('csp') ? { 'content-security-policy': "script-src 'self'" } : {}) }).end(page(u.searchParams.get('bad') ?? '', u.searchParams.get('lang') ?? 'es'));
     if (u.pathname === '/pq' || u.pathname === '/ps') return void res.writeHead(200, { 'content-type': 'text/html' }).end(portalPage(u.pathname === '/pq' ? 'q' : 's'));
+    if (u.pathname.startsWith('/approve/')) return void res.writeHead(200, { 'content-type': 'text/html' }).end(approvePage(u, u.pathname.slice(9)));
+    if (u.pathname.startsWith('/api/approve/')) return void res.writeHead(+(u.searchParams.get('s') ?? 404), { 'content-type': 'application/json' }).end('{"error":"invalid_token"}');
+    if (u.pathname === '/ov') return void res.writeHead(200, { 'content-type': 'text/html' }).end(overlapPage(u.searchParams.get('mode')));
+    if (u.pathname === '/pf') return void res.writeHead(200, { 'content-type': 'text/html' }).end(req.method === 'POST' ? '{"ok":true}' : portalFixture(u.searchParams.has('bare')));
+    if (u.pathname === '/sf') return void res.writeHead(200, { 'content-type': 'text/html' }).end(statusFixture());
     if (u.pathname === '/gone') return void res.writeHead(u.searchParams.has('spoof') ? 200 : 404, { 'content-type': 'text/html' }).end(gonePage(u));
     if (u.pathname === '/api/demo/overview') return void res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(server.overview ?? { invoices: [] }));
     if (u.pathname === '/api/fx') return void res.writeHead(200, { 'content-type': 'application/json' }).end('{"provider":"gate","rates":[{"c":"USD"}]}');
@@ -362,4 +403,111 @@ describe('designed 404 pages (R-103)', () => {
     expect(SCREENS.filter((s) => s.notFound).map((s) => s.id)).toEqual(['portal-error', 'status-invalid']);
     expect(SCREENS.find((s) => s.id === 'portal').compose).toBeTruthy();
   });
+});
+
+describe('invalid approval link: the one expected 404 line (R-112)', () => {
+  const approve = (q = '', o = {}) => ({ ...SCREENS.find((s) => s.id === 'approve'), path: `/approve/tok-gate?lang=${o.lang ?? 'es'}${q}` });
+  const row = (rs, id) => rs.find((r) => r.id === id);
+  it.each(['es', 'en'])('excludes exactly that line and prints it (%s)', async (lang) => {
+    const rs = await run(approve('&s=404', { lang }), { lang });
+    expect(status(rs, '6.console'), JSON.stringify(row(rs, '6.console'))).toBe('pass');
+    expect(row(rs, '6.console').measured).toContain('excluded: expected 404 (invalid link)');
+  }, 60_000);
+  it.each([['a second error line', '&s=404&x=1'], ['a 409', '&s=409'], ['a 500', '&s=500'], ['another URL', '&s=404&n=1&o=1'], ['a second request that fails', '&s=404&o=1'], ['no designed heading', '&s=404&wrong=1']])('still fails with %s', async (_, q) => {
+    const rs = await run(approve(q));
+    expect(status(rs, '6.console'), JSON.stringify(row(rs, '6.console'))).toBe('fail');
+    expect(row(rs, '6.console').measured).toMatch(/^1 console errors/); // the expected line may go (exactly one); the other stays
+  }, 60_000);
+  it('still fails the same line on any other screen', async () => {
+    expect(status(await run({ id: 'inbox', exp: 'finance', path: '/approve/tok-gate?s=404' }), '6.console')).toBe('fail');
+  }, 60_000);
+  it('has nothing to exclude on a page that loads', async () => {
+    const r = row(await run(approve('&s=200&wrong=1')), '6.console');
+    expect([r.status, r.measured.includes('excluded')]).toEqual(['pass', false]);
+  }, 60_000);
+
+  it('2.primary, 3.focus, 3.enter, 4.busy and the 7.usable primary part are N/A with the design reason when it has no control', async () => {
+    const rs = await run(approve('&s=404'));
+    expect([row(rs, '2.primary').status, row(rs, '2.primary').measured]).toEqual(['na', 'sin acción por diseño (R-103)']);
+    expect(row(rs, '7.usable').measured).toContain('sin acción por diseño (R-103)');
+    const d = await run(approve('&s=404'), { kind: 'dynamic' });
+    expect(['3.focus', '3.enter', '4.busy'].map((id) => row(d, id)).map((r) => [r.status, r.measured])).toEqual(Array(3).fill(['na', 'sin acción por diseño (R-103)']));
+  }, 60_000);
+  it('keeps the action items when the state has a control', async () => {
+    const d = await run(approve('&s=404&ctl=1'), { kind: 'dynamic' });
+    expect(row(d, '3.focus').measured).not.toBe('sin acción por diseño (R-103)');
+  }, 60_000);
+});
+
+describe('5.mixed: only strings that belong to the other language alone (R-113)', () => {
+  it('lets a string both dictionaries hold pass, ignoring case and spacing', async () => {
+    const r = (await cell('5.mixed:both', { lang: 'en' })).find((x) => x.id === '5.mixed');
+    expect(r.status, JSON.stringify(r)).toBe('pass');
+  }, 60_000);
+  it('flags a one-word string that only the es dictionary holds, on an en screen', async () => {
+    const r = (await cell('5.mixed:short', { lang: 'en' })).find((x) => x.id === '5.mixed');
+    expect([r.status, r.measured]).toEqual(['fail', expect.stringContaining('Enviar')]);
+  }, 60_000);
+  it('flags an en-only string on an es screen, and passes it once the es dictionary holds it too', async () => {
+    const screen = { id: 'x', exp: 'test', path: '/pq' }; // shows «Bandeja» in es
+    const dicts = (es) => ({ es, en: { b: 'Bandeja' } });
+    const mixed = async (d) => status(await run(screen, { opts: { dicts: d, speed: true, shots: false } }), '5.mixed');
+    expect(await mixed(dicts({ a: 'Hola' }))).toBe('fail');
+    expect(await mixed(dicts({ a: 'Hola', b: 'Bandeja' }))).toBe('pass');
+  }, 60_000);
+});
+
+describe('1.overlap: text under an opaque sticky or fixed layer (R-114)', () => {
+  const ov = (mode) => run({ id: 'ov', exp: 'test', path: `/ov?mode=${mode}` });
+  const one = (rs) => rs.find((r) => r.id === '1.overlap');
+  it('passes an opaque sticky header over scrolled content and prints the pair', async () => {
+    const r = one(await ov('opaque'));
+    expect(r.status, JSON.stringify(r)).toBe('pass');
+    expect(r.measured).toContain('excluded: occluded by sticky/fixed layer');
+  }, 60_000);
+  it.each([['a translucent header', 'translucent'], ['two texts inside the header', 'same'], ['a rectangle outside the layer box', 'outside'], ['content drawn above the header', 'above']])('still fails %s', async (_, mode) => {
+    const r = one(await ov(mode));
+    expect(r.status, JSON.stringify(r)).toBe('fail');
+    expect(r.measured).toMatch(/^[1-9] overlapping text boxes/);
+  }, 60_000);
+  it('keeps the excluded line in the aggregate when another cell has none', () => {
+    const rows = [{ screen: 's', width: 360, lang: 'es', id: '1.overlap', status: 'pass', value: 0, measured: '0 overlapping text boxes' }, { screen: 's', width: 390, lang: 'es', id: '1.overlap', status: 'pass', value: 0, measured: '0 overlapping text boxes; excluded: occluded by sticky/fixed layer ("a" under "b")' }];
+    expect(aggregate(rows)[0].measured).toContain('excluded: occluded by sticky/fixed layer');
+  });
+});
+
+describe('vendor forced states (QA of Task 25)', () => {
+  const forced = (id, path) => ({ ...SCREENS.find((s) => s.id === id), path });
+  const state = async (screen, st, lang = 'es') => (await run(screen, { state: st, lang })).find((r) => r.id === '4.state');
+  it('portal error: types a message, the POST answers 500 (never reaches the server), the message has a next step', async () => {
+    seen.length = 0;
+    const r = await state(forced('portal', '/pf'), 'error');
+    expect(r.status, JSON.stringify(r)).toBe('pass');
+    expect(r.measured).toContain('No se pudo enviar');
+    expect(seen).toEqual([]);
+  }, 60_000);
+  it('portal error fails when the message offers no next step', async () => {
+    expect((await state(forced('portal', '/pf?bare=1'), 'error')).status).toBe('fail');
+  }, 60_000);
+  it('portal offline: sends while offline and checks the message', async () => {
+    const r = await state(forced('portal', '/pf'), 'offline');
+    expect(r.status, JSON.stringify(r)).toBe('pass');
+    expect(r.measured).toContain('Sin conexión');
+  }, 60_000);
+  it('portal offline fails when the message offers no next step', async () => {
+    expect((await state(forced('portal', '/pf?bare=1'), 'offline')).status).toBe('fail');
+  }, 60_000);
+  it('portal empty is N/A: no list by design', async () => {
+    const r = await state(forced('portal', '/pf'), 'empty');
+    expect([r.status, r.measured]).toEqual(['na', 'sin estado vacío por diseño']);
+  }, 60_000);
+  it.each(['empty', 'error'])('status %s is N/A: server-rendered, no request to fail', async (st) => {
+    const r = await state(forced('status', '/sf'), st);
+    expect([r.status, r.measured]).toEqual(['na', 'servidor: sin petición que fallar']);
+  }, 60_000);
+  it('status offline shows the «Sin conexión» notice', async () => {
+    const r = await state(forced('status', '/sf'), 'offline');
+    expect(r.status, JSON.stringify(r)).toBe('pass');
+    expect(r.measured).toContain('Sin conexión');
+  }, 60_000);
 });

@@ -26,7 +26,7 @@ export const es: Record<string, string> = {
   'tour.done': 'Terminar',
   'tour.inbox.title': 'Bandeja',
   'tour.inbox.body':
-    'Thesaurus es un agente: con cada factura percibe → lee → consulta sus herramientas → decide → actúa → rinde cuentas. Aquí ves el resultado de cada una, PAGAR, FRENAR o ESCALAR, con su razón en una línea. Trabaja solo: revisa las facturas pendientes cada 5 minutos, aunque nadie haya iniciado sesión. Dónde actúa la IA: lee cada factura (Amazon Nova Lite en AWS Bedrock) y responde tus preguntas sobre el registro («Pregúntale a Thesaurus»). Dónde decide el código: las 13 reglas, la tabla de consecuencias y la tasa de cambio del día; solo el código puede escribir PAGAR.',
+    'Thesaurus es un agente: con cada factura percibe → lee → consulta sus herramientas → decide → actúa → rinde cuentas. Revisa las pendientes cada 5 minutos, aunque nadie haya iniciado sesión. Dónde actúa la IA: lee cada factura (Amazon Nova Lite en AWS Bedrock) y responde tus preguntas sobre el registro («Pregúntale a Thesaurus»). Dónde decide el código: las 13 reglas, la tabla de consecuencias y la tasa de cambio del día; solo el código puede escribir PAGAR.',
   'tour.new-invoice.title': 'Nueva factura',
   'tour.new-invoice.body': 'Sube un PDF o una imagen, o pega un correo o un chat. El agente la lee y la decide en el momento.',
   'tour.run-agent.title': 'Ejecutar agente',
@@ -72,7 +72,7 @@ export const en: Record<string, string> = {
   'tour.done': 'Finish',
   'tour.inbox.title': 'Inbox',
   'tour.inbox.body':
-    'Thesaurus is an agent: with every invoice it perceives → reads → consults its tools → decides → acts → accounts for it. Here you see each result, PAY, STOP or ESCALATE, with its reason in one line. It works on its own: it checks pending invoices every 5 minutes, even when nobody is signed in. Where the AI acts: it reads each invoice (Amazon Nova Lite on AWS Bedrock) and answers your questions about the record ("Ask Thesaurus"). Where code decides: the 13 rules, the consequence table and the day\'s exchange rate; only code can write PAY.',
+    'Thesaurus is an agent: with every invoice it perceives → reads → consults its tools → decides → acts → accounts for it. It checks pending invoices every 5 minutes, even when nobody is signed in. Where the AI acts: it reads each invoice (Amazon Nova Lite on AWS Bedrock) and answers your questions about the record ("Ask Thesaurus"). Where code decides: the 13 rules, the consequence table and the day\'s exchange rate; only code can write PAY.',
   'tour.new-invoice.title': 'New invoice',
   'tour.new-invoice.body': 'Upload a PDF or an image, or paste an email or a chat. The agent reads it and decides it right away.',
   'tour.run-agent.title': 'Run agent',

@@ -136,7 +136,11 @@ body:has(.tour) .topbar { position: sticky; top: 0; z-index: 1001; }
   background: var(--surface);
   border-radius: var(--radius);
   padding: 1.5rem 1.75rem;
+  max-height: calc(100dvh - var(--tour-top, 0px) - 3rem); /* --tour-top: the top bar's bottom, set by Tour.tsx */
+  display: flex;
+  flex-direction: column;
 }
+.tour-card > p:not(.muted) { overflow-y: auto; min-height: 0; }
 .tour-card h2 { font: 400 var(--text-xl) / 1.2 var(--font-serif); letter-spacing: -0.02em; margin: 0.25rem 0 0.5rem; }
 .tour-card p { margin: 0 0 1rem; }
 .tour-card p.muted { margin: 0; font-size: var(--text-sm); }

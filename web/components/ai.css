@@ -1,5 +1,5 @@
 /* AI on screen (AC-67, AC-77, AC-79; minimalist-ui, approved palette only): the ask box, «Leído por IA», the IA/código tags. */
-.ask { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 1.5rem; margin-top: 3rem; }
+.ask { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 1.5rem; margin: 0 0 2rem; }
 section.ask > h2 { font: 400 var(--text-xl) / 1.2 var(--font-serif); letter-spacing: -0.02em; margin: 0 0 1rem; }
 .ask form { display: grid; gap: 0.75rem; justify-items: start; }
 .ask label { display: grid; gap: 0.5rem; width: 100%; }

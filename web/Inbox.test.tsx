@@ -248,13 +248,32 @@ test('a payee outside the directory is one entry labelled as read on its oldest 
   expect(items()).toHaveLength(2);
 });
 
-test('Bandeja carries «Pregúntale a Thesaurus» below the list; it asks about the whole inbox, no invoice (AC-67)', async () => {
+// AC-91 item 4: the rows load under the box, never above it, so nothing pushes it down (UX pass 1, CLS 0.35).
+test('Bandeja carries «Pregúntale a Thesaurus» under the filters and above the list; it asks about the whole inbox, no invoice (AC-67)', async () => {
   const { f } = setup({ 'POST /api/ask': { answer: 'Quedan 3.200 USD del presupuesto de octubre.', provider: 'Amazon Nova Lite (AWS Bedrock)', remaining: 8 } });
   await screen.findByText(/supera el umbral/);
   const ask = screen.getByRole('region', { name: 'Pregúntale a Thesaurus' });
-  expect(screen.getAllByRole('list').at(-1)!.compareDocumentPosition(ask) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  const follows = (a: Node, b: Node) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+  expect(follows(payeeSelect(), ask)).toBe(true);
+  expect(follows(ask, screen.getAllByRole('list').at(-1)!)).toBe(true);
   fireEvent.change(within(ask).getByLabelText('Tu pregunta sobre el registro'), { target: { value: '¿cuánto queda del presupuesto?' } });
   fireEvent.click(within(ask).getByRole('button', { name: 'Preguntar' }));
   expect(await within(ask).findByText('Te quedan 8 preguntas hoy')).toBeTruthy();
   expect(calls(f, 'POST', '/api/ask').map(([, i]) => JSON.parse(String(i!.body)))).toEqual([{ question: '¿cuánto queda del presupuesto?', lang: 'es' }]);
+});
+
+// AC-91 item 4: nothing above «Pregúntale a Thesaurus» may change height once data arrives (measured in Chromium: the
+// last-run line popping in and the payee select widening with its options were the remaining shifts).
+test('the last-run line holds its place before its request answers', () => {
+  setup();
+  expect(document.querySelector('.inbox-last-run')).not.toBeNull();
+});
+
+test('the filters and the last-run line have sizes that do not depend on the data', async () => {
+  const { readFileSync } = (await import('node:fs' as string)) as { readFileSync(p: string, enc: string): string };
+  const css = readFileSync('web/pages/inbox.css', 'utf8');
+  expect(css).toMatch(/\n\.inbox-last-run \{[^}]*min-height: 1\.6em/); // one line
+  expect(css.split('@media (max-width: 640px) {')[1]).toMatch(/\.inbox-last-run \{[^}]*min-height: 3\.2em/); // it wraps to two on a phone
+  expect(css).toMatch(/\n\.inbox-filters label \{[^}]*flex: 1 1 12rem/);
+  expect(css).toMatch(/\n\.inbox-filters select \{[^}]*width: 100%/);
 });

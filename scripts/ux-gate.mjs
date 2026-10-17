@@ -28,20 +28,22 @@ const DEMO = { email: 'demo@andina-labs.example', password: 'andina-demo-2026' }
 
 // ---- Screens (AC-91 lists them). `path` may be a function of the run's variables; `states` get empty, error and offline cells. ----
 const STATES = ['empty', 'error', 'offline'];
+const SERVER_PAGE = 'servidor: sin petición que fallar'; // the real failure page is the server's designed 503, covered by status-invalid
 const FX_STATES = ['fx-empty', 'fx-error']; // policy: only GET /api/fx is forced; the rest of the screen loads normally (AC-73)
 // "Unread": the agent has not decided the invoice, or the reader could not read it. The demo may have none: then the screen is N/A, not a failure.
 export const unreadId = (invoices) => invoices?.find((i) => i.outcome == null || i.fields?.read_error)?.id;
 const EMPTY_BODY = { '/api/period': { budget_usd: null, balance_usd: null, paid_usd: 0, committed_usd: 0, available_usd: null, count_by_outcome: { PAGAR: 0, FRENAR: 0, ESCALAR: 0 }, by_beneficiary: [], autonomy: { n: 0, m: 0 }, autonomy_pct: null, violations: 0, explained_pct: 0 }, '/api/agent/last-run': null };
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
+const MSG = 'Factura AS-0087 de Ana Souza, 10.000,00 BRL';
 const newInvoice = (i, text) => async (page) => {
   await page.locator('[data-tour="new-invoice"]').click();
   await page.locator('[role="tab"]').nth(i).click();
-  if (text) await page.locator('form.new-invoice textarea').fill('Factura AS-0087 de Ana Souza, 10.000,00 BRL');
+  if (text) await page.locator('form.new-invoice textarea').fill(MSG);
   else await page.locator('form.new-invoice input[type="file"]').setInputFiles({ name: 'factura.png', mimeType: 'image/png', buffer: PNG });
 };
 const sendPortal = async (page, o) => {
   if (!o.mutate) return 'na: portal-reply sends a real message (one AI read); pass --mutate';
-  await page.locator('textarea, input[type="text"]').first().fill('Factura AS-0087 de Ana Souza, 10.000,00 BRL');
+  await page.locator('textarea, input[type="text"]').first().fill(MSG);
   await page.locator('button[type="submit"], button.primary').first().click();
   await page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => {});
   await page.waitForTimeout(1500);
@@ -63,10 +65,10 @@ export const SCREENS = [
   { id: 'period', exp: 'finance', path: '/period', states: STATES },
   { id: 'approve', exp: 'finance', path: (v) => `/approve/${v.approveToken ?? 'invalid'}`, auth: false },
   { id: 'demo', exp: 'finance', path: '/demo', auth: false },
-  { id: 'portal', exp: 'vendor', path: '/andina-labs', auth: false, states: STATES, primary: 'button[type="submit"], button.primary', compose: 'textarea' }, // compose: typed before 4.busy, an empty send takes the error path
+  { id: 'portal', exp: 'vendor', path: '/andina-labs', auth: false, states: STATES, primary: 'button[type="submit"], button.primary', compose: 'textarea', send: true, na: { empty: 'sin estado vacío por diseño' } }, // compose: typed before 4.busy, an empty send takes the error path; send: error and offline type a message and send it
   { id: 'portal-reply', exp: 'vendor', path: '/andina-labs', auth: false, prepare: sendPortal, primary: 'button[type="submit"], button.primary' },
   { id: 'portal-error', exp: 'vendor', path: '/no-such-portal-gate', auth: false, notFound: true }, // designed 404 (R-103)
-  { id: 'status', exp: 'vendor', path: (v) => `/estado/${v.statusToken}`, auth: false, states: STATES, needs: 'statusToken' },
+  { id: 'status', exp: 'vendor', path: (v) => `/estado/${v.statusToken}`, auth: false, states: STATES, needs: 'statusToken', na: { empty: SERVER_PAGE, error: SERVER_PAGE } }, // server-rendered; offline is the page's own notice
   { id: 'status-invalid', exp: 'vendor', path: '/estado/token-invalido-gate', auth: false, notFound: true },
 ];
 
@@ -118,18 +120,33 @@ function measure(o) {
     const rects = [...range.getClientRects()].filter((r) => r.width > 1 && r.height > 1);
     if (rects.length) runs.push({ el, text: n.textContent.trim().replace(/\s+/g, ' '), rects, modal: !!el.closest('[aria-modal="true"],[role="dialog"]') });
   }
-  const overlaps = [];
+  // R-114: x is hidden under an opaque sticky or fixed layer when all four hold: (a) the layer is sticky or fixed and a background
+  // from x's element up to the layer is opaque; (b) y is not in the layer; (c) every intersection lies in the layer's box; (d) at its centre the layer is what the page shows.
+  const opaque = (el) => { const m = getComputedStyle(el).backgroundColor.match(/^rgba?\((.*)\)$/); const v = m && m[1].split(/[,/ ]+/).filter(Boolean); return !!v && (v.length < 4 || +v[3] === 1); };
+  const hidden = (x, y, hits) => {
+    for (let l = x.el; l && l !== document.body && l !== document.documentElement; l = l.parentElement) {
+      if (!/^(?:sticky|fixed)$/.test(getComputedStyle(l).position) || l.contains(y.el)) continue;
+      let solid = false;
+      for (let p = x.el; ; p = p.parentElement) { solid ||= opaque(p); if (p === l) break; }
+      const box = l.getBoundingClientRect();
+      if (solid && hits.every((h) => h.left >= box.left - 0.5 && h.right <= box.right + 0.5 && h.top >= box.top - 0.5 && h.bottom <= box.bottom + 0.5 && l.contains(document.elementFromPoint((h.left + h.right) / 2, (h.top + h.bottom) / 2)))) return true;
+    }
+    return false;
+  };
+  const overlaps = [], occluded = [];
   for (let i = 0; i < runs.length; i++)
     for (let j = i + 1; j < runs.length; j++) {
       const a = runs[i], b = runs[j];
       if (a.modal !== b.modal) continue; // a dialog sits over the page by design
-      const hit = a.rects.some((r) => b.rects.some((s) => {
+      const hits = a.rects.flatMap((r) => b.rects.map((s) => {
         const ix = Math.min(r.right, s.right) - Math.max(r.left, s.left), iy = Math.min(r.bottom, s.bottom) - Math.max(r.top, s.top);
-        return ix > 1 && iy > 1 && (ix * iy) / Math.min(r.width * r.height, s.width * s.height) > 0.25;
-      }));
-      if (hit) overlaps.push(`"${a.text.slice(0, 20)}" over "${b.text.slice(0, 20)}"`);
+        return ix > 1 && iy > 1 && (ix * iy) / Math.min(r.width * r.height, s.width * s.height) > 0.25 ? { left: Math.max(r.left, s.left), right: Math.min(r.right, s.right), top: Math.max(r.top, s.top), bottom: Math.min(r.bottom, s.bottom) } : null;
+      })).filter(Boolean);
+      if (!hits.length) continue;
+      (hidden(a, b, hits) || hidden(b, a, hits) ? occluded : overlaps).push(`"${a.text.slice(0, 20)}" over "${b.text.slice(0, 20)}"`);
     }
   out.overlaps = sample(overlaps);
+  out.occluded = sample(occluded);
   out.texts = runs.map((r) => r.text);
   out.attrs = els.flatMap((el) => ['placeholder', 'aria-label', 'title', 'alt'].map((a) => el.getAttribute(a)).filter(Boolean));
 
@@ -203,22 +220,46 @@ const LOCALE = {
 const ISO_DATE = /\b\d{4}-\d{2}-\d{2}\b/;
 const NEXT_STEP = /reintent|recarg|vuelve|int[eé]ntalo|intenta|usa |sube|crea|agrega|a[ñn]ade|revisa|comprueba|conecta|p[ií]dele|retry|reload|try again|go back|check|use |upload|add |create|connect|refresh|\bask\b/i;
 const BY_DESIGN = 'sin acción por diseño (R-103)'; // the two designed 404 pages have no action on purpose
+const EXCLUDED_LAYER = 'excluded: occluded by sticky/fixed layer'; // R-114
+const EXCLUDED_LINK = 'excluded: expected 404 (invalid link)'; // R-112
 const EXCLUDED_404 = 'excluded: expected 404 (AC-83/AC-84)';
 const hex = (c) => {
   const m = c.match(/rgba?\((\d+), (\d+), (\d+)(?:, ([\d.]+))?\)/);
   return m && (m[4] === undefined || +m[4] > 0) ? '#' + [m[1], m[2], m[3]].map((n) => (+n).toString(16).padStart(2, '0')).join('') : null;
 };
 const norm = (s) => s.replace(/["']/g, '').replace(/\s+/g, ' ').toLowerCase();
-const foreign = new Map();
-function foreignPatterns(dicts, lang) {
-  const k = `${lang}:${Object.keys(dicts.es).length}`;
-  if (!foreign.has(k)) {
-    const other = lang === 'es' ? 'en' : 'es';
-    foreign.set(k, Object.entries(dicts[other]).filter(([key, v]) => v.replace(/\{\w+\}/g, '').trim().length >= 4 && v !== dicts[lang][key]).map(([key, v]) => ({
-      key, re: new RegExp('^' + v.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\{\w+\}/g, '.+?') + '$'),
-    })));
+// R-113: a text is flagged only when the other language's dictionary holds it and this language's own dictionary does not.
+// Compared trimmed, whitespace collapsed, case ignored; {placeholders} match any text.
+const tidy = (v) => v.replace(/\s+/g, ' ').trim().toLowerCase();
+const index = new WeakMap();
+const holds = (dict) => {
+  if (!index.has(dict)) {
+    const exact = new Set(), pats = [];
+    for (const v of Object.values(dict)) {
+      if (!v.replace(/\{\w+\}/g, '').trim()) continue; // a bare placeholder says nothing about a language
+      if (/\{\w+\}/.test(v)) pats.push(new RegExp('^' + tidy(v).replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\{\w+\}/g, '.+?') + '$'));
+      else exact.add(tidy(v));
+    }
+    index.set(dict, (s) => exact.has(s) || pats.some((re) => re.test(s)));
   }
-  return foreign.get(k);
+  return index.get(dict);
+};
+
+// R-112: the approve screen opened with an invalid or expired token. Returns the console line to exclude, or null when any condition fails:
+// a «Failed to load resource» error for /api/approve/<the page's own token>, observed as 404, with the designed heading and a next step.
+const DESIGNED = 'No puedo mostrar este pago';
+async function invalidLink(page, screen, logs, responses, { dicts, lang }) {
+  if (screen.id !== 'approve') return null;
+  const api = `/api/approve/${new URL(page.url()).pathname.split('/')[2]}`;
+  const line = logs.findIndex((l) => l.failedLoad && l.text.startsWith('error:') && new URL(l.failedLoad).pathname === api);
+  if (line < 0 || !responses.some((r) => r.url === logs[line].failedLoad && r.status === 404)) return null;
+  const want = lang === 'es' ? DESIGNED : dicts?.en?.[Object.keys(dicts?.es ?? {}).find((k) => dicts.es[k] === DESIGNED)]; // the en heading is the en entry of the same key
+  if (!want) return null;
+  const p = await page.evaluate(() => {
+    const main = document.querySelector('main') ?? document.body;
+    return { heads: [...document.querySelectorAll('h1,h2')].filter((h) => h.checkVisibility()).map((h) => h.textContent), text: main.innerText, controls: [...main.querySelectorAll('button,a[href],[role="button"]')].filter((e) => e.checkVisibility() && !e.closest('header,nav,.lang,.lang-switch')).length };
+  });
+  return p.heads.some((h) => tidy(h) === tidy(want)) && (p.controls > 0 || NEXT_STEP.test(p.text)) ? { line, controls: p.controls } : null;
 }
 
 const R = (id, status, value, measured) => ({ id, status, value, measured });
@@ -231,7 +272,7 @@ function judge(m, c) {
   rs.push(P('1.scroll', m.scroll.sw > m.scroll.iw, Math.max(0, m.scroll.sw - m.scroll.iw), `scrollWidth ${m.scroll.sw} vs innerWidth ${m.scroll.iw}`));
   rs.push(P('1.offscreen', m.offscreen.count > 0, m.offscreen.count, `${m.offscreen.count} elements outside the viewport${m.offscreen.count ? ': ' + list(m.offscreen) : ''}`));
   rs.push(P('1.clip', m.clipped.count > 0, m.clipped.count, `${m.clipped.count} clipped text elements${m.clipped.count ? ': ' + list(m.clipped) : ''}`));
-  rs.push(P('1.overlap', m.overlaps.count > 0, m.overlaps.count, `${m.overlaps.count} overlapping text boxes${m.overlaps.count ? ': ' + list(m.overlaps) : ''}`));
+  rs.push(P('1.overlap', m.overlaps.count > 0, m.overlaps.count, `${m.overlaps.count} overlapping text boxes${m.overlaps.count ? ': ' + list(m.overlaps) : ''}${m.occluded.sample.map((p) => `; ${EXCLUDED_LAYER} (${p})`).join('')}`));
   rs.push(width > 768 ? R('1.tables', 'na', 0, 'only checked at 768 px and below') : P('1.tables', m.tables.count > 0, m.tables.count, `${m.tables.count} wide tables without their own scroll${m.tables.count ? ': ' + list(m.tables) : ''}`));
   if (width <= 390) {
     const t = m.targets.small;
@@ -253,7 +294,8 @@ function judge(m, c) {
   rs.push(P('5.words', words.length > 0, words.length, `${words.length} developer words in visible text${words.length ? ': ' + words.slice(0, 5).join('; ') : ''}`));
   if (!c.dicts) rs.push(R('5.mixed', 'na', 0, 'no UI dictionaries loaded'));
   else {
-    const hits = foreignPatterns(c.dicts, lang), mixed = [...new Set(text)].map((s) => hits.find((h) => h.re.test(s)) && s).filter(Boolean);
+    const other = holds(c.dicts[lang === 'es' ? 'en' : 'es']), own = holds(c.dicts[lang]);
+    const mixed = [...new Set(text)].filter((s) => other(tidy(s)) && !own(tidy(s)));
     rs.push(P('5.mixed', mixed.length > 0, mixed.length, `${mixed.length} strings from the ${lang === 'es' ? 'English' : 'Spanish'} dictionary${mixed.length ? ': ' + mixed.slice(0, 5).join('; ') : ''}`));
   }
   const loc = text.filter((s) => [...LOCALE[lang], ISO_DATE].some((re) => re.test(s)));
@@ -317,6 +359,7 @@ export async function runCell(browser, job) {
   const label = screen.id + (state ? '-' + state : '');
   const rows = [];
   const add = (r) => wanted(opts.only, r.id) && rows.push({ screen: label, width, lang, ...r });
+  if (state && screen.na?.[state]) return add(R('4.state', 'na', 0, screen.na[state])), rows; // a designed state this screen has no way to reach
   const context = await browser.newContext({
     viewport: { width, height: HEIGHT[width] ?? 800 },
     deviceScaleFactor: width <= 390 ? 2 : 1,
@@ -327,7 +370,8 @@ export async function runCell(browser, job) {
   const gate = { release: new Promise((r) => (release = r)), held: [] };
   try {
     const page = await context.newPage();
-    const logs = [];
+    const logs = [], responses = [];
+    page.on('response', (r) => responses.push({ url: r.url(), status: r.status() }));
     page.on('console', (msg) => ['error', 'warning'].includes(msg.type()) && logs.push({ text: `${msg.type()}: ${msg.text().slice(0, 120)}${msg.text().startsWith('Failed to load resource') ? ` <${msg.location().url}>` : ''}`, failedLoad: msg.text().startsWith('Failed to load resource') ? msg.location().url : null }));
     page.on('pageerror', (e) => logs.push({ text: `pageerror: ${String(e.message).slice(0, 120)}` }));
     await page.addInitScript(INIT, { lang, session: screen.auth === false ? null : opts.session, tour: !!screen.tour });
@@ -368,12 +412,14 @@ export async function runCell(browser, job) {
     const reached = new URL(page.url()).pathname;
     const want = path.split('?')[0];
     add(P('0.reach', reached !== want, reached !== want ? 1 : 0, reached === want ? `opened ${want}` : `asked for ${want}, got ${reached}`));
+    const invalid = state ? null : await invalidLink(page, screen, logs, responses, { dicts: opts.dicts, lang });
+    const noAction = screen.notFound || (invalid && !invalid.controls); // R-103: a page with no control by design
     if (!state) {
       const g = await page.evaluate(() => window.__gate);
       const enforce = opts.speed || !isLocal(base); // opts.speed: the fixture tests run on a local URL; no CLI flag
-      const part = screen.notFound ? `; primary action: ${BY_DESIGN}` : '';
+      const part = noAction ? `; primary action: ${BY_DESIGN}` : '';
       add(!enforce ? R('7.usable', 'na', usable ?? 0, `${usable === null ? 'not usable' : Math.round(usable) + ' ms'} (enforced on the deployed URL)${part}`)
-        : P('7.usable', usable === null || usable > 2000, usable ?? 99_999, usable === null ? `heading${screen.notFound ? '' : ' and primary action'} never became usable` : `usable at ${Math.round(usable)} ms (limit 2000)${part}`));
+        : P('7.usable', usable === null || usable > 2000, usable ?? 99_999, usable === null ? `heading${noAction ? '' : ' and primary action'} never became usable` : `usable at ${Math.round(usable)} ms (limit 2000)${part}`));
       add(P('7.longtask', g.long > 300, Math.round(g.long), `longest task ${Math.round(g.long)} ms (limit 300)`));
       add(P('4.cls', g.cls > 0.01, +g.cls.toFixed(4), `CLS ${g.cls.toFixed(4)} (limit 0.01)`));
     }
@@ -383,14 +429,19 @@ export async function runCell(browser, job) {
       await sleep(500);
     }
     for (const [sel, v] of Object.entries(screen.fill ?? {})) await page.locator(sel).first().fill(v).catch(() => {});
+    if (state && screen.send) { // the portal has no request on load: its error and offline states appear when a message is sent (answered 500, or sent offline)
+      await page.locator(screen.compose).first().fill(MSG);
+      await page.locator(primarySel).first().click();
+      await sleep(800);
+    }
 
     if (kind === 'dynamic') {
-      await dynamic(page, screen, primarySel, add);
+      await dynamic(page, screen, primarySel, add, noAction);
       return rows;
     }
 
     const m = await page.evaluate(measure, { width, primary: primarySel });
-    judge(m, { width, lang, dicts: opts.dicts, notFound: screen.notFound }).forEach(add);
+    judge(m, { width, lang, dicts: opts.dicts, notFound: noAction }).forEach(add);
     if (state || screen.notFound) {
       // A designed 404 page needs no control: its sentence is the next step.
       const t = screen.notFound ? m.message.text || m.main : m.message.text, ok = t.length >= 10 && ((!screen.notFound && m.message.next > 0) || NEXT_STEP.test(t));
@@ -398,10 +449,10 @@ export async function runCell(browser, job) {
       add(P('4.state', !ok, ok ? 0 : 1, ok ? `${what}: "${t.slice(0, 50)}", ${m.message.next} next-step controls` : `${what}: ${t ? `"${t.slice(0, 50)}"` : 'nothing shown'} and ${m.message.next} next-step controls`));
     }
     if (!state) {
-      // R-103: exactly one line may be excluded, the browser's own 404 for this page's main document, on a designed 404 page.
-      const skip = screen.notFound && nav?.status() === 404 ? logs.findIndex((l) => l.failedLoad === nav.url()) : -1;
+      // Exactly one line may be excluded: R-103, the browser's own 404 for the main document of a designed 404 page; R-112, the expected 404 of an invalid approval link.
+      const skip = screen.notFound && nav?.status() === 404 ? logs.findIndex((l) => l.failedLoad === nav.url()) : invalid?.line ?? -1;
       const left = logs.filter((_, i) => i !== skip).map((l) => l.text);
-      add(P('6.console', left.length > 0, left.length, `${left.length} console errors or warnings${left.length ? ': ' + left.slice(0, 3).join('; ') : ''}${skip >= 0 ? `; ${EXCLUDED_404}` : ''}`));
+      add(P('6.console', left.length > 0, left.length, `${left.length} console errors or warnings${left.length ? ': ' + left.slice(0, 3).join('; ') : ''}${skip >= 0 ? `; ${invalid ? EXCLUDED_LINK : EXCLUDED_404}` : ''}`));
     }
     if (wanted(opts.only, '3.axe') || wanted(opts.only, '3.contrast')) {
       await page.evaluate(axeJs()); // not addScriptTag: a script-src CSP refuses it (the portal's does); evaluate is not subject to the page's CSP
@@ -426,9 +477,9 @@ export async function runCell(browser, job) {
 }
 
 // Keyboard path to the primary action (focus ring, Enter), then the response within 100 ms (items 3 and 4).
-async function dynamic(page, screen, primarySel, add) {
-  if (screen.notFound) return ['3.focus', '3.enter', '4.busy'].forEach((id) => add(R(id, 'na', 0, BY_DESIGN)));
-  if (screen.compose) await page.locator(screen.compose).first().fill('Factura AS-0087 de Ana Souza, 10.000,00 BRL'); // a send with nothing typed takes the error path and shows no busy state
+async function dynamic(page, screen, primarySel, add, noAction) {
+  if (noAction) return ['3.focus', '3.enter', '4.busy'].forEach((id) => add(R(id, 'na', 0, BY_DESIGN)));
+  if (screen.compose) await page.locator(screen.compose).first().fill(MSG); // a send with nothing typed takes the error path and shows no busy state
   const marked = await page.evaluate((sel) => {
     const p = [...document.querySelectorAll(sel)].find((e) => e.checkVisibility() && !e.disabled);
     p?.setAttribute('data-gate-primary', '');
@@ -486,7 +537,7 @@ export function aggregate(rows) {
   return [...groups.values()].map((g) => {
     const failing = g.filter((r) => r.status === 'fail');
     const pool = failing.length ? failing : g;
-    const worst = pool.reduce((a, b) => (b.value > a.value ? b : a));
+    const worst = pool.reduce((a, b) => (b.value > a.value || (b.value === a.value && !a.measured.includes('excluded:') && b.measured.includes('excluded:')) ? b : a)); // a tie keeps the row that printed an exclusion
     const status = failing.length ? 'fail' : g.some((r) => r.status === 'pass') ? 'pass' : g[0].status;
     return { screen: g[0].screen, id: g[0].id, status, value: worst.value, measured: `${worst.measured} @${worst.width}/${worst.lang}`, cells: g.length, failing: failing.length };
   }).sort((a, b) => order(a.id).localeCompare(order(b.id)));

@@ -1,0 +1,20 @@
+/* Wordmark intro (AC-108). The box is the static logo's (160 x 32 viewBox, 5:1) and sizes everything in container units,
+   so the final frame sits where thesaurus-logo.svg puts it and nothing shifts. Only transform and opacity animate. */
+.logo.logo-intro { position: relative; width: 8.75rem; height: auto; aspect-ratio: 5 / 1; container-type: inline-size; }
+.logo-mark { position: absolute; inset: 0 auto 0 0; width: 20%; height: 100%; transform-origin: center; }
+.logo-word {
+  position: absolute; left: 26.25%; top: 0; white-space: nowrap;
+  font: 400 15cqw / 0 var(--font-serif); letter-spacing: -0.02em; color: #111111; /* 24 px in a 160 px logo; -0.48 px = -0.02em */
+}
+.logo-word::before { content: ''; display: inline-block; height: 14.375cqw; } /* the baseline sits 23 of 32 down, as in the SVG */
+.logo-word > span { display: inline-block; }
+
+.logo-mark, .logo-word > span { animation-fill-mode: backwards; animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1); } /* delay and duration are inline */
+.logo-word > span { animation-name: logo-letter; }
+.logo-mark { animation-name: logo-mark; }
+@keyframes logo-letter { from { opacity: 0; transform: translateX(-6px); } }
+@keyframes logo-mark { from { opacity: 0; transform: scale(0.85); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .logo-mark, .logo-word > span { animation: none; }
+}

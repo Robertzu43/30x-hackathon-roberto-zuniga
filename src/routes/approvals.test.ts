@@ -123,6 +123,15 @@ describe('GET /api/approve/:token (AC-35, R-55)', () => {
     expect(decisionsOf(uid('A-11'))).toHaveLength(1);
   });
 
+  it('shows what the escalation read for an invoice stored without fields, so the approver can still answer (7c)', async () => {
+    await setup(['11']);
+    db.tables.invoices!.find((i) => i.id === uid('A-11'))!.fields = null; // a REST insert: the loop never writes invoices (AC-38)
+    const { approve } = await links(uid('A-11'));
+    const res = await get(approve);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ invoice: { fields: { payee_name: 'Nube Sur LLC', amount: 4200, currency: 'USD' } } });
+  });
+
   it('a tampered, expired, unknown or malformed token -> "no es válido o venció", nothing written', async () => {
     await setup(['11']);
     const { approve } = await links(uid('A-11'));

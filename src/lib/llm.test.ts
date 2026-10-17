@@ -13,7 +13,7 @@ const envWith = (run: (model: string, input: unknown) => Promise<unknown>) =>
 const model = (out: unknown) => envWith(async () => ({ response: out }));
 const ALL_NULL = { payee_name: null, amount: null, currency: null, invoice_number: null, issue_date: null, due_date: null, concept: 'ilegible', bank_account: null, confidence: {} };
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
 // the repo has no @types/node, so the fs module is typed by hand
 const readFixture = async (path: string): Promise<ArrayBuffer> => {
@@ -86,11 +86,27 @@ describe('extractFields (AC-12, AC-13, AC-14)', () => {
     expect(await extractFields(env, 'x')).toEqual(ALL_NULL);
   });
 
+  // 7c live regression: the account's daily Workers AI allocation ran out (error 4006) and every read became a silent
+  // "ilegible". Each failure now logs one reason code, never the document text.
+  it.each([
+    ['quota', envWith(async () => { throw new Error('4006: you have used up your daily free allocation of 10,000 neurons'); })],
+    ['model_error', envWith(async () => { throw new Error('boom'); })],
+    ['invalid_json', model('lo siento')],
+    ['schema', model({ ...good, confidence: { amount: 7 } })],
+  ])('logs the reason code %s without the document text (AC-13)', async (code, env) => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(await extractFields(env, 'SECRETO factura 1042')).toEqual(ALL_NULL);
+    expect(log).toHaveBeenCalledWith('reader: ilegible', code);
+    expect(JSON.stringify(log.mock.calls)).not.toContain('SECRETO');
+  });
+
   it('returns ilegible after 20 s without an answer (AC-13)', async () => {
     vi.useFakeTimers();
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
     const p = extractFields(envWith(() => new Promise(() => {})), 'x');
     await vi.advanceTimersByTimeAsync(20_000);
     expect(await p).toEqual(ALL_NULL);
+    expect(log).toHaveBeenCalledWith('reader: ilegible', 'timeout');
   });
 
   it('reads the issuer, not the company billed, from the real 01.pdf text (live QA regression)', async () => {
@@ -148,5 +164,11 @@ describe('documentToText (AC-11, AC-12)', () => {
     ['bytes are missing', () => documentToText(model(null), { kind: 'pdf' })],
   ])('returns an empty string when %s, so the reader ends in ilegible (AC-13)', async (_n, call) => {
     expect(await call()).toBe('');
+  });
+
+  it('logs the vision failure reason, so an image read as ilegible is never silent (AC-13)', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await documentToText(envWith(async () => { throw new Error('4006: daily free allocation of 10,000 neurons'); }), { kind: 'image', bytes: new ArrayBuffer(2) });
+    expect(log).toHaveBeenCalledWith('reader: no text', 'quota');
   });
 });

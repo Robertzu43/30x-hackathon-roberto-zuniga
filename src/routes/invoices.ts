@@ -4,7 +4,7 @@ import type { Context } from 'hono';
 import { z } from 'zod';
 import { decodeCursor, runAgent } from '../agent/loop';
 import { directorio, findBeneficiary } from '../agent/tools';
-import { agentTrace, type StoredDecision } from '../agent/trace';
+import { agentTrace, recordedFields, type StoredDecision } from '../agent/trace';
 import { explainCheck, whatWouldPay } from '../engine/explain';
 import { validFields } from '../engine/checks';
 import type { Invoice, InvoiceFields } from '../engine/types';
@@ -17,6 +17,7 @@ import { memberRoutes } from './agent';
 export interface Current extends Omit<Invoice, 'fields'> {
   fields: InvoiceFields | null;
   file_path: string | null;
+  decision_id: string | null;
   outcome: StoredDecision['outcome'] | null;
   amount_usd: number | null;
   headline_es: string | null;
@@ -117,12 +118,13 @@ export const invoices = memberRoutes()
     const policy = latest?.policy_version == null ? null
       : must(await db.from('policies').select('name, version, created_at').eq('company_id', companyId).eq('version', latest.policy_version).maybeSingle());
     // R-71: "Lo que leí" shows a field the engine cannot trust as unknown, as every check saw it.
-    const invoice = { ...row, fields: (row.fields && validFields(row.fields)) as InvoiceFields };
+    const read = recordedFields(row.fields, latest?.checks);
+    const invoice = { ...row, fields: (read && validFields(read)) as InvoiceFields };
     return c.json({
       invoice,
       headline: row[`headline_${lang}`],
       decisions,
-      beneficiary: findBeneficiary(row.fields?.payee_name ?? null, directory),
+      beneficiary: findBeneficiary(read?.payee_name ?? null, directory),
       // R-49: each line names the rate of the stored decision's policy version, never the current one.
       explanations: (latest?.checks ?? []).map((ch) => explainCheck(ch, lang, row.received_at, latest?.policy_version)),
       fixes: whatWouldPay({ checks: latest?.checks ?? [] }, lang),

@@ -1,14 +1,15 @@
 // Periodo (AC-44, D17, R-01, R-63): the month's money and per-beneficiary table, the policy, and the agent's honesty figures.
 import { directorio, politica } from '../agent/tools';
+import { recordedFields } from '../agent/trace';
 import { bogotaDay, findBeneficiary, nameKey } from '../engine/checks';
-import type { Outcome } from '../engine/types';
+import type { Check, InvoiceFields, Outcome } from '../engine/types';
 import { round2 } from '../lib/money';
 import { must } from '../lib/supabase';
 import { memberRoutes } from './agent';
 
 interface Seeded { id: string; expected_outcome: Outcome }
-interface Row { invoice_id: string; outcome: Outcome; actor: 'agent' | 'human'; checks: unknown[] | null }
-interface Current { received_at: string; fields: { payee_name?: string | null } | null; outcome: Outcome | null; amount_usd: number | string | null }
+interface Row { invoice_id: string; outcome: Outcome; actor: 'agent' | 'human'; checks: Check[] | null }
+interface Current { id: string; received_at: string; fields: InvoiceFields | null; outcome: Outcome | null; amount_usd: number | string | null }
 type Group = { beneficiary: string | null; paid_usd: number; committed_usd: number; count: number };
 
 export const period = memberRoutes().get('/', async (c) => {
@@ -17,7 +18,7 @@ export const period = memberRoutes().get('/', async (c) => {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return c.json({ error: 'Mes no válido: usa AAAA-MM' }, 400);
   // ponytail: reads every decision and invoice of the company; a seeded workspace has ~30. Aggregate in SQL if one grows to thousands.
   const [current, directory, policy, seeded, decisions]: [Current[], Awaited<ReturnType<typeof directorio>>, Awaited<ReturnType<typeof politica>>, Seeded[], Row[]] = await Promise.all([
-    db.from('invoice_current').select('received_at, fields, outcome, amount_usd').eq('company_id', companyId).order('received_at').order('id').then(must),
+    db.from('invoice_current').select('id, received_at, fields, outcome, amount_usd').eq('company_id', companyId).order('received_at').order('id').then(must),
     directorio(db, companyId),
     politica(db, companyId),
     db.from('invoices').select('id, expected_outcome').eq('company_id', companyId).eq('archived', false).not('expected_outcome', 'is', null).then(must),
@@ -26,6 +27,7 @@ export const period = memberRoutes().get('/', async (c) => {
   // R-01: each seeded invoice's FIRST agent decision, so a later human answer or a policy change never moves the figures.
   const first = new Map<string, Outcome>();
   for (const d of decisions) if (d.actor === 'agent' && !first.has(d.invoice_id)) first.set(d.invoice_id, d.outcome);
+  const lastChecks = new Map(decisions.map((d) => [d.invoice_id, d.checks])); // seq order: the latest wins
   const n = seeded.filter((i) => first.get(i.id) !== 'ESCALAR' && first.get(i.id) === i.expected_outcome).length;
   // The month's money (D5, R-45) and the per-beneficiary table (R-63) from the same rows: non-archived invoices that arrived in
   // the Bogotá month. Rows group by the engine's AC-19 name rule, labelled with the directory name or else the oldest invoice's
@@ -35,7 +37,7 @@ export const period = memberRoutes().get('/', async (c) => {
   const groups = new Map<string, Group>();
   const count_by_outcome: Record<Outcome, number> = { PAGAR: 0, FRENAR: 0, ESCALAR: 0 };
   for (const r of rows) {
-    const payee = r.fields?.payee_name ?? null;
+    const payee = recordedFields(r.fields, lastChecks.get(r.id))?.payee_name ?? null; // a decided invoice stored without fields
     const key = nameKey(payee);
     const g = groups.get(key) ?? { beneficiary: key ? findBeneficiary(payee, directory)?.name ?? payee : null, paid_usd: 0, committed_usd: 0, count: 0 };
     groups.set(key, { ...g, paid_usd: g.paid_usd + usdOf(r, ['PAGAR']), committed_usd: g.committed_usd + usdOf(r, ['PAGAR', 'ESCALAR']), count: g.count + 1 });

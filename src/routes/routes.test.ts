@@ -355,6 +355,51 @@ describe('GET /api/invoices/:id (AC-26, AC-08, AC-64, AC-65)', () => {
   });
 });
 
+// 7c live regression: an invoice inserted through REST with `fields` null is read by the loop at `lee`, which never writes
+// `invoices` (AC-38). Every view then shows what the decision's stored checks recorded, never a 500 or "not read".
+describe('an invoice inserted without fields, then decided (AC-26, AC-31, AC-44, AC-64)', () => {
+  const unread = (rules: object = SEED.rules) => {
+    db = testDb({ ...workspace(['01']), policies: [{ id: 'p1', company_id: 'A', version: 1, name: 'Política general', rules, created_at: '2026-10-01T00:00:00Z' }] });
+    Object.assign(db.tables.invoices!.find((i) => i.id === uid('A-01'))!, { fields: null, source: 'email', raw_text: 'Factura 1050 de Laura Méndez por 2.500 USD' });
+  };
+
+  it('GET /api/invoices/:id answers 200 with the fields the decision read, and the invoice row keeps fields null', async () => {
+    unread();
+    await call('POST', '/api/invoices/run');
+    const r = await call('GET', `/api/invoices/${uid('A-01')}`);
+    expect(r.status).toBe(200);
+    const d = (await r.json()) as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+    expect(d.invoice.fields).toMatchObject({ payee_name: 'Laura Méndez', amount: 2500, currency: 'USD', invoice_number: '1050' });
+    expect(d.beneficiary).toMatchObject({ name: 'Laura Méndez' });
+    expect(d.trace[0].text).toMatch(/Laura Méndez/);
+    expect(db.tables.invoices!.find((i) => i.id === uid('A-01'))!.fields).toBeNull();
+  });
+
+  it('GET /api/invoices/:id answers 200 with every field unknown when the decision recorded no checks', async () => {
+    unread();
+    db.tables.decisions!.push({ id: 'd1', invoice_id: uid('A-01'), company_id: 'A', seq: 1, outcome: 'ESCALAR', actor: 'agent', checks: [], created_at: NOW });
+    const r = await call('GET', `/api/invoices/${uid('A-01')}`);
+    expect(r.status).toBe(200);
+    expect((await json<{ invoice: { fields: Row } }>(r)).invoice.fields).toMatchObject({ payee_name: null, amount: null, invoice_number: null });
+  });
+
+  it('GET /api/period groups it under the payee the decision read, not "Beneficiario no leído"', async () => {
+    unread();
+    await call('POST', '/api/invoices/run');
+    const p = await json<{ by_beneficiary: Row[] }>(await call('GET', '/api/period'));
+    expect(p.by_beneficiary).toEqual([expect.objectContaining({ beneficiary: 'Laura Méndez', count: 1 })]);
+  });
+
+  it('PUT /api/policy simulates a decided one from its reading; only a never-decided one is "not read yet"', async () => {
+    unread({ ...SEED.rules, approval_threshold_usd: 1000 });
+    await call('POST', '/api/invoices/run');
+    expect(decisionsOf(uid('A-01')).map((d) => d.outcome)).toEqual(['ESCALAR']);
+    const out = await json<{ would_change: Row[]; unread_pending: number }>(await call('PUT', '/api/policy', { rules: SEED.rules }));
+    expect(out.unread_pending).toBe(0);
+    expect(out.would_change.map((w) => [w.invoice_id, w.from, w.to])).toEqual([[uid('A-01'), 'ESCALAR', 'PAGAR']]);
+  });
+});
+
 describe('company (AC-32, R-34, R-31)', () => {
   it('GET /api/company returns the member company with is_demo', async () => {
     db = testDb();

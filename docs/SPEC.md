@@ -1,6 +1,6 @@
 # Spec: Thesaurus (Reto Blinka: Agentes que pagan por la empresa)
 
-Owner: `product`. Sources: `docs/PROBLEM.md`, `docs/DECISIONS.md` (D1-D27 plus the "Scope: in" bullets, cited as S-Ingest, S-Reader, S-Directory, S-Policy, S-Engine, S-Record, S-Escalation, S-Screens, S-Auth, S-Bilingual, S-Output, S-DataSet, S-Tests, S-Submission, S-SES; D22-D27 are the section "Thesaurus is an agent", folded in as AC-61..AC-67; D28-D38 are the section "Roberto's feedback after watching the draft", folded in on 17 Oct as section 13d, AC-73..AC-91, rulings R-85..R-95), `docs/CONTEXT.md` (rubric, submission form), `CLAUDE.md` (demo requirements). The plan is `docs/PLAN.md` (Tasks 1-19, done and merged; S1-S6 SHOULD) plus `docs/PLAN-D28.md` (Tasks 20-38 for D28-D38, the same list as the section "Tasks D28-D35" at the end of this file, which also covers D36-D38).
+Owner: `product`. Sources: `docs/PROBLEM.md`, `docs/DECISIONS.md` (D1-D27 plus the "Scope: in" bullets, cited as S-Ingest, S-Reader, S-Directory, S-Policy, S-Engine, S-Record, S-Escalation, S-Screens, S-Auth, S-Bilingual, S-Output, S-DataSet, S-Tests, S-Submission, S-SES; D22-D27 are the section "Thesaurus is an agent", folded in as AC-61..AC-67; D28-D38 are the section "Roberto's feedback after watching the draft", folded in on 17 Oct as section 13d, AC-73..AC-91, rulings R-85..R-95; D39-D41, Roberto's 17:40-17:50Z feedback, are folded in as section 13e, AC-92..AC-106, rulings R-115..R-126, Tasks 39-51), `docs/CONTEXT.md` (rubric, submission form), `CLAUDE.md` (demo requirements). The plan is `docs/PLAN.md` (Tasks 1-19, done and merged; S1-S6 SHOULD) plus `docs/PLAN-D28.md` (Tasks 20-38 for D28-D38, the same list as the section "Tasks D28-D35" at the end of this file, which also covers D36-D38).
 
 Format: `AC-nn (MUST|SHOULD) When <situation>, the system <observable behaviour>. Evidence: <what a tester runs or clicks>.` followed by Trace, Rubric (Impacto 30 / Innovación 20 / V. técnica 20 / V. implementación 20 / Presentación 10), Axis (Autonomía / Seguridad / Explicabilidad) where it applies, and Tasks.
 
@@ -18,6 +18,8 @@ Global definitions used by every AC:
 - AI provider from D36 (AC-89, R-92): Amazon Bedrock, model `amazon.nova-lite-v1:0` in us-east-2 (in-Region id only, never `us.` or `global.`), is the primary model for reading and for "Pregúntale a Thesaurus". Workers AI is the automatic fallback. If both fail, the invoice is ESCALAR as before (AC-13). Both are called only from `src/lib/llm.ts`. The Workers AI free daily allocation stays used up until 2026-10-18 00:00 UTC, so until then the fallback can be exercised live only as "unavailable".
 - Tests in this round (extends R-76): no unit or route test calls Bedrock, Workers AI, Yahoo or open.er-api.com. They use fakes and recorded fixtures only. Live checks follow R-94.
 - D38 UX gate (AC-91, R-93): no screen merges, and the video is not recorded, until the screens it touches pass the gate. A failed gate item blocks, whatever its confidence.
+- "Trial user" (D41, AC-92) = a Supabase anonymous user created by «Probar con mi propia empresa». "Trial company" = its company, `is_trial = true`, named «Empresa de prueba <n>». QA may create trial users freely within AC-96's limits. They are never deleted.
+- "Screen function" (D40, AC-98) = the one `security invoker` read function behind a screen's `GET /api/screen/<name>`.
 
 ---
 
@@ -32,7 +34,8 @@ Trace: D14, D20, S-Bilingual. Rubric: V. implementación. Tasks: 1, 5.
 ## 2. Workspaces, isolation, append-only
 
 **AC-03 (MUST)** When a new user is created, the system creates that user's own company (named from the email's local part), a membership row, policy version 1 "Política general", the 8 Andina Labs beneficiaries and every seeded invoice, from a database trigger with no service-role call in the signup path. Evidence: create a user with the Admin API, sign in, `GET /api/invoices` returns every DATASET.md row and `GET /api/beneficiaries` returns 8.
-Trace: D8, S-Auth. Rubric: V. implementación. Tasks: 2, 3.
+Clarified (D41, R-115): a Supabase anonymous user (no email) is a new user too. The same trigger seeds the same data. Its company is named «Empresa de prueba <n>», where n comes from a database sequence. It gets `is_trial = true` and `approver_email` null. Evidence: schema.test.sh; AC-92.
+Trace: D8, S-Auth. Rubric: V. implementación. Tasks: 2, 3, 39.
 
 **AC-04 (MUST)** When user A sends a request with A's JWT for any row of company B (companies, policies, beneficiaries, invoices, decisions, approval_tokens, approval_uses, `invoice_current`), the system returns no rows and changes nothing. Evidence: two Admin-API users; Supabase REST `select` with A's JWT filtered on B's `company_id` returns `[]`; an `insert` with B's `company_id` is refused.
 Trace: S-Auth (RLS on `company_id`). Rubric: V. técnica. Axis: Seguridad. Tasks: 2.
@@ -46,6 +49,7 @@ Trace: PROBLEM "Cada decisión tiene que poder explicarse después", D17. Rubric
 
 **AC-07 (MUST)** When the migrations are read, the system's schema changes are forward-only and additive: every new table has `enable row level security` in its first migration, no migration or seed contains `drop`, `truncate` or `delete from` in executable SQL (SQL comments, `--` and `/* */`, are excluded; function bodies such as `$$ ... $$` are executable and are checked), and no table reuses `profiles` or `deliveries`. The already-applied pre-run migration `20261015000000_files_bucket.sql` keeps its inert comment `-- delete from storage.buckets` because applied migrations are never edited; README "what's not done / notes" says so. Evidence: `bash scripts/tests/run.sh` (schema.test.sh and seed.test.sh) passes. (Clarified by product ruling, Task 2 Q1.)
 Clarified (R-90, D34/D35): the `invoices.source` check cannot be widened without `drop constraint`, which this AC forbids. So the channel an invoice came through is a new additive column, `invoices.origin text not null default 'app' check (origin in ('app','portal','email'))`, with `sender text` (the From address of an email) and `sender_note text` (a vendor's portal message). `source` keeps the document kind (`pdf`, `image`, `email`, `chat`). Likewise `agent_runs.via text check (via in ('portal','email'))` is added, null for every other run. New tables of this round are `fx_rates`, `ai_usage`, `portal_status_tokens` and `intake_rate_limits`. Each one has RLS on in its first migration. Migration numbers are fixed in advance to avoid collisions: `20261017000600_fx_rates.sql` (Task 21), `20261017000700_ai_usage.sql` (Task 23), `20261017000800_portal.sql` (Task 25).
+Clarified (D39-D41): three more migrations, numbers fixed now: `20261017000900_trial_access.sql` (Task 39: `companies.is_trial boolean not null default false`, which members cannot update; the sequence `trial_company_seq`; `create or replace` of `handle_new_user`), `20261017001000_screen_functions.sql` (Task 42: the per-screen read functions of AC-98), `20261017001100_dashboard_functions.sql` (Task 45: `create or replace` of those functions with the D39 fields). None of them adds a table; the trial ingest cap reuses `ai_usage` (AC-96). The rules above apply unchanged. Anonymous users are real Auth users: nothing deletes them or their companies, in any migration, seed, script or test.
 Trace: CLAUDE.md Infrastructure. Rubric: V. implementación. Tasks: 2, 3.
 
 **AC-08 (MUST)** When an invoice file is uploaded, the system stores it in the private bucket `files` under `<company_id>/`, and the decision detail serves it through a signed URL that stops working after 5 minutes; a user of another company cannot read it. Evidence: open a PDF invoice's detail, copy the file URL, it opens; after 5 minutes it returns an error; with company B's JWT, `storage.from('files').createSignedUrl('<A company_id>/...')` fails.
@@ -178,6 +182,7 @@ Trace: S-Escalation, D11. Rubric: V. técnica. Axis: Seguridad. Tasks: 9, 16.
 Trace: D11. Rubric: V. técnica. Axis: Seguridad. Tasks: 6, 9, 16.
 
 **AC-37 (MUST)** When two human answers for the same invoice arrive at once (link and dashboard, or two dashboard clicks), the system records exactly one human decision; any answer arriving when the invoice's latest decision is no longer ESCALAR gets 409 "Esta factura ya fue decidida". A human decision's `actor_email` is the verified session's email (dashboard, from the JWT checked by `requireUser`) or the company's `approver_email` (link); it is never taken from the request body (R-32). Evidence: unit test with two concurrent approvals; route test that a body `actor_email` is ignored; QA: two parallel `POST /api/invoices/:id/approve`, the timeline shows one human event with the logged-in user's email. (R-03)
+Clarified (D41, R-116): an anonymous trial user has no email. Their dashboard answer stores `actor_email = 'invitado:<first 8 hex of the user id>'`, taken from the verified JWT and never from the body. It is shown as «Invitado 3f9a1c2b» / "Guest 3f9a1c2b", and the same value goes in `overridden.by`. After «Guardar mi acceso» (AC-95), the user's email is used. A user with neither an email nor `is_anonymous` still gets 401.
 Trace: D11, D16, D10. Rubric: V. técnica. Axis: Seguridad. Tasks: 2, 9.
 
 **AC-38 (MUST)** When the Worker code is searched, the system builds the service-role client in `src/lib/admin.ts` only, and only three non-test modules import it: the approval-by-token handler, the cron's scheduled handler (R-23) and the agent's record writer `src/agent/record.ts` (R-32). `record.ts` is the only code that writes `decisions` (through `insert_decision`), `approval_tokens`, `approval_uses` and `agent_runs`; it never reads or writes anything else, and before each write it re-reads the invoice by id and refuses when the invoice's `company_id` differs from the company the caller was authorised for. Every HTTP route other than approval-by-token, CSV export included, reads and writes everything else (invoices, policies, beneficiaries, company, files) with the user's JWT. Evidence: `grep -rn "SERVICE_ROLE" src` matches only `src/lib/admin.ts` and `src/env.ts`; `grep -rln --exclude='*.test.ts' "lib/admin" src` lists only `src/routes/approvals.ts`, `src/agent/scheduled.ts` and `src/agent/record.ts`; `npx vitest run src/agent/record.test.ts` includes "company mismatch -> refused, nothing written".
@@ -191,6 +196,7 @@ Trace: S-Escalation, S-SES, D8, D9. Rubric: V. implementación. Axis: Seguridad.
 ## 10. Login, language, guided tour
 
 **AC-40 (MUST)** When a visitor opens `/login`, the system offers "Español | English", an email field with "Enviar código", then a 6-digit code field; a wrong code shows "Código incorrecto o vencido"; a valid code opens Bandeja, and on first login the user's pending invoices are decided once. (Clarified, R-56, Task 8c: "once" is one pass, which may be several calls (AC-70). It shows "Decidiendo tus facturas pendientes… n de m" and then opens Bandeja. A failed call does not block the login; Bandeja opens and the cron decides what is left.) Evidence: `npx vitest run web` login test with a mocked Supabase client; on the deployed URL, entering an email reaches the "Te enviamos un código de 6 dígitos" state. Code delivery itself is AC-54 (SHOULD).
+Clarified (D41, R-120): the login screen's one primary action is now «Probar con mi propia empresa» (AC-92). «Enviar código» stays and works as before, styled as a secondary button. A secondary «Entrar con contraseña» opens the email + password form (AC-95). The OTP flow is unchanged for Roberto and real customers.
 Trace: S-Auth, D20. Rubric: V. implementación. Tasks: 11.
 
 **AC-41 (MUST)** When the user picks a language on the login screen or in the top bar, the system switches UI, tour, record sentences and number/date formats (es-CO / en-US) without reload and stores the choice per user, so it persists on the next login from another browser. Evidence: switch to "en", log out, clear localStorage, log in: UI is English.
@@ -223,7 +229,8 @@ Trace: D17, PROBLEM "How success looks". Rubric: Impacto. Axis: Autonomía, Segu
 ## 12. Demo (judges on a shared screen, no Roberto)
 
 **AC-45 (MUST)** When anyone opens `/demo` in a clean browser session with no account, the system shows a three-line problem statement, Andina Labs' read-only inbox (outcome and one-line reason per invoice), the Periodo figures, the "Entrar como Andina Labs" button and the link to the happy-path video. Evidence: open the deployed `/demo` in a private window.
-Trace: D8, CONTEXT ("/demo page with seeded data is a MUST"), CLAUDE.md Demo requirements. Rubric: Presentación. Tasks: 10, 16.
+Clarified (D41, R-120): `/demo` also shows «Probar con mi propia empresa» / "Try it with my own company" as its one primary action, with the line «Tu propia copia de Andina Labs, privada, sin correo ni contraseña.» / "Your own private copy of Andina Labs, no email or password needed." «Entrar como Andina Labs» stays as the zero-click shared view (AC-46), styled as a secondary button.
+Trace: D8, D41, CONTEXT ("/demo page with seeded data is a MUST"), CLAUDE.md Demo requirements. Rubric: Presentación. Tasks: 10, 16, 40.
 
 **AC-46 (MUST)** When a judge clicks "Entrar como Andina Labs", the system opens the full dashboard on the demo company with no OTP and no mail, where the judge can create a trap invoice (upload or paste), change a rule and re-evaluate, and approve or reject from the dashboard. If anyone changed the demo user's password, re-running `node scripts/seed-demo-user.mjs <URL>` restores access. Evidence: private window, click, paste a chat invoice from "Pixel Lab", see ESCALAR; lower "Límite por pago", Reevaluar. (R-18)
 Trace: D8, PROBLEM (mentors "create a trap invoice live, change a rule live"). Rubric: Presentación, Impacto. Tasks: 10, 16.
@@ -239,6 +246,14 @@ Trace: CLAUDE.md Demo requirements, Infrastructure. Rubric: V. implementación. 
 
 **AC-49 (MUST)** When a non-technical reader opens `README.md`, the system's first 10 lines (Spanish) say Blinka's problem in their words, what Thesaurus does, the three outcomes, the demo URL and how to enter ("Entrar como Andina Labs"); the rest explains how it decides (check list and consequence table), the app's flows and architecture, how to run, how to deploy, how to swap the mail provider (one file, `src/lib/email.ts`), and what is not done. It never presents Thesaurus as Blinka's own product or uses Blinka's logo. Evidence: read the first 10 lines aloud to someone outside the project.
 Clarified (D28-D38, Task 35 is the only README writer of this round): README gains these sections, in Spanish. «Tasas de cambio»: Yahoo Finance with the open.er-api.com fallback, the 48 h rule, the pin, the `FxProvider` interface and `FX_PROVIDER`, and how a company connects its bank's, its treasury provider's or Blinka's rate (AC-76). «Dónde actúa la IA y dónde decide el código»: AC-79's sentence within the first 40 lines; the reader and the chat run on Amazon Nova Lite (AWS Bedrock) with Workers AI fallback; the question caps and the constants to raise (AC-67, AC-89). «Portal de proveedores»: the URL, what a vendor sees and never sees, and the limits (AC-83..AC-85). «Facturas por correo»: built and tested with `.eml` fixtures; the steps to switch it on (AC-87, AC-88). The logo is described as Thesaurus's own (AC-80). "What's not done" is updated: the old 250-reads line goes, and email live and SES production access are listed. The first 10 lines stay as AC-49 requires, and may name the vendor portal.
+Clarified (D39-D41; Task 35b is the README writer):
+- "How to enter" in the first 10 lines names both doors: «Probar con mi propia empresa» (a private copy, no email) and «Entrar como Andina Labs» (the shared view).
+- A section «Para el jurado» says what a juror can do in their own copy, that it lasts through judging, and how «Guardar mi acceso» works.
+- «Velocidad» links `docs/perf.md`.
+- "What's not done" adds three items:
+  - emails attached with «Guardar mi acceso» are not verified, because autoconfirm is on while SES is in sandbox (R-118);
+  - trial workspaces are never deleted;
+  - the open questions Q15-Q19.
 Trace: CLAUDE.md Demo requirements, CONTEXT (submission: "README must explain the app, its flows and its architecture"), DECISIONS product name. Rubric: Presentación. Tasks: 17, 18.
 
 **AC-50 (MUST)** When the "Video demo" URL is opened, the system plays, without login, a recording of the happy path on the deployed URL: `/demo` → "Entrar como Andina Labs" → tour (some steps, then Saltar) → upload an invoice (`/demo/invoices/01.pdf`, FRENAR as exact duplicate) → its decision record → reject the escalated "cuenta cambiada" invoice → approve the escalated Nube Sur invoice, which ends in PAGAR with its payment block (R-35) → lower a limit in Política, save, Reevaluar → Periodo. The recording is made after "Reiniciar demo" in the same calendar month. Evidence: open `<URL>/demo/happy-path.webm` in a private window.
@@ -254,10 +269,11 @@ Trace: CLAUDE.md Demo requirements, CONTEXT (submission: "README must explain th
 9. Política: lower a limit, save, Reevaluar.
 10. It ends on the Periodo figures (rinde cuentas).
 
+Clarified (D39-D41, R-126): the video is recorded on the UI as it stands at the 02:00Z UI freeze, after Tasks 33 and 34 pass on it. In step 1 the caption adds «Cualquier persona del jurado puede probarlo con su propia empresa, sin correo» while «Probar con mi propia empresa» is on screen. It is not clicked, because the first-run pass would add a wait. Step 2 still uses «Entrar como Andina Labs». Steps 4 and 10 show the Bandeja dashboard and the Periodo charts if AC-101 and AC-103 shipped. Otherwise they show the screens as they are. The `docs/perf.md` table (AC-97) is committed before recording.
 Live AI use is at most 2 reads and 2 questions per take, and there are at most 3 takes (R-94). Evidence: open `<URL>/demo/happy-path.webm` (or `.mp4`) in a private window; the duration from `ffprobe` (or Playwright's measured recording time, written in the ledger) is between 120 and 180 s; QA watches it once and lists any frozen frame or wait longer than 2 s, and any is a defect.
 Trace: CLAUDE.md "One recorded happy path", CONTEXT submission ("Video demo (URL)"), S-Tests, D32, D29, D34, D36, D38. Rubric: Presentación, Innovación. Tasks: 18, 37.
 
-**AC-51 (MUST)** When Roberto opens `docs/SUBMISSION.md` on his phone, the system has: project name "Thesaurus", challenge "Reto Blinka: Agentes que pagan por la empresa", a Spanish jury description of at most 5000 characters (problem, what it does, how safety is guaranteed by design, how to try it), the public repo URL, the demo URL and the video URL, and all three links answer 200. Evidence: `wc -m` on the description block; `curl -sI` on the three links. Clarified (D28-D38, Task 35): the description adds, still within 5000 characters, the market FX rate, the visible AI (reading with Amazon Nova Lite and the chat), the vendor portal URL, and email intake as "built, switched on by adding a domain".
+**AC-51 (MUST)** When Roberto opens `docs/SUBMISSION.md` on his phone, the system has: project name "Thesaurus", challenge "Reto Blinka: Agentes que pagan por la empresa", a Spanish jury description of at most 5000 characters (problem, what it does, how safety is guaranteed by design, how to try it), the public repo URL, the demo URL and the video URL, and all three links answer 200. Evidence: `wc -m` on the description block; `curl -sI` on the three links. Clarified (D28-D38, Task 35): the description adds, still within 5000 characters, the market FX rate, the visible AI (reading with Amazon Nova Lite and the chat), the vendor portal URL, and email intake as "built, switched on by adding a domain". Clarified (D41, Task 35b): "how to try it" opens with «Probar con mi propia empresa» on `/demo`: a private copy of Andina Labs, with no email needed. It still fits within 5000 characters.
 Trace: CONTEXT submission format, S-Submission. Rubric: Presentación. Tasks: 17, 18.
 
 **AC-52 (MUST)** When a non-engineer reads `docs/LEDGER.md`, the system shows every task result, every debate (both positions) and every ruling with its reason in plain language, and README links to it. Evidence: open the ledger, pick any ruling, it states who decided what and why.
@@ -281,6 +297,7 @@ Trace: D23. Rubric: Innovación, Presentación. Axis: Autonomía, Explicabilidad
 **AC-64 (MUST)** When the user opens a decided invoice, the system shows "Lo que hice" between the headline and the two columns: numbered steps in plain language, each tagged with its loop stage, filled by templates from the stored decision and invoice, never by a model (R-29): 1 (lee) "Leí <el PDF | la imagen | el correo | el chat> y encontré a <beneficiario>, <monto> <moneda>, factura #<número>." (a field not read is named: "no pude leer el monto"; illegible: "Leí la imagen y no pude leerla: ilegible."); 2 (consulta) "La encontré en el directorio: <acuerdo>, cuenta terminada en <4 dígitos>." or "No la encontré en el directorio." or "La encontré en el directorio, pero la cuenta de la factura termina en <x> y la registrada en <y>."; 3 (consulta) "Verifiqué 13 reglas: <a> cumplen[, <b> no cumplen][, <c> no se pudieron verificar]."; 4 (decide) "Decidí <RESULTADO>[: <razón>]."; 5 (actúa) PAGAR "Preparé la orden de pago: <moneda> · <ruta>.", FRENAR "Frené la factura; no preparé orden de pago.", ESCALAR "Le envié a <correo> la pregunta: «<pregunta AC-65>»" or, when the send failed, "No pude enviar el correo a <correo>; la pregunta quedó en el tablero." or, for the demo company, "Empresa demo: la pregunta quedó en el tablero, sin correo."; then one step per later human answer (actúa): "<correo> <aprobó | rechazó> <en el tablero | vía enlace>; volví a verificar las reglas y el resultado es <RESULTADO>." The counts and values match the "Lo que decidí" column of the same record. Same steps in English. Evidence: `npx vitest run src/agent/trace.test.ts`, whose PAGAR fixture yields D24's text verbatim ("1. Leí el PDF y encontré a Laura Méndez, 2.500 USD, factura #1042. 2. La encontré en el directorio: retainer mensual de 2.500 USD, cuenta terminada en 4821. 3. Verifiqué 13 reglas: 13 cumplen. 4. Decidí PAGAR. 5. Preparé la orden de pago: COP · transferencia."), plus FRENAR, ESCALAR sent / failed / demo, illegible, an approval step and the en version; `grep -rn "lib/llm" src/agent/trace.ts` returns nothing; QA: open a seeded Laura Méndez PAGAR record and the Nube Sur ESCALAR record before and after approving it from the dashboard.
 Clarified (product rulings R-47, R-48, Task 5 Q2/Q3): (a) In step 5 for PAGAR, "<moneda> · <ruta>" is shown as follows. A stored route that already contains " · " is shown as is (Laura: "COP · transferencia", even though her invoice is in USD). A route that is empty or equal to the currency is shown as the currency alone ("MXN"). Any other route is shown as "<moneda> · <ruta>" ("USD · ACH"). (b) A human approval reads "<correo> aprobó <canal>; volví a verificar las reglas y el resultado es <RESULTADO>." A human rejection reads "<correo> rechazó <canal>; el resultado es FRENAR y no preparé orden de pago." / "<email> rejected <channel>; the result is STOP and I did not prepare a payment order." A rejection must never be rendered as an approval, and vice versa.
 Clarified (R-64, final QA B): steps 1-5 always narrate the invoice's first agent decision, from that decision's stored data. A later decision never rewrites them. Each later decision adds one step, in `seq` order, built only from its own stored data (R-29). (a) A human answer follows R-48. When an approval's result is not PAGAR, the step ends with that decision's reason, the same reason its stored headline gives: "roberto@… aprobó en el tablero; volví a verificar las reglas y el resultado es ESCALAR: <razón>." / "…; I re-checked the rules and the result is ESCALATE: <reason>." (b) An agent re-evaluation ("Reevaluar pendientes") reads "Reevalué la factura con la política v<n>: <a> cumplen[, <b> no cumplen][, <c> no se pudieron verificar]. Decidí <RESULTADO>[: <razón>]." / "I re-evaluated the invoice under policy v<n>: <a> pass[, <b> fail][, <c> could not be verified]. I decided <OUTCOME>[: <reason>]." It is tagged "decide". "The counts and values match the 'Lo que decidí' column" applies to the step that narrates the latest decision, because the column shows the latest decision: that step's reason (and counts, for a re-evaluation) agree with the column. Evidence: on a reset demo company approve Nube Sur first (without rejecting #15). Step 3 still reads the first decision's counts, and a new last step reads "…aprobó en el tablero; volví a verificar las reglas y el resultado es ESCALAR: <presupuesto reason>", matching the column's failing "presupuesto del periodo" row. `trace.test.ts` has a re-escalated-approval fixture and a re-evaluation fixture, es and en.
+Clarified (D41, R-115, R-116): for a trial company, ESCALAR step 5 reads «Empresa de prueba: la pregunta quedó en el tablero, sin correo.» / "Trial company: the question stays on the dashboard, no email sent." A guest's answer step names «Invitado 3f9a1c2b» / "Guest 3f9a1c2b" where an email would go. Evidence: `trace.test.ts` trial and guest fixtures, es and en.
 Trace: D24, D22 (rinde cuentas), D7. Rubric: Innovación, Impacto. Axis: Explicabilidad. Tasks: 2, 4, 5, 8, 13.
 
 **AC-65 (MUST)** When the agent escalates an invoice, the system writes one concrete question from a template filled with the failing checks and stores it with the decision: "<Nombre>, la factura #<número> de <beneficiario> por <monto> <moneda> <motivo 1>[, <motivo 2> y <motivo n>]. ¿La pago?", one motive per check that is not `cumple` (e.g. umbral: "supera tu umbral de aprobación de 2.500 USD"; beneficiario nuevo: "es de un beneficiario que no está en el directorio"; cuenta cambiada: "trae una cuenta terminada en <x> y la registrada termina en <y>"); a field not read becomes "sin número", "de un beneficiario que no pude leer", "por un monto que no pude leer"; <Nombre> per R-26; when a failing check cannot be overridden by a person the ending follows R-27. The same stored text is the escalation email's subject and first line (Spanish, AC-39) and the text of the dashboard's escalation card, which sits on the ESCALAR record above its two buttons "Aprobar" and "Rechazar" (in the UI's language per R-28). Evidence: `npx vitest run src/agent/question.test.ts` (with approver `juan@…` and the Nube Sur fixture it yields D25 verbatim: "Juan, la factura #2044 de Nube Sur LLC por 4.200 USD supera tu umbral de aprobación de 2.500 USD. ¿La pago?"; two motives; unknown fields; non-overridable ending; en version) and `src/lib/email.test.ts` (subject and first line equal the stored question); QA: on the demo company open the seeded Nube Sur record: the card reads "Roberto, la factura #… de Nube Sur LLC por 4.200 USD supera tu umbral de aprobación de 2.500 USD. ¿La pago?" with Aprobar / Rechazar.
@@ -531,7 +548,14 @@ Clarified (R-112, Q-I), the `approve` screen opened with an invalid or expired t
 Clarified (R-113, Q-J), item 5, `5.mixed`. Text is compared after trimming and collapsing whitespace, ignoring case. A text node is flagged on a screen in language L only if it equals a value in the other language's UI dictionary and does not equal any value in L's own dictionary. A string that both dictionaries contain, such as «decide», is never flagged. There is no minimum word count, because a one-word leak such as «Aprobar» on an English button is a real defect. There is also no hand-kept allowlist. The gate's fixture test adds both cases: a word found in both dictionaries passes, and a word found only in the es dictionary, shown on an en screen, fails.
 Clarified (R-114, Q-K), item 1, text overlap, on every screen. A text pair is not counted as an overlap when one text is occluded by a layer that covers it. All four conditions must hold: (1) one text, A, sits inside an element whose computed `position` is `sticky` or `fixed` and whose background, its own or an ancestor's up to that element, is opaque (alpha 1); (2) the other text, B, is not inside that same element; (3) the whole rectangle where the two text boxes intersect lies inside that element's box; (4) `document.elementFromPoint` at that rectangle's centre returns A's layer or one of its descendants, which proves that B is hidden in the actual render. The gate table prints each such pair as «excluded: occluded by sticky/fixed layer». The pair still counts when both texts are in the same layer (two header texts, or two content texts, dimmed or not), and when the layer is translucent. Whether each tour step's highlighted element is fully visible below the top bar is checked by the UX reviewer from the screenshots, not by this exclusion.
 
-Trace: D38, D37, D31, D20, D14. Rubric: Presentación, V. técnica, V. implementación. Tasks: 27 (harness), every UI task, 33, 34.
+Clarified (D39-D41, R-121, R-125): the finance screen list adds:
+- `trial`: the first-run progress and the Bandeja of a fresh trial user;
+- `login-password`;
+- `save-access`, the dialog and its success and error states;
+- `leave-trial`, the warning;
+- `beneficiary`, the profile, with its `empty` state.
+The `inbox`, `period` and `beneficiary` screens also get the D39 sections' empty states. Item 7 is extended by D40: a screen reached by in-app navigation shows its heading or skeleton within 100 ms and its data within 1 s, and any `docs/perf.md` FAIL (AC-97) on a screen is a failed item 7 for that screen. Trial screens reuse one anonymous session per gate run, created once, so a run never meets AC-96's sign-in limit.
+Trace: D38, D37, D31, D20, D14, D39, D40, D41. Rubric: Presentación, V. técnica, V. implementación. Tasks: 27 (harness), every UI task, 33, 34, 44 (new screen ids).
 
 **AC-82 (MUST)** When the D31 UX QA pass runs (QA in Chromium, at 1440 × 900 and 390 × 844, in es and en, on every AC-91 screen, using the gate harness plus hands-on use), the system's findings are listed in `docs/UX-QA.md` as `UX-nn`. Each entry gives the screen, width, language, steps, expected result, actual result, screenshot path, and one category: broken state, layout jump, loading without feedback, confusing copy, dead link, or slow or stuck screen (more than 2 s without feedback). Before the final video every item is closed: either «corregido (<commit>)», re-verified by QA, or «no es defecto» with a product ruling. Evidence: `docs/UX-QA.md` has no open item; the QA verdicts are in the ledger; the video (AC-50) shows none of the listed defects.
 
@@ -673,6 +697,348 @@ Trace: D35, D12 (superseded), D4. Rubric: Impacto, V. implementación. Axis: Aut
 **AC-88 (SHOULD)** When a domain is on the Cloudflare account with Email Routing pointing to the Worker and `INBOUND_EMAIL_DOMAIN` is set (Roberto's optional step, D35), the system turns a live email from `HEARTBEAT_EMAIL` to `facturas+andina-labs@<dominio>` with `01.pdf` attached into an invoice of the demo company with origin `email`, and the reply reaches `HEARTBEAT_EMAIL`. Evidence: send it; Bandeja shows «Correo de roberto@…»; the reply is in the inbox. Until then the evidence is AC-87's tests and the ledger.
 
 Trace: D35. Rubric: Impacto. Tasks: none until Roberto adds a domain (the orchestrator runs the check then).
+
+## 13e. Roberto's feedback at 17:40-17:50Z (D39-D41, 17 Oct)
+
+Folded by product on 17 Oct, ~18:00Z. Rulings R-115..R-126 bind these ACs. Q15-Q19 are added to docs/QUESTIONS.md.
+
+The launcher's order is binding:
+1. D41 first. It is the jury's door: MUST, urgent, never cut.
+2. Then D40, speed. Its targets are MUST and never cut, because a miss is a blocking D38 finding.
+3. Then D39, the richer UI. MUST, but cuttable in R-126's order and clock.
+
+The guardrails do not move:
+- AC-07: migrations are additive (no drop, delete or truncate), and RLS is on for every table. Anonymous users are real Auth users, and nothing deletes them.
+- AC-16, AC-69: no model writes PAGAR.
+- AC-38: one writer for the record tables.
+- AC-68: members cannot write the record.
+- AC-91: the D38 gate applies to every screen these ACs touch.
+- The shared demo user (AC-46) stays.
+
+### D41 Every juror can get in, on their own (MUST, never cut)
+
+**AC-92 (MUST; never cut)** When a visitor with no session opens `/login` or `/demo` and clicks «Probar con mi propia empresa» / "Try it with my own company", the system does the following.
+- Sign-in. It signs the visitor in as a Supabase anonymous user (`signInAnonymously`). No email, code or password is involved. Anonymous sign-in is enabled through the Management API (`external_anonymous_users_enabled: true`), using `scripts/auth-config.sh`, which only the orchestrator runs.
+- The company. The signup trigger (AC-03 Clarified) creates a fresh company «Empresa de prueba <n>» with `is_trial = true` and `approver_email` null. It gets the full Andina Labs data set: policy v1, the 8 beneficiaries, and every DATASET.md invoice.
+- First run. The browser runs the first-login pass (AC-40 Clarified, AC-70), which shows «Decidiendo tus facturas pendientes… n de m». Then it opens Bandeja and starts the guided tour (AC-42), in the language the page showed at the click. That language is stored on the user (AC-41).
+- One primary. The button is the one primary action on both screens (R-120).
+- Time. From the click to a Bandeja that lists every DATASET.md row with its expected outcome takes at most 30 s on the deployed URL, measured by wall clock. That is AC-47's bound, and progress is visible the whole time (AC-91 item 4).
+- Failure. If the sign-in fails (AC-96's rate limit, network, Auth down), the page shows, in place: «No pude crear tu empresa de prueba ahora. Intenta de nuevo en unos minutos, o entra como Andina Labs.» / "I couldn't create your trial company right now. Try again in a few minutes, or enter as Andina Labs." It offers «Entrar como Andina Labs» as the next step and never shows a blank screen.
+
+Evidence:
+- `bash scripts/auth-config.sh --check` prints `external_anonymous_users_enabled true`. It prints no secret.
+- `npx vitest run web/Trial.test.tsx`, with a mocked Supabase client: one click calls `signInAnonymously` once, then the run loop, then Bandeja with the tour. The failure message shows on a refused sign-in.
+- `bash scripts/tests/run.sh`: schema.test.sh asserts that the trigger names an anonymous user's company «Empresa de prueba <n>» and sets `is_trial`.
+- QA on the deployed URL, in a private window at 390 and 1440, es and en. Click and time it; the time goes in the ledger. The top bar shows «Empresa de prueba <n>». Bandeja matches DATASET.md, Periodo shows «Violaciones 0», and tour step 1 is on screen.
+- The D38 gate on `login`, `demo` and `trial`.
+
+Trace: D41, D8, D19, D20. Rubric: Presentación, Impacto (the jury evaluates on their own). Axis: Autonomía. Tasks: 39 (trigger, config script), 40 (web).
+
+**AC-93 (MUST; never cut)** When a trial user works in their workspace, the system lets them do everything a customer does, and nothing more.
+- Invoices. They can upload a PDF or image and paste an email or chat text (AC-11). The agent decides each one.
+- Vendor portal. They can open their company's portal from Bandeja's card (AC-86; random slug `p-<12 hex>`) and send an invoice, which lands in their own Bandeja with origin «Portal de proveedores».
+- Policy. They can change a rule in Política, save it as a new version, and press Reevaluar (AC-30, AC-31).
+- Approvals. They can approve or reject an escalation from the dashboard (AC-34). The human decision carries the guest identity of AC-37 Clarified (R-116).
+- Questions. They can ask «Pregúntale a Thesaurus» (AC-67), within R-87's per-user caps.
+- No mail. A trial company never gets approval emails or approval tokens (R-115). Its ESCALAR step 5 is AC-64 Clarified's trial text.
+  - Política shows the approver field read-only, with «Las empresas de prueba no envían correos; las escalaciones esperan en el tablero.» / "Trial companies send no email; escalations wait on the dashboard."
+  - A save that sends `approver_email` for a trial company answers 403 «Las empresas de prueba no envían correos.» / "Trial companies send no email." and changes nothing.
+- Isolation. An anonymous JWT is an ordinary `authenticated` JWT, so AC-04, AC-05, AC-06 and AC-68 hold for it:
+  - selecting another company's rows returns `[]`;
+  - writes to the four record tables and to `fx_rates`, `ai_usage`, `portal_status_tokens` and `intake_rate_limits` are refused;
+  - `POST /api/demo/reset` answers 403;
+  - two trial users never share a company.
+  `is_trial` cannot be changed by any member.
+
+Evidence:
+- `npx vitest run src/routes src/agent`:
+  - a dashboard answer from an anonymous user stores `invitado:<8 hex>` (body values ignored);
+  - `notify` is never called for `is_trial`, and no token is written;
+  - the trace texts in es and en;
+  - the approver 403.
+- `bash scripts/tests/run.sh`: `is_trial` is not in the member update grant.
+- QA on the deployed URL with two trials, A and B, in two private windows (at most 2 live reads and 1 question):
+  1. A uploads `/demo/invoices/01.pdf` and pastes a chat invoice. B's Bandeja does not show either.
+  2. With A's JWT, a REST `select` on B's `company_id` returns `[]`, and `POST /rest/v1/decisions` is refused.
+  3. A opens the portal from the card and pastes one invoice. It appears in A's Bandeja.
+  4. A rejects #15, then approves Nube Sur, which ends in PAGAR. The timeline shows «Invitado …».
+  5. A lowers «Límite por pago», saves, and presses Reevaluar.
+  6. A asks one question.
+  7. As `service_role`, `select count(*) from approval_tokens where company_id = '<A>'` is 0.
+
+Trace: D41, D34, D29(a), D8, D4, S-Auth (RLS on `company_id`), PROBLEM "Seguridad". Rubric: Impacto, V. técnica. Axis: Seguridad. Tasks: 39, 40.
+
+**AC-94 (MUST; never cut)** When a trial user comes back in the same browser during judging (reload, new tab, or browser restart, through at least 2026-10-27), the system opens the same workspace with no sign-in.
+- Auth config. `scripts/auth-config.sh --check` shows no session time-box and no inactivity timeout (`sessions_timebox` and `sessions_inactivity_timeout` are 0 or unset).
+- Returning. While an anonymous session exists, the primary action on `/login` and `/demo` reads «Volver a mi empresa de prueba» / "Back to my trial company" and opens Bandeja. It never creates a second workspace.
+- Top bar. It shows the company name and «Acceso sin guardar» / "Access not saved", plus a «Guardar mi acceso» / "Save my access" button. Where the email used to be, it never shows a blank, `null` or `undefined`.
+- Leaving (R-119). Some actions would end an unsaved trial session in this browser: «Cerrar sesión», «Entrar como Andina Labs», and «Enviar código» or «Entrar con contraseña» for another account. Each first shows, in place: «Si sales sin guardar tu acceso, no podrás volver a «<empresa>». ¿Guardas tu acceso primero?» / "If you leave without saving your access, you can't come back to "<company>". Save your access first?"
+  - «Guardar mi acceso» is the primary button.
+  - «Salir de todos modos» / "Leave anyway" goes ahead.
+  - «Cancelar» or Escape keeps the session.
+  Once access is saved (AC-95), these actions go ahead with no warning.
+
+Evidence:
+- `npx vitest run web/Trial.test.tsx`: each of the leaving actions shows the warning; «Salir de todos modos» goes ahead; «Cancelar» and Escape keep the session; the returning primary shows when an anonymous session exists.
+- QA with a persistent Chromium profile (not private): create a trial, close the browser, reopen `/demo`, and see «Volver a mi empresa de prueba», which opens the same company with the invoice uploaded before.
+- The D38 gate on `leave-trial` and on the trial top bar at 360.
+
+Trace: D41 ("lasts the whole judging period, and the browser keeps the session"). Rubric: Presentación, Impacto. Tasks: 39 (config), 40.
+
+**AC-95 (MUST; never cut)** When a trial user clicks «Guardar mi acceso» and enters an email and a password, the system attaches both to the same Auth user and keeps the same company and data.
+- Form. The password needs at least 8 characters and has a show/hide toggle.
+- Mechanism. Supabase `updateUser`, with `mailer_autoconfirm` on as D41 says. No mail is sent or needed. R-118 covers the fallback.
+- Success. «Listo: ya puedes entrar desde cualquier dispositivo con <correo> y tu contraseña.» / "Done: you can now sign in from any device with <email> and your password." The top bar then shows the email.
+- Signing in elsewhere. From another browser, `/login` → «Entrar con contraseña» / "Sign in with password" (secondary) → email + password opens the same workspace, with no OTP. The tour does not repeat, because "seen" is stored per user.
+- Errors:
+  - email already registered: «Ese correo ya tiene una cuenta en Thesaurus. Usa otro correo, o entra con ese correo desde la pantalla de inicio.» / "That email already has a Thesaurus account. Use another email, or sign in with it from the start screen.";
+  - short password: «La contraseña debe tener al menos 8 caracteres.» / "The password needs at least 8 characters.";
+  - wrong credentials at login: «Correo o contraseña incorrectos.» / "Wrong email or password.";
+  - network: «No pude guardar tu acceso ahora; intenta de nuevo.» / "I couldn't save your access right now; try again."
+- What does not change. The company stays a trial company and sends no mail (R-115). OTP login (AC-40) is unchanged.
+- Config. `scripts/auth-config.sh --check` shows `mailer_autoconfirm true` and `password_min_length 8`.
+
+Evidence:
+- `npx vitest run web/SaveAccess.test.tsx web/Login.test.tsx`: success, each error, and the password login.
+- QA:
+  1. Create a trial in window A and save it with `qa-trial-<random>@example.com` and a password.
+  2. In a fresh window B, use «Entrar con contraseña» to open the same company, and see A's uploaded invoice.
+  3. Request one OTP for `HEARTBEAT_EMAIL`. Supabase answers with success (OTP still works).
+- Before the web task merges, Task 39 runs one live probe on a throwaway anonymous user: `updateUser({ email, password })` must give a user with `email_confirmed_at` set and `is_anonymous` false. The result goes in the ledger. If the probe fails, R-118's fallback applies.
+- The D38 gate on `save-access` and `login-password`.
+
+Trace: D41 ("«Guardar mi acceso» … autoconfirm on … come back from another device without OTP"). Rubric: Impacto, Presentación. Axis: Seguridad. Tasks: 39 (config, probe, fallback route if needed), 41.
+
+**AC-96 (MUST; never cut)** When someone scripts trials or a trial user overuses the product, the system holds these limits (R-117).
+- Sign-ins. Supabase `rate_limit_anonymous_users` is 30 sign-ins per hour per IP (config check). Over it, the visitor sees AC-92's failure message.
+- Invoices. A trial user can create at most 30 invoices (`POST /api/invoices`) per UTC day.
+  - The count is taken in the database before any read, through the existing quota function on `ai_usage`, with key `ingest:<user id>`.
+  - The 31st answers 429 «Llegaste al límite de 30 facturas por día en tu empresa de prueba. Se renueva a las 19:00, hora de Bogotá.» / "You reached the limit of 30 invoices a day in your trial company. It renews at 19:00 Bogotá time (00:00 UTC)." It stores nothing and calls no model.
+  - Users who are not on a trial are not capped by this rule.
+- Other limits that apply unchanged: R-87's question caps (10 per user per day, 500 per deployment), AC-43's per-user POST limit, and AC-85's portal limits.
+- No deletion. Nothing deletes anonymous users or their companies; there is no Auth user deletion anywhere (CLAUDE.md). Trial workspaces accumulate, and that is accepted (Q17).
+
+Evidence:
+- `npx vitest run src/routes`: the 31st ingest gives 429 with 0 reader calls and no insert; a user who is not on a trial is not capped.
+- `bash scripts/tests/run.sh`: no migration, seed, script or test contains `deleteUser` or `delete from auth.users`.
+- `scripts/auth-config.sh --check`.
+- A DB-level check in R-104's way: call the quota function 31 times on a fresh `qa:ingest:<random>` key, and the 31st reports over the limit.
+
+Trace: D41 ("Abuse guard … AI quota per user (R-87) applies"), D36 (cost hygiene), CLAUDE.md Infrastructure. Rubric: V. técnica. Axis: Seguridad. Tasks: 39.
+
+### D40 Speed (MUST, never cut: a miss is a blocking D38 finding)
+
+**AC-97 (MUST; never cut)** When `node scripts/perf.mjs --base <deployed URL>` runs, the system meets the targets below.
+- How it runs:
+  - Chromium at `/opt/pw-browsers/chromium`, a fresh context and an empty cache for each first load, after one warm-up `GET /api/health`.
+  - Main Worker screens: `login`, `demo`, `inbox`, `detail` (one PAGAR and one ESCALAR), `period`, `beneficiaries`, `beneficiary` (when AC-104 ships) and `policy`, as the demo user. Also `inbox` as a trial user.
+  - The `facturas` Worker: `portal` and `status`.
+- Targets:
+  1. First load: from navigation start in a fresh context until the heading and the primary action are visible and enabled (AC-91 item 7's definition), under 2.000 ms. Median of 3.
+  2. In-app navigation: from the click on another screen's link until the heading or skeleton shows, within 100 ms; until the screen's data is rendered, under 1.000 ms. Median of 3.
+  3. API: every request on a screen's critical path, `/api/demo/overview` included, has p95 under 600 ms over 20 sequential requests after 2 warm-ups.
+  4. JavaScript: the gzipped JS transferred before the first screen is usable is under 250 KB, for `/login`, `/demo` and Bandeja each.
+- Output. The script writes `docs/perf.md` with:
+  - the UTC date-time and the base URL;
+  - where it was measured: the Cloudflare colo from `cf-ray`, and the egress country;
+  - each number, its target, and PASS or FAIL.
+- Rules (R-121):
+  - Any FAIL is a failed AC-91 item 7 on that screen, a blocking finding.
+  - The table committed before the video has every line PASS (AC-50 Clarified).
+  - A miss still open at FREEZE goes to product under R-126.
+
+Evidence:
+- `docs/perf.md`.
+- `npx vitest run scripts`: median, p95 and the gz sum on fixtures.
+- The 17:40Z baseline (`/api/demo/overview` 2.27 s; one 626 KB bundle) is the first row of `docs/perf.md`, for comparison.
+
+Trace: D40. Rubric: V. técnica, Presentación. Tasks: 44 (script and baseline), 42, 43, and every D39 task (its screens).
+
+**AC-98 (MUST; never cut)** When a screen loads, the system fetches its data with at most one API request on the critical path. That request makes at most one database round trip for data: one PostgREST RPC to that screen's function, plus the authentication check.
+- Endpoints. This contract is fixed now, so web tasks build on mocks:
+  - `GET /api/screen/inbox?lang=` → `{ invoices, last_run, portal, dashboard }`. `invoices` has the same rows as `GET /api/invoices`, `last_run` the same as `GET /api/agent/last-run`, and `portal` the same as `GET /api/portal-link`. `dashboard` is `null` until Task 45, then AC-101's shape.
+  - `GET /api/screen/period` → `{ period, charts }`. `period` is the same as `GET /api/period`; `charts` is `null` until Task 45, then AC-103's shape.
+  - `GET /api/screen/beneficiaries` → `{ beneficiaries }`.
+  - `GET /api/screen/beneficiary/:id` (AC-104).
+  - `GET /api/screen/policy` → `{ policy, versions, company, fx }`, the same data as today's endpoints.
+  - `GET /api/invoices/:id` stays Detalle's endpoint, with its reads collapsed into one RPC. The record texts are still rendered in TypeScript from the stored data (R-29).
+  The old endpoints stay, for their tests and callers.
+- Functions (R-122). Each per-screen function:
+  - is `security invoker` (RLS applies with the user's JWT), `stable` and read-only;
+  - finds the company from `auth.uid()`'s membership;
+  - returns `jsonb`;
+  - is executable by `authenticated` only.
+  None is `security definer`, and no screen read uses the service role.
+- The demo overview. `/api/demo/overview` calls one function through the demo user's JWT and is cached at the edge (Workers Cache API) for 60 s. It is the only cached API response that holds company data, and that data is the public demo company's (AC-45).
+- Auth. The Worker may verify the JWT locally instead of calling `/auth/v1/user` (R-122): signature against the project's JWKS, or the project JWT secret held as a `wrangler secret`; plus `exp` and `aud = authenticated`. An expired, altered or other-project token still answers 401.
+- Off the critical path: the activity poll (AC-78) and the ask route.
+
+Evidence:
+- `npx vitest run src/routes src/lib`, with a fake db that counts calls: each screen GET makes at most 1 RPC. JWT cases: valid gives 200; expired, bad signature or wrong `aud` gives 401.
+- `bash scripts/tests/run.sh`: every `screen_*` function is `security invoker`, and `has_function_privilege('anon', …)` is false.
+- QA with trial A's JWT: `rpc/screen_inbox` returns only A's rows. On Bandeja, the network tab shows one data request on load.
+
+Trace: D40 ("one DB function per screen", "short-lived caching … never for decisions in flight"), D39 ("one round trip per screen"), S-Auth. Rubric: V. técnica. Axis: Seguridad. Tasks: 42 (functions, routes, auth, cache), 45 (D39 fields).
+
+**AC-99 (MUST; never cut)** When the product is built and deployed, the system uses these delivery levers.
+- `wrangler.toml` has `[placement] mode = "smart"`.
+- Each page is its own chunk, loaded on navigation. `/login`, `/demo` and the approve page load no chart code and no code from logged-in pages. Chart code loads only on screens that show charts.
+- Every screen renders a skeleton with the same markup as its loaded state (R-109's pattern) while its data loads. CLS stays at or under 0.01 (AC-91 item 4).
+- Hashed static assets are served with `Cache-Control: public, max-age=31536000, immutable`. `index.html` is not cached long.
+
+Evidence:
+- `grep -n 'mode = "smart"' wrangler.toml`.
+- The `npm run build` chunk list in the task report.
+- `curl -sI <URL>/assets/<a hashed file>`.
+- The D38 gate.
+
+Trace: D40 (levers). Rubric: V. técnica. Tasks: 42 (placement), 43.
+
+**AC-100 (SHOULD)** When a user moves around the app, the system feels instant.
+- Prefetch. Hovering over or focusing a nav link prefetches that page's chunk and its screen data.
+- Per-tab cache. A screen visited before in this tab shows its last data at once and revalidates it. The cache is dropped after any write from this tab.
+- Approve and reject. Within 100 ms the buttons are disabled and the card reads «Enviando tu respuesta…» / "Sending your answer…". The result (PAGAR, FRENAR, or ESCALAR again) is shown only from the server's answer, never predicted (R-122). On an error the card comes back with the server's message.
+
+Evidence:
+- `npx vitest run web`: prefetch on hover, the cache dropped after a POST, and the pending state with no outcome before the response.
+- QA: in the network tab, hovering «Periodo» fetches it.
+
+Trace: D40 (levers: prefetch, optimistic UI). Rubric: V. técnica, Presentación. Tasks: 43.
+
+### D39 Richer product UI (MUST; cut in R-126's order)
+
+Same palette, type and logo as before (D37, AC-53 Clarified). Every number is computed from the company's own records by the screen's function (AC-98, R-124), and every screen passes the D38 gate. AC-106 applies to all five.
+
+**AC-101 (MUST; cut last of D39, R-126)** When the user opens Bandeja, the system shows the finance dashboard, then the invoice table.
+- KPI strip, four tiles (R-124). At 360 and 390 px they sit 2 × 2.
+  - «Por pagar hoy»: USD and «n órdenes preparadas hoy».
+  - «Esperando tu aprobación»: count and USD.
+  - «Frenadas este mes»: count.
+  - «Autonomía»: %. It is the same number as Periodo's (AC-44).
+- «Necesita tu respuesta»:
+  - Up to 3 invoices whose latest decision is ESCALAR, oldest first. Each shows the stored question in the tab's language (AC-65) and a «Responder» link to its Detalle.
+  - «y <n> más» filters the table to ESCALAR.
+  - No approve or reject buttons here; those stay on Detalle.
+- «Facturas por día y resultado (últimos 30 días)»: stacked bars by arrival day, with PAGAR, FRENAR, ESCALAR and «pendiente» (R-124).
+- «Pagado este mes por moneda» and «… por país»: horizontal bars in USD.
+- «Vence pronto (7 días)»: up to 5 invoices, by due date, then «y <n> más».
+- The «Actividad del agente» panel (AC-78), «Pregúntale a Thesaurus» (AC-67 placement) and the portal card (AC-86) stay.
+- The table comes last:
+  - Search over beneficiary, number and concept, ignoring case and accents.
+  - Sort by date, beneficiary, USD amount and outcome. A header click toggles the direction, with `aria-sort`.
+  - Filters by outcome (pendiente included) and by origin.
+  - Search, sort and filters run in the browser over the loaded rows.
+- The one primary action is unchanged.
+
+Contract: `dashboard = { kpis: { to_pay_today_usd, to_pay_today_count, awaiting_count, awaiting_usd, stopped_month_count, autonomy_pct, autonomy_n, autonomy_m }, by_day: Array<{ day, PAGAR, FRENAR, ESCALAR, pending }> (30 entries, zero-filled, America/Bogota), by_currency: Array<{ currency, usd }>, by_country: Array<{ country: string | null, usd }>, due_soon: Array<{ invoice_id, payee, amount, currency, amount_usd, due_date, outcome: string | null }>, due_soon_total, approvals: Array<{ invoice_id, payee, amount, currency, question_es, question_en, decided_at }>, approvals_total }`.
+
+Evidence:
+- `bash scripts/tests/run.sh` and `npx vitest run src/routes`, on a fixture company with hand-computed values: every KPI and series.
+- `npx vitest run web/Inbox.test.tsx`: each section, empty states, search with accents, sort and `aria-sort`.
+- QA on the demo company after «Reiniciar demo»:
+  - «Esperando tu aprobación» equals the number of ESCALAR rows;
+  - «Autonomía» equals Periodo's;
+  - the currency bars sum to Periodo's Pagado;
+  - the `by_day` bars sum to the invoices that arrived in the last 30 days.
+- The D38 gate on `inbox` and its states, as the demo user and as a trial user.
+
+Trace: D39 (1), D29(c), D17. Rubric: Presentación, Impacto. Axis: Explicabilidad, Autonomía. Tasks: 45, 46, 47.
+
+**AC-102 (MUST; D39 cut order, R-126)** When the user opens a decision record, the system adds the following to everything AC-26, AC-64, AC-65 and AC-77 already require.
+- Document panel:
+  - The original file through its signed URL (AC-08): the PDF embedded, or the image shown.
+  - The stored text (`raw_text`), with each value the AI read marked with `<mark>`.
+  - The marks come from offsets that code computes in `src/lib/snippet.ts` over `raw_text` (R-88), never from the model: `doc_marks: Array<{ field, start, end }> | null` in `GET /api/invoices/:id`.
+  - Nothing is drawn on the PDF or image pixels (R-124).
+  - With no stored text, the panel shows the document and AC-77's status line.
+- Rules as a visual checklist:
+  - A segmented progress bar, cumple / no cumple / no se pudo verificar, labelled «11 de 13 cumplen» / "11 of 13 pass".
+  - Then one row per check: verdict icon and word, rule name, and the existing check sentence.
+- FX card, shown only when the Moneda check stored a rate: «1 USD = 4.020,10 COP · Yahoo Finance · 17 oct 2026 10:00 · 1.500.000 COP = 373,14 USD». With a pin it says «tasa fijada por la política v<n>» (AC-74), built from the stored values.
+- Timeline with an avatar per actor:
+  - Agente: the Thesaurus mark.
+  - A person: up to two initials from the email's local-part segments (R-26 split).
+  - A guest: a neutral person glyph and «Invitado 3f9a1c2b».
+
+Evidence:
+- `npx vitest run src/lib/snippet.test.ts`: `raw_text.slice(start, end)` is the printed value for each field kind.
+- `npx vitest run web/InvoiceDetail.test.tsx`: the marks, the bar counts, the FX card with no Moneda rate (not shown) and with one (shown), and the avatars.
+- The D38 gate on `detail-pagar`, `detail-frenar`, `detail-escalar` and `detail-unread`.
+
+Trace: D39 (2), D29(b), D28, D24. Rubric: Innovación, Presentación. Axis: Explicabilidad. Tasks: 45 (`doc_marks`), 46, 48.
+
+**AC-103 (MUST; D39 cut order, R-126)** When the user opens Periodo, the system keeps AC-44's figures and table and adds these charts (R-124):
+- A budget burn-down: available USD (budget minus cumulative committed, by arrival day) for each day of the month up to today, against the budget line. Days after today are empty, with no projection.
+- One stacked bar: Pagado, Escalado (committed minus paid) and Disponible. When committed exceeds the budget, an «Excede el presupuesto por <USD>» label shows and Disponible is 0.
+- Per-beneficiary bars from the AC-44 table rows: paid and committed.
+- The outcome breakdown for invoices that arrived this month: PAGAR, FRENAR, ESCALAR and pendiente.
+- An autonomy and violations trend: cumulative by day of the first agent decision. With fewer than 2 days of data, it shows the current figures and «La tendencia aparece cuando haya decisiones en más de un día.» / "The trend appears once there are decisions on more than one day." instead of a one-point line.
+
+Contract: `charts = { budget_usd, burn: Array<{ day, available_usd: number | null }>, stack: { paid, escalated, available, over }, outcomes: { PAGAR, FRENAR, ESCALAR, pending }, trend: Array<{ day, autonomy_pct, violations }> }`.
+
+Evidence:
+- SQL and route tests on a fixture: `stack.paid` equals Pagado, `paid + escalated` equals Comprometido, and the burn's last point equals budget minus Comprometido.
+- `npx vitest run web/Period.test.tsx`, including the one-day trend message.
+- The D38 gate on `period` and its states.
+
+Trace: D39 (3), D17, D5. Rubric: Impacto, Presentación. Axis: Autonomía. Tasks: 45, 46, 49.
+
+**AC-104 (MUST; D39 cut order, R-126)** When the user clicks a beneficiary in Beneficiarios, the system opens `/beneficiaries/:id`, a profile view.
+- What it shows:
+  - name, country, currency;
+  - the Blinka route and the bank account ending in its last 4 digits;
+  - the agreement (type, amount, periodicity, validity) in plain words;
+  - totals: paid this month, paid all-time (USD), and the number of invoices;
+  - a sparkline of the USD amount of each of the last 12 invoices whose latest decision is PAGAR, in arrival order (R-124);
+  - the last 5 invoices, with outcome chips that link to Detalle.
+- Invoices are matched to the beneficiary by the AC-19 name rule (R-63).
+- The page has a back link to the list. Editing stays where it is today.
+- Empty state: «Todavía no hay pagos a este beneficiario.» / "No payments to this beneficiary yet."
+
+Contract: `GET /api/screen/beneficiary/:id` → `{ beneficiary, totals: { paid_month_usd, paid_total_usd, invoices }, history: Array<{ received_at, amount_usd }>, last: Array<{ invoice_id, received_at, amount, currency, outcome: string | null }> }`. Another company's id answers 404.
+
+Evidence:
+- Route and SQL tests: totals, the 12-point cap, another company's id gives 404.
+- `npx vitest run web/Beneficiaries.test.tsx`.
+- The D38 gate on `beneficiary` and `beneficiary-empty`.
+
+Trace: D39 (4), S-Directory. Rubric: Impacto, Presentación. Tasks: 45, 46, 50.
+
+**AC-105 (MUST; first of D39 to cut, R-126)** When the user opens Política, the system groups the existing form into cards.
+- The groups: «Beneficiarios y acuerdos», «Límites y aprobación», «Presupuesto y saldo», «Fechas y duplicados» and «Moneda». Moneda holds AC-76's market table and the pins.
+- Each rule keeps its input and gets one plain sentence filled with its current value, in es and en. Examples:
+  - «Si una factura supera 10.000 USD, la freno: no se paga.»
+  - «Desde 2.500 USD te pregunto antes de pagar.»
+  - An empty rule: «Sin valor: no puedo verificar esta regla y escalo la factura.»
+- The «qué cambiaría» preview (AC-31, R-61, R-68) becomes a diff list. Each row shows the invoice, the beneficiary, the amount, a from-chip → a to-chip, and the reason. Then one line: «<n> facturas no cambian.»
+- «Guardar como versión» stays the one primary. AC-30, AC-31, AC-76 Clarified (R-108..R-111) and AC-32 keep holding.
+
+Evidence:
+- `npx vitest run web/Policy.test.tsx`: each sentence with a value and empty, and the diff rows from a mocked preview.
+- The D38 gate on `policy`.
+
+Trace: D39 (5), S-Policy, D16. Rubric: Presentación, Impacto. Tasks: 51.
+
+**AC-106 (MUST while any of AC-101..AC-105 ships)** When a D39 chart or figure is shown, the system follows these rules (R-123, R-124).
+1. Real data. Every value comes from the screen function over the company's records. There are no placeholders, no samples and no projections. A chart with no data shows a designed empty state, «Todavía no hay datos para este gráfico.» / "No data for this chart yet.", and keeps its height.
+2. dataviz method in the approved palette.
+   - Outcome series use the status pairs: PAGAR #346538, FRENAR #9f2f2d, ESCALAR #956400, pendiente #6d6c69.
+   - A single-measure chart uses one ink colour.
+   - No new colour value appears (AC-53 Clarified; `ux-gate --palette`).
+3. Readable without colour. Every chart has:
+   - a visible title and its unit;
+   - a one-sentence text summary, also used as its `aria-label`;
+   - legends with words;
+   - its values reachable as text (labels, or a visually hidden table).
+   Numbers and dates follow the tab's locale.
+4. Light. Chart code loads lazily (AC-99). No animation longer than 300 ms. Adding a chart library is allowed only when the builder's report justifies it and AC-97's 250 KB still holds.
+
+Evidence:
+- `npx vitest run web/charts`: summary sentences, the empty state, locale.
+- The D38 gate: palette, axe, CLS.
+- The cross-checks in AC-101 to AC-104.
+
+Trace: D39 ("built with the `dataviz` skill", "no fake data"), D37. Rubric: Presentación, V. técnica. Tasks: 46, 47-51.
 
 ## 14. SHOULD (only after every MUST passed QA)
 
@@ -955,6 +1321,121 @@ Gate-semantics rulings (product, 17 Oct; product questions, not disputes; MUST; 
 - **R-113 `5.mixed` flags only strings that belong to the other language alone (AC-91 Clarified; Q-J).** «decide» is correct English. Flagging it means the gate measures a dictionary coincidence, not a language leak. Excluding strings that the current language's own dictionary also contains removes exactly that false positive. Leaks stay visible because there is no minimum word count, and single-word buttons are where leaks happen. Principle: evidence (measure what the item means). Loser's best argument (the minimum-words option): "a minimum of N words removes every short cognate at once".
 - **R-114 Text hidden under an opaque sticky or fixed layer is not an overlap (AC-91 Clarified; Q-K).** Item 1 exists so that no reader sees two texts printed on top of each other. A sticky top bar (R-78) that covers scrolled content shows the reader only the bar. The `elementFromPoint` check and the opacity condition make the exclusion prove the occlusion, not assume it. Texts inside the same layer, and any translucent layer, still count. The rule applies on every screen, so the next sticky screen does not come back with the same question. Principle: evidence. Loser's best argument (the tour-only option): "limit the exclusion to `tour`, where the dim layer makes it obvious, so no other screen loses a check".
 
+Rulings from folding D39-D41 (product, 17 Oct ~18:00Z; Roberto's decisions D39, D40 and D41; nobody was asked; conservative defaults; the orchestrator ledgers each one; Q15-Q19 are added to docs/QUESTIONS.md):
+- **R-115 A trial company is marked, named, and never mails (AC-03 Clarified, AC-92, AC-93, AC-64 Clarified; Q15).**
+  - The trigger already gives every new Auth user a seeded company. So no new path is needed. An anonymous user just gets a company named «Empresa de prueba <n>», from a sequence, as D41 says.
+  - It also gets `is_trial = true`, a new additive column that only the trigger writes and no member can update.
+  - A trial company is treated like the demo company for mail (R-15): no approval tokens and no approval email, ever. Its approver field is read-only, and the API refuses to set it (403).
+  - Why not just leave `approver_email` null? A juror could type any address into Política. Once SES leaves the sandbox, or a domain is verified (D41's optional step), an anonymous, rate-limited-only sign-up would become a way to send mail with approve links to strangers. Today, in the sandbox, the mail would fail anyway and record «No pude enviar el correo», which reads as a defect to a juror.
+  - D41 lists "approve escalations in the dashboard", not by email, so nothing a juror needs is lost.
+  - Saving access (AC-95) does not lift the flag. Lifting it would make an unverified, autoconfirmed email a mail sender.
+  - Principle: Seguridad, with company-can-deploy-Monday.
+  - Loser's best argument: "a juror who types their own email as approver should see the email flow work end to end; it is part of what a customer does".
+- **R-116 The guest's answers carry a guest identity, not a relaxed constraint (AC-37 Clarified, AC-93).**
+  - Today the dashboard approval answers 401 when the JWT has no email, and `decisions` requires `actor_email` on a human answer. So without this ruling a juror could not approve, and D41 names approving explicitly.
+  - Relaxing the check would need `drop constraint`, which AC-07 forbids.
+  - So the server stores `invitado:<first 8 hex of the user id>`, taken from the verified JWT and never from the body. It shows as «Invitado 3f9a1c2b». It is stable for that user, unique enough to tell two guests apart in a ledger, and it does not look like an email, so nothing can mail it.
+  - After «Guardar mi acceso», new answers use the email. Old ones keep the guest label, because the record is append-only (D10).
+  - Principle: completeness (D41's "approve escalations"), within D10 and AC-07.
+  - Loser's best argument: "store the anonymous user's UUID in full; a short prefix is not provably unique".
+- **R-117 Abuse numbers (AC-96; Q17).**
+  - Anonymous sign-ins: 30 per hour per IP, Supabase's default. A juror needs one. A venue NAT with a table of jurors and the D38 gate's single session fit under it, and a script is slowed to 720 workspaces a day per IP.
+  - Trial ingest: 30 invoices per user per UTC day, counted in the database before any read, with the existing quota function and table, so there is no new table. A juror tests a handful; the full seed is already there. It also caps what one anonymous user can spend of Roberto's Bedrock credits on reads, where R-87 caps only questions.
+  - Non-trial users keep today's limits, so this changes nothing for Roberto or real customers.
+  - No CAPTCHA. It needs a Turnstile site that only Roberto can create; the idea is noted in `docs/IDEAS.md`.
+  - Nothing is ever deleted. Accumulated trial workspaces are accepted: each is a few hundred small rows.
+  - Principle: Seguridad and cost hygiene (D36), without blocking the jury (D41).
+  - Loser's best argument: "10 sign-ins per hour per IP is the safer number; jurors rarely share an IP".
+- **R-118 How «Guardar mi acceso» works, and its fallback (AC-95; Q16).**
+  - D41 fixes the mechanism: `updateUser` with autoconfirm on, so no mail is needed. That is the only way under SES sandbox for a juror to come back from another device.
+  - The cost is that the attached email is not verified. Someone could attach an address they do not own. Their workspace stays isolated and sends no mail (R-115), so the harm is a squatted login name, not data access.
+  - The password minimum is 8, set in the Auth config.
+  - An email that already has an account is refused with a clear message. Two workspaces are never merged.
+  - Task 39 proves the mechanism live once, on a throwaway anonymous user, before the web task merges.
+  - If GoTrue still requires a confirmation mail for the email change, the fallback is `POST /api/account/save`. It uses the Admin API (`updateUserById` with `email_confirm: true`) and acts only on the caller's own user id from the verified JWT, only while that user `is_anonymous`. Body ids are ignored.
+  - That fallback is a second service-role use, beyond S-Auth's one module. It is accepted now, the same way R-23 and R-32 were, because D41 cannot be met otherwise.
+  - README "what's not done" names the unverified email and how to switch autoconfirm off once a sending domain exists.
+  - Principle: completeness (D41 as written) and evidence (prove before building).
+  - Loser's best argument: "keep confirmation mail on so every attached email is proven; an unverified email is an identity we cannot trust".
+- **R-119 A juror is never silently locked out of their own trial (AC-94).**
+  - An anonymous session lives only in this browser. Signing out, or switching to the shared demo user, loses the workspace for good. Nothing deletes it, but nobody can reach it again.
+  - So any action that ends an unsaved trial session warns first, with «Guardar mi acceso» as the primary.
+  - While a trial session exists, the door button reads «Volver a mi empresa de prueba», so a returning juror never spawns a second copy by mistake.
+  - Principle: company's actual user gets hurt (a juror who loses an hour of setup will not try again).
+  - Loser's best argument: "a plain sign-out is simpler; the juror can always start another trial in one click".
+- **R-120 The door is the primary action, and the first run stays a progress screen (AC-92, AC-40 Clarified, AC-45 Clarified).**
+  - D41 says "a primary action" on both screens, and AC-91 allows one primary per view. So «Probar con mi propia empresa» is the primary. «Enviar código» and «Entrar como Andina Labs» stay fully working, as secondary buttons.
+  - The trial's first decision pass reuses the existing first-login flow (progress «n de m», then Bandeja, then the tour), bounded at 30 s like «Reiniciar demo».
+  - Opening Bandeja at once while the agent decides behind the tour was rejected. Rows would change under the spotlight, which breaks AC-91's CLS bar and the tour anchors, and it is new behaviour the night before the deadline.
+  - D40's per-screen targets apply to screens. This one-time run is a progress state, which item 4 already governs.
+  - Principle: company-can-deploy-Monday, and scope.
+  - Loser's best argument: "a juror waiting up to 30 seconds at the door is a bad first impression; open Bandeja instantly and let the activity panel show the agent working".
+- **R-121 How D40 is measured (AC-97, AC-91 Clarified).**
+  - D40 gives targets but no method, so the method is fixed so QA and builders measure the same thing.
+  - One script, `scripts/perf.mjs`. A fresh Chromium context for first loads, and a warm Worker (one `/api/health` first).
+  - Medians of 3 for page times. p95 over 20 requests for APIs. Gzipped JS bytes until the first screen is usable.
+  - The place it was measured from is recorded, because the sandbox is not a juror's laptop.
+  - `docs/perf.md` is the evidence, and any FAIL is a blocking item 7 finding, as D40 says.
+  - The 17:40Z measurements are kept as the baseline row.
+  - Principle: evidence.
+  - Loser's best argument: "use Lighthouse scores; they are the industry standard and judges recognise them".
+- **R-122 The speed levers, and where they stop (AC-98, AC-99, AC-100; Q18).**
+  - Per-screen functions are `security invoker`, so RLS and the user's JWT still decide what is read. A `security definer` read function would make one bug a cross-company leak. Today, at 2.27 s, the cause is chained round trips, not RLS.
+  - Local JWT verification is allowed: signature, `exp` and `aud`. It is the standard way to remove one Auth round trip per request. The accepted cost is that a token stays valid until it expires (at most 1 h) after sign-out.
+  - Edge caching covers only the public demo overview (60 s), whose data is public by D8, plus hashed assets. Member data is never put in a shared cache. A key mistake there would show one company's invoices to another, and D40 itself says "never for decisions in flight".
+  - Optimistic UI shows only "sending". An outcome is never painted before the server writes it, because a predicted PAGAR on screen is a lie about money (D2).
+  - Principle: Seguridad over speed where they conflict, then evidence.
+  - Loser's best argument: "cache member GETs at the edge for 10 seconds keyed by the JWT; it is the biggest win and the key isolates users".
+- **R-123 Charts follow the dataviz method inside the approved palette (AC-106).**
+  - D39 asks for the `dataviz` skill on every chart, and also for "same palette" (D37). The skill itself says to swap its placeholder palette for the brand's.
+  - So outcome series use the three approved status colours plus the muted grey for pending. Single-measure charts use one ink colour. No colour is added. That makes D37 and the gate's palette check (AC-53 Clarified) hold without any exemption.
+  - Every chart has a sentence and text values, so it passes axe and works for anyone who cannot tell green from red.
+  - A chart library is not forbidden, but it must be justified and must fit AC-97's 250 KB budget. Charts load lazily.
+  - Principle: scope (D37 approved the palette) and evidence (the gate measures it).
+  - Loser's best argument: "the dataviz skill's validated palette is built for charts; forcing four brand colours limits categorical charts".
+- **R-124 What each D39 number means (AC-101..AC-105; Q19).** Each number is defined once, so the screen function, the test and QA compute the same thing.
+  - «Por pagar hoy»: invoices whose latest decision is PAGAR, made today (America/Bogota), summed in USD. Thesaurus prepares orders and does not move money (scope-out), so "to pay today" is "orders prepared today". The tile says so.
+  - «Esperando tu aprobación»: latest decision ESCALAR, not archived.
+  - «Frenadas este mes»: latest FRENAR, arrived this month.
+  - «Autonomía»: AC-44's figure, the same number on both screens.
+  - «Facturas por día y resultado»: x is the arrival day and the colour is the current outcome. Every trial or reset workspace is decided in one pass, so "decision day" would be one bar and 29 empty days, which says nothing. The arrival day is what a finance team triages by.
+  - «Pagado por moneda / país»: AC-44's Pagado, split by invoice currency and by the directory beneficiary's country. With no match, the label is «Sin país en el directorio».
+  - «Vence pronto»: due in the next 7 days and not FRENAR.
+  - Burn-down: budget minus cumulative Comprometido (AC-44), by arrival day, with no projection.
+  - Trend: cumulative by first-agent-decision day, with the honest one-day message.
+  - Sparkline: per invoice, because one month of data gives no monthly series.
+  - Document highlights: on the stored text only. The reader returns no coordinates, and boxes guessed on a PDF would be fake.
+  - Principle: evidence (no fake data, D39) and the company's actual user.
+  - Loser's best argument: "D39 says 'decisions per day'; plot the day each decision was made, as written".
+- **R-125 D39 sequencing with Tasks 32a and 32b, and file ownership (AC-101..AC-106, AC-92).**
+  - 32a (finance screens) and 32b (`/demo`, Login, portal) are 1-2 h from merging and fix gate items that D39 must not reopen. So neither is cancelled or folded.
+  - New work starts at once in new files only: chart primitives, dashboard sections, trial and save-access components, the perf script, and backend files that 32a and 32b do not touch.
+  - Edits to `Login.tsx` and `Demo.tsx` wait for 32b. Edits to `App.tsx`, `auth.tsx`, `Inbox.tsx`, `InvoiceDetail.tsx`, `Period.tsx`, `Beneficiaries.tsx`, `Policy.tsx` and the page CSS wait for 32a. Each later task rebases and mounts its components in a small final commit.
+  - Each page file has one D39 owner. The D40 web task (43) owns `main.tsx`, `App.tsx` routing, `api.ts`, `vite.config.ts` and the loader lines of every page, and merges before the D39 page tasks mount.
+  - A 32a fix still open when it merges goes to the D39 task that owns that page, which keeps 32a's gate result as its floor.
+  - Principle: company-can-deploy-Monday (no collisions on the night before), and scope.
+  - Loser's best argument: "fold 32a into the D39 page tasks, since D39 rewrites those screens anyway and the polish will be redone".
+- **R-126 Cut order and clock for D39-D41 (replaces R-95's checkpoints; R-95's never-cut list stands and grows).**
+  - Never cut: AC-92..AC-96 (D41), AC-97..AC-99 (D40 targets and levers), AC-91, AC-50, AC-82..AC-87, AC-89, AC-90, AC-73..AC-77, AC-67, AC-79, AC-80.
+  - Cut order, first to last:
+    1. AC-88 (already SHOULD).
+    2. AC-81 (taste polish beyond the gate).
+    3. AC-100 (SHOULD).
+    4. AC-105 Política cards.
+    5. AC-104 Beneficiarios profile.
+    6. AC-103 Periodo charts.
+    7. AC-102 Detalle.
+    8. AC-101 Bandeja dashboard.
+    AC-106 goes with the last D39 AC cut. AC-78 is merged; it stays unless it fails the gate at checkpoint C, and then it is left out.
+  - A cut D39 AC becomes SHOULD. Its branch stays unmerged, and its page keeps today's screen plus D40's loader change.
+  - Checkpoint A, 2026-10-17T22:00Z: if the door (Tasks 39 and 40) is not deployed, every free builder seat goes to D41 until it is, and no D39 page task starts.
+  - Checkpoint B, 2026-10-18T00:00Z: R-95 checkpoint 1 still applies to AC-81. Any D39 page task (47-51) not started by then is cut, in the order above.
+  - Checkpoint C, 2026-10-18T02:00Z: the UI freezes for the video. A D39 task that has not merged and passed the gate by then is cut. Tasks 33, 34 and the final `docs/perf.md` run start no later than 02:00Z on what is merged. After C, only gate, perf and UX-QA fixes touch the UI.
+  - FREEZE, 2026-10-18T11:00Z: unchanged. A never-cut MUST still open then goes to product for re-scope at that moment.
+  - The orchestrator ledgers each checkpoint result.
+  - Principle: scope, in Roberto's stated order (D41, then D40, then D39).
+  - Loser's best argument: "cut D40's code splitting before any D39 screen; a richer screen is what the juror sees, a smaller bundle is not".
+
 ---
 
 ## Task to AC map
@@ -1013,6 +1494,20 @@ Gate-semantics rulings (product, 17 Oct; product questions, not disputes; MUST; 
 | 36 Final delta review | every AC above (reviewer, whole branch since 6d34830) |
 | 37 Video (D32) | AC-50 (Amended) |
 | 38 QA happy path + merge to main | AC-50, AC-48, AC-01, AC-16 (R-83 queries), AC-75 (live seed check) |
+| 39 D41 backend: trial trigger, guest identity, no-mail, ingest cap, Auth config script, save-access probe | AC-92 (trigger, config), AC-93, AC-94 (config), AC-95 (config, probe, fallback route only if needed), AC-96, AC-03 / AC-07 / AC-37 / AC-64 Clarified |
+| 40 D41 door (web) | AC-92, AC-93 (Política read-only approver), AC-94, AC-40 / AC-45 Clarified, AC-91 (gate: `login`, `demo`, `trial`, `leave-trial`, `inbox` top bar) |
+| 41 D41 «Guardar mi acceso» + «Entrar con contraseña» | AC-95, AC-91 (gate: `save-access`, `login-password`) |
+| 42 D40 backend: screen functions, one round trip, local JWT, demo cache, Smart Placement | AC-98, AC-99 (placement), AC-97 (API p95), AC-07 Clarified |
+| 43 D40 web: code splitting, screen loaders, skeletons, prefetch, tab cache, pending state | AC-99, AC-100 (SHOULD), AC-97 (first load, navigation, JS budget), AC-91 |
+| 44 D40 perf harness + baseline + final table; new gate screen ids | AC-97 (`scripts/perf.mjs`, `docs/perf.md`), AC-91 Clarified (screen ids) |
+| 45 D39 data: dashboard fields in the screen functions, `doc_marks` | AC-101, AC-102 (`doc_marks`), AC-103, AC-104 (contracts), AC-106 (real data) |
+| 46 D39 chart primitives `web/charts/` | AC-106, AC-99 (lazy) |
+| 47 D39 Bandeja dashboard | AC-101, AC-106, AC-91 (gate: `inbox` + states, demo and trial) |
+| 48 D39 Detalle | AC-102, AC-106, AC-91 (gate: `detail-*`) |
+| 49 D39 Periodo | AC-103, AC-106, AC-91 (gate: `period` + states) |
+| 50 D39 Beneficiarios profile | AC-104, AC-106, AC-91 (gate: `beneficiaries`, `beneficiary`, `beneficiary-empty`) |
+| 51 D39 Política cards + diff list | AC-105, AC-91 (gate: `policy`) |
+| 35b README + SUBMISSION refresh | AC-49 / AC-51 Clarified (D41 doors, «Para el jurado», «Velocidad», SES verified identity, not-done items) |
 | S1 CSV | AC-56 |
 | S6 Pregúntale a Thesaurus | superseded: AC-67 is MUST, built by Tasks 20, 23 and 24 |
 | S2 JEV | AC-57 |
@@ -1049,3 +1544,26 @@ Every task: TDD and the full suite green, with no real AI or FX call in any test
 | 38 | QA happy path, live seed check, merge to main | qa + orchestrator | AC-50, AC-48, AC-01, AC-16, AC-75 | D8 | none | merge before FREEZE |
 
 Cut at plan time: only AC-88 (live email, SHOULD by nature: only Roberto can add a domain). Conditional cuts by R-95: AC-81 at checkpoint 1, then AC-78 at checkpoint 2. Never cut: D28, D29(a)(b), D34, D36, the D38 gate, the video.
+
+### Tasks D39-D41 (17 Oct ~18:00Z; full briefs, shared files, deploy points E1-E6 and clock in `docs/PLAN-D28.md`, section "D39-D41")
+
+Order is binding: D41, then D40, then D39 (R-126). New work starts in new files at once. Edits to files that Tasks 32a and 32b own wait for those tasks to merge (R-125). Migrations: 000900 (39), 001000 (42), 001100 (45). Checkpoints: A at 22:00Z, B at 00:00Z, C (UI freeze) at 02:00Z. FREEZE is 11:00Z.
+
+| # | Task | Seat | ACs | Depends on | Merge order on shared files | Deploy |
+|---|---|---|---|---|---|---|
+| 39 | D41 backend: trial trigger, `is_trial`, guest identity, no mail, ingest cap, `scripts/auth-config.sh`, save probe | senior (1st priority) | AC-92/93/94/95/96 (backend), AC-03/07/37/64 Cl. | none, now | first on `auth.ts`, `invoices.ts`, `policy.ts` | E1: db-push 000900, auth-config, deploy |
+| 40 | D41 door (web): button, first run, top bar, leave warning, read-only approver | senior (2nd) | AC-92, AC-93, AC-94, AC-40/45 Cl., AC-91 | new files now; mounts after 32b (Login, Demo) and 32a (App, auth, Policy); merges after 39 | 32a/32b → 40 → 41 → 43 | E2: the door is live (target 21:30Z) |
+| 41 | «Guardar mi acceso» + «Entrar con contraseña» | junior | AC-95, AC-91 | new files now; mounts after 40; 39's probe result | 40 → 41 | E3 |
+| 42 | D40 backend: screen functions, `/api/screen/*`, local JWT, demo edge cache, Smart Placement | senior (3rd) | AC-98, AC-99 (placement), AC-97 (API) | starts once a seat is free; rebases onto 39 | 39 → 42 → 45 | E3: db-push 001000 |
+| 43 | D40 web: route splitting, screen loaders, skeletons, prefetch, tab cache, pending state | senior (4th) | AC-99, AC-100, AC-97, AC-91 | after 32a merges (mocks of AC-98); merges after 42 and 40 | 40/41 → 43 → 47-51 | E4 |
+| 44 | Perf harness `scripts/perf.mjs`, baseline now, final table at C; gate screen ids | junior (1st) | AC-97, AC-91 Cl. | none, now | own files | none (runs at E2 and E6) |
+| 45 | D39 data: dashboard fields, `doc_marks` | senior (5th) | AC-101..AC-104 contracts, AC-106 | new SQL now; merges after 42 | 42 → 45 | E4: db-push 001100 |
+| 46 | D39 chart primitives `web/charts/` | junior (2nd) | AC-106, AC-99 | none, now | own files | none |
+| 47 | Bandeja dashboard | senior | AC-101, AC-106, AC-91 | new files on mocks; mounts after 43; data after 45 | 43 → 47 | E5 |
+| 48 | Detalle | senior | AC-102, AC-106, AC-91 | same | 43 → 48 | E5 |
+| 49 | Periodo | junior | AC-103, AC-106, AC-91 | same | 43 → 49 | E5 |
+| 50 | Beneficiarios profile | junior | AC-104, AC-106, AC-91 | same | 43 → 50 | E5 |
+| 51 | Política cards + diff | junior | AC-105, AC-91 | same; after 40's Policy line | 40 → 43 → 51 | E5 |
+| 35b | README + SUBMISSION refresh | junior | AC-49/51 Cl. | after C | own files | none |
+
+Then, unchanged: 33 and 34 (gates, from checkpoint C), 36, 37 (video), 38 (merge to main). Never cut: D41 (AC-92..AC-96), D40 targets (AC-97..AC-99), the gate, the video. D39 cut order (R-126): AC-105, then AC-104, then AC-103, then AC-102, then AC-101.

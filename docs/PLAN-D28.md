@@ -1,5 +1,7 @@
 # Tasks D28-D35 (+ D36-D38): Thesaurus delta plan
 
+> 17 Oct ~18:00Z: Tasks 39-51 for D39-D41 are appended at the end of this file, in the section "D39-D41". Their clock and cut order (R-126) replace the clock and the R-95 checkpoints below.
+>
 > For agentic workers: the orchestrator runs this with subagent-driven-development, one task per builder, in the waves below. Tasks 1-19 (docs/PLAN.md) are done and merged and keep their numbers. The ACs and rulings live in `docs/SPEC.md` (section 13d, AC-73..AC-91, AC-67 now MUST, AC-50 amended, R-85..R-95). Where this file and a ruling differ, the ruling wins. The same list is the section "Tasks D28-D35" at the end of `docs/SPEC.md`.
 
 ## Rules for every task in this plan
@@ -238,3 +240,267 @@
 - ~07:30: 38 and merge to main.
 
 That leaves 3.5 h of buffer to FREEZE at 11:00. Nothing is cut at plan time beyond AC-88 (SHOULD by nature, Roberto's domain step).
+
+---
+
+# D39-D41: Tasks 39-51 (product, 17 Oct ~18:00Z)
+
+> These tasks fold Roberto's D39 (richer UI), D40 (speed) and D41 (jury access). The ACs are AC-92..AC-106 in `docs/SPEC.md` section 13e, the rulings are R-115..R-126, and Q15-Q19 are in `docs/QUESTIONS.md`. Where this section and a ruling differ, the ruling wins. This section replaces the clock and checkpoints above; R-126 replaces R-95's checkpoints.
+
+## Binding order and rules
+- The order is D41 → D40 → D39 (R-126):
+  - D41 is the jury's door and is never cut. Every free builder seat serves it first.
+  - D40's targets are never cut, because a miss is a blocking D38 finding.
+  - D39 is MUST but cuttable, in the order below.
+- Every rule from the top of this file still holds:
+  - TDD, then the full suite and `bash scripts/tests/run.sh` green.
+  - Tests never call a real model, FX source or Supabase Auth.
+  - The D38 gate and a fresh UX reviewer on every screen a task touches (AC-91).
+  - Builders never deploy, run db-push or change Auth config.
+  - Branches are `r202610162341/task/<n>-<slug>`.
+- Migrations, numbers fixed now (AC-07 Clarified):
+  - `20261017000900_trial_access.sql` (Task 39);
+  - `20261017001000_screen_functions.sql` (Task 42);
+  - `20261017001100_dashboard_functions.sql` (Task 45).
+  All are additive, with no drop, delete or truncate, and nothing touches `auth.users` beyond the existing trigger. Anonymous users are real Auth users and are never deleted.
+- Guardrails that do not move: AC-07, AC-16 and AC-69 (no model writes PAGAR), AC-38 (one writer), AC-68.
+- Sequencing with the tasks in flight (R-125):
+  - Task 32a owns `web/**` except `Demo.tsx`, `Login.tsx` and `portal/**`. Task 32b owns those three. Both merge first and are not cancelled.
+  - Every task below starts at once in new files only. Edits to files 32a or 32b own wait for their merge, then go in as a small final mount commit after a rebase.
+  - A 32a item still open at its merge goes to the D39 task that owns that page.
+- Seat priority when seats are short:
+  - Seniors: 39, then 40, then 42, then 43, then 45, then 47, then 48.
+  - Juniors: 44, then 46, then 41, then 49, then 50, then 51, then 35b.
+
+## Tasks
+
+**Task 39: D41 backend: trial workspace, guest identity, no mail, ingest cap, Auth config (AC-92..AC-96 backend).** Seat: senior-builder, first priority, now.
+- Files:
+  - `supabase/migrations/20261017000900_trial_access.sql`:
+    - `companies.is_trial boolean not null default false`, kept out of the member update grant;
+    - `create sequence trial_company_seq`;
+    - `create or replace function handle_new_user()`. When `new.is_anonymous`, the company is «Empresa de prueba <n>», `is_trial = true` and `approver_email` null. Otherwise the behaviour is unchanged. It is the same seed for both.
+  - `scripts/auth-config.sh`:
+    - with no flag, it PATCHes the Auth config over the Management API: `external_anonymous_users_enabled true`, `rate_limit_anonymous_users 30`, `mailer_autoconfirm true`, `password_min_length 8`, and `sessions_timebox` and `sessions_inactivity_timeout` 0;
+    - `--check` prints those keys only, never a secret.
+  - `src/lib/auth.ts`: expose `is_anonymous` and the user id on the request.
+  - `src/routes/approvals.ts`: the guest identity `invitado:<8 hex>` (R-116).
+  - `src/agent/loop.ts`: no `notify` and no tokens when `is_trial` (R-115).
+  - `src/agent/trace.ts` and its test: the trial step 5 and the guest name, es and en.
+  - `src/routes/invoices.ts` (POST only): the trial ingest cap through the existing quota function, key `ingest:<user id>`, 30 per UTC day, 429 text (AC-96).
+  - `src/routes/policy.ts`: 403 on `approver_email` for a trial company.
+  - `src/i18n/features/trial-record.ts`.
+  - `scripts/tests/schema.test.sh`: the trigger, the grant, and no `deleteUser` or `delete from auth.users` anywhere.
+  - Route and agent tests.
+- The live probe (AC-95, R-118). The builder writes `scripts/probe-save-access.mjs`. The orchestrator runs it once after E1 on a throwaway anonymous user: `signInAnonymously`, then `updateUser({ email: 'qa-probe-<random>@example.com', password })`, then it reports `email_confirmed_at` and `is_anonymous`. If the email is not confirmed at once, Task 39b adds `POST /api/account/save` (the Admin API on the caller's own id only, only while `is_anonymous`, with tests) before Task 41 merges.
+- Dependencies: none.
+- Merge order: first on `auth.ts`, `invoices.ts` and `policy.ts`. Tasks 42 and 45 rebase onto it.
+- Deploy E1, by the orchestrator:
+  1. `bash scripts/db-push.sh` (000900).
+  2. `bash scripts/auth-config.sh`, then `--check`.
+  3. Deploy the main Worker.
+  4. The probe.
+  5. One anonymous sign-in by curl: the company row is «Empresa de prueba <n>», with 8 beneficiaries.
+- Estimate: 2.5 h.
+
+**Task 40: D41 door (web) (AC-92, AC-93 web, AC-94, AC-40 and AC-45 Clarified).** Seat: senior-builder, second priority.
+- New files, started now:
+  - `web/trial.ts`: `startTrial`; `isTrial`; `guardLeave`, the one guard every leaving action calls.
+  - `web/components/TrialButton.tsx`: the door, plus «Volver a mi empresa de prueba».
+  - `web/components/LeaveTrialWarning.tsx`.
+  - `web/Trial.test.tsx`.
+  - `src/i18n/features/trial.ts`.
+- Mount commit, after 32b and 32a merge:
+  - `web/pages/Login.tsx` and `web/pages/Demo.tsx`: the door becomes the one primary, and «Enviar código» and «Entrar como Andina Labs» become secondary.
+  - `web/App.tsx`: the top bar shows the company name, «Acceso sin guardar» and «Guardar mi acceso» (the button opens Task 41's dialog; until 41 merges it is hidden behind `false`). The sign-out guard goes here too.
+  - `web/auth.tsx`: the anonymous session.
+  - `web/pages/Policy.tsx`: one line, the read-only approver field for a trial company.
+- The first run reuses the first-login call loop (R-120), then Bandeja and the tour.
+- Gate: `login`, `demo`, `trial`, `leave-trial`, and `inbox` as a trial user at 360 and 1440, es and en (screen ids from Task 44).
+- Dependencies: the mounts wait for 32a and 32b. It merges after 39, which provides the guest approval, no mail and the trial name.
+- Deploy E2: the door is live, target 21:30Z. Right after it, a QA run on AC-92, AC-93 and AC-94 (at most 2 live reads and 1 question).
+- Estimate: 2.5 h.
+
+**Task 41: «Guardar mi acceso» + «Entrar con contraseña» (AC-95).** Seat: junior-builder.
+- Files:
+  - `web/components/SaveAccess.tsx`;
+  - `web/SaveAccess.test.tsx`;
+  - `src/i18n/features/account.ts`;
+  - the mount: the password form on `web/pages/Login.tsx` (secondary «Entrar con contraseña») and the button wiring in `web/App.tsx`.
+- It calls `supabase.auth.updateUser`, or `POST /api/account/save` if 39b exists.
+- Dependencies:
+  - new files now;
+  - the mount after Task 40 merges;
+  - the probe result from E1 decides which call is used.
+- Gate: `save-access` (success and errors) and `login-password`.
+- Deploy E3.
+- Estimate: 1.5 h.
+
+**Task 42: D40 backend: one round trip per screen (AC-98, AC-99 placement).** Seat: senior-builder, third priority.
+- Files:
+  - `supabase/migrations/20261017001000_screen_functions.sql`:
+    - `screen_inbox(p_lang)`, `screen_period()`, `screen_beneficiaries()`, `screen_policy()`, `screen_detail(p_id)` and `screen_demo_overview()`;
+    - each is `security invoker`, `stable` and read-only, takes the company from `auth.uid()`, returns `jsonb`, and has execute revoked from `anon` and `public`;
+    - the numbers equal today's endpoints'.
+  - `src/routes/screen.ts` (new: `/api/screen/inbox|period|beneficiaries|policy`).
+  - `src/routes/invoices.ts` (GET `/:id` collapsed into one RPC).
+  - `src/routes/demo.ts` (one function, and the Workers Cache API for 60 s).
+  - `src/lib/auth.ts`: local JWT verification by JWKS, or by `SUPABASE_JWT_SECRET` if the orchestrator has it to `wrangler secret put`. Otherwise it keeps `/auth/v1/user` and states so in the report.
+  - `src/index.ts` (mount).
+  - `wrangler.toml` (`[placement] mode = "smart"`) and `src/env.ts`.
+  - `scripts/tests/schema.test.sh` (security invoker, no anon execute).
+  - Route tests that count db calls.
+- Dependencies: none to start. It rebases onto 39 before review.
+- Merge order: 39 → 42 → 45 on `invoices.ts`, `auth.ts` and the screen functions.
+- Deploy E3: db-push 001000, then deploy. Then Task 44 runs the API part of `perf.mjs`.
+- Estimate: 3 h.
+
+**Task 43: D40 web: delivery (AC-99, AC-100, AC-97 web).** Seat: senior-builder, fourth priority.
+- Files:
+  - `web/main.tsx`;
+  - `web/App.tsx` (lazy route per page, plus a placeholder route `/beneficiaries/:id` for Task 50);
+  - `web/api.ts` (screen loaders, per-tab cache, prefetch on hover and focus);
+  - `vite.config.ts` (chunks);
+  - the loader lines and skeletons of every page (`web/pages/*.tsx`), switched to `/api/screen/*`;
+  - the approve and reject pending state in `web/pages/InvoiceDetail.tsx`. It shows no outcome until the server answers (R-122);
+  - `public/_headers`, or the Worker's asset headers, for immutable hashed assets.
+- Dependencies: it starts after 32a merges, on mocks of AC-98's contract. It merges after 42 (real endpoints) and after 40 and 41 (`App.tsx`, `Login.tsx`).
+- Every D39 page task mounts after this merges.
+- Gate: every page, for CLS and skeletons.
+- Deploy E4.
+- Estimate: 2.5 h.
+
+**Task 44: Perf harness and the measured table (AC-97, AC-91 Clarified).** Seat: junior-builder, first junior priority, now.
+- Files:
+  - `scripts/perf.mjs` and `scripts/perf.test.mjs` (median, p95 and gz sum on fixtures);
+  - `docs/perf.md`;
+  - `package.json` (`perf` script);
+  - `scripts/ux-gate.mjs`: the new screen ids `trial`, `login-password`, `save-access`, `leave-trial`, `beneficiary` and `beneficiary-empty`, with one anonymous session per gate run.
+- Runs:
+  - The baseline at once on the deployed URL, with the 17:40Z numbers as row 0.
+  - Again after E3 (the API part).
+  - The final table at checkpoint C (E6), committed before the video.
+  - The trial row needs E2.
+- Estimate: 1.5 h, plus 0.5 h per run.
+
+**Task 45: D39 data (AC-101..AC-104 contracts, AC-102 `doc_marks`, AC-106).** Seat: senior-builder, fifth priority.
+- Files:
+  - `supabase/migrations/20261017001100_dashboard_functions.sql`:
+    - new `dash_inbox()`, `dash_period()` and `screen_beneficiary(p_id)`, all `security invoker` with R-124's definitions;
+    - `create or replace` of `screen_inbox` and `screen_period`, embedding those as `dashboard` and `charts`.
+  - `src/routes/screen.ts` (`/api/screen/beneficiary/:id`).
+  - `src/lib/snippet.ts` (document offsets) and `src/routes/invoices.ts` (`doc_marks`).
+  - SQL fixture tests in `scripts/tests/`, and route tests with hand-computed values.
+- Dependencies: the new SQL can start now. It merges after 42.
+- Deploy E4: db-push 001100, then deploy.
+- Estimate: 2.5 h.
+
+**Task 46: Chart primitives (AC-106).** Seat: junior-builder, now.
+- Files:
+  - `web/charts/{StackedBars,HBars,Line,Sparkline,Kpi,Segments}.tsx` and `web/charts/charts.css`;
+  - `web/charts/*.test.tsx`;
+  - `src/i18n/features/charts.ts`.
+- Built with the `dataviz` skill, with the approved palette swapped in (R-123). Each chart has its summary sentence, text values, a designed empty state with reserved height, and locale formats. No library unless justified.
+- Owned by this task only; Tasks 47-50 import it.
+- Estimate: 1.5 h.
+
+**Tasks 47-51: the D39 screens.** Each one is built in new component files on AC-101..AC-105's mocked contracts as soon as a seat is free. It mounts into its page in one commit after Task 43 merges, uses real data after Task 45 deploys, and ends with the gate on its screens.
+- **47 Bandeja dashboard (AC-101).** Senior.
+  - Files: `web/dashboard/*.tsx` and `web/dashboard/dashboard.css` (new), `web/pages/Inbox.tsx`, `web/pages/inbox.css`, `src/i18n/features/dashboard.ts`, `web/Inbox.test.tsx`.
+  - Gate: `inbox` and its states, as the demo user and as a trial user.
+  - Estimate: 2.5 h.
+- **48 Detalle (AC-102).** Senior.
+  - Files: `web/components/{DocumentPanel,RuleChecklist,FxCard}.tsx` (new), `web/components/Timeline.tsx` (avatars), `web/components/ChecksTable.tsx` (if replaced by the checklist), `web/pages/InvoiceDetail.tsx`, `web/pages/detail.css`, `src/i18n/features/detail-viz.ts`, `web/InvoiceDetail.test.tsx`.
+  - Gate: `detail-*`.
+  - Estimate: 2 h.
+- **49 Periodo (AC-103).** Junior.
+  - Files: `web/pages/Period.tsx`, `web/pages/period.css`, `src/i18n/features/period-viz.ts`, `web/Period.test.tsx`.
+  - Gate: `period` and its states.
+  - Estimate: 2 h.
+- **50 Beneficiarios profile (AC-104).** Junior.
+  - Files: `web/pages/Beneficiary.tsx` (new), `web/pages/Beneficiaries.tsx` (row links), the route line in `web/App.tsx` (replacing 43's placeholder; a declared shared edit), `src/i18n/features/beneficiary.ts`, `web/Beneficiaries.test.tsx`.
+  - Gate: `beneficiaries`, `beneficiary` and `beneficiary-empty`.
+  - Estimate: 2 h.
+- **51 Política cards + diff list (AC-105).** Junior.
+  - Files: `web/pages/Policy.tsx`, `web/policy.css`, `src/i18n/features/policy-cards.ts`, `web/Policy.test.tsx`.
+  - Gate: `policy`, with R-108..R-111 still holding.
+  - Estimate: 1.5 h.
+
+**Task 35b: README + SUBMISSION refresh (AC-49 and AC-51 Clarified).** Seat: junior-builder.
+- The ledgered 17:30Z SES correction, plus D41's two doors in the first 10 lines, «Para el jurado», «Velocidad» (a link to `docs/perf.md`), and the not-done items of AC-49 Clarified.
+- After checkpoint C. It is allowed in FREEZE.
+- Estimate: 1 h.
+
+Then the existing tasks, unchanged except for their start: 33 and 34 (the gates) at checkpoint C on E6, then 36, 37 (the video, after 00:00Z and after 33 and 34 pass), and 38 (merge to main).
+
+## Shared files (merge in this order; the later task rebases)
+| File | Order |
+|---|---|
+| migrations | 39: 000900 → 42: 001000 → 45: 001100 |
+| `src/lib/auth.ts` | 39 → 42 |
+| `src/routes/invoices.ts` | 39 (POST) → 42 (GET collapse) → 45 (`doc_marks`) |
+| `src/routes/policy.ts` | 39 → 42 |
+| `src/routes/approvals.ts`, `src/agent/loop.ts`, `src/agent/trace.ts`, `scripts/auth-config.sh` | 39 only |
+| `src/routes/screen.ts`, `src/index.ts` | 42 → 45 (39 touches `index.ts` only if 39b's route is needed: 39b → 42) |
+| `src/lib/snippet.ts` | 45 only |
+| `wrangler.toml`, `src/env.ts` | 42 only |
+| `scripts/perf.mjs`, `scripts/ux-gate.mjs`, `package.json` | 44 only |
+| `web/pages/Login.tsx` | 32b → 40 → 41 → 43 |
+| `web/pages/Demo.tsx` | 32b → 40 → 43 |
+| `web/App.tsx`, `web/auth.tsx` | 32a → 40 → 41 → 43 → 50 (one route line) |
+| `web/main.tsx`, `web/api.ts`, `vite.config.ts` | 43 only |
+| `web/pages/Inbox.tsx`, `inbox.css` | 32a → 43 → 47 |
+| `web/pages/InvoiceDetail.tsx`, `detail.css`, `Timeline.tsx`, `ChecksTable.tsx` | 32a → 43 → 48 |
+| `web/pages/Period.tsx`, `period.css` | 32a → 43 → 49 |
+| `web/pages/Beneficiaries.tsx` | 32a → 43 → 50 |
+| `web/pages/Policy.tsx`, `web/policy.css` | 32a → 40 (one line) → 43 → 51 |
+| `web/charts/*` | 46 only |
+| `web/dashboard/*` | 47 only |
+| `src/i18n/es.ts`, `en.ts` | registration lines only, any order |
+| `README.md`, `docs/SUBMISSION.md` | 35b only (37 sets the video URL) |
+
+## Deploy points (the orchestrator only, from integration, after a green full suite)
+- E1 (39): db-push 000900; `scripts/auth-config.sh`, then `--check`; deploy main; the save-access probe; one anonymous sign-in by curl.
+- E2 (40): deploy. The door is live. QA on AC-92..AC-94. `perf.mjs` adds the trial row.
+- E3 (41, 42, 39b if needed): db-push 001000; deploy; QA on AC-95; `perf.mjs` API run.
+- E4 (43, 45): db-push 001100; deploy.
+- E5 (47-51, as they merge): deploy, at most two batches.
+- E6, at checkpoint C, 2026-10-18T02:00Z: the last UI deploy. `perf.mjs` final table; Tasks 33 and 34 start.
+- Then the existing D8 (video) and Task 38.
+
+## Clock (UTC, target)
+- 17 Oct 18:15: dispatch 39 (senior), 44 and 46 (junior). Dispatch 40 (senior, new files) and 41 (junior, new files) as soon as a seat is free.
+- ~19:30: 32a and 32b merged (in flight now). Then 40's mounts, 42, 43 (on mocks) and 45 start.
+- ~20:45: 39 merged → E1.
+- ~21:30: 40 merged → E2, and the door is live.
+- 22:00: **checkpoint A**. If the door is not live, every free seat goes to D41 and no D39 page task starts.
+- ~22:15: 41 and 42 merged → E3.
+- ~23:00: 43 and 45 merged → E4. Tasks 47-51 mount; they started on new files from ~20:00 as seats allowed.
+- 18 Oct 00:00: **checkpoint B**. R-95 checkpoint 1 still applies to AC-81, and any D39 page task not started is cut.
+- ~00:30-01:45: 47-51 merge as they pass → E5.
+- 02:00: **checkpoint C, the UI freeze**. E6, the final `docs/perf.md`, and 33 and 34 start. An unmerged D39 task is cut in R-126's order.
+- ~03:30: 33 and 34 pass. 35b runs alongside.
+- ~04:30: 36.
+- ~06:30: 37, the video (after 00:00Z).
+- ~08:30: 38, and the merge to main.
+- FREEZE at 11:00, which leaves 2.5 h of buffer.
+
+## Cut order (R-126)
+- Never cut:
+  - D41: AC-92..AC-96;
+  - D40: AC-97..AC-99;
+  - AC-91 (the gate) and AC-50 (the video);
+  - everything on R-95's never-cut list.
+- Cut first to last:
+  1. AC-88 (already SHOULD).
+  2. AC-81 (taste polish beyond the gate).
+  3. AC-100 (SHOULD).
+  4. AC-105 Política cards (Task 51).
+  5. AC-104 Beneficiarios profile (Task 50).
+  6. AC-103 Periodo charts (Task 49).
+  7. AC-102 Detalle (Task 48).
+  8. AC-101 Bandeja dashboard (Task 47).
+  AC-106 goes with the last one cut.
+- What a cut means: the AC becomes SHOULD and its branch stays unmerged. Its page keeps today's screen plus Task 43's loader change, so D40 still holds there.
+- AC-78 (merged) stays unless it fails the gate at checkpoint C.
+- A never-cut MUST still open at FREEZE goes to product for re-scope then, not before.

@@ -8,7 +8,7 @@ import { must } from '../lib/supabase';
 // Workers ratelimit binding refused nothing live, so it is gone. A failing counter lets the request through, logged.
 export const memberRoutes = () => new Hono<AppEnv>().use('*', requireUser, async (c, next) => {
   if (c.req.method === 'POST') {
-    const r = await c.var.db.rpc('rate_limit_hit', { p_limit: 60 }).then((x) => x, (e: unknown) => ({ data: null, error: e }));
+    const r = await c.var.db.rpc('rate_limit_hit').then((x) => x, (e: unknown) => ({ data: null, error: e }));
     if (r.error) console.error('rate limit: counter failed, request allowed', r.error);
     else if (r.data === false) return c.json({ error: 'Demasiadas solicitudes, intenta en un minuto' }, 429);
   }

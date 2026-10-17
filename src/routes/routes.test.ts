@@ -15,7 +15,7 @@ let db: Db;
 // Both clients count on the request's Budget, as the real ones do through Budget.fetch (R-56).
 const counting = (budget?: BudgetT) => { if (budget) db.meter.budget = budget; return db; };
 vi.mock('../lib/supabase', async (orig) => ({ ...(await orig<typeof import('../lib/supabase')>()),
-  userClient: (_e: Env, jwt: string, b?: BudgetT) => ({ ...counting(b), rpc: (name: string, args: Row) => db.rpc(name, args, jwt) }) }));
+  userClient: (_e: Env, jwt: string, b?: BudgetT) => ({ ...counting(b), rpc: (name: string, args?: Row) => db.rpc(name, args, jwt) }) }));
 vi.mock('../lib/admin', () => ({ adminClient: (_e: Env, b?: BudgetT) => counting(b) }));
 vi.mock('../lib/email', async (orig) => ({ ...(await orig<typeof import('../lib/email')>()), sendEmail: vi.fn(async () => ({ sent: true })) }));
 const { app } = await import('../index');
@@ -49,7 +49,7 @@ function testDb(seed: Record<string, Row[]> = {}) {
   const conflict = { policies: false };
   // rate_limit_hit of migration 20261017000500, per user (the JWT's) and minute; refuse/fail inject its answers.
   const rateLimit = { hits: new Map<string, number>(), refuse: false, fail: '' };
-  async function rpc(name: string, args: Row, jwt?: string) {
+  async function rpc(name: string, args: Row = {}, jwt?: string) {
     if (name !== 'rate_limit_hit') return base.rpc(name, args);
     base.meter.hit();
     base.rpcs.push({ name, args });
@@ -57,7 +57,7 @@ function testDb(seed: Record<string, Row[]> = {}) {
     if (rateLimit.fail) return { data: null, error: { message: rateLimit.fail } };
     const key = `${USERS[jwt ?? '']?.id}|${Math.floor(Date.now() / 60000)}`;
     rateLimit.hits.set(key, (rateLimit.hits.get(key) ?? 0) + 1);
-    return { data: !rateLimit.refuse && rateLimit.hits.get(key)! <= Number(args.p_limit), error: null };
+    return { data: !rateLimit.refuse && rateLimit.hits.get(key)! <= 60, error: null };
   }
   let n = 0;
   function write(table: string, op: 'insert' | 'update', payload: Row | Row[]) {
@@ -588,6 +588,12 @@ describe('malformed ids and uncaught errors (R-74)', () => {
     expect([r.status, await r.json()]).toEqual([404, answer]);
     expect(lookups()).toBe(before);
   });
+  it.each([123, ['Laura Méndez'], {}, true])('an invoice row whose payee_name is %j never makes GET /api/invoices/:id or PUT /api/policy answer 500', async (payee) => {
+    db = testDb(workspace(['01']));
+    (db.tables.invoices![0]!.fields as Row).payee_name = payee;
+    expect((await call('GET', `/api/invoices/${uid('A-01')}`)).status).toBe(200);
+    expect((await call('PUT', '/api/policy', { rules: SEED.rules })).status).toBe(200);
+  });
   it('an uncaught error under /api/* -> 500 JSON, logged, never plain text', async () => {
     db = testDb(workspace(['11']));
     db.fail.query = (q) => (q.table === 'invoice_current' ? 'connection reset' : undefined);
@@ -626,7 +632,7 @@ describe('rate limit (AC-43, R-72)', () => {
     const r = await call('POST', '/api/invoices/run');
     expect(r.status).toBe(429);
     expect(await r.json()).toEqual({ error: 'Demasiadas solicitudes, intenta en un minuto' });
-    expect(limitCalls().at(-1)).toEqual({ name: 'rate_limit_hit', args: { p_limit: 60 } });
+    expect(limitCalls().at(-1)?.args).toEqual({}); // no caller-chosen limit: 60 is in the SQL
     expect((await call('GET', '/api/invoices')).status).toBe(200);
     expect((await call('POST', '/api/invoices/run', undefined, 'tok-en')).status).toBe(200);
     expect(limitCalls()).toHaveLength(62); // one counted call per member POST, none per GET

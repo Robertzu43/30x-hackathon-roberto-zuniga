@@ -145,6 +145,16 @@ describe('lee: the reader only when fields are missing (AC-61, AC-13)', () => {
   });
 });
 
+describe('lee: a payee_name that is not a string (R-71)', () => {
+  it.each([['a number', 123], ['an array', ['Laura Méndez']], ['an object', {}], ['true', true]])('%s escalates with lectura no_verificado, not an error', async (_, payee) => {
+    db = fakeDb(workspace('A', { only: ['01'] }));
+    (db.tables.invoices![0]!.fields as Record<string, unknown>).payee_name = payee;
+    expect(await runAgent(deps(), 'A', 'pending', 'manual')).toMatchObject({ ESCALAR: 1, errors: 0 });
+    const lectura = (decisionsOf('A-01')[0]!.checks as Array<{ id: string; verdict: string }>).find((c) => c.id === 'lectura');
+    expect(lectura?.verdict).toBe('no_verificado');
+  });
+});
+
 describe('actua (AC-24, AC-25, AC-39, R-15, R-16, R-25, R-29)', () => {
   it('STALE_PERIOD once -> recomputes the period and retries, one decision', async () => {
     db = fakeDb(workspace('A', { only: ['01'] }));

@@ -10,10 +10,10 @@ create table public.rate_limits (
 alter table public.rate_limits enable row level security;
 revoke all on public.rate_limits from public, anon, authenticated;
 
--- Counts this call for auth.uid() (never a caller value) and answers whether the last 60 s stay within p_limit: this
+-- Counts this call for auth.uid() (never a caller value) and answers whether the last 60 s stay within 60: this
 -- minute's count plus the previous minute's, weighted by the part of it still inside the window.
 -- ponytail: sliding-window estimate (Cloudflare's own scheme), not an exact log; exact needs a row per request.
-create function public.rate_limit_hit(p_limit int default 60) returns boolean
+create function public.rate_limit_hit() returns boolean
 language plpgsql security definer set search_path = '' as $$
 declare
   v_at double precision := extract(epoch from now()) / 60;
@@ -25,7 +25,7 @@ begin
     on conflict (user_id, minute) do update set n = r.n + 1
     returning r.n into v_n;
   select p.n into v_prev from public.rate_limits p where p.user_id = auth.uid() and p.minute = v_min - 1;
-  return coalesce(v_prev, 0) * (1 - (v_at - v_min)) + v_n <= p_limit;
+  return coalesce(v_prev, 0) * (1 - (v_at - v_min)) + v_n <= 60;
 end $$;
-revoke execute on function public.rate_limit_hit(int) from public, anon;
-grant execute on function public.rate_limit_hit(int) to authenticated;
+revoke execute on function public.rate_limit_hit() from public, anon;
+grant execute on function public.rate_limit_hit() to authenticated;

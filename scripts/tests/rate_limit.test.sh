@@ -34,8 +34,7 @@ UA=11111111-1111-4111-8111-111111111111 UB=22222222-2222-4222-8222-222222222222
 hits=$(as authenticated "$UA" "select string_agg(left(public.rate_limit_hit()::text, 1), '') from generate_series(1, 61);")
 [ "$hits" = "$(printf 't%.0s' $(seq 60))f" ] || fail "60 allowed then refused (got $hits)"
 [ "$(as authenticated "$UB" "select public.rate_limit_hit()")" = t ] || fail "a second user is limited"
-[ "$(as authenticated "$UA" "select public.rate_limit_hit(1000)")" = t ] || fail "p_limit ignored"
-[ "$(sql -c "select n from public.rate_limits where user_id = '$UA'")" = 62 ] || fail "count is not one row per user and minute"
+[ "$(sql -c "select n from public.rate_limits where user_id = '$UA'")" = 61 ] || fail "count is not one row per user and minute"
 # The previous minute still weighs on this one (sliding window): a flood last minute keeps refusing now.
 sql -c "insert into public.rate_limits values ('$UB', floor(extract(epoch from now()) / 60)::bigint - 1, 1000000)" >/dev/null
 [ "$(as authenticated "$UB" "select public.rate_limit_hit()")" = f ] || fail "previous minute ignored"

@@ -294,6 +294,13 @@ describe('account comparison (AC-19, R-73)', () => {
     expect(acct('Nube Sur LLC', 'Cuenta 483920175, nueva cuenta 991234567').values.invoice_account_last4).toBe('4567');
     expect(acct('Nube Sur LLC', 'Routing 026009593 Account 483920175').values).toMatchObject({ invoice_account_last4: '0175', directory_account_last4: '0175' });
   });
+  // F1: member-controlled text must stay linear; any doubt about a line with a crowd of digit groups is no_cumple.
+  it.each([['001234564821 ', 4000], ['0012-3456-4821 1234567 ', 2500]])('a ~50 KB line of %j x%i is no_cumple, fast', (unit, n) => {
+    const t0 = performance.now();
+    const c = acct('Laura Méndez', unit.repeat(n));
+    expect(c.verdict).toBe('no_cumple');
+    expect(performance.now() - t0).toBeLessThan(250);
+  });
   it('a partial tail keeps the same last 4 on both sides (the sentence then names both accounts)', () => {
     expect(acct('Laura Méndez', 'Bancolombia ahorros 3456-4821').values).toMatchObject({ invoice_account_last4: '4821', directory_account_last4: '4821' });
   });

@@ -18,8 +18,8 @@ const month = (iso: string) => bogotaDay(iso).slice(0, 7);
 const addDays = (day: string, n: number) => new Date(Date.parse(`${day}T00:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
 
 // Case, accents and punctuation ignored (AC-19, AC-20).
-const norm = (s: string | null) =>
-  (s ?? '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[.,]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+const norm = (s: unknown) =>
+  (typeof s === 'string' ? s : '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[.,]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
 export const nameKey = (s: string | null) => norm(s).replace(/ (sas|ltda|inc|llc)$/, '');
 const accountKey = (s: string | null) => norm(s).replace(/ /g, '');
 const last4 = (s: string | null) => (s ? s.replace(/\D/g, '').slice(-4) || null : null);
@@ -88,6 +88,7 @@ function compareAccounts(inv: string, dir: string): { same: boolean; last4: stri
   const dirAcct = segment(dir), dirAll = dir.replace(/\D/g, '');
   if (dirAcct.length < 6) return { same: accountKey(inv) === accountKey(dir), last4: last4(inv) };
   const g = [...inv.matchAll(/\d+/g)].map((m) => ({ d: m[0], at: m.index, end: m.index + m[0].length }));
+  if (g.length > 40) return { same: false, last4: last4(inv) }; // ponytail: a line with a crowd of digit groups is no_cumple (R-73's conservative side); the stray scan below is O(n) per match
   const known = new Set(dir.match(/\d+/g));
   const stray = (a: number, b: number): string[] => {
     const out: string[] = [];

@@ -1,8 +1,9 @@
 // Política and the company section (AC-30, AC-31, AC-32; R-14, R-31, R-34, R-41).
 import { z } from 'zod';
 import { decide, directorio, findBeneficiary, periodFrom, previousFrom } from '../agent/tools';
+import { recordedFields } from '../agent/trace';
 import { headline } from '../engine/explain';
-import type { Invoice, Outcome, PolicyRules } from '../engine/types';
+import type { Check, Invoice, Outcome, PolicyRules } from '../engine/types';
 import { must } from '../lib/supabase';
 import { memberRoutes } from './agent';
 import { runFromCursor, type Current } from './invoices';
@@ -48,6 +49,10 @@ export const policy = memberRoutes()
       db.from('invoice_current').select('*').eq('company_id', companyId).order('received_at').order('id').then(must) as Promise<Current[]>,
       directorio(db, companyId),
     ]);
+    // A decided invoice stored without fields is simulated from its decision's reading; only a never-decided one is unread.
+    const ids = rows.filter((r) => !r.fields && r.decision_id).map((r) => r.decision_id);
+    const read: Array<{ id: string; checks: Check[] }> = ids.length ? must(await db.from('decisions').select('id, checks').in('id', ids)) : [];
+    for (const r of rows) r.fields = recordedFields(r.fields, read.find((d) => d.id === r.decision_id)?.checks);
     const now = new Date().toISOString();
     // One read of earlier invoices covers both windows: the checks filter by their own policy's window.
     const window = { duplicate_window_days: Math.max(previous?.rules.duplicate_window_days ?? 0, rules.duplicate_window_days ?? 0) };

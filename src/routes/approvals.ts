@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { escalationQuestion } from '../agent/question';
 import { recorder, type DecisionInput, type Recorder } from '../agent/record';
 import { directorio, duplicados, findBeneficiary, periodo, politica } from '../agent/tools';
-import type { StoredDecision } from '../agent/trace';
+import { recordedFields, type StoredDecision } from '../agent/trace';
 import { decideWithOverrides } from '../engine/decide';
 import { headline } from '../engine/explain';
 import type { Decision, Invoice } from '../engine/types';
@@ -116,7 +116,7 @@ approvals.get('/approve/:token', async (c) => {
   const invoice = must(await l.db.from('invoices').select('id, source, received_at, fields')
     .eq('company_id', l.company_id).eq('id', l.invoice_id).eq('archived', false).maybeSingle());
   if (!invoice) return refuse(c, 'not_found'); // archived invoices are hidden, so they cannot be answered (R-21)
-  return c.json({ action: l.action, expires_at: new Date(l.exp).toISOString(), invoice, decision: l.esc });
+  return c.json({ action: l.action, expires_at: new Date(l.exp).toISOString(), invoice: { ...invoice, fields: recordedFields(invoice.fields, l.esc.checks) }, decision: l.esc });
 });
 
 approvals.post('/approve/:token', async (c) => {

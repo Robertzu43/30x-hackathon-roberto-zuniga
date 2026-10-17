@@ -3,7 +3,7 @@
 import { agreementText, asRead, fieldList, fill, list, money, motives } from '../engine/explain';
 import { validFields } from '../engine/checks';
 import { outcomeOf } from '../engine/decide';
-import type { Check, CheckId, Decision, Invoice, Outcome } from '../engine/types';
+import type { Check, CheckId, Decision, Invoice, InvoiceFields, Outcome } from '../engine/types';
 import { t, type Lang } from '../i18n';
 
 // One row of `decisions` (also the decision columns of `invoice_current`).
@@ -24,6 +24,22 @@ export interface StoredDecision {
   payment: Decision['payment'];
   note: string | null;
   created_at: string;
+}
+
+// An invoice stored without fields (a REST insert the loop read at `lee`; the loop never writes `invoices`, AC-38) is
+// shown as its decision's checks recorded the reading (R-29): validFields' output, so every recorded value is trusted.
+// Null when there is no decision yet (pending, not read).
+export function recordedFields(fields: InvoiceFields | null, checks: Check[] | null | undefined): InvoiceFields | null {
+  if (fields || !checks) return fields;
+  const c = (id: CheckId) => checks.find((x) => x.id === id);
+  const s = (v: unknown) => (typeof v === 'string' && v ? v : null);
+  const m = c('moneda')?.values;
+  const read = {
+    payee_name: s(c('beneficiario_permitido')?.values.payee_name), amount: typeof m?.amount === 'number' ? m.amount : null,
+    currency: s(m?.currency), invoice_number: s(c('duplicado_exacto')?.actual), issue_date: null, due_date: s(c('vencimiento')?.actual),
+    concept: s(c('duplicado_probable')?.actual), bank_account: s(c('beneficiario_cuenta')?.values.invoice_account),
+  };
+  return { ...read, confidence: Object.fromEntries(Object.entries(read).filter(([, v]) => v !== null).map(([k]) => [k, 1])) };
 }
 
 export interface TraceStep { stage: 'lee' | 'consulta' | 'decide' | 'actua'; text: string }

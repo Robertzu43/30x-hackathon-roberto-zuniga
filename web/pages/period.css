@@ -25,5 +25,10 @@
   .period-money dd { font-size: 1.125rem; } /* AC-72: "USD 42.000,00" fits a half-width cell at 390 px */
 }
 .period-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 1rem; }
+.period-charts > * { min-height: 15.5rem; } /* AC-91 CLS: an empty chart takes the place of a drawn one, so the skeleton and either answer match */
 .period-trend { display: grid; gap: 0.75rem; align-content: start; }
 .period-trend p { margin: 0; }
+.skeleton .chart-body { background: #f1efe9; border-radius: 4px; } /* AC-99: the drawing of the made-up data is never shown, only its place */
+.skeleton .chart-body > *, .skeleton .chart-swatch { visibility: hidden; }
+.period-charts .chart-sr { display: block; width: 1px; } /* a table cannot shrink to the 1px of .chart-sr (and `.period table` made it 100%), so its text ran 2330 px wide */
+.period-charts .chart-sr :is(caption, th, td) { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; } /* each cell hidden like .sr-only: its text sat over the next chart at 360 px */

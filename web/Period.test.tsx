@@ -18,7 +18,12 @@ const empty = {
   count_by_outcome: { PAGAR: 0, FRENAR: 0, ESCALAR: 0 }, by_beneficiary: [],
   autonomy: { n: 0, m: 0 }, autonomy_pct: null, violations: 0, explained_pct: 100,
 };
-const scr = (period: unknown) => ({ period, charts: null }); // AC-98: GET /api/screen/period
+const charts = {
+  budget_usd: 10000, burn: [{ day: `${month}-01`, available_usd: 10000 }, { day: `${month}-02`, available_usd: 4299.5 }],
+  stack: { paid: 1500.5, escalated: 4200, available: 4299.5, over: 0 }, outcomes: { PAGAR: 3, FRENAR: 2, ESCALAR: 1, pending: 4 },
+  trend: [{ day: `${month}-01`, autonomy_pct: 50, violations: 0 }, { day: `${month}-02`, autonomy_pct: 75, violations: 0 }],
+};
+const scr = (period: unknown, c: unknown = null) => ({ period, charts: c }); // AC-98: GET /api/screen/period
 const show = () => renderAt(<Period />, { at: '/period' });
 beforeEach(() => localStorage.clear());
 
@@ -199,4 +204,44 @@ test('a second visit shows the last figures at once, then the fresh ones', async
   expect(screen.getByText('Autonomía 75 %')).toBeTruthy(); // synchronously: no skeleton on a revisit
   expect(await screen.findByText(/99,00/)).toBeTruthy();
   expect(fetchMock.mock.calls.filter(([u]) => String(u).startsWith('/api/screen/period')).length).toBe(2);
+});
+
+// AC-103: the charts of /api/screen/period mount under the AC-44 figures and table, which stay.
+test('the charts field mounts the five D39 charts beside the AC-44 figures and table', async () => {
+  mockApi({ [`GET /api/screen/period?month=${month}`]: scr(body, charts) });
+  show();
+  expect(await screen.findByRole('figure', { name: /Presupuesto disponible/ })).toBeTruthy();
+  for (const t of ['Presupuesto del mes', 'Por beneficiario', 'Facturas del mes por decisión', 'Autonomía por día']) expect(await screen.findByRole('figure', { name: new RegExp(t) })).toBeTruthy();
+  expect(screen.getByText('Autonomía 75 %')).toBeTruthy();
+  expect(within(screen.getByRole('region', { name: 'Por beneficiario' })).getByRole('table')).toBeTruthy();
+});
+
+test('the charts sit above the table, so the table growing with its rows moves nothing (AC-91 CLS)', async () => {
+  mockApi({ [`GET /api/screen/period?month=${month}`]: scr(body, charts) });
+  const { container } = show();
+  const bars = await screen.findByRole('figure', { name: /Por beneficiario/ });
+  const table = container.querySelector('.table-wrap') as HTMLElement;
+  expect(bars.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+test('the beneficiary bars use the AC-44 table rows', async () => {
+  mockApi({ [`GET /api/screen/period?month=${month}`]: scr(body, charts) });
+  show();
+  expect((await screen.findByRole('figure', { name: /Por beneficiario/ })).getAttribute('aria-label')).toMatch(/Nube Sur LLC \(Pagado 0, Comprometido 4\.200\)/);
+});
+
+test('the one-day trend message shows on the mounted page (AC-103)', async () => {
+  mockApi({ [`GET /api/screen/period?month=${month}`]: scr(body, { ...charts, trend: [charts.trend[1]] }) });
+  show();
+  expect(await screen.findByText('La tendencia aparece cuando haya decisiones en más de un día.')).toBeTruthy();
+});
+
+test('while loading, the chart section is part of the skeleton, hidden from assistive tech; the text tables stay inside their 1px box', async () => {
+  const { readFileSync } = (await import('node:fs' as string)) as { readFileSync(p: string, enc: string): string };
+  mockApi({ [`GET /api/screen/period?month=${month}`]: () => new Promise(() => {}) });
+  const { container } = show();
+  expect(container.querySelector('.skeleton .period-charts')).toBeTruthy();
+  expect(readFileSync('web/pages/period.css', 'utf8')).toMatch(/\.period-charts \.chart-sr \{ display: block; width: 1px/);
+  expect(readFileSync('web/pages/period.css', 'utf8')).toMatch(/\.chart-sr :is\(caption, th, td\) \{ position: absolute; width: 1px/);
+  expect(readFileSync('web/pages/period.css', 'utf8')).toMatch(/\.skeleton \.chart-body > \*[^{]*\{ visibility: hidden/);
 });

@@ -7,9 +7,11 @@ import { CHECK_IDS, type InvoiceFields } from '../../src/engine/types';
 import { api, ApiError, useScreen } from '../api';
 import AgentTrace from '../components/AgentTrace';
 import AskThesaurus from '../components/AskThesaurus';
-import ChecksTable from '../components/ChecksTable';
+import DocumentPanel, { type DocMark } from '../components/DocumentPanel';
+import FxCard from '../components/FxCard';
 import { originLabel } from '../components/PortalLinkCard';
 import ReadingPanel, { type Reading } from '../components/ReadingPanel';
+import RuleChecklist from '../components/RuleChecklist';
 import Timeline from '../components/Timeline';
 import { printedAsRead, tu } from '../components/User';
 import { useT } from '../i18n';
@@ -33,6 +35,8 @@ type Detail = {
   reading?: Reading | null;
   /** R-97: who read it, decided by the API (never derived here); absent on an older API, treated as 'none'. */
   reading_status?: 'ai' | 'preloaded' | 'unavailable' | 'none';
+  /** AC-102: half-open offsets into invoice.raw_text computed by src/lib/snippet.ts (R-88); absent on an older API. */
+  doc_marks?: DocMark[] | null;
 };
 
 const FIELDS = ['payee_name', 'amount', 'currency', 'invoice_number', 'issue_date', 'due_date', 'concept', 'bank_account'] as const;
@@ -124,18 +128,7 @@ export default function InvoiceDetail() {
             {reading && <p className="ai-badge">{t('detail.read_by', { provider: reading.provider })}</p>}
             {unreached && <p className="detail-notice">{t('detail.reader_unavailable')}</p>}
             {status === 'preloaded' && <p className="muted">{t('detail.preloaded')}</p>}
-            {invoice.source === 'email' || invoice.source === 'chat' ? (
-              invoice.raw_text ? <pre className="detail-doc" data-user="">{invoice.raw_text}</pre> : <p className="muted">{t('detail.file.none')}</p>
-            ) : !url ? (
-              <p className="muted">{t('detail.file.none')}</p>
-            ) : (
-              <>
-                {invoice.source === 'pdf'
-                  ? <iframe className="detail-doc" src={url} title={t('detail.file.title')} />
-                  : <img className="detail-doc" src={url} alt={t('detail.file.title')} />}
-                <a className="detail-link" href={url} target="_blank" rel="noreferrer">{t('detail.file.open')}</a>
-              </>
-            )}
+            <DocumentPanel source={invoice.source} url={url} rawText={invoice.raw_text} marks={data.doc_marks ?? null} />
             {reading ? <ReadingPanel fields={reading.fields} show={shown} /> : <dl className="detail-fields">
               {FIELDS.map((k) => {
                 const v = invoice.fields?.[k] ?? null;
@@ -151,7 +144,8 @@ export default function InvoiceDetail() {
             </dl>}
           </div>
           <div>
-            <ChecksTable explanations={data.explanations} checks={latest.checks} />
+            <RuleChecklist explanations={data.explanations} checks={latest.checks} />
+            <FxCard check={latest.checks.find((c) => c.id === 'moneda')} version={latest.policy_version} />
             {data.fixes.length > 0 && (
               <section>
                 <h2>{t('detail.fixes')}</h2>

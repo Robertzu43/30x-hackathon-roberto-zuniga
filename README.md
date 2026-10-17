@@ -32,7 +32,7 @@ Cada factura pasa por 13 controles. Cada uno guarda el valor real, el umbral, la
 | Posible duplicado | mismo beneficiario, concepto y mes, con otro número | ESCALAR |
 | Límite por pago | monto en USD no supera el límite | FRENAR |
 | Umbral de aprobación | monto en USD no supera el umbral que exige una persona | ESCALAR |
-| Presupuesto del periodo | pagado + comprometido + esta factura no supera el presupuesto del mes | ESCALAR |
+| Presupuesto del periodo | comprometido (pagado + escalado pendiente) + esta factura no supera el presupuesto del mes | ESCALAR |
 | Saldo de la cuenta | lo pagado + esta factura no supera el saldo simulado | ESCALAR |
 | Vencimiento | no está vencida (más los días de gracia) | ESCALAR |
 | Periodo | llegó en el mes en curso (America/Bogota) | ESCALAR |
@@ -50,7 +50,7 @@ Reglas de apoyo: permitido significa nombre y cuenta en el directorio (D4); el p
 
 El criterio del reto es cero pagos fuera de las reglas. No depende de que el código "se porte bien": está impuesto en capas.
 
-- **PAGAR solo sale de `decide()`.** Es una función pura (`src/engine/decide.ts`) que devuelve PAGAR únicamente si los 13 controles pasan. Ningún modelo, prompt o ruta escribe PAGAR por su cuenta; `src/agent` no llama a ningún modelo y el único `AI.run` del código está en `src/lib/llm.ts` (el lector).
+- **PAGAR solo sale de `decide()`.** Es una función pura (`src/engine/decide.ts`) que devuelve PAGAR únicamente si los 13 controles pasan. Ningún modelo decide ni escribe PAGAR: `src/agent` solo llama al lector (`extractFields`, en la etapa `lee`) y el único `AI.run` está en `src/lib/llm.ts`.
 - **La base de datos rechaza un PAGAR fuera de las reglas (AC-69).** El trigger de `decisions` lanza `PAGAR_OUTSIDE_RULES` si un PAGAR del agente no trae los 13 controles en "cumple", o si uno humano tiene un control fallido que no fue anulado o que una persona no puede anular. Vale también para la clave de servicio, así que un error del Worker tampoco puede guardarlo.
 - **Los miembros no escriben decisiones (AC-68).** Ninguna cuenta de usuario, ni la del demo público, puede insertar en `decisions`, `approval_tokens`, `approval_uses` ni `agent_runs`, ni llamar a `insert_decision`. Solo escribe el Worker, por `src/agent/record.ts`, el manejador del enlace de aprobación y el cron. La clave de servicio se construye en `src/lib/admin.ts` y solo esos tres módulos la importan.
 - **Registro de solo adición.** No hay políticas de UPDATE ni DELETE sobre decisiones, tokens ni usos; una respuesta humana es una fila nueva. PAGAR y FRENAR son finales: la base se niega a agregar otra decisión a una factura ya pagada o frenada. Las facturas solo permiten cambiar `archived`.
@@ -60,13 +60,14 @@ El criterio del reto es cero pagos fuera de las reglas. No depende de que el có
 
 ## Qué hace la app
 
-- **Bandeja:** todas las facturas con su resultado y su razón en una línea, filtros, "Nueva factura" (subir PDF o imagen, pegar un correo, pegar un chat), "Ejecutar agente" y la hora de la última revisión del agente (automática o manual).
-- **Detalle de decisión:** el registro completo descrito arriba; en una factura escalada, la pregunta del agente con los botones Aprobar y Rechazar.
-- **Política:** formulario (nunca JSON) con todas las reglas y la tabla de tasas; "Guardar como versión n" y "Reevaluar pendientes", que solo toca facturas pendientes o escaladas.
+- **Bandeja:** todas las facturas con su resultado y su razón en una línea, filtros por resultado y por beneficiario, "Nueva factura" (subir PDF o imagen, pegar un correo, pegar un chat), "Ejecutar agente" (con "Decidiendo facturas… n de m" mientras corre y el resumen "n PAGAR · n FRENAR · n ESCALAR" al terminar), la hora de la última revisión del agente ("automático" o "manual") y el aviso de que las facturas pagadas o frenadas no se reevalúan.
+- **Detalle de decisión:** el registro completo descrito arriba, el documento original (PDF, imagen o texto) y, si se pagó, la orden de pago; en una factura escalada, la pregunta del agente, una nota opcional y los botones Aprobar y Rechazar.
+- **Política:** formulario (nunca JSON) con los datos de la empresa (nombre, correo del aprobador, idioma), todas las reglas, la tabla de tasas y la lista de versiones; "Guardar como versión n" muestra qué facturas pendientes cambiarían de resultado sin escribir nada, y "Reevaluar pendientes" solo toca facturas pendientes o escaladas.
 - **Beneficiarios:** el directorio ("lo acordado"): cuenta, ruta de pago y acuerdo.
-- **Periodo:** presupuesto, saldo, pagado, comprometido, disponible, y las tres cifras del reto: Autonomía, Violaciones y Decisiones explicadas.
+- **Periodo:** selector de mes; presupuesto, saldo, pagado, comprometido, disponible, decisiones del mes, el desglose por beneficiario y las tres cifras del reto: Autonomía, Violaciones y Decisiones explicadas.
 - **Aprobación por correo:** el aprobador recibe la pregunta y dos enlaces (`/approve/<token>`).
-- **/demo:** vista pública de Andina Labs, "Entrar como Andina Labs" (sin código por correo) y "Reiniciar demo". Un recorrido guiado de 7 pasos explica cada pantalla, en español o inglés.
+- **/demo:** página pública con el problema, el ciclo del agente, la Bandeja de solo lectura de Andina Labs y sus tres cifras, en español o inglés. "Entrar como Andina Labs" no pide código por correo; "Reiniciar demo" aparece solo con esa sesión.
+- **Recorrido guiado:** 7 pasos (Bandeja, Nueva factura, Ejecutar agente, Detalle, Política, Beneficiarios, Periodo). Arranca solo en el primer ingreso (y siempre con la cuenta demo) y se repite con "Ver tutorial".
 
 ## Arquitectura
 
@@ -82,7 +83,7 @@ Cloudflare Workers (Hono) sirve la API y la app (Vite + React como assets estát
 | rinde cuentas: el registro y "Lo que hice" | `src/engine/explain.ts`, `src/agent/trace.ts`, y una fila en `agent_runs` por ejecución |
 | el agente solo, cada 5 minutos | `src/agent/scheduled.ts`, con el cron `*/5 * * * *` de `wrangler.toml` |
 
-Cada camino que decide una factura (subirla, "Ejecutar agente", el primer ingreso, "Reevaluar", "Reiniciar demo" y el cron) llama a `runAgent`. Con el cron, una factura pegada a las 02:00 se decide a las 02:05 sin nadie conectado. Si hay muchas facturas pendientes, las empresas se turnan entre pasadas. La Bandeja dice cuándo corrió el agente por última vez.
+Cada camino que decide una factura (subirla, "Ejecutar agente", el primer ingreso, "Reevaluar", "Reiniciar demo" y el cron) llama a `runAgent`. Con el cron, una factura pegada a las 02:00 se decide a las 02:05 sin nadie conectado. Si hay muchas facturas pendientes, las empresas se turnan entre pasadas. La Bandeja dice cuándo corrió el agente por última vez y si fue automático o manual.
 
 Otras carpetas: `src/routes/` (API), `src/i18n/` (textos es/en), `web/pages/` (pantallas), `supabase/migrations/` (esquema, solo hacia adelante), `scripts/` (despliegue y semilla), `docs/demo/DATASET.md` (las 29 facturas de la demo con su resultado esperado y por qué).
 
@@ -98,10 +99,12 @@ Las pruebas usan Supabase y el modelo simulados; no necesitan red. `scripts/test
 
 ## Cómo desplegarlo
 
+Antes de desplegar en otra cuenta, cambia en `wrangler.toml` lo que hoy apunta a las cuentas de Roberto: `account_id` (Cloudflare), el `id` del namespace KV (créalo con `npx wrangler kv namespace create KV`) y las variables `APP_URL` (la URL del Worker) y `SUPABASE_URL` (junto con `SUPABASE_ANON_KEY`, de tu proyecto de Supabase).
+
 1. Variables de la sesión: las de `.env.example`. Los valores públicos (URL de Supabase, clave anónima, modelos) están en `wrangler.toml`.
 2. Migraciones: `bash scripts/db-push.sh` (por la API de gestión de Supabase; solo aplica las que faltan).
-3. Secretos del Worker: `bash scripts/worker-secrets.sh` sube los que estén definidos en el entorno (`AWS_SES_ACCESS_KEY_ID`, `AWS_SES_SECRET_ACCESS_KEY`, `SES_FROM_EMAIL`, `SUPABASE_SERVICE_ROLE_KEY` y los opcionales) y no imprime valores. `APPROVAL_HMAC_SECRET` se genera una vez con `openssl rand -hex 32 | npx wrangler secret put APPROVAL_HMAC_SECRET`.
-4. `npm run build` y `npx wrangler deploy`. El despliegue registra el cron de 5 minutos.
+3. Primer despliegue: `npm run build` y `npx wrangler deploy`. Crea el Worker y registra el cron de 5 minutos.
+4. Secretos del Worker, ya con el Worker creado: `bash scripts/worker-secrets.sh` sube los que estén definidos en el entorno (`AWS_SES_ACCESS_KEY_ID`, `AWS_SES_SECRET_ACCESS_KEY`, `SES_FROM_EMAIL`, `SUPABASE_SERVICE_ROLE_KEY` y los opcionales) y no imprime valores. `APPROVAL_HMAC_SECRET` se genera una vez con `openssl rand -hex 32 | npx wrangler secret put APPROVAL_HMAC_SECRET`. Los secretos se leen en cada petición: no hace falta volver a desplegar.
 5. `curl <URL>/api/health` debe responder `{"ok":true}`; luego `node scripts/seed-demo-user.mjs <URL>` crea (o repara) el acceso "Entrar como Andina Labs".
 
 ## Cómo conectar SES u otro servicio de correo

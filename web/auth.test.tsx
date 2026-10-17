@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
 import { expect, test } from 'vitest';
 import { Route, Routes } from 'react-router-dom';
 import { RequireAuth, shouldStartTour, useSession } from './auth';
@@ -52,10 +52,29 @@ test('a stored per-user language is applied when this browser has no choice yet 
   expect(fakeAuth.updateUser).not.toHaveBeenCalled();
 });
 
-test('a language picked in this browser is stored on the user (AC-41)', async () => {
-  localStorage.setItem('lang', 'en');
-  signedInAs('ana@empresa.co', { lang: 'es' });
+test('a stale browser choice never beats the language the user saved, and is not written over it (AC-41)', async () => {
+  localStorage.setItem('lang', 'es');
+  signedInAs('ana@empresa.co', { lang: 'en' });
   renderAt(<Lang />);
-  await waitFor(() => expect(fakeAuth.updateUser).toHaveBeenCalledWith({ data: { lang: 'en' } }));
-  expect(screen.getByText('lang:en')).toBeTruthy();
+  expect(await screen.findByText('lang:en')).toBeTruthy();
+  expect(fakeAuth.updateUser).not.toHaveBeenCalled();
+});
+
+test('a user with no saved language keeps the browser language and nothing is written (AC-41)', async () => {
+  localStorage.setItem('lang', 'en');
+  signedInAs('ana@empresa.co');
+  renderAt(<Lang />);
+  expect(await screen.findByText('lang:en')).toBeTruthy();
+  expect(fakeAuth.updateUser).not.toHaveBeenCalled();
+});
+
+test('a second user on the same browser inherits nothing from the first (AC-41)', async () => {
+  signedInAs('ana@empresa.co', { lang: 'en' });
+  renderAt(<Lang />);
+  expect(await screen.findByText('lang:en')).toBeTruthy();
+  const emit = fakeAuth.onAuthStateChange.mock.calls[0]![0];
+  act(() => emit('SIGNED_OUT', null));
+  act(() => emit('SIGNED_IN', fakeSession('bea@empresa.co', { lang: 'es' })));
+  expect(await screen.findByText('lang:es')).toBeTruthy();
+  expect(fakeAuth.updateUser).not.toHaveBeenCalled();
 });

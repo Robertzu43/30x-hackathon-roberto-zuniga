@@ -3,10 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import type { PageRoute } from '../App';
 import { api, supabase } from '../api';
 import { useT } from '../i18n';
+import type { Lang } from '../../src/i18n';
 
 export const route: PageRoute = { path: '/login', public: true, fullBleed: true };
 
-/** AC-40: email -> one-time code -> Bandeja. The language picked here is stored on the user at sign-in (auth.tsx, AC-41). */
+/** AC-40: email -> one-time code -> Bandeja. A language picked here is stored on the user once the code is accepted (AC-41). */
 export default function Login() {
   const { t, lang, setLang } = useT();
   const navigate = useNavigate();
@@ -16,6 +17,8 @@ export default function Login() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [deciding, setDeciding] = useState(false);
+  const [picked, setPicked] = useState<Lang | null>(null); // only a click on this screen counts as a choice
+  const pick = (l: Lang) => { setPicked(l); setLang(l); };
 
   const send = async (e: FormEvent) => {
     e.preventDefault();
@@ -40,6 +43,10 @@ export default function Login() {
       setBusy(false);
       return setError(t('login.wrong_code'));
     }
+    if (picked) {
+      await (await supabase()).auth.updateUser({ data: { lang: picked } }).catch(() => undefined);
+      setLang(picked); // the user's previously saved language may have been applied meanwhile; the choice just made wins
+    }
     // First login: decide what is pending once. A failure is not fatal: the 5-minute cron decides them (D23).
     setDeciding(true);
     await api.post('/api/invoices/run').catch(() => undefined);
@@ -54,9 +61,9 @@ export default function Login() {
       </section>
       <section className="login-form">
         <div className="lang-switch" role="group" aria-label={t('login.language')}>
-          <button type="button" className="link" aria-pressed={lang === 'es'} onClick={() => setLang('es')}>Español</button>
+          <button type="button" className="link" aria-pressed={lang === 'es'} onClick={() => pick('es')}>Español</button>
           <span aria-hidden="true">|</span>
-          <button type="button" className="link" aria-pressed={lang === 'en'} onClick={() => setLang('en')}>English</button>
+          <button type="button" className="link" aria-pressed={lang === 'en'} onClick={() => pick('en')}>English</button>
         </div>
         {!sent ? (
           <form onSubmit={send}>

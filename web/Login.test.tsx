@@ -97,6 +97,15 @@ test('after sign-in the language picked on the login screen is stored on the use
   fireEvent.change(await screen.findByLabelText('6-digit code'), { target: { value: '123456' } });
   fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
   await waitFor(() => expect(fakeAuth.updateUser).toHaveBeenCalledWith({ data: { lang: 'en' } }));
+  expect(fakeAuth.updateUser).toHaveBeenCalledTimes(1);
+});
+
+test('signing in without touching the language toggle writes no language to the user (AC-41)', async () => {
+  setup();
+  await sendEmail();
+  enterCode('123456');
+  expect(await screen.findByText('bandeja')).toBeTruthy();
+  expect(fakeAuth.updateUser).not.toHaveBeenCalled();
 });
 
 test('while the first run is going, the screen says the agent is reviewing pending invoices', async () => {

@@ -37,15 +37,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // AC-41, once per signed-in user: a choice made in this browser is stored on the user; otherwise the user's stored choice applies.
+  // AC-41, once per signed-in user: the language saved on the user wins over whatever this browser holds.
+  // Saving happens only where a choice is made (top bar, Login), never from localStorage, so a stale browser value cannot overwrite it.
   const user = auth.session?.user;
   useEffect(() => {
-    if (!user) return;
-    const picked = localStorage.getItem('lang');
-    const stored: unknown = user.user_metadata?.lang;
-    if (picked === 'es' || picked === 'en') {
-      if (picked !== stored) void supabase().then((sb) => sb.auth.updateUser({ data: { lang: picked } }));
-    } else if (stored === 'es' || stored === 'en') setLang(stored);
+    const stored: unknown = user?.user_metadata?.lang;
+    if (stored === 'es' || stored === 'en') setLang(stored);
   }, [user?.id]); // keyed on the id: USER_UPDATED (tour_seen, lang) must not re-run it
 
   return <AuthCtx.Provider value={auth}>{children}</AuthCtx.Provider>;

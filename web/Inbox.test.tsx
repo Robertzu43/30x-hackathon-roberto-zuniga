@@ -32,6 +32,13 @@ function setup(routes: Record<string, unknown> = {}) {
   return { f, view };
 }
 const items = () => screen.getAllByRole('listitem');
+const payeeSelect = () => screen.getByLabelText(/^Benefici(ario|ary)$/);
+const payeeOptions = () => within(payeeSelect()).getAllByRole('option').map((o) => o.textContent);
+const choosePayee = (label: string) => {
+  const select = payeeSelect();
+  const option = within(select).getAllByRole('option').find((o) => o.textContent === label)!;
+  fireEvent.change(select, { target: { value: (option as HTMLOptionElement).value } });
+};
 
 test('Bandeja is the nav page at / (order 10)', () => expect(route).toEqual({ path: '/', nav: { key: 'screen.inbox', order: 10 } }));
 
@@ -65,7 +72,7 @@ test('filter by ESCALAR leaves 1, filter by beneficiary narrows too', async () =
   fireEvent.change(screen.getByLabelText('Resultado'), { target: { value: 'pending' } });
   expect(items()).toHaveLength(1);
   fireEvent.change(screen.getByLabelText('Resultado'), { target: { value: '' } });
-  fireEvent.change(screen.getByLabelText('Beneficiario'), { target: { value: 'Nubia Diseño' } });
+  choosePayee('Nubia Diseño');
   expect(items()).toHaveLength(2);
   fireEvent.change(screen.getByLabelText('Resultado'), { target: { value: 'FRENAR' } });
   expect(screen.getByText('Ninguna factura coincide con estos filtros.')).toBeTruthy();
@@ -214,4 +221,29 @@ test('re-evaluation note in English (AC-31)', () => {
   localStorage.setItem('lang', 'en');
   setup();
   expect(screen.getByText('Paid or stopped invoices are not re-evaluated; only pending and escalated ones.')).toBeTruthy();
+});
+
+// AC-29 Clarified (R-79, R-63): the beneficiary filter groups exactly like Periodo.
+const at = (day: string, id: string, payee: string | null) => ({ ...row(id, 'ESCALAR', payee, `ESCALAR · ${id}`), received_at: `2026-10-${day}T15:00:00Z`, fields: payee === null ? null : { payee_name: payee } });
+
+test('the beneficiary filter lists one vendor once, under its directory name, with every spelling of it (R-79)', async () => {
+  setup({
+    'GET /api/invoices': [at('12', 'n2', 'Contadores Andinos SAS'), at('11', 'k1', 'Kodex Labs'), at('10', 'n1', 'Contadores Andinos S.A.S.'), at('09', 'u1', null)],
+    'GET /api/beneficiaries': [{ id: 'b1', name: 'Contadores Andinos', bank_account: '1234', agreement: null }],
+  });
+  await screen.findByText('ESCALAR · n2');
+  expect(payeeOptions()).toEqual(['Todos', 'Contadores Andinos', 'Kodex Labs', 'Beneficiario no leído']);
+  choosePayee('Contadores Andinos');
+  expect(items().map((li) => li.textContent)).toEqual([expect.stringContaining('n2'), expect.stringContaining('n1')]);
+  choosePayee('Beneficiario no leído');
+  expect(items().map((li) => li.textContent)).toEqual([expect.stringContaining('u1')]);
+});
+
+test('a payee outside the directory is one entry labelled as read on its oldest invoice (R-63)', async () => {
+  localStorage.setItem('lang', 'en');
+  setup({ 'GET /api/invoices': [at('12', 'p2', 'PIXEL LAB'), at('10', 'p1', 'Pixel Lab S.A.S.'), at('09', 'u1', null)] });
+  await screen.findByText('ESCALAR · p2');
+  expect(payeeOptions()).toEqual(['All', 'Pixel Lab S.A.S.', 'Payee not read']);
+  choosePayee('Pixel Lab S.A.S.');
+  expect(items()).toHaveLength(2);
 });

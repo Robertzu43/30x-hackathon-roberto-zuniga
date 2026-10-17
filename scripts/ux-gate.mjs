@@ -32,7 +32,7 @@ const SERVER_PAGE = 'servidor: sin petición que fallar'; // the real failure pa
 const FX_STATES = ['fx-empty', 'fx-error']; // policy: only GET /api/fx is forced; the rest of the screen loads normally (AC-73)
 // "Unread": the agent has not decided the invoice, or the reader could not read it. The demo may have none: then the screen is N/A, not a failure.
 export const unreadId = (invoices) => invoices?.find((i) => i.outcome == null || i.fields?.read_error)?.id;
-const EMPTY_BODY = { '/api/period': { budget_usd: null, balance_usd: null, paid_usd: 0, committed_usd: 0, available_usd: null, count_by_outcome: { PAGAR: 0, FRENAR: 0, ESCALAR: 0 }, by_beneficiary: [], autonomy: { n: 0, m: 0 }, autonomy_pct: null, violations: 0, explained_pct: 0 }, '/api/agent/last-run': null };
+export const EMPTY_BODY = { '/api/period': { budget_usd: null, balance_usd: null, paid_usd: 0, committed_usd: 0, available_usd: null, count_by_outcome: { PAGAR: 0, FRENAR: 0, ESCALAR: 0 }, by_beneficiary: [], autonomy: { n: 0, m: 0 }, autonomy_pct: null, violations: 0, explained_pct: 0 }, '/api/agent/last-run': null, '/api/screen/beneficiaries': { beneficiaries: [] }, '/api/screen/period': { period: { budget_usd: null, balance_usd: null, paid_usd: 0, committed_usd: 0, available_usd: null, count_by_outcome: { PAGAR: 0, FRENAR: 0, ESCALAR: 0 }, by_beneficiary: [], autonomy: { n: 0, m: 0 }, autonomy_pct: null, violations: 0, explained_pct: 0 } } };
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
 // Typed into composers: vendor data, but in the tab's language so it cannot trip 5.mixed or 5.locale (Task 32b).
 export const MSG = { es: 'Factura AS-0087 de Ana Souza, 10.000,00 BRL', en: 'Invoice AS-0087 from Ana Souza, 10,000.00 BRL' };
@@ -106,6 +106,7 @@ function measure(o) {
     const cs = getComputedStyle(el), r = el.getBoundingClientRect();
     return cs.position === 'absolute' && r.width <= 1 && r.height <= 1 && (cs.clip !== 'auto' || cs.clipPath !== 'none');
   };
+  const inSrOnly = (el) => { for (let p = el; p; p = p.parentElement) if (srOnly(p)) return true; return false; }; // hidden cells of an sr-only table
   const hasText = (el) => [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
   const clippedBy = (el) => {
     for (let p = el.parentElement; p && p !== document.documentElement; p = p.parentElement) if (getComputedStyle(p).overflowX !== 'visible') return p;
@@ -128,7 +129,7 @@ function measure(o) {
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   for (let n = walker.nextNode(); n; n = walker.nextNode()) {
     const el = n.parentElement;
-    if (!el || !live.has(el) || srOnly(el) || !n.textContent.trim()) continue;
+    if (!el || !live.has(el) || inSrOnly(el) || !n.textContent.trim()) continue;
     const range = document.createRange();
     range.selectNodeContents(n);
     const rects = [...range.getClientRects()].filter((r) => r.width > 1 && r.height > 1);
@@ -381,7 +382,10 @@ function installRoutes(page, base, { state, guard, delayGets, gate, fake }) {
     if (data && path === '/api/fx' && req.method() === 'GET' && state === 'fx-error') return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"gate"}' });
     if (data && !config && state === 'error') return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"gate"}' });
     if (data && !config && state === 'empty' && req.method() === 'GET') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(path in EMPTY_BODY ? EMPTY_BODY[path] : []) });
-    if (fake && data && req.method() === 'GET' && path.startsWith(fake.path)) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fake.patch(await (await route.fetch()).json())) });
+    if (fake && data && req.method() === 'GET' && path.startsWith(fake.path)) {
+      try { return await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fake.patch(await (await route.fetch()).json())) }); }
+      catch { return route.abort().catch(() => {}); } // the context closed (or the origin dropped) while the request was in flight: nothing left to answer
+    }
     if (guard && req.method() !== 'GET' && req.method() !== 'OPTIONS') {
       const held = sleep(600).then(() => route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' })).catch(() => {}); // answered here, never sent to the origin
       gate.held.push(held);

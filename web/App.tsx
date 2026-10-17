@@ -20,8 +20,7 @@ export const routes: PageRoute[] = [
   { path: '/beneficiaries', nav: 'screen.beneficiaries', load: () => import('./pages/Beneficiaries'), data: screens.beneficiaries },
   { path: '/period', nav: 'screen.period', load: () => import('./pages/Period'), data: () => screens.period() },
   { path: '/invoices/:id', load: () => import('./pages/InvoiceDetail') },
-  // Task 50 mounts the beneficiary profile here; until then the directory.
-  { path: '/beneficiaries/:id', load: async () => ({ default: () => <Navigate to="/beneficiaries" replace /> }) },
+  { path: '/beneficiaries/:id', load: () => import('./pages/Beneficiary') },
   { path: '/login', public: true, fullBleed: true, load: () => import('./pages/Login') },
   { path: '/demo', public: true, fullBleed: true, load: () => import('./pages/Demo') },
   { path: '/approve/:token', public: true, load: () => import('./pages/Approve') },

@@ -30,6 +30,8 @@ type Detail = {
   file_url: string | null;
   /** AC-77: null when no model read it (seeded, inserted with fields, or the reader was unavailable). */
   reading?: Reading | null;
+  /** R-97: who read it, decided by the API (never derived here); absent on an older API, treated as 'none'. */
+  reading_status?: 'ai' | 'preloaded' | 'unavailable' | 'none';
 };
 
 const FIELDS = ['payee_name', 'amount', 'currency', 'invoice_number', 'issue_date', 'due_date', 'concept', 'bank_account'] as const;
@@ -89,8 +91,9 @@ export default function InvoiceDetail() {
 
   const { invoice, file_url: url } = data;
   const payment = latest.outcome === 'PAGAR' ? latest.payment : null;
-  const unreached = invoice.fields?.read_error === 'lector_no_disponible';
-  const reading = data.reading ?? null;
+  const status = data.reading_status ?? 'none';
+  const unreached = status === 'unavailable';
+  const reading = status === 'ai' ? data.reading ?? null : null;
   return (
     <section className="detail">
       {back}
@@ -101,7 +104,7 @@ export default function InvoiceDetail() {
           <h2>{t('detail.read')}</h2>
           {reading && <p className="ai-badge">{t('detail.read_by', { provider: reading.provider })}</p>}
           {unreached && <p className="detail-notice">{t('detail.reader_unavailable')}</p>}
-          {!reading && !unreached && invoice.fields && <p className="muted">{t('detail.preloaded')}</p>}
+          {status === 'preloaded' && <p className="muted">{t('detail.preloaded')}</p>}
           {invoice.source === 'email' || invoice.source === 'chat' ? (
             invoice.raw_text ? <pre className="detail-doc">{invoice.raw_text}</pre> : <p className="muted">{t('detail.file.none')}</p>
           ) : !url ? (

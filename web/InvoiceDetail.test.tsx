@@ -230,6 +230,7 @@ const unread = {
     fields: { payee_name: null, amount: null, currency: null, invoice_number: null, issue_date: null, due_date: null, concept: null,
       bank_account: null, confidence: {}, read_error: 'lector_no_disponible' } },
   file_url: null,
+  reading_status: 'unavailable',
 };
 
 test('an invoice the reader could not reach: the notice tops «Lo que leí», beside the text, every field unknown (AC-13, R-75)', async () => {
@@ -276,7 +277,7 @@ const reading = (provider = NOVA) => ({
 const fieldRow = (label: string) => screen.getByText(label, { selector: 'dt' }).parentElement!;
 
 test('a model-read invoice heads «Lo que leí» with the provider, and shows each field with value, percentage and snippet (AC-77)', async () => {
-  mockApi({ [GET]: { ...escalated, reading: reading() } });
+  mockApi({ [GET]: { ...escalated, reading: reading(), reading_status: 'ai' } });
   open();
   const badge = await screen.findByText(`Leído por IA · ${NOVA}`);
   expect(screen.getByRole('heading', { name: 'Lo que leí' }).compareDocumentPosition(badge) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -297,13 +298,13 @@ test('a model-read invoice heads «Lo que leí» with the provider, and shows ea
 });
 
 test('the Workers AI fallback is named with its model id, as recorded at read time (AC-77)', async () => {
-  mockApi({ [GET]: { ...escalated, reading: reading('Workers AI · @cf/meta/llama-3.2-11b-vision-instruct') } });
+  mockApi({ [GET]: { ...escalated, reading: reading('Workers AI · @cf/meta/llama-3.2-11b-vision-instruct'), reading_status: 'ai' } });
   open();
   expect(await screen.findByText('Leído por IA · Workers AI · @cf/meta/llama-3.2-11b-vision-instruct')).toBeTruthy();
 });
 
 test('an invoice no model read says its data was preloaded, with no AI badge (AC-77)', async () => {
-  mockApi({ [GET]: { ...escalated, reading: null } });
+  mockApi({ [GET]: { ...escalated, reading: null, reading_status: 'preloaded' } });
   open();
   expect(await screen.findByText(PRELOADED_ES)).toBeTruthy();
   expect(screen.queryByText(/Leído por IA/)).toBeNull();
@@ -311,16 +312,32 @@ test('an invoice no model read says its data was preloaded, with no AI badge (AC
 });
 
 test('an unread invoice keeps the AC-13 notice, neither preloaded nor AI-read (AC-77)', async () => {
-  mockApi({ [GET]: { ...unread, reading: null } });
+  mockApi({ [GET]: { ...unread, reading: null, reading_status: 'unavailable' } });
   open();
   expect(await screen.findByText(NOTICE_ES)).toBeTruthy();
   expect(screen.queryByText(PRELOADED_ES)).toBeNull();
   expect(screen.queryByText(/Leído por IA/)).toBeNull();
 });
 
+// R-97: the API says who read the invoice (reading_status); the web maps it one to one and never derives it.
+test.each([
+  ['ai', { reading: reading() }, true, false, false],
+  ['preloaded', { reading: null }, false, true, false],
+  ['unavailable', { reading: null }, false, false, true],
+  ['none', { reading: null }, false, false, false],
+  [undefined, {}, false, false, false],
+])('reading_status %s renders exactly its line (AC-77, AC-13)', async (status, extra, badge, preloaded, notice) => {
+  mockApi({ [GET]: { ...unread, ...extra, reading_status: status } });
+  open();
+  await screen.findByRole('heading', { name: 'Lo que leí' });
+  expect(!!screen.queryByText(/Leído por IA/)).toBe(badge);
+  expect(!!screen.queryByText(PRELOADED_ES)).toBe(preloaded);
+  expect(!!screen.queryByText(NOTICE_ES)).toBe(notice);
+});
+
 test('«Leído por IA» in English (AC-77)', async () => {
   localStorage.setItem('lang', 'en');
-  mockApi({ [GET]: { ...escalated, reading: reading() } });
+  mockApi({ [GET]: { ...escalated, reading: reading(), reading_status: 'ai' } });
   open();
   expect(await screen.findByText(`Read by AI · ${NOVA}`)).toBeTruthy();
   expect(fieldRow('Due date').textContent).toContain('I did not find this value verbatim in the text');
@@ -329,7 +346,7 @@ test('«Leído por IA» in English (AC-77)', async () => {
 
 test('the preloaded notice in English (AC-77)', async () => {
   localStorage.setItem('lang', 'en');
-  mockApi({ [GET]: { ...escalated, reading: null } });
+  mockApi({ [GET]: { ...escalated, reading: null, reading_status: 'preloaded' } });
   open();
   expect(await screen.findByText('Preloaded sample data; the AI did not read this document.')).toBeTruthy();
 });
@@ -352,7 +369,7 @@ test('the highlight is the span the API sends, as printed in the document (AC-77
     { name: 'concept', value: 'x', confidence: 0.9, snippet: 'Total due: USD 1,000.00', match: [15, 23] },
     { name: 'due_date', value: '2026-10-31', confidence: 0.9, snippet: 'Vence: 31/10/2026', match: [7, 17] },
   ];
-  mockApi({ [GET]: { ...escalated, reading: { provider: NOVA, fields } } });
+  mockApi({ [GET]: { ...escalated, reading: { provider: NOVA, fields }, reading_status: 'ai' } });
   open();
   await screen.findByText(`Leído por IA · ${NOVA}`);
   expect(fieldRow('Monto').querySelector('mark')?.textContent).toBe('1.000,00');
@@ -365,7 +382,7 @@ test('no <mark> when match is null or missing, even if the value appears in the 
     { name: 'invoice_number', value: '2044', confidence: 0.9, snippet: 'Factura No. 2044', match: null },
     { name: 'payee_name', value: 'Nube Sur LLC', confidence: 0.9, snippet: 'Emisor: Nube Sur LLC' },
   ];
-  mockApi({ [GET]: { ...escalated, reading: { provider: NOVA, fields } } });
+  mockApi({ [GET]: { ...escalated, reading: { provider: NOVA, fields }, reading_status: 'ai' } });
   open();
   await screen.findByText(`Leído por IA · ${NOVA}`);
   expect(fieldRow('Número de factura').textContent).toContain('Factura No. 2044');

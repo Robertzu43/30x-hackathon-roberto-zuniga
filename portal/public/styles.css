@@ -75,7 +75,7 @@ main {
 h1 { font: 400 1.75rem / 1.15 var(--font-serif); letter-spacing: -0.03em; margin: 0 0 1.25rem; overflow-wrap: anywhere; }
 h2 { font-size: 1rem; font-weight: 600; margin: 1.5rem 0 0.5rem; }
 
-.log { flex: 1; list-style: none; margin: 0; padding: 0 0 1.5rem; display: flex; flex-direction: column; gap: 0.75rem; }
+.log { flex: 1; margin: 0; padding: 0 0 1.5rem; display: flex; flex-direction: column; gap: 0.75rem; }
 .bubble {
   max-width: 85%;
   padding: 0.75rem 1rem;
@@ -91,6 +91,8 @@ h2 { font-size: 1rem; font-weight: 600; margin: 1.5rem 0 0.5rem; }
 .bubble.error { background: var(--error-bg); border-color: var(--error-bg); color: var(--error); }
 .bubble a { display: block; min-height: 44px; padding: 0.5rem 0; color: var(--accent); text-underline-offset: 3px; }
 .bubble .file { font: 0.875rem / 1.5 var(--font-mono); }
+.bubble strong { font-weight: 600; }
+.bubble .copy { margin-top: 0.25rem; padding: 0.5rem 0.75rem; white-space: normal; text-align: left; }
 
 .composer {
   position: sticky;
@@ -131,6 +133,7 @@ textarea {
 }
 .chip .remove { border: 0; background: none; font-size: 1.25rem; }
 
+.state { margin: 0 0 1rem; padding: 0.75rem 1rem; border-radius: 12px; background: var(--error-bg); color: var(--error); }
 .card { padding: 1.5rem; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
 .card h1 { margin-bottom: 0.5rem; }
 .card h1::first-letter { text-transform: uppercase; } /* «En revisión», the status words start the page */

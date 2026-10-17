@@ -173,10 +173,10 @@ describe('intake: each input kind (AC-83)', () => {
     expect(vi.mocked(sendEmail).mock.calls.map((c) => c[1].to)).toEqual(['aprobador@B.example']);
   });
 
-  it('a second copy of the same invoice is «rechazada: duplicada»', async () => {
+  it('a second copy of the same invoice is «rechazada: duplicada», one colon in the reply line (R-102 QA item 5)', async () => {
     await ok({ text: 'factura 1050' });
     const r = await ok({ text: 'factura 1050' });
-    expect(r.reply.es.at(-1)).toBe('Estado: rechazada: duplicada');
+    expect([r.reply.es.at(-1), r.reply.en.at(-1)]).toEqual(['Estado: rechazada (duplicada)', 'Status: rejected (duplicate)']);
   });
 });
 

@@ -53,6 +53,28 @@ describe('record.ts, the only writer of decisions, approval_tokens and agent_run
     expect(admin.tables.approval_tokens).toEqual([{ ...TOKEN, company_id: 'B' }]);
   });
 
+  it('records a link use under the authorised company, after re-reading the invoice (R-03, R-55)', async () => {
+    await recorder(env, 'A').approvalUse('inv-a', 'h1', 'd1');
+    expect(admin.tables.approval_uses).toEqual([{ token_hash: 'h1', decision_id: 'd1', company_id: 'A' }]);
+    expect(admin.queries.map((q) => `${q.op} ${q.table}`)).toEqual(['select invoices', 'insert approval_uses']);
+  });
+
+  it('a link use of another company\'s invoice is refused, nothing written', async () => {
+    await expect(recorder(env, 'A').approvalUse('inv-b', 'h1', 'd1')).rejects.toThrow('COMPANY_MISMATCH');
+    expect(admin.tables.approval_uses ?? []).toEqual([]);
+  });
+
+  it('a pair already spent (unique violation 23505) -> TOKEN_USED; other errors keep their message', async () => {
+    const base = admin;
+    const failWith = (error: { code: string; message: string }) => {
+      admin = { ...base, from: (t: string) => (t === 'approval_uses' ? { insert: async () => ({ data: null, error }) } : base.from(t)) } as unknown as FakeDb;
+    };
+    failWith({ code: '23505', message: 'duplicate key value violates unique constraint' });
+    await expect(recorder(env, 'A').approvalUse('inv-a', 'h2', 'd1')).rejects.toThrow('TOKEN_USED');
+    failWith({ code: '42501', message: 'permission denied' });
+    await expect(recorder(env, 'A').approvalUse('inv-a', 'h2', 'd1')).rejects.toThrow('permission denied');
+  });
+
   it('writes one agent_runs row: the company run and the cron tick (company null)', async () => {
     await recorder(env, 'A').run('manual', { PAGAR: 1, FRENAR: 0, ESCALAR: 2 }, 0);
     await recorder(env, null).run('cron', null, 1);

@@ -6,6 +6,7 @@ import { beneficiaries } from './routes/beneficiaries';
 import { invoices } from './routes/invoices';
 import { period } from './routes/period';
 import { company, policy } from './routes/policy';
+import { approvals } from './routes/approvals';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -18,6 +19,7 @@ app.route('/api/company', company);
 app.route('/api/beneficiaries', beneficiaries);
 app.route('/api/period', period);
 app.route('/api/agent', agent);
+app.route('/api', approvals); // Task 9: approval links and dashboard answers
 app.all('/api/*', (c) => c.json({ error: 'not_found' }, 404));
 
 export { app };

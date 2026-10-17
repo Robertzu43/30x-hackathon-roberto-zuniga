@@ -1,4 +1,4 @@
-/* global URL, setTimeout */
+/* global URL, setTimeout, console */
 // The gate's own checks (AC-91): a fixture page with one known violation per item, driven by ?bad=<check id>.
 // The clean page must pass every check; each bad variant must fail exactly the check it names.
 import { execFileSync } from 'node:child_process';
@@ -7,7 +7,7 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { aggregate, FONTS, launch, PALETTE, renderGate, runCell, writeGate } from './ux-gate.mjs';
+import { aggregate, FONTS, launch, main, PALETTE, renderGate, runCell, SCREENS, unreadId, writeGate } from './ux-gate.mjs';
 
 const DICTS = {
   es: { 'f.title': 'Bandeja', 'f.empty': 'Todavía no hay facturas.', 'f.retry': 'Reintentar', 'f.send': 'Enviar', 'f.save': 'Guardar cambios', 'f.err': 'No pude cargar los datos. Inténtalo de nuevo.' },
@@ -50,6 +50,7 @@ const page = (bad, lang) => {
   <h1 id="h">${t['f.title']}</h1>
   <div id="list"></div>
   <p>${lang === 'es' ? '1.234,50 COP' : '1,234.50 COP'}</p>
+  <p>160 USD</p><p><span>160</span> USD</p>
   ${bad === '1.scroll' ? '<div class="x"></div>' : ''}
   ${bad === '1.offscreen' ? '<div style="position:absolute;left:150vw;top:0">fuera</div>' : ''}
   ${bad === '1.clip' ? '<div class="clip">Un texto bastante largo que no cabe</div>' : ''}
@@ -59,6 +60,8 @@ const page = (bad, lang) => {
   ${bad === '3.axe' ? '<button type="button"></button>' : ''}
   ${bad === '3.contrast' ? '<p class="low">Texto de bajo contraste</p>' : ''}
   ${bad === '5.words' ? '<p>Total: undefined</p>' : ''}
+  ${bad === '5.words:404' ? '<p>404</p>' : ''}
+  ${bad === '5.words:trace' ? '<p>at render (https://x.test/app.js:10:5)</p>' : ''}
   ${bad === '5.mixed' ? `<p>${DICTS.es['f.save']}</p>` : ''}
   ${bad === '5.locale' ? '<p>Total 1,234.50</p>' : ''}
   ${bad === '6.palette' ? '<p class="pal">Color</p>' : ''}
@@ -74,7 +77,7 @@ const page = (bad, lang) => {
   const list = document.getElementById('list');
   const show = (rows) => { list.innerHTML = rows.length ? rows.map((r) => '<p>' + r + '</p>').join('') : bad === '4.state' ? '' : '<p role="status">' + T['f.empty'] + '</p><a class="btn" href="#sube">' + T['f.retry'] + '</a>'; };
   const fail = () => { list.innerHTML = bad === '4.state' ? '' : '<p class="err" role="alert">' + T['f.err'] + '</p><button type="button">' + T['f.retry'] + '</button>'; };
-  fetch('/api/data').then((r) => { if (!r.ok) throw new Error('x'); return r.json(); }).then(show, fail);
+  fetch(bad === 'fx' ? '/api/fx' : '/api/data').then((r) => { if (!r.ok) throw new Error('x'); return r.json(); }).then((d) => show(bad === 'fx' ? d.rates.map((x) => x.c) : d), fail);
   document.getElementById('go').addEventListener('click', (e) => {
     if (bad !== '4.busy') { e.currentTarget.disabled = true; e.currentTarget.setAttribute('aria-busy', 'true'); }
     fetch('/api/act', { method: 'POST' });
@@ -96,6 +99,8 @@ beforeAll(async () => {
     const u = new URL(req.url, 'http://x');
     if (req.method !== 'GET') seen.push(`${req.method} ${u.pathname}`);
     if (u.pathname === '/f') return void res.writeHead(200, { 'content-type': 'text/html' }).end(page(u.searchParams.get('bad') ?? '', u.searchParams.get('lang') ?? 'es'));
+    if (u.pathname === '/api/demo/overview') return void res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(server.overview ?? { invoices: [] }));
+    if (u.pathname === '/api/fx') return void res.writeHead(200, { 'content-type': 'application/json' }).end('{"provider":"gate","rates":[{"c":"USD"}]}');
     if (u.pathname === '/api/data') return void res.writeHead(200, { 'content-type': 'application/json' }).end('["Factura A","Factura B"]');
     res.writeHead(404).end();
   });
@@ -177,11 +182,46 @@ describe('one known violation per item', () => {
   it.each(['3.focus', '3.enter', '4.busy'])('%s', async (id) => {
     expect(status(await cell(id, { kind: 'dynamic' }), id)).toBe('fail');
   }, 60_000);
+  it.each(['5.words:404', '5.words:trace'])('%s', async (bad) => {
+    expect(status(await cell(bad), '5.words')).toBe('fail');
+  }, 60_000);
   it('4.loading', async () => {
     expect(status(await cell('4.loading', { kind: 'loading' }), '4.loading')).toBe('fail');
   }, 60_000);
   it.each(['empty', 'error', 'offline'])('4.state (%s)', async (state) => {
     expect(status(await cell('4.state', { state }), '4.state')).toBe('fail');
+  }, 60_000);
+});
+
+describe('policy forced states (AC-91)', () => {
+  const policy = SCREENS.find((s) => s.id === 'policy');
+  it('policy runs fx-empty and fx-error', () => expect(policy.states).toEqual(['fx-empty', 'fx-error']));
+  it.each([['fx-empty', 'f.empty'], ['fx-error', 'f.err']].flatMap(([s, k]) => ['es', 'en'].map((l) => [s, k, l])))('%s shows its message and next step (%s, %s)', async (state, key, lang) => {
+    const rs = await cell('fx', { state, lang });
+    expect(status(rs, '4.state'), JSON.stringify(rs.find((r) => r.id === '4.state'))).toBe('pass');
+    expect(rs.find((r) => r.id === '4.state').measured).toContain(DICTS[lang][key].slice(0, 12));
+  }, 60_000);
+});
+
+describe('detail-unread (AC-91)', () => {
+  const inv = [{ id: 'a', outcome: 'PAGAR', fields: {} }, { id: 'b', outcome: 'ESCALAR', fields: { read_error: 'lector_no_disponible' } }, { id: 'c', outcome: null }];
+  it('opens an invoice the agent has not decided or could not read', () => {
+    expect(unreadId(inv)).toBe('b');
+    expect(unreadId([inv[0], inv[2]])).toBe('c');
+  });
+  it('is undefined when the demo has none', () => expect(unreadId([inv[0]])).toBeUndefined());
+  it('is reported N/A, not opened, when the demo has none', async () => {
+    const lines = [];
+    const log = console.log;
+    console.log = (l) => lines.push(l);
+    server.overview = { invoices: [inv[0]] };
+    try {
+      expect(await main(['--base', base, '--screens', 'detail-unread', '--only', '0.reach'])).toBe(0);
+    } finally {
+      console.log = log;
+      server.overview = undefined;
+    }
+    expect(lines.join('\n')).toMatch(/detail-unread N\/A/);
   }, 60_000);
 });
 

@@ -60,7 +60,10 @@ export function escalationEmail(a: { lang: 'es'; question: string; invoice: Invo
   const p = (s: string, style = 'margin:0 0 12px') => `<p style="${style}">${esc(s)}</p>`;
   const button = (label: string, url: string, style: string) =>
     `<a href="${esc(url)}" style="display:inline-block;padding:10px 20px;margin-right:8px;border-radius:6px;text-decoration:none;${style}">${esc(label)}</a>`;
+  // AC-80: mail clients do not render SVG, so the 2x PNG, by absolute URL on the host the approval links already use.
+  const logo = `<p style="margin:0 0 24px"><img src="${esc(new URL('/brand/thesaurus-logo.png', a.approveUrl).href)}" alt="Thesaurus" width="160" height="32" style="display:block;border:0"></p>`;
   const html = `<!doctype html><html lang="es"><body style="margin:0;padding:32px;background:#FBFBFA;color:#2F3437;font:15px/1.6 'Helvetica Neue',Helvetica,Arial,sans-serif">`
+    + logo
     + p(a.question, 'margin:0 0 12px;font-size:17px;color:#111111')
     + p(head, 'margin:0 0 12px;color:#787774')
     + `<h2 style="font-size:13px;margin:24px 0 8px;color:#787774;text-transform:uppercase;letter-spacing:0.05em">${esc(t(lang, 'email.read'))}</h2>`

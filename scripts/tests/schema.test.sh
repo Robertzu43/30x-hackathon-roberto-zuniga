@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Task 2 schema (AC-03..08, AC-24, AC-25, AC-37, AC-62..65). Part 1 greps the migrations (AC-07). Part 2, when a local
+# Task 2 schema (AC-03..08, AC-24, AC-25, AC-37, AC-62..65, AC-68, AC-69). Part 1 greps the migrations (AC-07). Part 2, when a local
 # Postgres 15+ exists, applies every migration over Supabase stubs in a throwaway socket-only cluster and checks RLS and
 # insert_decision for real. Never a delete statement here (CLAUDE.md): the no-DELETE rule is checked through pg_policies.
 set -u
 cd "$(dirname "$0")/../.." || exit 1
 fail(){ echo "FAIL: $1"; exit 1; }
 CORE=supabase/migrations/20261017000100_thesaurus_core.sql RPC=supabase/migrations/20261017000200_thesaurus_rpc.sql
-[ -f "$CORE" ] && [ -f "$RPC" ] || fail "missing $CORE or $RPC"
+LOCK=supabase/migrations/20261017000250_thesaurus_lockdown.sql
+[ -f "$CORE" ] && [ -f "$RPC" ] && [ -f "$LOCK" ] || fail "missing $CORE, $RPC or $LOCK"
 code=$(sed 's/--.*$//' supabase/migrations/*.sql)   # executable SQL only: comments stripped
 echo "$code" | grep -qiE '\b(drop|truncate)\b|delete[[:space:]]+from' && fail "destructive SQL in a migration (AC-07)"
 echo "$code" | grep -qiE 'create table (public\.)?(profiles|deliveries)\b' && fail "reuses an earlier run's table (AC-07)"
@@ -28,6 +29,14 @@ grep -q 'on_auth_user_created' "$CORE" || fail "no signup trigger (AC-03)"
 grep -A1 'create policy members_update_companies' "$CORE" | grep -q 'using (not is_demo' || fail "demo company row not locked (AC-32, R-31)"
 for w in pg_advisory_xact_lock ALREADY_DECIDED STALE_PERIOD FINAL_DECISION NOT_ESCALATED 'security_invoker = true'; do
   grep -q "$w" "$RPC" || fail "RPC file lacks $w"; done
+# AC-68/R-32: members cannot write the decision record; AC-69/R-33: PAGAR only inside the rules
+lock=$(sed 's/--.*$//' "$LOCK")
+for w in 'revoke insert on public.decisions, public.approval_tokens, public.approval_uses, public.agent_runs from public, anon, authenticated;' \
+  'revoke execute on function public.insert_decision(uuid, numeric, jsonb, int) from public, anon, authenticated;' \
+  'grant execute on function public.insert_decision(uuid, numeric, jsonb, int) to service_role;' \
+  'create or replace function public.decisions_guard()' PAGAR_OUTSIDE_RULES \
+  umbral_aprobacion beneficiario_permitido beneficiario_cuenta acuerdo duplicado_probable vencimiento periodo lectura; do
+  echo "$lock" | grep -qF "$w" || fail "lockdown migration lacks: $w (AC-68, AC-69)"; done
 
 # ---- Part 2: execute against a real Postgres ----
 INITDB=$(command -v initdb || ls /usr/lib/postgresql/*/bin/initdb 2>/dev/null | sort -V | tail -1)
@@ -38,7 +47,8 @@ trap 'pg "$B/pg_ctl" -D "$D/db" -m immediate stop >/dev/null 2>&1; rm -rf "$D"' 
 pg "$B/initdb" -D "$D/db" -U postgres -A trust >/dev/null 2>&1 || fail "initdb"
 pg "$B/pg_ctl" -D "$D/db" -o "-c listen_addresses='' -k $D" -w start >/dev/null 2>&1 || fail "pg_ctl start"
 sql(){ "$B/psql" -h "$D" -U postgres -d postgres -X -q -A -t -v ON_ERROR_STOP=1 "$@" 2>&1; }
-as(){ printf "set role authenticated;\nset request.jwt.claim.sub = '%s';\n%s\n" "$1" "$2" | sql -f -; }
+as(){ if [ "$1" = svc ]; then printf "set role service_role;\n%s\n" "$2"   # the Worker's record.ts / cron / link path
+  else printf "set role authenticated;\nset request.jwt.claim.sub = '%s';\n%s\n" "$1" "$2"; fi | sql -f -; }
 expect(){ out=$(as "$1" "$2"); echo "$out" | grep -qE "$3" || fail "$4 (got: $out)"; }
 sql <<'STUBS' >/dev/null || fail "supabase stubs"
 create role anon nologin; create role authenticated nologin; create role service_role nologin bypassrls;
@@ -71,39 +81,62 @@ expect "$UA" "update public.invoices set expected_outcome = 'PAGAR' where id = '
 expect "$UA" "update public.invoices set archived = false where id = '${I}1' returning archived" '^f$' "archived not updatable (AC-06)"
 dec(){ printf "select seq from public.insert_decision('%s', %s, '%s', %s)" "$1" "$2" "$3" "$4"; }
 ESC='{"outcome":"ESCALAR","actor":"agent","amount_usd":100,"checks":[],"question_es":"¿La pago?","question_en":"Pay it?"}'
-PAY='{"outcome":"PAGAR","actor":"agent","amount_usd":100,"checks":[]}'
-HUM='{"outcome":"PAGAR","actor":"human","actor_email":"juan.perez@andina.co","channel":"dashboard","amount_usd":100,"checks":[]}'
-expect "$UA" "$(dec "${I}1" 0 "$ESC" 0)" '^1$' "first decision gets seq 1"
-expect "$UA" "$(dec "${I}1" 0 "$ESC" 0)" 'ALREADY_DECIDED' "racing first decision (R-25)"
-expect "$UA" "$(dec "${I}2" 0 "$PAY" 0)" 'STALE_PERIOD' "stale committed amount (AC-24)"
-expect "$UA" "$(dec "${I}2" 100 "$PAY" 0)" '^1$' "fresh committed amount passes"
-expect "$UA" "$(dec "${I}2" 100 "$PAY" 1)" 'FINAL_DECISION' "decision after PAGAR (AC-25)"
-expect "$UA" "$(dec "${I}3" 200 "$HUM" 0)" 'NOT_ESCALATED' "human answer on a pending invoice (R-03)"
-expect "$UA" "$(dec "${I}1" 100 "$HUM" 1)" '^2$' "human answer on ESCALAR, committed excludes itself"
-expect "$UA" "$(dec "${I}1" 100 "$HUM" 2)" 'FINAL_DECISION' "second human answer (AC-37)"
-expect "$UA" "insert into public.decisions (company_id, invoice_id, seq, outcome, actor) values ('$CA', '${I}2', 9, 'PAGAR', 'agent')" 'FINAL_DECISION' "direct insert bypasses the RPC (AC-25)"
-expect "$UA" "$(dec "${I}3" 200 "$PAY" 0)" '^1$' "pending invoice decided"
-expect "$UA" "$(dec "${I}4" 300 '{"outcome":"FRENAR","actor":"agent","question_es":"x","checks":[]}' 0)" 'check constraint' "question on non-ESCALAR (R-28)"
+OK=$(printf '{"id":"c%s","verdict":"cumple"},' $(seq 1 13)); OK="[${OK%,}]"          # 13 checks, all cumple
+PAY='{"outcome":"PAGAR","actor":"agent","amount_usd":100,"checks":'$OK'}'
+HUM='{"outcome":"PAGAR","actor":"human","actor_email":"juan.perez@andina.co","channel":"dashboard","amount_usd":100,"checks":'$OK'}'
+expect svc "$(dec "${I}1" 0 "$ESC" 0)" '^1$' "first decision gets seq 1"
+expect svc "$(dec "${I}1" 0 "$ESC" 0)" 'ALREADY_DECIDED' "racing first decision (R-25)"
+expect svc "$(dec "${I}2" 0 "$PAY" 0)" 'STALE_PERIOD' "stale committed amount (AC-24)"
+expect svc "$(dec "${I}2" 100 "$PAY" 0)" '^1$' "fresh committed amount passes"
+expect svc "$(dec "${I}2" 100 "$PAY" 1)" 'FINAL_DECISION' "decision after PAGAR (AC-25)"
+expect svc "$(dec "${I}3" 200 "$HUM" 0)" 'NOT_ESCALATED' "human answer on a pending invoice (R-03)"
+expect svc "$(dec "${I}1" 100 "$HUM" 1)" '^2$' "human answer on ESCALAR, committed excludes itself"
+expect svc "$(dec "${I}1" 100 "$HUM" 2)" 'FINAL_DECISION' "second human answer (AC-37)"
+expect svc "insert into public.decisions (company_id, invoice_id, seq, outcome, actor) values ('$CA', '${I}2', 9, 'PAGAR', 'agent')" 'FINAL_DECISION' "direct insert bypasses the RPC (AC-25)"
+expect svc "$(dec "${I}3" 200 "$PAY" 0)" '^1$' "pending invoice decided"
+expect svc "$(dec "${I}4" 300 '{"outcome":"FRENAR","actor":"agent","question_es":"x","checks":[]}' 0)" 'check constraint' "question on non-ESCALAR (R-28)"
 expect "$UA" "update public.decisions set outcome = 'FRENAR' returning id" '^$' "decisions updatable (AC-05)"
 expect "$UA" "select count(*) from public.decisions where outcome = 'PAGAR'" '^3$' "decisions changed by update (AC-05)"
-expect "$UB" "$(dec "${I}4" 0 "$PAY" 0)" 'INVOICE_NOT_FOUND' "B decides A's invoice (AC-04)"
+expect "$UB" "$(dec "${I}4" 0 "$PAY" 0)" 'permission denied' "B decides A's invoice (AC-04, AC-68)"
 expect "$UA" "select public.period_state('$CA', current_date)" '"paid_usd": 300' "period_state paid"
 expect "$UA" "select public.period_state('$CA', current_date, '${I}3') ->> 'committed_usd'" '^200(\.00)?$' "period_state exclude"
 expect "$UA" "select public.period_state('$CA', current_date) -> 'by_beneficiary' -> 0 ->> 'beneficiary'" '^Laura$' "by_beneficiary"
 expect "$UB" "select public.period_state('$CA', current_date) ->> 'committed_usd'" '^0$' "B reads A's period (AC-04)"
 # AC-24: a concurrent decision waits for the company lock, then sees the committed amount and gets STALE_PERIOD
-as "$UA" "begin; $(dec "${I}4" 300 "$PAY" 0); select pg_sleep(1.5); commit;" >"$D/s1" &
-sleep 0.5; expect "$UA" "$(dec "${I}5" 300 "$PAY" 0)" 'STALE_PERIOD' "concurrent decision ignored the lock (AC-24)"
+as svc "begin; $(dec "${I}4" 300 "$PAY" 0); select pg_sleep(1.5); commit;" >"$D/s1" &
+sleep 0.5; expect svc "$(dec "${I}5" 300 "$PAY" 0)" 'STALE_PERIOD' "concurrent decision ignored the lock (AC-24)"
 wait; grep -q '^1$' "$D/s1" || fail "locked session did not commit: $(cat "$D/s1")"
+# AC-69/R-33 through the service role (committed is 400 here; amount 0 keeps it there). Error order is unchanged.
+one(){ printf '%s' "${OK%\]}" | sed "s/{\"id\":\"c13\",\"verdict\":\"cumple\"}$/$1]/"; }   # 12 cumple + $1
+NC='{"id":"c13","verdict":"no_cumple"}'
+OV(){ printf '{"id":"%s","verdict":"no_cumple","overridden":{"by":"juan.perez@andina.co","channel":"dashboard"}}' "$1"; }
+AG(){ printf '{"outcome":"PAGAR","actor":"agent","amount_usd":0,"checks":%s}' "$1"; }
+HU(){ printf '{"outcome":"PAGAR","actor":"human","actor_email":"juan.perez@andina.co","channel":"dashboard","amount_usd":0,"checks":%s}' "$1"; }
+expect svc "$(dec "${I}6" 400 "$(AG "$(one "$NC")")" 0)" 'PAGAR_OUTSIDE_RULES' "agent PAGAR with a no_cumple check (AC-69a)"
+expect svc "$(dec "${I}6" 400 "$(AG '[]')" 0)" 'PAGAR_OUTSIDE_RULES' "agent PAGAR with no checks (AC-69d)"
+expect svc "$(dec "${I}6" 400 "$(AG "$(one "$(OV acuerdo)")")" 0)" 'PAGAR_OUTSIDE_RULES' "agent PAGAR with an override (AC-69)"
+expect svc "$(dec "${I}5" 400 "$(AG "$OK")" 0)" '^1$' "agent PAGAR with 13 cumple (AC-69)"
+expect svc "$(dec "${I}6" 400 '{"outcome":"ESCALAR","actor":"agent","amount_usd":0,"checks":['"$NC"']}' 0)" '^1$' "ESCALAR unaffected (AC-69)"
+expect svc "$(dec "${I}6" 400 "$(HU "$(one "$(OV limite_pago)")")" 1)" 'PAGAR_OUTSIDE_RULES' "human overrides limite_pago (AC-69b)"
+expect svc "$(dec "${I}6" 400 "$(HU "$(one "$NC")")" 1)" 'PAGAR_OUTSIDE_RULES' "human PAGAR, no_cumple not overridden (AC-69)"
+expect svc "$(dec "${I}6" 400 "$(HU "$(one "$(OV umbral_aprobacion)")")" 1)" '^2$' "human overrides umbral_aprobacion (AC-69c)"
+# AC-68/R-32: a member JWT writes none of the four record tables, directly or through the RPC; other writes still work
+expect "$UA" "$(dec "${I}5" 400 "$PAY" 1)" 'permission denied' "member executes insert_decision (AC-68)"
+expect "$UA" "insert into public.decisions (company_id, invoice_id, seq, outcome, actor, checks) values ('$CA', '${I}5', 2, 'PAGAR', 'agent', '$OK')" 'permission denied' "member inserts a decision (AC-68)"
+expect "$UA" "insert into public.policies (company_id, version, name, rules) values ('$CA', 1, 'p', '{}'); insert into public.beneficiaries (company_id, name) values ('$CA', 'Laura'); select 1" '^1$' "member insert on policies/beneficiaries (AC-68)"
 # AC-05/AC-63/AC-08/R-03
 sql -c "select count(*) from pg_policies where schemaname = 'public' and cmd in ('DELETE', 'ALL')" | grep -q '^0$' || fail "delete-capable policy (D10)"
 D1=$(sql -c "select id from public.decisions where invoice_id = '${I}1' and seq = 1")
-expect "$UA" "insert into public.approval_tokens (token_hash, company_id, invoice_id, decision_id, expires_at, email_sent, sent_to) values ('h1', '$CA', '${I}1', '$D1', now(), true, 'x@y.co'), ('h2', '$CA', '${I}1', '$D1', now(), true, 'x@y.co'); insert into public.approval_uses (token_hash, company_id, decision_id) values ('h1', '$CA', '$D1'); select 1" '^1$' "tokens and first use"
-expect "$UA" "insert into public.approval_uses (token_hash, company_id, decision_id) values ('h2', '$CA', '$D1')" 'duplicate key' "second link of the pair (R-03)"
+expect "$UA" "insert into public.approval_tokens (token_hash, company_id, invoice_id, decision_id, expires_at, email_sent, sent_to) values ('hx', '$CA', '${I}1', '$D1', now(), true, 'x@y.co')" 'permission denied' "member inserts approval_tokens (AC-68)"
+expect "$UA" "insert into public.approval_uses (token_hash, company_id, decision_id) values ('hx', '$CA', '$D1')" 'permission denied' "member inserts approval_uses (AC-68)"
+expect svc "insert into public.approval_tokens (token_hash, company_id, invoice_id, decision_id, expires_at, email_sent, sent_to) values ('h1', '$CA', '${I}1', '$D1', now(), true, 'x@y.co'), ('h2', '$CA', '${I}1', '$D1', now(), true, 'x@y.co'); insert into public.approval_uses (token_hash, company_id, decision_id) values ('h1', '$CA', '$D1'); select 1" '^1$' "tokens and first use"
+expect svc "insert into public.approval_uses (token_hash, company_id, decision_id) values ('h2', '$CA', '$D1')" 'duplicate key' "second link of the pair (R-03)"
 expect "$UB" "select count(*) from public.approval_tokens" '^0$' "B reads A's tokens (AC-04)"
 sql -c "insert into public.agent_runs (company_id, trigger) values (null, 'cron'), ('$CB', 'manual')" >/dev/null || fail "service insert agent_runs"
-expect "$UA" "insert into public.agent_runs (company_id, trigger, decided) values ('$CA', 'manual', '{}'); select count(*) from public.agent_runs" '^2$' "A sees own run and cron tick, not B's (AC-63)"
-expect "$UA" "insert into public.agent_runs (company_id, trigger) values (null, 'cron')" 'row-level security' "member writes a cron tick (AC-63)"
+as svc "insert into public.agent_runs (company_id, trigger, decided) values ('$CA', 'manual', '{}')" >/dev/null || fail "service insert own run"
+expect "$UA" "select count(*) from public.agent_runs" '^2$' "A sees own run and cron tick, not B's (AC-63)"
+expect "$UA" "insert into public.agent_runs (company_id, trigger) values (null, 'cron')" 'permission denied' "member writes a cron tick (AC-63, AC-68)"
+expect "$UA" "insert into public.agent_runs (company_id, trigger) values ('$CA', 'manual')" 'permission denied' "member writes a run (AC-68)"
 sql -c "insert into storage.objects (bucket_id, name) values ('files', '$CA/x.pdf'), ('files', '$CB/y.pdf')" >/dev/null || fail "objects"
 expect "$UA" "select string_agg(name, ',') from storage.objects" "^$CA/x.pdf$" "A reads B's file (AC-08)"
 expect "$UA" "insert into storage.objects (bucket_id, name) values ('files', '$CB/z.pdf')" 'row-level security' "A writes into B's folder (AC-08)"

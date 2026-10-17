@@ -95,7 +95,8 @@ export async function runAgent(deps: AgentDeps, companyId: string, invoiceIds: s
         try {
           stored = await record.decision(row.id, period.committed_usd, input, row.seq ?? 0);
         } catch (e) {
-          if (messageOf(e) === 'ALREADY_DECIDED') break; // R-25: someone else decided it first; no tokens, no mail
+          // R-25: someone else decided it first; R-69: a member archived it meanwhile. Either way: no tokens, no mail.
+          if (['ALREADY_DECIDED', 'ARCHIVED'].includes(messageOf(e))) break;
           if (messageOf(e) !== 'STALE_PERIOD' || attempt === RETRIES) throw e;
           continue;
         }

@@ -24,7 +24,7 @@ export function recorder(env: Env, companyId: string | null, budget?: Budget) {
     if (!companyId || inv?.company_id !== companyId) throw new Error('COMPANY_MISMATCH');
   };
   return {
-    // Throws the database's refusal by name: ALREADY_DECIDED, STALE_PERIOD, FINAL_DECISION, NOT_ESCALATED, PAGAR_OUTSIDE_RULES.
+    // Throws the database's refusal by name: ALREADY_DECIDED, ARCHIVED, STALE_PERIOD, FINAL_DECISION, NOT_ESCALATED, PAGAR_OUTSIDE_RULES.
     async decision(invoiceId: string, expectedCommittedUsd: number, decision: DecisionInput, expectedSeq: number): Promise<StoredDecision> {
       await owned(invoiceId);
       return must(await admin.rpc('insert_decision', {

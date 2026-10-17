@@ -93,7 +93,11 @@ test('the tour keeps its place across routes: Siguiente from Bandeja reaches Pol
   fireEvent.click(await screen.findByRole('button', { name: 'Ver tutorial' }));
   await screen.findByRole('heading', { name: 'Bandeja', level: 2 });
   fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }));
-  // Placeholder pages have no new-invoice / run-agent / invoice-row anchors yet, so those steps are skipped.
+  await screen.findByRole('heading', { name: 'Nueva factura', level: 2 });
+  fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }));
+  await screen.findByRole('heading', { name: 'Ejecutar agente', level: 2 });
+  fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }));
+  // No invoices are mocked here, so Bandeja has no invoice-row anchor and that step is skipped.
   expect(await screen.findByRole('heading', { name: 'Política', level: 2 }, { timeout: 8000 })).toBeTruthy();
   expect(screen.getByRole('heading', { name: 'Política', level: 1 })).toBeTruthy();
 }, 10000);

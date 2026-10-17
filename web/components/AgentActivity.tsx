@@ -13,13 +13,16 @@ const MAX = 10;
 const key = (i: Item) => `${i.invoice_id}@${i.decided_at}`;
 
 export default function AgentActivity({ refresh = 0 }: { refresh?: number }) {
-  const { t } = useT();
+  const { t, lang } = useT();
   const [items, setItems] = useState<Played[] | null>(null);
   const [failed, setFailed] = useState(false);
   const since = useRef<string | null>(null); // the newest decided_at seen; the API answers at or after it
+  const round = useRef(0); // bumped on a language switch: an answer asked before it is dropped
 
-  const load = () =>
-    api.get<{ items?: Item[] }>(`/api/agent/activity${since.current ? `?since=${encodeURIComponent(since.current)}` : ''}`).then((r) => {
+  const load = () => {
+    const asked = round.current;
+    return api.get<{ items?: Item[] }>(`/api/agent/activity${since.current ? `?since=${encodeURIComponent(since.current)}` : ''}`).then((r) => {
+      if (asked !== round.current) return;
       const fresh = Array.isArray(r?.items) ? r.items : []; // newest first
       if (fresh[0]) since.current = fresh[0].decided_at;
       setItems((old) => {
@@ -27,9 +30,15 @@ export default function AgentActivity({ refresh = 0 }: { refresh?: number }) {
         return [...fresh.filter((i) => !seen.has(key(i))).map((i) => ({ ...i, shown: 0 })), ...(old ?? [])].slice(0, MAX);
       });
       setFailed(false);
-    }, () => setFailed(true));
+    }, () => asked === round.current && setFailed(true));
+  };
 
+  // A language switch starts over: the Worker renders the steps in the request's language (R-98).
   useEffect(() => {
+    round.current++;
+    since.current = null;
+    setItems(null);
+    setFailed(false);
     let timer: ReturnType<typeof setInterval> | undefined;
     const sync = () => {
       clearInterval(timer);
@@ -43,7 +52,7 @@ export default function AgentActivity({ refresh = 0 }: { refresh?: number }) {
       clearInterval(timer);
       document.removeEventListener('visibilitychange', sync);
     };
-  }, []);
+  }, [lang]);
   useEffect(() => {
     if (refresh) void load();
   }, [refresh]);

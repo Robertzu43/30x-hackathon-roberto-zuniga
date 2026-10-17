@@ -4,6 +4,7 @@ import { act, fireEvent, screen } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import AgentActivity from './components/AgentActivity';
+import { useT } from './i18n';
 import { mockApi, renderAt, signedInAs } from './test/utils';
 
 const steps = (payee: string, outcome: string) => [
@@ -108,4 +109,43 @@ test('an answer without items (an empty list) is the empty state, never a crash'
   renderAt(<AgentActivity />);
   await tick(0);
   expect(screen.getByText(/Cuando el agente decida una factura/)).toBeTruthy();
+});
+
+test('a language switch replays the panel from a fresh fetch, so no step stays in the other language (R-98)', async () => {
+  let answer: unknown = { items: [NEW] };
+  const f = mockApi({ [BASE]: () => answer });
+  function Switch() {
+    const { setLang } = useT();
+    return <><button type="button" onClick={() => setLang('en')}>en</button><AgentActivity /></>;
+  }
+  renderAt(<Switch />);
+  await tick(0);
+  await tick(1600);
+  expect(shown()).toHaveLength(4);
+  answer = { items: [{ ...NEW, steps: [{ stage: 'lee', text: "Reading Laura Méndez's invoice with AI…" }] }] };
+  fireEvent.click(screen.getByRole('button', { name: 'en' }));
+  await tick(0);
+  await tick(400);
+  expect(shown()).toEqual(["Reading Laura Méndez's invoice with AI…"]);
+  expect(activityCalls(f)).toEqual(['/api/agent/activity', '/api/agent/activity']); // from scratch, no since
+});
+
+test('an answer still in flight when the language switches is dropped', async () => {
+  let release: (v: unknown) => void = () => {};
+  let answer: unknown = new Promise((r) => (release = r));
+  mockApi({ [BASE]: () => answer });
+  function Switch() {
+    const { setLang } = useT();
+    return <><button type="button" onClick={() => setLang('en')}>en</button><AgentActivity /></>;
+  }
+  renderAt(<Switch />);
+  await tick(0);
+  answer = { items: [] };
+  fireEvent.click(screen.getByRole('button', { name: 'en' }));
+  await tick(0);
+  release({ items: [NEW] }); // the Spanish answer arrives late
+  await tick(0);
+  await tick(1600);
+  expect(shown()).toEqual([]);
+  expect(screen.getByText(/When the agent decides an invoice/)).toBeTruthy();
 });

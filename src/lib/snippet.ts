@@ -31,12 +31,41 @@ export function locate(text: string | null, name: string, value: string | number
   const alts = [...new Set(forms(name, value))].sort((a, b) => b.length - a.length)
     .map((f) => esc(f).replace(/ del\\\? /g, ' del? ').replace(/[ \t\u00a0]+/g, '[ \\t\\u00a0]+'));
   const m = new RegExp(`(?<![\\p{L}\\p{N}]|\\d[.,])(?:${alts.join('|')})(?![\\p{L}\\p{N}]|[.,]\\d)`, 'iu').exec(text);
-  if (!m || m[0].length > MAX) return none; // ponytail: a value over 120 characters cannot fit; no field is that long
+  if (!m) return none;
   const from = text.lastIndexOf('\n', m.index - 1) + 1;
   const to = text.indexOf('\n', m.index);
   const raw = text.slice(from, to < 0 ? text.length : to).trimEnd();
   const line = raw.trimStart();
-  const start = m.index - from - (raw.length - line.length), end = start + m[0].length;
-  const cut = line.length <= MAX ? 0 : Math.min(Math.max(0, start - Math.floor((MAX - m[0].length) / 2)), line.length - MAX);
-  return { snippet: line.slice(cut, cut + MAX), match: [start - cut, end - cut] };
+  const start = m.index - from - (raw.length - line.length);
+  return cut(line, start, start + m[0].length);
+}
+
+// R-130: the window of trimmed line L around the span [s, e): centred, snapped to whole words, «…» where cut, <= 120 in all.
+export function cut(L: string, s: number, e: number): { snippet: string; match: [number, number] } {
+  if (L.length <= MAX) return { snippet: L, match: [s, e] };
+  if (e - s > MAX - 2) return { snippet: L.slice(s, e), match: [0, e - s] };
+  const ws = (i: number) => i < 0 || i >= L.length || /\s/.test(L[i]!);
+  const size = (x: number, y: number) => y - x + (x > 0 ? 1 : 0) + (y < L.length ? 1 : 0);
+  let a = Math.max(0, Math.min(s - Math.floor((MAX - 2 - (e - s)) / 2), L.length - (MAX - 2)));
+  let b = a + MAX - 2;
+  if (a === 0) b = MAX - 1;
+  else if (b === L.length) a = L.length - (MAX - 1);
+  // An edge inside a word: inward to the word's edge, or, when the word holds part of the span, outward if it fits.
+  let wordStart = -1, wordEnd = -1;
+  if (!ws(a - 1) && !ws(a)) {
+    let x = a;
+    while (!ws(x)) x++;
+    if (x > s) { wordStart = s; while (!ws(wordStart - 1)) wordStart--; a = s; } else a = Math.min(x, s);
+  }
+  if (!ws(b - 1) && !ws(b)) {
+    let y = b;
+    while (!ws(y - 1)) y--;
+    if (y < e) { wordEnd = e; while (!ws(wordEnd)) wordEnd++; b = e; } else b = Math.max(y, e);
+  }
+  while (a < s && ws(a)) a++;
+  while (b > e && ws(b - 1)) b--;
+  if (wordStart >= 0 && size(wordStart, b) <= MAX) a = wordStart;
+  if (wordEnd >= 0 && size(a, wordEnd) <= MAX) b = wordEnd;
+  const m = a > 0 ? 1 : 0;
+  return { snippet: `${m ? '\u2026' : ''}${L.slice(a, b)}${b < L.length ? '\u2026' : ''}`, match: [s - a + m, e - a + m] };
 }

@@ -1,4 +1,4 @@
-// Bandeja, ingest and the decision detail (AC-08, AC-11, AC-12, AC-13, AC-15, AC-26, AC-29, AC-64, AC-65).
+// Bandeja, ingest and the decision detail (AC-08, AC-11, AC-12, AC-13, AC-15, AC-26, AC-29, AC-64, AC-65, AC-77).
 // Every read and write uses the user's JWT client (RLS); decisions and runs are written only by runAgent's record.ts.
 import type { Context } from 'hono';
 import { z } from 'zod';
@@ -8,14 +8,17 @@ import { agentTrace, recordedFields, type StoredDecision } from '../agent/trace'
 import { explainCheck, whatWouldPay } from '../engine/explain';
 import { validFields } from '../engine/checks';
 import type { Invoice, InvoiceFields } from '../engine/types';
-import { documentToText, extractFields } from '../lib/llm';
+import type { Lang } from '../i18n';
+import { documentToText, extractFields, type ReadFields } from '../lib/llm';
 import type { AppEnv } from '../lib/auth';
+import { locate } from '../lib/snippet';
 import { isUuid, must } from '../lib/supabase';
 import { memberRoutes } from './agent';
 
 // One invoice_current row: the invoice and its latest decision's columns (outcome null = pending).
 export interface Current extends Omit<Invoice, 'fields'> {
   fields: InvoiceFields | null;
+  raw_text: string | null;
   file_path: string | null;
   decision_id: string | null;
   outcome: StoredDecision['outcome'] | null;
@@ -36,6 +39,8 @@ const BAD_TEXT = 'Pega un texto de 1 a 20.000 caracteres.'; // R-84
 const PastedSource = z.object({ source: z.enum(['email', 'chat']) });
 const PastedText = z.string().max(20000).refine((t) => t.trim().length > 0);
 const SIGNED_URL_SECONDS = 300; // AC-08
+// "Lo que leí" fields in screen order (AC-12, AC-77).
+export const READ = ['payee_name', 'amount', 'currency', 'invoice_number', 'issue_date', 'due_date', 'concept', 'bank_account'] as const;
 const NOT_RUN = 'No pude ejecutar el agente ahora. Las facturas siguen pendientes; lo intentaré solo en la próxima revisión automática (cada 5 minutos).';
 
 // "Ejecutar agente" and "Reevaluar" (R-60): one budgeted call after the optional {cursor} (AC-70). The browser calls again
@@ -92,7 +97,7 @@ export const invoices = memberRoutes()
     }
     c.var.budget.count(); // the Workers AI reader (R-56)
     const fields = await extractFields(c.env, text);
-    must(await db.from('invoices').insert({ id, company_id: companyId, source, file_path: filePath, raw_text: filePath ? null : text, fields }));
+    must(await db.from('invoices').insert({ id, company_id: companyId, source, file_path: filePath, raw_text: text?.slice(0, 20000) ?? null, fields })); // R-88: files too
     // One invoice always fits the budget. If the agent cannot run, the invoice is stored and pending: the cron decides it (R-60).
     await runAgent({ db, env: c.env, budget: c.var.budget }, companyId, [id], 'ingest')
       .catch((e) => console.error('agent: ingest not decided', id, e instanceof Error ? e.message : e));
@@ -104,39 +109,59 @@ export const invoices = memberRoutes()
   })
 
   .get('/:id', async (c) => {
-    const { db, companyId, lang } = c.var;
-    if (!isUuid(c.req.param('id'))) return c.json({ error: 'Factura no encontrada' }, 404); // R-74
-    const row: Current | null = must(await db.from('invoice_current').select('*').eq('company_id', companyId).eq('id', c.req.param('id')).maybeSingle());
-    if (!row) return c.json({ error: 'Factura no encontrada' }, 404);
-    const [decisions, directory, company, notification]: [StoredDecision[], Awaited<ReturnType<typeof directorio>>, { is_demo: boolean }, { email_sent: boolean; sent_to: string } | null] = await Promise.all([
-      db.from('decisions').select('*').eq('company_id', companyId).eq('invoice_id', row.id).order('seq').then(must),
-      directorio(db, companyId),
-      db.from('companies').select('is_demo').eq('id', companyId).single().then(must),
-      db.from('approval_tokens').select('email_sent, sent_to').eq('invoice_id', row.id).order('created_at', { ascending: false }).limit(1).maybeSingle().then(must),
-    ]);
-    const latest = decisions.at(-1);
-    // file_path is member-writable (R-31): only the seed's static documents pass as is, only the company's own Storage keys are signed.
-    const path = row.file_path;
-    const fileUrl = !path || path.split('/').includes('..') ? null
-      : path.startsWith('/demo/invoices/') ? path
-      : path.startsWith(`${companyId}/`) ? (await db.storage.from('files').createSignedUrl(path, SIGNED_URL_SECONDS)).data?.signedUrl ?? null
-      : null;
-    const policy = latest?.policy_version == null ? null
-      : must(await db.from('policies').select('name, version, created_at').eq('company_id', companyId).eq('version', latest.policy_version).maybeSingle());
-    // R-71: "Lo que leí" shows a field the engine cannot trust as unknown, as every check saw it.
-    const read = recordedFields(row.fields, latest?.checks);
-    const invoice = { ...row, fields: (read && validFields(read)) as InvoiceFields };
-    return c.json({
-      invoice,
-      headline: row[`headline_${lang}`],
-      decisions,
-      beneficiary: findBeneficiary(read?.payee_name ?? null, directory),
-      // R-49: each line names the rate of the stored decision's policy version, never the current one.
-      explanations: (latest?.checks ?? []).map((ch) => explainCheck(ch, lang, row.received_at, latest?.policy_version)),
-      fixes: whatWouldPay({ checks: latest?.checks ?? [] }, lang),
-      policy,
-      trace: agentTrace({ invoice, decisions, isDemo: company.is_demo, notification }, lang),
-      question: latest?.outcome === 'ESCALAR' ? latest[`question_${lang}`] : null,
-      file_url: fileUrl,
-    });
+    const d = isUuid(c.req.param('id')) ? await invoiceDetail(c.var, c.req.param('id'), c.var.lang) : null; // R-74
+    return d ? c.json(d) : c.json({ error: 'Factura no encontrada' }, 404);
   });
+
+// AC-77, R-88: who read it, as recorded at read time, and per field the line of the stored text where code found the
+// value. null when no model read it (seeded, inserted with fields, unread or the reader unavailable).
+function readingOf(stored: ReadFields | null, shown: InvoiceFields | null, text: string | null) {
+  const provider = stored?.read_by?.provider;
+  if (typeof provider !== 'string') return null;
+  return {
+    provider,
+    fields: READ.map((name) => {
+      const value = shown?.[name] ?? null, c = stored?.confidence?.[name];
+      return { name, value, confidence: typeof c === 'number' ? c : null, ...locate(text, name, value) };
+    }),
+  };
+}
+
+// The decision detail of one of the company's invoices in `lang`, or null when it has none with that id. Also the record
+// «Pregúntale a Thesaurus» answers from (AC-67).
+export async function invoiceDetail({ db, companyId }: AppEnv['Variables'], id: string, lang: Lang) {
+  const row: Current | null = must(await db.from('invoice_current').select('*').eq('company_id', companyId).eq('id', id).maybeSingle());
+  if (!row) return null;
+  const [decisions, directory, company, notification]: [StoredDecision[], Awaited<ReturnType<typeof directorio>>, { is_demo: boolean }, { email_sent: boolean; sent_to: string } | null] = await Promise.all([
+    db.from('decisions').select('*').eq('company_id', companyId).eq('invoice_id', row.id).order('seq').then(must),
+    directorio(db, companyId),
+    db.from('companies').select('is_demo').eq('id', companyId).single().then(must),
+    db.from('approval_tokens').select('email_sent, sent_to').eq('invoice_id', row.id).order('created_at', { ascending: false }).limit(1).maybeSingle().then(must),
+  ]);
+  const latest = decisions.at(-1);
+  // file_path is member-writable (R-31): only the seed's static documents pass as is, only the company's own Storage keys are signed.
+  const path = row.file_path;
+  const fileUrl = !path || path.split('/').includes('..') ? null
+    : path.startsWith('/demo/invoices/') ? path
+    : path.startsWith(`${companyId}/`) ? (await db.storage.from('files').createSignedUrl(path, SIGNED_URL_SECONDS)).data?.signedUrl ?? null
+    : null;
+  const policy = latest?.policy_version == null ? null
+    : must(await db.from('policies').select('name, version, created_at').eq('company_id', companyId).eq('version', latest.policy_version).maybeSingle());
+  // R-71: "Lo que leí" shows a field the engine cannot trust as unknown, as every check saw it.
+  const read = recordedFields(row.fields, latest?.checks);
+  const invoice = { ...row, fields: (read && validFields(read)) as InvoiceFields };
+  return {
+    invoice,
+    headline: row[`headline_${lang}`],
+    decisions,
+    beneficiary: findBeneficiary(read?.payee_name ?? null, directory),
+    // R-49: each line names the rate of the stored decision's policy version, never the current one.
+    explanations: (latest?.checks ?? []).map((ch) => explainCheck(ch, lang, row.received_at, latest?.policy_version)),
+    fixes: whatWouldPay({ checks: latest?.checks ?? [] }, lang),
+    policy,
+    trace: agentTrace({ invoice, decisions, isDemo: company.is_demo, notification }, lang),
+    question: latest?.outcome === 'ESCALAR' ? latest[`question_${lang}`] : null,
+    file_url: fileUrl,
+    reading: readingOf(row.fields, invoice.fields, row.raw_text),
+  };
+}

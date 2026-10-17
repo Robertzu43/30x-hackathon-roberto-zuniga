@@ -1,7 +1,8 @@
 /// <reference types="vite/client" />
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Env } from '../env';
-import { documentToText, extractFields } from './llm';
+import { ASK_SYSTEM, askMessage } from '../prompts/ask';
+import { answerQuestion, documentToText, extractFields } from './llm';
 
 const conf = { payee_name: 0.99, amount: 0.97, currency: 0.99, invoice_number: 0.95, issue_date: 0.9, due_date: 0.9, concept: 0.9, bank_account: 0.9 };
 const good = {
@@ -15,8 +16,12 @@ const ALL_NULL = { payee_name: null, amount: null, currency: null, invoice_numbe
 // R-75: no answer came from the model for this invoice. No concept 'ilegible': the document was never judged.
 const UNAVAILABLE = { ...ALL_NULL, concept: null, read_error: 'lector_no_disponible' };
 const QUOTA = '4006: you have used up your daily free allocation of 10,000 neurons';
+// Without the Bedrock vars and secrets (every env above), the reader goes straight to Workers AI and names it.
+const WAI = { read_by: { provider: 'Workers AI · text-model' } };
 
-afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+// R-94: no test reaches the network; a Bedrock test installs its own fake fetch.
+beforeEach(() => { vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('no network in unit tests'); })); });
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 // the repo has no @types/node, so the fs module is typed by hand
 const readFixture = async (path: string): Promise<ArrayBuffer> => {
@@ -30,7 +35,7 @@ const TEXT_01 = 'Laura Méndez\nFactura N.º 1042\nFacturar a\nAndina Labs Inc.\
 describe('extractFields (AC-12, AC-13, AC-14)', () => {
   it('returns the validated fields and calls the text model with a JSON schema', async () => {
     const run = vi.fn(async () => ({ response: good }));
-    expect(await extractFields(envWith(run), 'Factura 1042')).toEqual(good);
+    expect(await extractFields(envWith(run), 'Factura 1042')).toEqual({ ...good, ...WAI });
     const [name, input] = run.mock.calls[0] as unknown as [string, { response_format: { type: string }; max_tokens: number }];
     expect(name).toBe('text-model');
     expect(input.response_format.type).toBe('json_schema');
@@ -38,7 +43,7 @@ describe('extractFields (AC-12, AC-13, AC-14)', () => {
   });
 
   it('accepts the model answer as a JSON string', async () => {
-    expect(await extractFields(model(JSON.stringify(good)), 'x')).toEqual(good);
+    expect(await extractFields(model(JSON.stringify(good)), 'x')).toEqual({ ...good, ...WAI });
   });
 
   it('re-parses a string amount "1.000,00" as 1000', async () => {
@@ -229,7 +234,7 @@ describe('extractFields with the amount guard (AC-14 Clarified, R-80)', () => {
     for (const o of outs) expect(o).toMatchObject({ amount: null, read_error: code });
   });
   it('keeps the other fields the model read, and stores the guard values', async () => {
-    expect(await extractFields(answers(150), CUADRA)).toEqual({ ...good, amount: null, read_error: 'total_no_cuadra',
+    expect(await extractFields(answers(150), CUADRA)).toEqual({ ...good, ...WAI, amount: null, read_error: 'total_no_cuadra',
       read_detail: { subtotal: 100, tax: 19, sum: 119, totals: '150', amount_read: 150 } });
   });
   it('with the model unavailable: every field null, the guard code instead of lector_no_disponible', async () => {
@@ -240,7 +245,7 @@ describe('extractFields with the amount guard (AC-14 Clarified, R-80)', () => {
   it('3b: a model amount that is none of the printed totals is total_no_cuadra', async () => {
     expect(await extractFields(answers(250), 'Total: USD 2,500.00')).toMatchObject({ amount: null, read_error: 'total_no_cuadra',
       read_detail: { totals: '2500', amount_read: 250 } });
-    expect(await extractFields(answers(2500), 'Total: USD 2,500.00')).toEqual({ ...good, amount: 2500 });
+    expect(await extractFields(answers(2500), 'Total: USD 2,500.00')).toEqual({ ...good, ...WAI, amount: 2500 });
   });
   it('an image whose vision transcription says «nota crédito» is flagged (the text model unavailable)', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -250,5 +255,258 @@ describe('extractFields with the amount guard (AC-14 Clarified, R-80)', () => {
   });
   it('a vision step with no answer has no text to guard: lector_no_disponible', async () => {
     expect(await extractFields(model(null), null)).toEqual(UNAVAILABLE);
+  });
+});
+
+// AC-89 (D36, R-92): Amazon Nova Lite on Bedrock first, one Workers AI attempt second. Fake fetch and recorded Converse
+// fixtures only (R-94): the request aws4fetch signs is inspected, never sent.
+describe('Bedrock first, Workers AI fallback (AC-89, AC-13, AC-77)', () => {
+  const SECRET = 'test-only-secret-never-logged';
+  const BEDROCK = { BEDROCK_MODEL_ID: 'amazon.nova-lite-v1:0', BEDROCK_REGION: 'us-east-2', AWS_BEDROCK_ACCESS_KEY_ID: 'AKIDTESTONLY', AWS_BEDROCK_SECRET_ACCESS_KEY: SECRET };
+  const NOVA = { read_by: { provider: 'Amazon Nova Lite (AWS Bedrock)' } };
+  const ENDPOINT = 'https://bedrock-runtime.us-east-2.amazonaws.com/model/amazon.nova-lite-v1:0/converse';
+  const both = (run: (model: string, input: unknown) => Promise<unknown>) => ({ ...envWith(run), ...BEDROCK }) as unknown as Env;
+  const fixture = async (name: string) => new TextDecoder().decode(await readFixture(`./__fixtures__/${name}`));
+  const json = (body: string, status = 200, headers: Record<string, string> = {}) =>
+    new Response(body, { status, headers: { 'content-type': 'application/json', ...headers } });
+  const converse = (text: string) => json(JSON.stringify({ output: { message: { role: 'assistant', content: [{ text }] } }, stopReason: 'end_turn' }));
+  const throttled = async () => json(await fixture('bedrock-throttling.json'), 429, { 'x-amzn-ErrorType': 'ThrottlingException:http://internal.amazon.com/coral/com.amazon.bedrock/' });
+  // Fake Bedrock: answers every request with `answer` and records the signed requests.
+  const bedrock = (answer: () => Response | Promise<Response> | Promise<never>) => {
+    const f = vi.fn<(req: Request) => Promise<Response>>(async () => answer());
+    vi.stubGlobal('fetch', f);
+    return f;
+  };
+  const sent = async (f: ReturnType<typeof bedrock>) => {
+    const req = f.mock.calls[0]![0];
+    return { req, body: (await req.clone().json()) as { system?: { text: string }[]; messages: { role: string; content: Record<string, unknown>[] }[]; inferenceConfig: { maxTokens: number } } };
+  };
+  const READ_01 = {
+    payee_name: 'Laura Méndez', amount: 2500, currency: 'USD', invoice_number: '1042', issue_date: '2026-10-16', due_date: '2026-11-30',
+    concept: 'Retainer mensual de desarrollo', bank_account: 'Bancolombia ahorros 0012-3456-4821',
+    confidence: { payee_name: 0.98, amount: 0.97, currency: 0.99, invoice_number: 0.96, issue_date: 0.93, due_date: 0.92, concept: 0.9, bank_account: 0.94 },
+  };
+  const wai = () => vi.fn(async () => ({ response: good }));
+
+  describe('extractFields', () => {
+    it('Bedrock answers (a fenced JSON, recorded): the fields name Nova and Workers AI is never called', async () => {
+      const f = bedrock(async () => json(await fixture('bedrock-extract.json')));
+      const run = wai();
+      expect(await extractFields(both(run), TEXT_01)).toEqual({ ...READ_01, ...NOVA });
+      expect(f).toHaveBeenCalledTimes(1);
+      expect(run).not.toHaveBeenCalled();
+    });
+
+    it('signs a Converse call to the in-Region Nova Lite endpoint with the Worker secret, which never travels in clear', async () => {
+      const f = bedrock(async () => json(await fixture('bedrock-extract.json')));
+      await extractFields(both(wai()), TEXT_01);
+      const { req, body } = await sent(f);
+      expect([req.method, req.url, new URL(req.url).host]).toEqual(['POST', ENDPOINT, 'bedrock-runtime.us-east-2.amazonaws.com']);
+      expect(req.headers.get('authorization')).toMatch(/^AWS4-HMAC-SHA256 Credential=AKIDTESTONLY\/\d{8}\/us-east-2\/bedrock\/aws4_request, SignedHeaders=.*, Signature=[0-9a-f]{64}$/);
+      expect(JSON.stringify([...req.headers]) + JSON.stringify(body)).not.toContain(SECRET);
+      expect(body.messages).toEqual([{ role: 'user', content: [{ text: TEXT_01 }] }]); // the document is data, never the system prompt
+      expect(body.inferenceConfig.maxTokens).toBeGreaterThan(0);
+    });
+
+    it('keeps the Task 7b payee rule and the JSON schema in the Nova prompt', async () => {
+      const f = bedrock(async () => json(await fixture('bedrock-extract.json')));
+      await extractFields(both(wai()), TEXT_01);
+      const system = (await sent(f)).body.system![0]!.text;
+      expect(system).toMatch(/issued the invoice and gets paid/);
+      expect(system).toMatch(/Facturar a.*Bill to|Bill to.*Facturar a/s);
+      expect(system).toContain('"bank_account"');
+    });
+
+    it.each([
+      ['HTTP 500', () => json('{"message":"internal"}', 500)],
+      ['throttling (429 ThrottlingException)', throttled],
+      ['a network error', () => Promise.reject(new TypeError('fetch failed'))],
+      ['an answer that is not JSON', () => converse('No puedo leer esta factura.')],
+      ['an answer that breaks the schema', () => converse(JSON.stringify({ ...good, confidence: { amount: 7 } }))],
+      ['a response with no message', () => json('{}')],
+    ])('Bedrock fails with %s: Workers AI is called once and its answer is used and named', async (_n, answer) => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      bedrock(answer);
+      const run = wai();
+      expect(await extractFields(both(run), 'Factura 1042')).toEqual({ ...good, ...WAI });
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(run.mock.calls[0]).toEqual(['text-model', expect.objectContaining({ response_format: expect.objectContaining({ type: 'json_schema' }) })]);
+    });
+
+    it('Bedrock silent for 20 s: Workers AI answers', async () => {
+      vi.useFakeTimers();
+      const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+      bedrock(() => new Promise<never>(() => {}));
+      const p = extractFields(both(wai()), 'Factura 1042');
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(await p).toEqual({ ...good, ...WAI });
+      expect(log).toHaveBeenCalledWith('llm: bedrock', 'timeout');
+    });
+
+    it.each([
+      ['Bedrock 500, Workers AI out of quota', () => json('{}', 500), async () => { throw new Error(QUOTA); }],
+      ['Bedrock throttled, Workers AI unknown model', throttled, async () => { throw new Error('5007: No such model'); }],
+      ['Bedrock invalid, Workers AI down', () => converse('lo siento'), async () => { throw new Error('boom'); }],
+    ])('both fail (%s): lector_no_disponible, with no provider recorded (AC-13 Clarified)', async (_n, answer, run) => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      bedrock(answer);
+      expect(await extractFields(both(run), 'x')).toEqual(UNAVAILABLE);
+    });
+
+    it('Bedrock fails and Workers AI answers nothing usable: ilegible, as today', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      bedrock(() => json('{}', 500));
+      expect(await extractFields(both(async () => ({ response: 'lo siento' })), 'x')).toEqual(ALL_NULL);
+    });
+
+    it('without the Bedrock secrets it goes straight to Workers AI, with no request at all', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      const f = bedrock(() => json('{}'));
+      expect(await extractFields({ ...envWith(wai()), BEDROCK_MODEL_ID: 'amazon.nova-lite-v1:0', BEDROCK_REGION: 'us-east-2' } as unknown as Env, 'x'))
+        .toEqual({ ...good, ...WAI });
+      expect(f).not.toHaveBeenCalled();
+    });
+
+    it('logs only reason codes: never the secret, never the document text', async () => {
+      const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+      bedrock(throttled);
+      await extractFields(both(async () => { throw new Error(QUOTA); }), 'SECRETO factura 1042');
+      expect(log).toHaveBeenCalledWith('llm: bedrock', 'quota');
+      expect(JSON.stringify(log.mock.calls)).not.toMatch(new RegExp(`SECRETO|${SECRET}|AKIDTESTONLY`));
+    });
+
+    it('the amount guard runs on the Nova answer too, and the provider stays recorded (AC-14, R-80)', async () => {
+      bedrock(() => converse(JSON.stringify({ ...good, amount: 150 })));
+      expect(await extractFields(both(wai()), 'Subtotal: USD 100.00 / IVA: USD 19.00 / Total: USD 150.00'))
+        .toMatchObject({ amount: null, read_error: 'total_no_cuadra', ...NOVA });
+    });
+  });
+
+  describe('documentToText', () => {
+    const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 7]);
+    const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1]);
+    const b64 = (u: Uint8Array) => btoa(String.fromCharCode(...u));
+
+    it.each([['png', PNG], ['jpeg', JPEG]])('an image (%s) goes to Nova as a Converse image block; the transcription is the text', async (format, bytes) => {
+      const f = bedrock(async () => json(await fixture('bedrock-transcribe.json')));
+      const run = vi.fn();
+      const text = await documentToText(both(run), { kind: 'image', bytes: bytes.buffer as ArrayBuffer });
+      expect(text).toMatch(/^Laura Méndez\nFactura N\.º 1042/);
+      const { req, body } = await sent(f);
+      expect(req.url).toBe(ENDPOINT);
+      expect(body.messages[0]!.content).toEqual([{ image: { format, source: { bytes: b64(bytes) } } }, { text: expect.stringMatching(/transcribe/i) }]);
+      expect(run).not.toHaveBeenCalled();
+    });
+
+    it('an image Bedrock cannot read goes to the Workers AI vision model once', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      bedrock(throttled);
+      const run = vi.fn(async () => ({ response: 'Laura Méndez 2.500,00' }));
+      expect(await documentToText(both(run), { kind: 'image', bytes: PNG.buffer as ArrayBuffer })).toBe('Laura Méndez 2.500,00');
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(run).toHaveBeenCalledWith('vision-model', expect.objectContaining({ image: [...PNG] }));
+    });
+
+    it('an image neither provider reads is null (lector_no_disponible)', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      bedrock(() => json('{}', 500));
+      expect(await documentToText(both(async () => { throw new Error(QUOTA); }), { kind: 'image', bytes: PNG.buffer as ArrayBuffer })).toBeNull();
+    });
+
+    it('a PDF with an empty text layer goes to Nova as a Converse document block (R-92)', async () => {
+      const f = bedrock(async () => json(await fixture('bedrock-transcribe.json')));
+      const bytes = await readFixture('./__fixtures__/blank.pdf');
+      expect(await documentToText(both(vi.fn()), { kind: 'pdf', bytes })).toMatch(/^Laura Méndez/);
+      const content = (await sent(f)).body.messages[0]!.content;
+      expect(content).toEqual([{ document: { format: 'pdf', name: 'factura', source: { bytes: b64(new Uint8Array(bytes)) } } }, { text: expect.any(String) }]);
+    });
+
+    it('a PDF with a text layer sends the text only: no model call', async () => {
+      const f = bedrock(() => json('{}'));
+      const run = vi.fn();
+      expect(await documentToText(both(run), { kind: 'pdf', bytes: await readFixture('./__fixtures__/simple.pdf') })).toContain('Laura Méndez');
+      expect(f).not.toHaveBeenCalled();
+      expect(run).not.toHaveBeenCalled();
+    });
+
+    it('a PDF with no text layer that Nova cannot read is null: Workers AI cannot read PDF pages', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      bedrock(throttled);
+      const run = vi.fn();
+      expect(await documentToText(both(run), { kind: 'pdf', bytes: await readFixture('./__fixtures__/blank.pdf') })).toBeNull();
+      expect(run).not.toHaveBeenCalled();
+    });
+  });
+
+  // AC-67: the grounded answer. The route (Task 23) builds the context and takes the quota.
+  describe('answerQuestion', () => {
+    const CONTEXT = 'Factura 1042 de Laura Méndez · FRENAR · Límite por pago: 2.500 USD supera 2.000 USD → no cumple';
+    const Q = '¿por qué frenaste esta factura?';
+    const waiAnswer = (answer: unknown) => vi.fn(async () => ({ response: { answer } }));
+
+    it('Bedrock answers (recorded): the answer and the provider that gave it', async () => {
+      const f = bedrock(async () => json(await fixture('bedrock-answer.json')));
+      const run = vi.fn();
+      expect(await answerQuestion(both(run), CONTEXT, Q, 'es'))
+        .toEqual({ answer: 'La frené porque el monto supera el límite por pago de la política.', provider: 'Amazon Nova Lite (AWS Bedrock)' });
+      expect(run).not.toHaveBeenCalled();
+      const { req, body } = await sent(f);
+      expect(req.url).toBe(ENDPOINT);
+      expect(req.headers.get('authorization')).toMatch(/^AWS4-HMAC-SHA256 /);
+      expect(body.system).toEqual([{ text: ASK_SYSTEM('es') }]);
+      expect(body.messages).toEqual([{ role: 'user', content: [{ text: askMessage(CONTEXT, Q) }] }]);
+    });
+
+    it('the prompt holds only the context and the question, and says what to answer when the record lacks it', () => {
+      expect(askMessage(CONTEXT, Q)).toBe(`<registro>\n${CONTEXT}\n</registro>\n<pregunta>\n${Q}\n</pregunta>`);
+      expect(ASK_SYSTEM('es')).toContain('No tengo ese dato en el registro.');
+      expect(ASK_SYSTEM('en')).toContain('That is not in the record.');
+      expect(ASK_SYSTEM('es')).toMatch(/never approve, pay/);
+      expect(ASK_SYSTEM('en')).toMatch(/in English/);
+      expect(ASK_SYSTEM('es')).toMatch(/en español/);
+    });
+
+    it('Bedrock fails: one Workers AI attempt with a JSON schema, named in the result', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      bedrock(() => json('{}', 500));
+      const run = waiAnswer('Porque supera el límite.');
+      expect(await answerQuestion(both(run), CONTEXT, Q, 'es')).toEqual({ answer: 'Porque supera el límite.', provider: 'Workers AI · text-model' });
+      expect(run).toHaveBeenCalledTimes(1);
+      const [name, input] = run.mock.calls[0] as unknown as [string, { messages: unknown[]; response_format: { type: string } }];
+      expect(name).toBe('text-model');
+      expect(input.response_format.type).toBe('json_schema');
+      expect(input.messages).toEqual([{ role: 'system', content: ASK_SYSTEM('es') }, { role: 'user', content: askMessage(CONTEXT, Q) }]);
+    });
+
+    it.each([
+      ['Bedrock 429 ThrottlingException, Workers AI 4006', throttled, async () => { throw new Error(QUOTA); }],
+      ['Bedrock 429, Workers AI 429', () => json('{}', 429), async () => { throw new Error('AiError: 429 Too Many Requests'); }],
+    ])('both refuse for quota (%s): ai_quota', async (_n, answer, run) => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      bedrock(answer);
+      expect(await answerQuestion(both(run), CONTEXT, Q, 'en')).toEqual({ reason: 'ai_quota' });
+    });
+
+    it.each([
+      ['Bedrock throttled, Workers AI throws', throttled, async () => { throw new Error('boom'); }],
+      ['Bedrock HTTP 500, Workers AI 4006', () => json('{}', 500), async () => { throw new Error(QUOTA); }],
+      ['both throw', () => Promise.reject(new TypeError('fetch failed')), async () => { throw new Error('boom'); }],
+      ['both answer invalid JSON', () => converse('claro que sí'), async () => ({ response: 'claro que sí' })],
+      ['both answer over 1.200 characters', () => converse(JSON.stringify({ answer: 'a'.repeat(1201) })), async () => ({ response: { answer: 'a'.repeat(1201) } })],
+      ['both answer an empty string', () => converse('{"answer":""}'), async () => ({ response: { answer: '' } })],
+    ])('anything else (%s): failed', async (_n, answer, run) => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      bedrock(answer);
+      expect(await answerQuestion(both(run), CONTEXT, Q, 'es')).toEqual({ reason: 'failed' });
+    });
+
+    it('both silent for 20 s: failed', async () => {
+      vi.useFakeTimers();
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      bedrock(() => new Promise<never>(() => {}));
+      const p = answerQuestion(both(() => new Promise(() => {})), CONTEXT, Q, 'es');
+      await vi.advanceTimersByTimeAsync(40_000);
+      expect(await p).toEqual({ reason: 'failed' });
+    });
   });
 });

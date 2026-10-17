@@ -10,6 +10,8 @@ SUPABASE_URL = "https://dhjumvswohajnusdifim.supabase.co"  # public
 SUPABASE_ANON_KEY = "sb_publishable_qKF4nId7_l5TJ78gSEAgWQ_bfZiFx4K"     # public by design; RLS protects data
 WORKERS_AI_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"  # product LLM; change here, not in code
 WORKERS_AI_VISION_MODEL = "@cf/meta/llama-3.2-11b-vision-instruct"
+BEDROCK_MODEL_ID = "amazon.nova-lite-v1:0"  # AC-89 primary reader; Workers AI above is the fallback
+BEDROCK_REGION = "us-east-2"
 SES_REGION = "us-east-2"
 JEV_ENABLED = "false"
 DEMO_EMAIL = "demo@andina-labs.example"
@@ -27,4 +29,4 @@ directory = "./dist"
 not_found_handling = "single-page-application"
 run_worker_first = ["/api/*"]
 
-# Secrets (wrangler secret put): AWS_SES_ACCESS_KEY_ID, AWS_SES_SECRET_ACCESS_KEY, SES_FROM_EMAIL, SUPABASE_SERVICE_ROLE_KEY, APPROVAL_HMAC_SECRET. Legacy: RESEND_API_KEY, SUPABASE_POOLER_URL. Optional: TYPESAFE_API_KEY, ANTHROPIC_API_KEY
+# Secrets (wrangler secret put): AWS_BEDROCK_ACCESS_KEY_ID, AWS_BEDROCK_SECRET_ACCESS_KEY, AWS_SES_ACCESS_KEY_ID, AWS_SES_SECRET_ACCESS_KEY, SES_FROM_EMAIL, SUPABASE_SERVICE_ROLE_KEY, APPROVAL_HMAC_SECRET. Legacy: RESEND_API_KEY, SUPABASE_POOLER_URL. Optional: TYPESAFE_API_KEY, ANTHROPIC_API_KEY

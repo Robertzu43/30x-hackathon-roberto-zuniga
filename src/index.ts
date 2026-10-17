@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { scheduled } from './agent/scheduled';
 import type { Env } from './env';
 import { agent } from './routes/agent';
+import { ask } from './routes/ask';
 import { beneficiaries } from './routes/beneficiaries';
 import { demo } from './routes/demo';
 import { fx } from './routes/fx';
@@ -21,6 +22,7 @@ app.route('/api/company', company);
 app.route('/api/beneficiaries', beneficiaries);
 app.route('/api/period', period);
 app.route('/api/agent', agent);
+app.route('/api/ask', ask); // Task 23: «Pregúntale a Thesaurus» (AC-67)
 app.route('/api/demo', demo); // Task 10: public overview (AC-45) and Reiniciar demo (AC-47)
 app.route('/api/fx', fx); // Task 21: stored market rates (AC-73, AC-76)
 app.route('/api', approvals); // Task 9: approval links and dashboard answers

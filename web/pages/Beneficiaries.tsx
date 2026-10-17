@@ -1,15 +1,150 @@
-// Placeholder: Task 14 replaces this file wholesale (keep the route export and the data-tour=beneficiaries anchor).
+import { useEffect, useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import type { PageRoute } from '../App';
+import type { Beneficiary } from '../../src/engine/types';
+import { api } from '../api';
 import { useT } from '../i18n';
+import '../policy.css';
+import { failure, send } from '../withField';
 
 export const route: PageRoute = { path: '/beneficiaries', nav: { key: 'screen.beneficiaries', order: 30 } };
 
+type Row = Beneficiary & { country: string | null };
+// The seven Blinka payment routes (AC-33). A directory row may hold another value (the seed does); editing keeps it.
+const ROUTES = ['ACH', 'Wire', 'SWIFT', 'Pix', 'CBU', 'Transferencia COP', 'USDC'];
+const TYPES = ['retainer', 'hourly', 'subscription', 'one_off'] as const;
+const TEXT = ['name', 'country', 'currency', 'bank_account', 'category'] as const;
+
+const toForm = (b?: Row) => ({
+  name: b?.name ?? '', country: b?.country ?? '', currency: b?.currency ?? '', bank_account: b?.bank_account ?? '', route: b?.route ?? '',
+  category: b?.category ?? '', type: b?.agreement?.type ?? '', amount_usd: String(b?.agreement?.amount_usd ?? ''),
+  cap_usd: String(b?.agreement?.cap_usd ?? ''), period: b?.agreement?.period ?? '', valid_until: b?.agreement?.valid_until ?? '',
+});
+
 export default function Beneficiaries() {
-  const { t } = useT();
+  const { t, locale } = useT();
+  const [rows, setRows] = useState<Row[] | null>(null);
+  const [f, setF] = useState(toForm());
+  const [editing, setEditing] = useState<Row | null>(null);
+  const [err, setErr] = useState<ReturnType<typeof failure> | null>(null);
+  const [saved, setSaved] = useState(false);
+  const load = () => api.get<Row[]>('/api/beneficiaries').then(setRows);
+  useEffect(() => void load().catch((e) => setErr(failure(e))), []);
+
+  const edit = (b: Row | null) => {
+    setEditing(b);
+    setF(toForm(b ?? undefined));
+    setErr(null);
+    setSaved(false);
+  };
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setErr(null);
+    setSaved(false);
+    const opt = (s: string) => s.trim() || null;
+    const agreement = !f.type ? null : {
+      type: f.type,
+      ...(f.amount_usd.trim() && { amount_usd: Number(f.amount_usd) }),
+      ...(f.cap_usd.trim() && { cap_usd: Number(f.cap_usd) }),
+      ...(f.period && { period: f.period }),
+      ...(f.valid_until && { valid_until: f.valid_until }),
+    };
+    const data = { name: f.name.trim(), country: opt(f.country), currency: opt(f.currency), bank_account: opt(f.bank_account), route: opt(f.route), category: opt(f.category), agreement };
+    try {
+      await (editing ? send('PUT', `/api/beneficiaries/${editing.id}`, data) : send('POST', '/api/beneficiaries', data));
+      edit(null);
+      setSaved(true);
+      await load();
+    } catch (x) {
+      setErr(failure(x));
+    }
+  };
+
+  const bad = (k: string) => (err?.field === k ? true : undefined);
+  const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
+  const money = (n: number) => `${n.toLocaleString(locale)} USD`;
+  const agreement = (a: Row['agreement']) => (a ? [t(`ben.agreement.${a.type}`), a.amount_usd && money(a.amount_usd), a.cap_usd && `≤ ${money(a.cap_usd)}`].filter(Boolean).join(' · ') : '—');
+  const routes = f.route && !ROUTES.includes(f.route) ? [...ROUTES, f.route] : ROUTES;
+
   return (
-    <section data-tour="beneficiaries">
+    <section data-tour="beneficiaries" className="beneficiaries">
       <h1>{t('screen.beneficiaries')}</h1>
-      <p className="muted">{t('screen.pending')}</p>
+      <p className="muted">{t('ben.intro')}</p>
+
+      <section className="card table-wrap">
+        {!rows && !err && <p className="muted">{t('policy.loading')}</p>}
+        {!rows && err && <p role="alert" className="error">{t('ben.load_error')}</p>}
+        {rows?.length === 0 && <p className="muted">{t('ben.empty')}</p>}
+        {!!rows?.length && (
+          <table>
+            <thead>
+              <tr>{['name', 'country', 'currency', 'route', 'category', 'agreement'].map((c) => <th key={c}>{t(`ben.col.${c}`)}</th>)}<th /></tr>
+            </thead>
+            <tbody>
+              {rows.map((b) => (
+                <tr key={b.id}>
+                  <td>{b.name}</td>
+                  <td>{b.country ?? '—'}</td>
+                  <td>{b.currency ?? '—'}</td>
+                  <td>{b.route ?? '—'}</td>
+                  <td>{b.category ?? '—'}</td>
+                  <td>{agreement(b.agreement)}</td>
+                  <td><button type="button" aria-label={`${t('ben.edit')} ${b.name}`} onClick={() => edit(b)}>{t('ben.edit')}</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      <section className="card" aria-labelledby="ben-form-h">
+        <h2 id="ben-form-h">{editing ? t('ben.edit_title', { name: editing.name }) : t('ben.new_title')}</h2>
+        <form onSubmit={submit} noValidate>
+          <div className="grid">
+            {TEXT.map((k) => (
+              <label key={k}>{t(`ben.${k}`)}
+                <input value={f[k]} aria-invalid={bad(k)} maxLength={k === 'country' ? 2 : k === 'currency' ? 3 : 200}
+                  onChange={(e) => setF({ ...f, [k]: k === 'country' || k === 'currency' ? e.target.value.toUpperCase() : e.target.value })} />
+              </label>
+            ))}
+            <label>{t('ben.route')}
+              <select value={f.route} aria-invalid={bad('route')} onChange={set('route')}>
+                <option value="">{t('ben.route.none')}</option>
+                {routes.map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </label>
+            <label>{t('ben.agreement.type')}
+              <select value={f.type} aria-invalid={bad('agreement')} onChange={set('type')}>
+                <option value="">{t('ben.agreement.none')}</option>
+                {TYPES.map((k) => <option key={k} value={k}>{t(`ben.agreement.${k}`)}</option>)}
+              </select>
+            </label>
+            {f.type && (
+              <>
+                <label>{t('ben.agreement.amount_usd')}
+                  <input type="number" min="0" step="any" value={f.amount_usd} aria-invalid={bad('agreement')} onChange={set('amount_usd')} />
+                </label>
+                <label>{t('ben.agreement.cap_usd')}
+                  <input type="number" min="0" step="any" value={f.cap_usd} aria-invalid={bad('agreement')} onChange={set('cap_usd')} />
+                </label>
+                <label>{t('ben.agreement.period')}
+                  <select value={f.period} aria-invalid={bad('agreement')} onChange={set('period')}>
+                    <option value="" />
+                    <option value="monthly">{t('ben.agreement.monthly')}</option>
+                  </select>
+                </label>
+                <label>{t('ben.agreement.valid_until')}
+                  <input type="date" value={f.valid_until} aria-invalid={bad('agreement')} onChange={set('valid_until')} />
+                </label>
+              </>
+            )}
+          </div>
+          <button className="primary">{t('ben.save')}</button>
+          {editing && <button type="button" onClick={() => edit(null)}>{t('ben.cancel')}</button>}
+          {err && rows && <p role="alert" className="error">{err.text}</p>}
+          {saved && <p role="status">{t('ben.saved')} <Link to="/policy">{t('ben.go_policy')}</Link>.</p>}
+        </form>
+      </section>
     </section>
   );
 }

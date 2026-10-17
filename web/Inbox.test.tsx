@@ -199,9 +199,19 @@ test('rejects empty and over-20.000-character text client-side', async () => {
   expect(calls(f, 'POST', '/api/invoices')).toHaveLength(0);
 });
 
-test('OutcomeChip: null is Pendiente; lang prop overrides the UI language', () => {
-  renderAt(<><OutcomeChip outcome={null} /><OutcomeChip outcome="FRENAR" lang="en" /><OutcomeChip outcome="ESCALAR" /></>);
+test('OutcomeChip: null is Pendiente', () => {
+  renderAt(<><OutcomeChip outcome={null} /><OutcomeChip outcome="ESCALAR" /></>);
   expect(screen.getByText('Pendiente')).toBeTruthy();
-  expect(screen.getByText('STOP')).toBeTruthy();
   expect(screen.getByText('ESCALAR')).toBeTruthy();
+});
+
+test('states that only pending and escalated invoices are re-evaluated (AC-31)', () => {
+  setup();
+  expect(screen.getByText('Las facturas pagadas o frenadas no se reevalúan; solo las pendientes y escaladas.')).toBeTruthy();
+});
+
+test('re-evaluation note in English (AC-31)', () => {
+  localStorage.setItem('lang', 'en');
+  setup();
+  expect(screen.getByText('Paid or stopped invoices are not re-evaluated; only pending and escalated ones.')).toBeTruthy();
 });

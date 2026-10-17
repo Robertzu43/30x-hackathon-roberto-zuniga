@@ -61,6 +61,7 @@ export default function Inbox() {
               })}
         </p>
       )}
+      <p className="muted">{t('inbox.reevaluate_note')}</p>
       <RunProgress run={run} mode="pending" />
       {adding && <NewInvoice />}
 

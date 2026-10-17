@@ -4,6 +4,8 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { Route, Routes } from 'react-router-dom';
 import { beforeEach, expect, test, vi } from 'vitest';
 import App from './App';
+import Demo from './pages/Demo';
+import Login from './pages/Login';
 import { useSession } from './auth';
 import LeaveTrialWarning, { useLeaveGuard } from './components/LeaveTrialWarning';
 import TrialButton from './components/TrialButton';
@@ -216,4 +218,64 @@ test('the warning never shows a blank company: before the name loads it says «t
   // Until Task 41's dialog exists there is no save button, so keeping the session is the primary.
   expect(screen.queryByRole('button', { name: 'Save my access' })).toBeNull();
   expect(screen.getByRole('button', { name: 'Cancel' }).className).toBe('primary');
+});
+
+// The mounts (AC-92, AC-94, AC-40 and AC-45 Clarified; R-119, R-120): the door is THE primary on /login and /demo.
+const OVERVIEW = { invoices: [], period: { autonomy: { n: 0, m: 0 }, autonomy_pct: null, violations: 0, explained_pct: 100 } };
+const page = (at: '/login' | '/demo') =>
+  renderAt(
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route path="/demo" element={<Demo />} />
+      <Route path="/" element={<p>Bandeja abierta</p>} />
+    </Routes>,
+    { at },
+  );
+const primaries = () => [...document.querySelectorAll('button.primary')].map((b) => b.textContent);
+
+test.each([
+  ['/login', 'Enviar código'],
+  ['/demo', 'Entrar como Andina Labs'],
+] as const)('on %s the door is the one primary and «%s» is secondary (AC-92, R-120)', (at, secondary) => {
+  mockApi({ 'GET /api/demo/overview': OVERVIEW });
+  page(at);
+  expect(primaries()).toEqual(['Probar con mi propia empresa']);
+  expect(screen.getByRole('button', { name: secondary }).className).not.toContain('primary');
+  expect(screen.getByText('Tu propia copia de Andina Labs, privada, sin correo ni contraseña.')).toBeTruthy();
+});
+
+test('the door on /demo starts the trial and opens Bandeja (AC-92)', async () => {
+  mockApi({ 'GET /api/demo/overview': OVERVIEW, [RUN]: { PAGAR: 0, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null } });
+  page('/demo');
+  fireEvent.click(screen.getByRole('button', { name: 'Probar con mi propia empresa' }));
+  expect(await screen.findByText('Bandeja abierta')).toBeTruthy();
+  expect(auth.signInAnonymously).toHaveBeenCalledOnce();
+});
+
+test('on the code step the user chose email: «Entrar» is the one primary (AC-40 unchanged)', async () => {
+  mockApi();
+  page('/login');
+  fireEvent.change(screen.getByLabelText('Correo'), { target: { value: 'ana@empresa.co' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Enviar código' }));
+  await screen.findByLabelText('Código de 6 dígitos');
+  expect(primaries()).toEqual(['Entrar']);
+});
+
+test.each([
+  ['/login', '«Enviar código»', () => {
+    fireEvent.change(screen.getByLabelText('Correo'), { target: { value: 'ana@empresa.co' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar código' }));
+  }, () => fakeAuth.signInWithOtp],
+  ['/demo', '«Entrar como Andina Labs»', () => fireEvent.click(screen.getByRole('button', { name: 'Entrar como Andina Labs' })), () => fakeAuth.signInWithPassword],
+] as const)('on %s an unsaved trial gets «Volver…» as the primary, and %s warns first (AC-94, R-119)', async (at, _, act, signIn) => {
+  anonymous();
+  mockApi({ ...COMPANY, 'GET /api/demo/overview': OVERVIEW });
+  page(at);
+  await screen.findByRole('button', { name: 'Volver a mi empresa de prueba' }); // the session loads after the first paint
+  expect(primaries()).toEqual(['Volver a mi empresa de prueba']);
+  act();
+  const dialog = await screen.findByRole('alertdialog');
+  expect(signIn()).not.toHaveBeenCalled();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Salir de todos modos' }));
+  await waitFor(() => expect(signIn()).toHaveBeenCalledOnce());
 });

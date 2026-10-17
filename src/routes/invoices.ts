@@ -103,7 +103,10 @@ export const invoices = memberRoutes()
     }
     c.var.budget.count(); // the Workers AI reader (R-56)
     const fields = await extractFields(c.env, text);
-    must(await db.from('invoices').insert({ id, company_id: companyId, source, file_path: filePath, raw_text: text?.slice(0, 20000) ?? null, fields })); // R-88: files too
+    const stored = await db.from('invoices').insert({ id, company_id: companyId, source, file_path: filePath, raw_text: text?.slice(0, 20000) ?? null, fields }); // R-88: files too
+    // R-133: the database's own trial cap (migration 001200) refused it; same answer as the count above, never a 500.
+    if (stored.error?.message === 'TRIAL_INVOICE_LIMIT') return c.json({ error: trialText[c.var.lang]['trial_record.ingest_cap'] }, 429);
+    must(stored);
     // One invoice always fits the budget. If the agent cannot run, the invoice is stored and pending: the cron decides it (R-60).
     await runAgent({ db, env: c.env, budget: c.var.budget }, companyId, [id], 'ingest')
       .catch((e) => console.error('agent: ingest not decided', id, e instanceof Error ? e.message : e));

@@ -1618,6 +1618,21 @@ describe('trial companies (D41; AC-93, AC-96; R-115, R-116, R-117)', () => {
     expect(await r.json()).toEqual({ error: 'You reached the limit of 30 invoices a day in your trial company. It renews at 19:00 Bogotá time (00:00 UTC).' });
   });
 
+  it('an insert the database refuses with TRIAL_INVOICE_LIMIT -> the same 429, nothing stored, no agent run (R-133)', async () => {
+    db = testDb(trial());
+    const from = db.from;
+    db.from = (t: string) => (t === 'invoices'
+      ? Object.assign(from(t), { insert: async () => ({ data: null, error: { code: 'P0001', message: 'TRIAL_INVOICE_LIMIT' } }) })
+      : from(t));
+    const invoices = db.tables.invoices!.length;
+    const r = await paste('tok-t');
+    expect(r.status).toBe(429);
+    expect(await r.json()).toEqual({ error: 'Llegaste al límite de 30 facturas por día en tu empresa de prueba. Se renueva a las 19:00, hora de Bogotá.' });
+    expect(db.tables.invoices!.length).toBe(invoices);
+    expect(db.tables.decisions ?? []).toEqual([]);
+    expect(db.tables.agent_runs ?? []).toEqual([]);
+  });
+
   it('a user whose company is not a trial is not capped: no ingest count is taken', async () => {
     db = testDb(workspace([]));
     for (let i = 0; i < 31; i++) expect((await paste('tok-a')).status).toBe(201);

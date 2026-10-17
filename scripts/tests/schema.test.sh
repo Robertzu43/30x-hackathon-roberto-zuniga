@@ -93,6 +93,15 @@ for w in 'create or replace function public.screen_period() returns jsonb' 'crea
   'create function public.screen_beneficiary(p_id uuid) returns jsonb' 'grant execute on function public.screen_beneficiary(uuid) to authenticated;'; do
   echo "$dash" | grep -qF "$w" || fail "dashboard migration lacks: $w (AC-98, AC-104)"; done
 
+# Task 39c (AC-96 Clarified, R-133; AC-07): the trial invoice cap in the database, one additive security-invoker trigger
+CAP=supabase/migrations/20261017001200_trial_invoice_cap.sql
+[ -f "$CAP" ] || fail "missing $CAP"
+cap=$(sed 's/--.*$//' "$CAP")
+echo "$cap" | grep -qiE '\b(drop|delete|truncate)\b' && fail "drop, delete or truncate in the cap migration (AC-07)"
+echo "$cap" | grep -qi 'security definer' && fail "the cap function is security definer: current_user would be its owner (R-133)"
+for w in "set search_path = ''" 'pg_advisory_xact_lock' 'TRIAL_INVOICE_LIMIT' 'before insert on public.invoices'; do
+  echo "$cap" | grep -qF "$w" || fail "cap migration lacks: $w (AC-96, R-133)"; done
+
 # ---- Part 2: execute against a real Postgres ----
 INITDB=$(command -v initdb || ls /usr/lib/postgresql/*/bin/initdb 2>/dev/null | sort -V | tail -1)
 [ -x "$INITDB" ] || { echo "schema.test: greps passed; no local Postgres, SQL not executed"; exit 0; }
@@ -314,6 +323,29 @@ got=$(for i in $(seq 1 31); do take "qa:ingest:t39"; done | tail -2 | tr '\n' ' 
 [ "$(take "ingest:$T1")" = '{"remaining": 29}' ] || fail "ingest:<user id> key not counted apart (AC-96)"
 expect svc "select n from public.ai_usage where key = 'global' and day = (now() at time zone 'utc')::date" '^1$' "ingests counted on the question cap (AC-96)"
 expect svc "select public.take_question('ingest')" 'BAD_KEY' "a bare ingest key"
+# AC-96 Clarified, R-133: a trial company's members insert at most 30 invoices per UTC day through any path, REST included.
+# Seeded rows carry expected_outcome, so a fresh trial has all 30; the service role and non-trial companies are never capped.
+fn=$(sql -c "select p.proconfig::text from pg_trigger t join pg_proc p on p.oid = t.tgfoid where t.tgrelid = 'public.invoices'::regclass and t.tgname = 'invoices_trial_cap'")
+[ "$fn" = '{"search_path=\"\""}' ] || fail "no invoices_trial_cap trigger with an empty search_path (got: $fn) (R-133)"
+C1=$(sql -c "select company_id from public.company_members where user_id = '$T1'") C2=$(sql -c "select company_id from public.company_members where user_id = '$T2'")
+ins(){ printf "insert into public.invoices (company_id, source, raw_text) select '%s', 'chat', 'qa-cap' from generate_series(1, %s)" "$1" "$2"; }
+qa(){ sql -c "select count(*) from public.invoices where company_id = '$1' and raw_text = 'qa-cap'"; }
+expect "$T1" "$(ins "$C1" 30); select 1" '^1$' "a fresh trial's 30 member inserts (AC-96)"
+expect "$T1" "$(ins "$C1" 1)" 'TRIAL_INVOICE_LIMIT' "the 31st member insert of a trial (AC-96)"
+[ "$(qa "$C1")" = 30 ] || fail "the refused insert stored a row (AC-96)"
+expect svc "$(ins "$C1" 2); select 1" '^1$' "a service-role insert into a capped trial (R-133)"
+expect "$T2" "$(ins "$C2" 31)" 'TRIAL_INVOICE_LIMIT' "31 member rows in one statement (AC-96)"
+[ "$(qa "$C2")" = 0 ] || fail "a refused statement stored rows (AC-96)"
+expect "$UA" "$(ins "$CA" 31); select 1" '^1$' "a non-trial company capped (AC-96)"
+sql -c "update public.invoices set received_at = now() - interval '1 day' where company_id = '$C1' and raw_text = 'qa-cap'" >/dev/null
+expect "$T1" "$(ins "$C1" 1); select 1" '^1$' "yesterday's invoices count on today's cap (UTC day)"
+expect svc "insert into public.invoices (company_id, source, raw_text, origin) select '$C1', 'pdf', 'portal', 'portal' from generate_series(1, 30); select 1" '^1$' "30 portal invoices"
+expect "$T1" "$(ins "$C1" 1); select 1" '^1$' "portal invoices count on a member's cap (R-133)"
+# Two members at row 29: the second waits for the first's company lock, then counts 30 and is refused (never 31)
+expect "$T2" "$(ins "$C2" 29); select 1" '^1$' "29 member inserts"
+as "$T2" "begin; $(ins "$C2" 1); select pg_sleep(1.5); commit;" >"$D/c1" &
+sleep 0.5; expect "$T2" "$(ins "$C2" 1)" 'TRIAL_INVOICE_LIMIT' "a concurrent 31st insert ignored the lock (R-133)"
+wait; [ "$(qa "$C2")" = 30 ] || fail "concurrent inserts reached $(qa "$C2") (R-133): $(cat "$D/c1")"
 # AC-98, R-122: every screen_* function is security invoker, stable (read-only), executable by authenticated only; each
 # finds the company from auth.uid()'s membership, so RLS and the member's own company decide every row
 scr="pronamespace = 'public'::regnamespace and proname like 'screen\\_%'"

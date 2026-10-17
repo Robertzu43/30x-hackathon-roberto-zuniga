@@ -179,11 +179,11 @@ describe('scripts/seed-demo-user.mjs (AC-46, R-18)', () => {
       `createUser ${JSON.stringify({ email: 'demo@andina-labs.example', password: PASSWORD, email_confirm: true, user_metadata: { lang: 'es' } })}`,
       `updateUserById u-new ${JSON.stringify({ password: PASSWORD })}`,
       'select company_members {"user_id":"u-new"}',
-      'update companies {"id":"C-demo"} {"is_demo":true,"approver_email":"roberto@heartbeat.example","name":"Andina Labs Inc."}',
+      'update companies {"id":"C-demo"} {"is_demo":true,"approver_email":"roberto@heartbeat.example","name":"Andina Labs Inc.","portal_slug":"andina-labs"}',
       `signIn demo@andina-labs.example ${PASSWORD}`,
       'POST https://app.test/api/invoices/run Bearer tok-demo {}',
     ]);
-    expect(companies[0]).toMatchObject({ is_demo: true, approver_email: 'roberto@heartbeat.example', name: 'Andina Labs Inc.' });
+    expect(companies[0]).toMatchObject({ is_demo: true, approver_email: 'roberto@heartbeat.example', name: 'Andina Labs Inc.', portal_slug: 'andina-labs' }); // AC-86
   });
 
   it('on a re-run finds the existing user (any case), never creates or deletes, and resets the password (R-18)', async () => {

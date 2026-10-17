@@ -381,6 +381,12 @@ describe('rindeCuentas (AC-63)', () => {
       { company_id: 'A', trigger: 'manual', decided: { PAGAR: 0, FRENAR: 0, ESCALAR: 0 }, errors: 0 },
     ]);
   });
+
+  it('a portal intake run records trigger ingest with via portal (AC-63 Clarified, R-90)', async () => {
+    db = fakeDb(workspace('A', { only: ['01'] }));
+    await runAgent(deps(), 'A', ['A-01'], 'ingest', null, 'portal');
+    expect(db.tables.agent_runs).toEqual([{ company_id: 'A', trigger: 'ingest', decided: { PAGAR: 1, FRENAR: 0, ESCALAR: 0 }, errors: 0, via: 'portal' }]);
+  });
 });
 
 describe('budgeted, resumable runs (R-56, R-57, AC-70)', () => {

@@ -39,7 +39,8 @@ export async function main({ admin, anon, fetch, appUrl, demoEmail, approverEmai
   must(await admin.auth.admin.updateUserById(user.id, { password: DEMO_PASSWORD }), 'updateUserById'); // R-18
   const { company_id } = must(await admin.from('company_members').select('company_id').eq('user_id', user.id).single(), 'company_members');
   // Service role: members cannot write is_demo or any column of the demo row (R-15, R-31); this script is its writer.
-  must(await admin.from('companies').update({ is_demo: true, approver_email: approverEmail, name: 'Andina Labs Inc.' }).eq('id', company_id), 'companies');
+  // AC-86: the demo's vendor portal is .../andina-labs; every other company keeps its random p-<12 hex> slug.
+  must(await admin.from('companies').update({ is_demo: true, approver_email: approverEmail, name: 'Andina Labs Inc.', portal_slug: 'andina-labs' }).eq('id', company_id), 'companies');
   const { session } = must(await anon.auth.signInWithPassword({ email: demoEmail, password: DEMO_PASSWORD }), 'demo sign-in');
   // The same call loop as the browser (R-60): each call decides what fits; go on with its cursor until it is null, it
   // makes no progress, or 20 calls. Only a non-2xx fails the script.

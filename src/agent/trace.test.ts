@@ -32,8 +32,8 @@ const stored = (d: Decision, p: Partial<StoredDecision> = {}): StoredDecision =>
   amount_usd: d.amount_usd, payment: d.payment, note: null, created_at: NOW, ...p,
 });
 const text = (steps: TraceStep[]) => steps.map((s, n) => `${n + 1}. ${s.text}`).join(' ');
-const trace = (i: Invoice, decisions: StoredDecision[], o: { isDemo?: boolean; notification?: typeof SENT | null } = {}, lang: 'es' | 'en' = 'es') =>
-  agentTrace({ invoice: i, decisions, isDemo: o.isDemo ?? false, notification: o.notification ?? null }, lang);
+const trace = (i: Invoice, decisions: StoredDecision[], o: { isDemo?: boolean; isTrial?: boolean; notification?: typeof SENT | null } = {}, lang: 'es' | 'en' = 'es') =>
+  agentTrace({ invoice: i, decisions, isDemo: o.isDemo ?? false, isTrial: o.isTrial ?? false, notification: o.notification ?? null }, lang);
 const escalated = () => {
   const i = inv(NUBE);
   return { i, d: stored(run(i), { question_es: QUESTION, question_en: 'Roberto, invoice #2044 … Should I pay it?' }) };
@@ -93,6 +93,21 @@ describe('agentTrace "Lo que hice" (AC-64, D24, R-29)', () => {
   it('ESCALAR on the demo company sends no email (R-15)', () => {
     const { i, d } = escalated();
     expect(trace(i, [d], { isDemo: true })[4]?.text).toBe('Empresa demo: la pregunta quedó en el tablero, sin correo.');
+  });
+  it('ESCALAR on a trial company sends no email, es and en (AC-64 Clarified, R-115)', () => {
+    const { i, d } = escalated();
+    expect(trace(i, [d], { isTrial: true })[4]?.text).toBe('Empresa de prueba: la pregunta quedó en el tablero, sin correo.');
+    expect(trace(i, [d], { isTrial: true }, 'en')[4]?.text).toBe('Trial company: the question stays on the dashboard, no email sent.');
+  });
+  it('a guest\'s answer names «Invitado <8 hex>» where an email would go, es and en (AC-64 Clarified, R-116)', () => {
+    const { i, d } = escalated();
+    const by = { email: 'invitado:3f9a1c2b', channel: 'dashboard' as const };
+    const a = decideWithOverrides(['umbral_aprobacion'], by, i, findBeneficiary('Nube Sur LLC', DIRECTORY), RULES, EMPTY, NOW);
+    const h = stored(a, { id: 'd2', seq: 2, actor: 'human', actor_email: by.email, channel: 'dashboard' });
+    const r = stored(run(i), { id: 'd3', seq: 2, outcome: 'FRENAR', actor: 'human', actor_email: by.email, channel: 'dashboard' });
+    expect(trace(i, [d, h], { isTrial: true })[5]?.text).toBe('Invitado 3f9a1c2b aprobó en el tablero; volví a verificar las reglas y el resultado es PAGAR.');
+    expect(trace(i, [d, h], { isTrial: true }, 'en')[5]?.text).toBe('Guest 3f9a1c2b approved on the dashboard; I checked the rules again and the result is PAY.');
+    expect(trace(i, [d, r], { isTrial: true })[5]?.text).toBe('Invitado 3f9a1c2b rechazó en el tablero; el resultado es FRENAR y no preparé orden de pago.');
   });
   it('ESCALAR with no recorded send does not claim one', () => {
     const { i, d } = escalated();

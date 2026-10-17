@@ -142,16 +142,18 @@ approvals.post('/approve/:token', async (c) => {
   return c.json({ decision: r });
 });
 
-// Dashboard "Aprobar" / "Rechazar": actor_email from the verified JWT (AC-37); writes no approval_uses row (AC-36).
+// Dashboard "Aprobar" / "Rechazar": actor_email from the verified JWT (AC-37, R-116); writes no approval_uses row (AC-36).
 for (const action of ['approve', 'reject'] as const) {
   approvals.post(`/invoices/:id/${action}`, requireUser, async (c) => {
     if (!isUuid(c.req.param('id'))) return refuse(c, 'not_found'); // R-74: as an unknown id, no lookup
     const body = await bodyOf(c);
     if (!body) return refuse(c, 'bad_request');
     const { db, companyId, user } = c.var;
-    if (!user.email) return c.json({ error: 'No autorizado' }, 401);
+    // R-116: an anonymous (trial) user answers as invitado:<first 8 hex of its id>, from the verified JWT.
+    const email = user.email || (user.is_anonymous ? `invitado:${user.id.slice(0, 8)}` : '');
+    if (!email) return c.json({ error: 'No autorizado' }, 401);
     const r = await answer({ db, record: recorder(c.env, companyId), companyId, invoiceId: c.req.param('id'),
-      approverEmail: (await approverOf(db, companyId)) ?? '', by: { email: user.email, channel: 'dashboard' }, action, seq: body.seq, note: body.note ?? null });
+      approverEmail: (await approverOf(db, companyId)) ?? '', by: { email, channel: 'dashboard' }, action, seq: body.seq, note: body.note ?? null });
     return typeof r === 'string' ? refuse(c, r) : c.json({ decision: r });
   });
 }

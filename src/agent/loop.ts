@@ -65,12 +65,11 @@ export async function runAgent(deps: AgentDeps, companyId: string, invoiceIds: s
   const [directory, policy] = await Promise.all([directorio(db, companyId), politica(db, companyId)]);
   const rules = policy?.rules ?? null;
   // AC-73, AC-74: a currency that is not USD and not pinned is decided on the stored market rates, read once per call.
-  // If its newest stored rate is not from today (UTC) it is fetched first, once per call; "Reevaluar" never fetches (R-85.6).
+  // If its newest stored rate is not from today (UTC) it is fetched first, once per invocation (budget.fxTried); "Reevaluar" never fetches (R-85.6).
   let market: MarketRates | null = null;
-  const tried = new Set<string>();
   const today = new Date().toISOString().slice(0, 10);
   const needsMarket = (c: string | null): c is string => !!c && c !== 'USD' && !(Number(rules?.fx_rates?.[c]) > 0);
-  const fxCost = (c: string | null) => !needsMarket(c) ? 0 : (market ? 0 : RATES) + (trigger === 'reevaluate' || tried.has(c) ? 0 : FX);
+  const fxCost = (c: string | null) => !needsMarket(c) ? 0 : (market ? 0 : RATES) + (trigger === 'reevaluate' || budget.fxTried.has(c) ? 0 : FX);
   const counts: Counts = { PAGAR: 0, FRENAR: 0, ESCALAR: 0 };
   let errors = 0;
   let pos: Cursor = from ?? [0, ''];
@@ -97,8 +96,8 @@ export async function runAgent(deps: AgentDeps, companyId: string, invoiceIds: s
       if (!known && budget.left() < fxCost(currency) + fits) break;
       if (needsMarket(currency)) {
         market ??= await tasas(db);
-        if (trigger !== 'reevaluate' && !tried.has(currency) && (market[currency] ? new Date(market[currency].fetched_at).toISOString().slice(0, 10) : null) !== today) {
-          tried.add(currency);
+        if (trigger !== 'reevaluate' && !budget.fxTried.has(currency) && (market[currency] ? new Date(market[currency].fetched_at).toISOString().slice(0, 10) : null) !== today) {
+          budget.fxTried.add(currency);
           const stored = market[currency];
           const rows = await fetchChain(providers(env.FX_PROVIDER, budget.fetch), [currency], stored ? { [currency]: stored.usd_per_unit } : {});
           await record.fxRates(rows);

@@ -501,7 +501,7 @@ describe('human approval (AC-34, R-02, R-21, R-22)', () => {
 // ---- Seed replay (AC-10, AC-75, R-09, R-35, R-36, R-86) ---------------------------------------------------------
 // The seed of migration 000600: a policy with no pinned rates, decided on the 17 Oct market rates and on every corner of
 // the ±20 % box around them (R-86). Its directory and rules, not the 000300 ones the unit tests above use.
-interface SeedRow { nn: string; expected_outcome: Outcome; check: CheckId | null; also: CheckId[]; prev_month?: boolean; issue: number | null; due: number | null; source: Invoice['source']; fields: Omit<InvoiceFields, 'issue_date' | 'due_date' | 'confidence'> }
+interface SeedRow { nn: string; trap: string; expected_outcome: Outcome; check: CheckId | null; also: CheckId[]; prev_month?: boolean; issue: number | null; due: number | null; source: Invoice['source']; fields: Omit<InvoiceFields, 'issue_date' | 'due_date' | 'confidence'> }
 interface Done { inv: Invoice; row: SeedRow; beneficiary: Beneficiary | null; outcome: Outcome; amount_usd: number | null }
 const SEED_RULES: PolicyRules = MARKET_SEED.rules;
 const SEED_DIRECTORY: Beneficiary[] = MARKET_SEED.beneficiaries.map((b: Beneficiary) => ({ ...b, id: `id-${b.name}`, agreement: { ...b.agreement, valid_until: '2027-10-17' } }));
@@ -597,3 +597,32 @@ describe.each(CORNERS.map((k) => [Object.entries(k).map(([c, f]) => `${c}×${f}`
     expect(approveNube(done, rejected15(done), now, market).outcome).toBe('PAGAR');
   });
 });
+
+// R-96 conditions (AC-75 Clarified, AC-09, AC-64, AC-65, AC-74), at the fixture rates and at all 32 corners.
+const TRAP_KINDS = ['duplicado exacto', 'duplicado con otro número', 'beneficiario nuevo', 'cuenta cambiada', 'sobre el límite por pago',
+  'sobre el umbral de aprobación', 'no cuadra con el retainer', 'COP sobre el límite por pago', 'agota el presupuesto del mes',
+  'supera el saldo de la cuenta', 'ilegible', 'vencida', 'fuera del periodo'];
+describe.each([['fixture', {}], ...CORNERS.map((k) => [Object.entries(k).map(([c, f]) => `${c}×${f}`).join(' '), k])] as Array<[string, Record<string, number>]>)(
+  'R-96 seed conditions at %s', (_, k) => {
+    const now = '2026-10-17T15:00:00Z';
+    const done = replay(now, marketAt(now, k));
+    const fields = (x: Done) => x.inv.fields;
+    it('(1) all six currencies appear and each of the 13 AC-09 trap kinds holds on some invoice', () => {
+      expect([...new Set(done.map((x) => fields(x).currency).filter(Boolean))].sort()).toEqual(['ARS', 'BRL', 'COP', 'EUR', 'MXN', 'USD']);
+      for (const kind of TRAP_KINDS) {
+        expect(done.some((x) => x.row.trap === kind && x.outcome === x.row.expected_outcome && failing(x.d).includes(x.row.check!)), kind).toBe(true);
+      }
+    });
+    it('(1) the COP-over-the-per-payment-limit trap stays in COP and FRENAR', () => {
+      const t = done.filter((x) => x.row.trap === 'COP sobre el límite por pago');
+      expect(t.map((x) => [fields(x).currency, x.outcome, check(x.d, 'limite_pago').verdict])).toEqual([['COP', 'FRENAR', 'no_cumple']]);
+    });
+    it('(2) at least one seeded COP invoice ends ESCALAR (AC-74 QA target)', () => {
+      expect(done.some((x) => fields(x).currency === 'COP' && x.outcome === 'ESCALAR')).toBe(true);
+    });
+    it('(3) Nube Sur LLC #2044 is 4.200 USD ESCALAR (AC-65) and a Laura Méndez #1042 2.500 USD record is PAGAR (AC-64)', () => {
+      const pick = (x: Done) => [fields(x).payee_name, fields(x).invoice_number, fields(x).amount, fields(x).currency, x.outcome];
+      expect(done.filter((x) => fields(x).payee_name === 'Nube Sur LLC').map(pick)).toEqual([['Nube Sur LLC', '2044', 4200, 'USD', 'ESCALAR']]);
+      expect(done.filter((x) => fields(x).invoice_number === '1042').map(pick)).toEqual([['Laura Méndez', '1042', 2500, 'USD', 'PAGAR']]);
+    });
+  });

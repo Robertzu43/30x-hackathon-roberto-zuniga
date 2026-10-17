@@ -221,6 +221,16 @@ describe('the daily FX cron (AC-73, R-85.7)', () => {
     expect(vi.mocked(console.error).mock.calls.some((c) => String(c[0]).includes('skipped'))).toBe(true);
   });
 
+  it('two companies with a COP invoice and failing providers: one provider chain for COP per invocation, 2 fetches (AC-73)', async () => {
+    db = fakeDb(merge(workspace('A', { only: ['08'] }), workspace('B', { only: ['08'] })));
+    for (const p of db.tables.policies!) p.rules = { ...SEED.rules, fx_rates: {} }; // market rates, no pin (R-85.1)
+    vi.stubGlobal('fetch', net = vi.fn(async () => new Response('slow down', { status: 429 })));
+    await tick();
+    expect(net.mock.calls.map((c) => String(c[0]))).toEqual([
+      'https://query1.finance.yahoo.com/v8/finance/chart/USDCOP=X?range=1d&interval=1d', 'https://open.er-api.com/v6/latest/USD']);
+    expect(inserted()).toEqual(['A-08', 'B-08']);
+  });
+
   it('the 5-minute tick fetches nothing', async () => {
     db = fakeDb(workspace('N', { only: ['01'] }));
     await scheduled({ scheduledTime: 0, cron: '*/5 * * * *' } as ScheduledController, env);

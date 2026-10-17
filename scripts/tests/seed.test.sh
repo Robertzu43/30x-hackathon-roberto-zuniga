@@ -49,11 +49,22 @@ for (const i of inv) {
   const ext = { pdf: 'pdf', image: 'png' }[i.source];
   if (ext && !existsSync(`web/public/demo/invoices/${i.nn}.${ext}`)) die(`missing web/public/demo/invoices/${i.nn}.${ext} (AC-09)`);
 }
-const rows = readFileSync(ds, 'utf8').split('\n').filter((l) => /^\| \d\d \|/.test(l)).map((l) => l.split('|').map((c) => c.trim()));
-const got = rows.map((c) => `${c[1]} ${c[5]} ${c[7]}`).join('\n');
-const want = inv.map((i) => `${i.nn} ${i.source} ${i.expected_outcome}`).join('\n');
-if (got !== want) die(`DATASET.md rows differ from the seed (R-08):\n${got}\n---\n${want}`);
+// R-96 condition 5: every DATASET.md row is the seed row, column for column, in scripts/gen-invoices.mjs's format.
+const money = (n, c) => new Intl.NumberFormat('es-CO', { minimumFractionDigits: c === 'COP' ? 0 : 2, maximumFractionDigits: c === 'COP' ? 0 : 2 }).format(n);
+const got = readFileSync(ds, 'utf8').split('\n').filter((l) => /^\| \d\d \|/.test(l)).join('\n');
+const want = inv.map((i) => { const f = i.fields, trap = i.check ? `${i.trap} · \`${[i.check, ...i.also].join('`, `')}\`` : i.trap;
+  return `| ${i.nn} | ${f.payee_name ?? 'desconocido'} | ${f.amount === null ? 'desconocido' : money(f.amount, f.currency)} | ${f.currency ?? 'desconocida'} | ${i.source} | ${trap} | ${i.expected_outcome} | ${i.reason} |`; }).join('\n');
+if (got !== want) die(`DATASET.md rows differ from the seed (R-08, R-96):\n${got}\n---\n${want}`);
 const doc = readFileSync(ds, 'utf8');
+// R-96 condition 5: the policy line says no pinned rate, and the rates line quotes the fixture rates and their date (AC-75).
+if (!doc.includes('sin tasas fijadas por la política (`fx_rates: {}`)')) die('DATASET.md policy line does not say "no pinned rates" (R-96)');
+const fix = readFileSync('src/engine/__fixtures__/seed.ts', 'utf8');
+const rates = JSON.parse((/FIXTURE_RATES[^=]*= (\{[^}]*\})/.exec(fix)?.[1] ?? '').replace(/(\w+):/g, '"$1":'));
+const fxDay = /FX_DAY = '(\d{4})-(\d\d)-(\d\d)'/.exec(fix);
+if (!fxDay || Object.keys(rates).join() !== 'COP,MXN,BRL,ARS,EUR') die('cannot read FIXTURE_RATES / FX_DAY from src/engine/__fixtures__/seed.ts');
+const per = (c) => new Intl.NumberFormat('es-CO', { maximumFractionDigits: 4 }).format(Number((1 / rates[c]).toPrecision(6)));
+const line = `tasas del ${Number(fxDay[3])} ${['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'][fxDay[2] - 1]} ${fxDay[1]} (1 USD = ${per('COP')} COP, ${per('MXN')} MXN, ${per('BRL')} BRL, ${per('ARS')} ARS y ${per('EUR')} EUR)`;
+if (!doc.includes(line)) die(`DATASET.md does not quote the fixture rates and their date: "${line}" (AC-75, R-96)`);
 for (const t of ['Rechazar', '#15', 'Aprobar', '#2044', '40.705,36', '22.609,39', '43.205,36']) if (!doc.includes(t)) die(`DATASET.md lacks the R-35 happy path ("${t}")`);
 for (const t of ['±20 %', 'Yahoo Finance']) if (!doc.includes(t)) die(`DATASET.md does not explain the market rates ("${t}", AC-75)`);
 if (/\b(40|20)\.000\b(?!\.)/.test(doc)) die('DATASET.md still cites the old budget 40.000 or balance 20.000 (R-35)');

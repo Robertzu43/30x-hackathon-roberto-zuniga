@@ -1,7 +1,7 @@
 // Bandeja and Nueva factura (AC-11, AC-29, AC-63, AC-66, AC-70).
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { Route, Routes } from 'react-router-dom';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import OutcomeChip from './components/OutcomeChip';
 import Inbox, { route } from './pages/Inbox';
 import { mockApi, renderAt, signedInAs } from './test/utils';
@@ -15,6 +15,7 @@ const ROWS = [
   row('b2', 'ESCALAR', 'Kodex Labs', 'ESCALAR · 4.800 USD a Kodex Labs: supera el umbral de aprobación'),
   row('c3', null, 'Nubia Diseño', null),
 ];
+const PORTAL = 'https://facturas.30x-hackathon-roberto-zuniga.workers.dev/andina-labs';
 const minsAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
 const batch = (o = {}) => ({ PAGAR: 0, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null, ...o });
 const calls = (f: ReturnType<typeof mockApi>, method: string, path: string) =>
@@ -22,7 +23,8 @@ const calls = (f: ReturnType<typeof mockApi>, method: string, path: string) =>
 
 function setup(routes: Record<string, unknown> = {}) {
   signedInAs('ana@empresa.co');
-  const f = mockApi({ 'GET /api/invoices': ROWS, 'GET /api/agent/last-run': { at: minsAgo(7), trigger: 'cron' }, ...routes });
+  const f = mockApi({ 'GET /api/invoices': ROWS, 'GET /api/agent/last-run': { at: minsAgo(7), trigger: 'cron' },
+    'GET /api/portal-link': { portal_url: PORTAL, email_address: null }, 'GET /api/agent/activity': { items: [] }, ...routes });
   const view = renderAt(
     <Routes>
       <Route path="/" element={<Inbox />} />
@@ -276,4 +278,86 @@ test('the filters and the last-run line have sizes that do not depend on the dat
   expect(css.split('@media (max-width: 640px) {')[1]).toMatch(/\.inbox-last-run \{[^}]*min-height: 3\.2em/); // it wraps to two on a phone
   expect(css).toMatch(/\n\.inbox-filters label \{[^}]*flex: 1 1 12rem/);
   expect(css).toMatch(/\n\.inbox-filters select \{[^}]*width: 100%/);
+});
+
+// AC-63 Clarified (R-90): a run started by the vendor portal or the email intake is never «manual».
+test.each([
+  ['portal', 'es', 'El agente revisó las facturas pendientes hace 3 min · portal de proveedores'],
+  ['email', 'es', 'El agente revisó las facturas pendientes hace 3 min · correo'],
+  ['portal', 'en', 'The agent last checked pending invoices 3 min ago · vendor portal'],
+  ['email', 'en', 'The agent last checked pending invoices 3 min ago · email'],
+])('last-run line: via %s (%s)', async (via, lang, line) => {
+  localStorage.setItem('lang', lang);
+  setup({ 'GET /api/agent/last-run': { at: minsAgo(3), trigger: 'ingest', via } });
+  expect(await screen.findByText(line)).toBeTruthy();
+});
+
+// AC-86: the portal link card, after the list (it appears with the rows, so nothing above it moves).
+const card = () => screen.findByRole('region', { name: 'Comparte este enlace con tus proveedores' });
+
+test('the card shows the company portal URL and no email line when the intake address is null (AC-86)', async () => {
+  setup();
+  const c = await card();
+  expect(within(c).getByText(PORTAL)).toBeTruthy();
+  expect(c.textContent).not.toMatch(/escriban|@/);
+  const list = screen.getAllByRole('list')[0]!;
+  expect(!!(list.compareDocumentPosition(c) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+  expect(screen.getAllByRole('button').filter((b) => b.classList.contains('primary')).map((b) => b.textContent)).toEqual(['Ejecutar agente']);
+});
+
+test('with an intake address the card adds «o que escriban a facturas+<slug>@<dominio>» (AC-86)', async () => {
+  setup({ 'GET /api/portal-link': { portal_url: PORTAL, email_address: 'facturas+andina-labs@in.example.co' } });
+  expect(within(await card()).getByText('o que escriban a facturas+andina-labs@in.example.co')).toBeTruthy();
+});
+
+test('«Copiar enlace» copies the URL, says «Copiado» for 2 s in an aria-live region (R-102)', async () => {
+  const writeText = vi.fn(async () => {});
+  vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+  setup();
+  const c = await card();
+  fireEvent.click(within(c).getByRole('button', { name: 'Copiar enlace' }));
+  expect(await within(c).findByRole('button', { name: 'Copiado' })).toBeTruthy();
+  expect(writeText).toHaveBeenCalledWith(PORTAL);
+  expect(c.querySelector('[aria-live="polite"]')!.textContent).toBe('Copiado');
+  expect(await within(c).findByRole('button', { name: 'Copiar enlace' }, { timeout: 3000 })).toBeTruthy();
+});
+
+test('a refused clipboard shows the press-and-hold text (R-102)', async () => {
+  vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText: async () => { throw new Error('denied'); } } });
+  setup();
+  fireEvent.click(within(await card()).getByRole('button', { name: 'Copiar enlace' }));
+  expect(await screen.findByText('No pude copiarlo; mantén presionado el enlace.')).toBeTruthy();
+});
+
+test('a failed portal-link call says so with a next step; an answer without a URL shows no card', async () => {
+  setup({ 'GET /api/portal-link': new Response(JSON.stringify({ error: 'boom' }), { status: 500 }) });
+  expect(await screen.findByText('No pude cargar tu enlace para proveedores. Recarga la página para intentar de nuevo.')).toBeTruthy();
+});
+
+test('an answer without a portal URL (empty) shows no card and no developer words', async () => {
+  setup({ 'GET /api/portal-link': [] });
+  await screen.findByRole('heading', { name: 'Actividad del agente' });
+  expect(screen.queryByRole('region', { name: 'Comparte este enlace con tus proveedores' })).toBeNull();
+  expect(document.body.textContent).not.toMatch(/undefined|null/);
+});
+
+test('rows show where a portal or email invoice came from (AC-86)', async () => {
+  setup({ 'GET /api/invoices': [
+    { ...row('p1', 'PAGAR', 'Laura Méndez', 'PAGAR · portal'), origin: 'portal', sender: null },
+    { ...row('e1', 'ESCALAR', 'Kodex Labs', 'ESCALAR · correo'), origin: 'email', sender: 'cobros@kodex.example' },
+    { ...row('a1', 'PAGAR', 'Nubia Diseño', 'PAGAR · app'), origin: 'app', sender: null },
+  ] });
+  await screen.findByText('PAGAR · portal');
+  expect(within(items()[0]!).getByText('Portal de proveedores')).toBeTruthy();
+  expect(within(items()[1]!).getByText('Correo de cobros@kodex.example')).toBeTruthy();
+  expect(items()[2]!.textContent).not.toMatch(/Portal de proveedores|Correo/);
+});
+
+// AC-78: the panel sits on Bandeja and plays what a run call decided as soon as the call returns.
+test('Bandeja carries the activity panel and refreshes it after each run call (AC-78)', async () => {
+  const { f } = setup({ 'POST /api/invoices/run': batch({ PAGAR: 1 }) });
+  await screen.findByRole('heading', { name: 'Actividad del agente' });
+  const before = calls(f, 'GET', '/api/agent/activity').length;
+  fireEvent.click(screen.getByRole('button', { name: 'Ejecutar agente' }));
+  await waitFor(() => expect(calls(f, 'GET', '/api/agent/activity').length).toBe(before + 1));
 });

@@ -64,3 +64,18 @@
   .inbox-last-run { min-height: 3.2em; }
   .inbox-list a { grid-template-columns: 1fr; gap: 0.25rem; }
 }
+
+/* AC-86 origin label; the portal link card and «Actividad del agente» (AC-78) after the list, at the 2.5 rem section gap. */
+.inbox-origin { display: block; font-size: var(--text-sm); }
+.portal-card,
+.activity { margin-top: 2.5rem; }
+.portal-card { padding: 1.5rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.portal-card h2,
+.activity h2 { font: 400 var(--text-xl) / 1.2 var(--font-serif); letter-spacing: -0.02em; margin: 0 0 0.5rem; } /* as the ask box heading (ai.css) */
+.portal-card p { margin: 0 0 1rem; }
+.portal-card-url { font-family: var(--font-mono); font-size: var(--text-sm); overflow-wrap: anywhere; }
+.portal-card button { min-height: 44px; min-width: 44px; }
+.activity-list { list-style: none; padding: 0; margin: 1rem 0 0; border-top: 1px solid var(--line); }
+.activity-list > li { padding: 0.75rem 0.5rem; border-bottom: 1px solid var(--line); }
+.activity-list ol { list-style: none; padding: 0; margin: 0; font-size: var(--text-sm); }
+.activity-decide { font-weight: 600; }

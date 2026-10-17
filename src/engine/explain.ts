@@ -44,9 +44,10 @@ function vars(values: Check['values'], lang: Lang): Record<string, string | null
   return out;
 }
 
-const checkVars = (c: Check, lang: Lang, receivedAt: string) => ({
+const checkVars = (c: Check, lang: Lang, receivedAt: string, policyVersion?: number | null) => ({
   ...vars(c.values, lang),
   actual: c.actual || null,
+  version: policyVersion == null ? '' : ` v${policyVersion}`, // R-49: the stored decision's version (R-29), left out when it has none
   month: monthName(lang, receivedAt),
   missing: fieldList(lang, missingOf(c)),
   agreement: agreementText(c.values, lang),
@@ -55,8 +56,8 @@ const checkVars = (c: Check, lang: Lang, receivedAt: string) => ({
 });
 
 // "Límite por pago: 2.500 USD ≤ 5.000 USD → cumple"; overridden: "… → no cumple · aprobado por <correo> <canal>" (R-22).
-export function explainCheck(check: Check, lang: Lang, receivedAt: string): string {
-  const v = checkVars(check, lang, receivedAt);
+export function explainCheck(check: Check, lang: Lang, receivedAt: string, policyVersion?: number | null): string {
+  const v = checkVars(check, lang, receivedAt, policyVersion);
   const variant = check.verdict !== 'cumple' ? ''
     : check.id === 'moneda' && check.values.currency === 'USD' ? '_usd'
     : check.id === 'beneficiario_permitido' && !check.values.directory_name ? '_open' : '';

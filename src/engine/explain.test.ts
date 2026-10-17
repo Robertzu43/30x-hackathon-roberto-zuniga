@@ -39,11 +39,20 @@ describe('explainCheck (AC-27, AC-28, AC-22, R-22)', () => {
     expect(explainCheck(c, 'es', RECEIVED)).toBe('Presupuesto de octubre: 42.000 usados + 9.000 = 51.000 > 50.000 USD → no cumple');
     expect(explainCheck(c, 'en', RECEIVED)).toBe('October budget: 42,000 used + 9,000 = 51,000 > 50,000 USD → does not pass');
   });
-  it('currency conversion with the policy rate, es and en', () => {
+  it('currency conversion names the stored decision\'s policy version (R-49), es and en', () => {
     const c: Check = { id: 'moneda', verdict: 'cumple', actual: 'COP', threshold: '0.000245',
       values: { amount: 1500000, currency: 'COP', rate: 0.000245, amount_usd: 367.5 } };
-    expect(explainCheck(c, 'es', RECEIVED)).toBe('Moneda: 1.500.000 COP × 0,000245 = 367,50 USD (tasa de la política) → cumple');
-    expect(explainCheck(c, 'en', RECEIVED)).toBe('Currency: 1,500,000 COP × 0.000245 = 367.50 USD (policy rate) → passes');
+    expect(explainCheck(c, 'es', RECEIVED, 1)).toBe('Moneda: 1.500.000 COP × 0,000245 = 367,50 USD (tasa de la política v1) → cumple');
+    expect(explainCheck(c, 'en', RECEIVED, 1)).toBe('Currency: 1,500,000 COP × 0.000245 = 367.50 USD (policy rate v1) → passes');
+    expect(explainCheck(c, 'es', RECEIVED, 3)).toContain('(tasa de la política v3)');
+  });
+  it('currency conversion without a stored policy version leaves the "v" out', () => {
+    const c: Check = { id: 'moneda', verdict: 'cumple', actual: 'COP', threshold: '0.000245',
+      values: { amount: 1500000, currency: 'COP', rate: 0.000245, amount_usd: 367.5 } };
+    for (const v of [undefined, null]) {
+      expect(explainCheck(c, 'es', RECEIVED, v)).toBe('Moneda: 1.500.000 COP × 0,000245 = 367,50 USD (tasa de la política) → cumple');
+      expect(explainCheck(c, 'en', RECEIVED, v)).toBe('Currency: 1,500,000 COP × 0.000245 = 367.50 USD (policy rate) → passes');
+    }
   });
   it('changed account, es and en', () => {
     const c = get(run({ bank_account: 'Nequi 300-555-7310' }).d.checks, 'beneficiario_cuenta');

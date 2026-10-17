@@ -96,7 +96,7 @@ const es: Record<string, string> = {
   'check.periodo.no_cumple': 'llegó en {invoice_month} y el mes en curso es {current_month}',
   'check.periodo.no_verificado': 'no se pudo saber el mes de llegada',
   'check.moneda.name': 'Moneda',
-  'check.moneda.cumple': '{amount} {currency} × {rate} = {amount_usd} USD (tasa de la política)',
+  'check.moneda.cumple': '{amount} {currency} × {rate} = {amount_usd} USD (tasa de la política{version})',
   'check.moneda.cumple_usd': '{amount} USD, no necesita conversión',
   'check.moneda.no_cumple': 'la política no tiene tasa para {currency}',
   'check.moneda.no_verificado': 'falta la moneda de la factura o las tasas en la política',

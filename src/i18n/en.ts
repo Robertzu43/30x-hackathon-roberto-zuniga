@@ -96,7 +96,7 @@ const en: Record<string, string> = {
   'check.periodo.no_cumple': 'arrived in {invoice_month} and the current month is {current_month}',
   'check.periodo.no_verificado': 'the arrival month is unknown',
   'check.moneda.name': 'Currency',
-  'check.moneda.cumple': '{amount} {currency} × {rate} = {amount_usd} USD (policy rate)',
+  'check.moneda.cumple': '{amount} {currency} × {rate} = {amount_usd} USD (policy rate{version})',
   'check.moneda.cumple_usd': '{amount} USD, no conversion needed',
   'check.moneda.no_cumple': 'the policy has no rate for {currency}',
   'check.moneda.no_verificado': 'the invoice currency or the policy\'s rates are missing',

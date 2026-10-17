@@ -515,6 +515,32 @@ describe('GET /api/period (AC-44, R-01)', () => {
     expect(await json(await call('GET', '/api/period'))).toMatchObject({ violations: 1, autonomy: { n: 0, m: 4 }, autonomy_pct: 0 });
   });
 
+  it('R-63: the per-beneficiary table groups by the AC-19 name rule, counts every invoice of the month, and each money column sums to its top figure', async () => {
+    const inv = (id: string, payee: string | null, received_at = '2026-10-05T15:00:00Z', archived = false) =>
+      ({ id, company_id: 'A', source: 'email', archived, received_at, fields: { payee_name: payee } });
+    db = testDb({ ...workspace([]), invoices: [
+      inv('c1', 'Contadores Andinos S.A.S.', '2026-10-02T15:00:00Z'), inv('c2', 'Contadores Andinos SAS'), inv('c3', 'contadores andinos'),
+      inv('s1', 'Imprenta Sol Ltda.', '2026-10-01T15:00:00Z'), inv('s2', 'IMPRENTA SOL'),
+      inv('u1', null), inv('u2', null),
+      inv('old', 'Contadores Andinos SAS', '2026-09-20T15:00:00Z'), inv('gone', 'Contadores Andinos SAS', '2026-10-06T15:00:00Z', true),
+      { ...inv('b1', 'Contadores Andinos SAS'), company_id: 'B' },
+    ] });
+    const d = (invoice_id: string, outcome: string, amount_usd: number) => ({ id: `d-${invoice_id}`, invoice_id, company_id: 'A', seq: 1, outcome, actor: 'agent', amount_usd, checks: [{ id: 'lectura' }] });
+    db.tables.decisions!.push(d('c1', 'PAGAR', 900), d('c2', 'ESCALAR', 6000), d('c3', 'FRENAR', 100), // c-row: count 3, paid 900, committed 6900
+      d('s1', 'ESCALAR', 50.5), // s2 pending
+      d('u1', 'PAGAR', 10.25), d('u2', 'ESCALAR', 20), d('old', 'PAGAR', 999), d('gone', 'PAGAR', 999));
+    const p = await json<{ paid_usd: number; committed_usd: number; by_beneficiary: Array<{ beneficiary: string | null; paid_usd: number; committed_usd: number; count: number }> }>(
+      await call('GET', '/api/period?month=2026-10'));
+    expect(p.by_beneficiary).toEqual([
+      { beneficiary: 'Contadores Andinos SAS', paid_usd: 900, committed_usd: 6900, count: 3 }, // the directory name
+      { beneficiary: 'Imprenta Sol Ltda.', paid_usd: 0, committed_usd: 50.5, count: 2 }, // the oldest invoice's name
+      { beneficiary: null, paid_usd: 10.25, committed_usd: 30.25, count: 2 }, // "Beneficiario no leído" / "Payee not read"
+    ]);
+    expect(p.paid_usd).toBeCloseTo(p.by_beneficiary.reduce((s, b) => s + b.paid_usd, 0), 2);
+    expect(p.committed_usd).toBeCloseTo(p.by_beneficiary.reduce((s, b) => s + b.committed_usd, 0), 2);
+    expect([p.paid_usd, p.committed_usd]).toEqual([910.25, 6980.75]);
+  });
+
   it('rejects a malformed month with 400', async () => {
     db = testDb(workspace([]));
     const r = await call('GET', '/api/period?month=octubre');
@@ -559,7 +585,6 @@ describe('rate limit (AC-43)', () => {
 
 const { runAgent } = await import('../agent/loop');
 const { Budget } = await import('../lib/supabase');
-const tools = await import('../agent/tools');
 const send = vi.mocked((await import('../lib/email')).sendEmail);
 
 describe('budgeted, resumable runs over HTTP (AC-70, R-56, R-57, R-59, R-60)', () => {
@@ -662,35 +687,30 @@ describe('budgeted, resumable runs over HTTP (AC-70, R-56, R-57, R-59, R-60)', (
     expect(invoice).toMatchObject({ outcome: null });
   });
 
-  it('PUT /api/policy: the would_change preview of 31 pending and escalated invoices is complete in one response, <= 40 counted, equal to the per-invoice computation (R-59)', async () => {
+  it('R-61 acceptance: the PUT /api/policy preview equals the change set of a reevaluate run on the same data, ESCALAR -> PAGAR from freed budget included, 30+ invoices in <= 40 counted', async () => {
     db = testDb(workspace());
+    // The seed plus 20 copies under new invoice numbers, all decided: the month's budget runs out, so many escalate.
+    db.tables.invoices!.push(...seedInvoices('A').slice(0, 20).map((i) => ({ ...i, id: `${i.id}-n`,
+      fields: { ...i.fields, invoice_number: `${(i.fields as { invoice_number?: string }).invoice_number}-n` } })));
     await runAgent({ db: db as never, env, budget: new Budget(Infinity) }, 'A', 'pending', 'manual');
-    const fresh = seedInvoices('A').slice(0, 20).map((i) => ({ ...i, id: `${i.id}-n`, fields: { ...i.fields, invoice_number: `${(i.fields as { invoice_number?: string }).invoice_number}-n` } }));
-    db.tables.invoices!.push(...fresh);
-    const rules = { ...SEED.rules, per_payment_limit_usd: 1000, duplicate_window_days: 45 };
-    // Today's computation: period state and duplicates read per invoice.
-    const previous = SEED.rules;
-    const directory = await tools.directorio(db as never, 'A');
-    const rows = (await db.from('invoice_current').select('*').eq('company_id', 'A').order('received_at').order('id')).data as Array<Row & { id: string; outcome: string | null; fields: object | null }>;
-    const reopen = rows.filter((x) => (x.outcome === null || x.outcome === 'ESCALAR') && x.fields);
-    expect(reopen.length).toBeGreaterThanOrEqual(30);
-    const window = { duplicate_window_days: 45 };
-    const expected = [];
-    for (const row of reopen) {
-      const inv = row as never as Parameters<typeof tools.periodo>[2];
-      const b = tools.findBeneficiary(inv.fields.payee_name, directory);
-      const period = { ...await tools.periodo(db as never, 'A', inv), previous: await tools.duplicados(db as never, 'A', inv, window, directory) };
-      const to = tools.decide(inv, b, rules, period, NOW).outcome;
-      const from = row.outcome ?? tools.decide(inv, b, previous, period, NOW).outcome;
-      if (from !== to) expected.push([row.id, from, to]);
-    }
+    const latest = () => new Map(db.tables.invoices!.filter((i) => i.company_id === 'A')
+      .map((i) => [String(i.id), decisionsOf(String(i.id)).sort((a, b) => Number(a.seq) - Number(b.seq)).at(-1)?.outcome]));
+    const before = latest();
+    expect([...before.values()].filter((o) => o === 'ESCALAR').length).toBeGreaterThanOrEqual(30);
+
+    const rules = { ...SEED.rules, per_payment_limit_usd: 1000 };
     const { r, n } = await counted('PUT', '/api/policy', { rules });
     expect(r.status).toBe(200);
     expect(n).toBeLessThanOrEqual(40);
-    const out = await json<{ would_change: Array<{ invoice_id: string; from: string; to: string }> }>(r);
-    expect(out.would_change.map((w) => [w.invoice_id, w.from, w.to])).toEqual(expected);
-    expect(expected.length).toBeGreaterThan(10);
-    const current = new Map(rows.map((x) => [x.id, x.outcome]));
-    expect(expected.some((e) => current.get(String(e[0])) === null) && expected.some((e) => current.get(String(e[0])) === 'ESCALAR')).toBe(true);
+    const out = await json<{ will_pay: number; would_change: Array<{ invoice_id: string; from: string; to: string }> }>(r);
+
+    await runAgent({ db: db as never, env, budget: new Budget(Infinity) }, 'A', 'pending', 'reevaluate');
+    const after = latest();
+    const changed = [...after].filter(([id, o]) => before.get(id) !== o).map(([id, o]) => [id, before.get(id), o]);
+    const listed = out.would_change.map((w) => [w.invoice_id, w.from, w.to]);
+    expect(listed.sort()).toEqual(changed.sort());
+    expect(listed.filter((x) => x[1] === 'ESCALAR' && x[2] === 'FRENAR').length).toBeGreaterThan(1);
+    expect(listed.filter((x) => x[1] === 'ESCALAR' && x[2] === 'PAGAR').length).toBeGreaterThan(0); // unlocked by the freed budget
+    expect(out.will_pay).toBe(listed.filter((x) => x[2] === 'PAGAR').length);
   });
 });

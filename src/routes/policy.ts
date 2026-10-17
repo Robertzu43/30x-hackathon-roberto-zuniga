@@ -51,18 +51,24 @@ export const policy = memberRoutes()
     const now = new Date().toISOString();
     // One read of earlier invoices covers both windows: the checks filter by their own policy's window.
     const window = { duplicate_window_days: Math.max(previous?.rules.duplicate_window_days ?? 0, rules.duplicate_window_days ?? 0) };
-    // R-59: period state and duplicates come from these same rows in memory, not one read per invoice, so the list stays
-    // complete inside the subrequest budget however many invoices are pending or escalated.
+    // R-61: the same sequential pass "Reevaluar" runs (oldest first), simulated in memory over these rows (R-59): each
+    // simulated decision updates committed, paid and previous invoices before the next, so budget freed by a new FRENAR
+    // can turn a later ESCALAR into PAGAR, and the list says so.
+    const sim = rows.map((r) => ({ ...r }));
     const would_change: Array<{ invoice_id: string; headline: string; from: Outcome; to: Outcome }> = [];
-    for (const row of rows.filter((r) => reopenable(r) && r.fields)) {
+    for (const row of sim.filter((r) => reopenable(r) && r.fields)) {
       const invoice = { ...row, fields: row.fields! } as Invoice;
       const beneficiary = findBeneficiary(invoice.fields.payee_name, directory);
-      const period = { ...periodFrom(rows, invoice), previous: previousFrom(rows, invoice, window, directory) };
+      const period = { ...periodFrom(sim, invoice), previous: previousFrom(sim, invoice, window, directory) };
       const next = decide(invoice, beneficiary, rules, period, now);
+      // A pending row has no outcome yet: its "from" is what the previous version gives in the same pass (R-14).
       const from = row.outcome ?? decide(invoice, beneficiary, previous?.rules ?? null, period, now).outcome;
+      Object.assign(row, { outcome: next.outcome, amount_usd: next.amount_usd });
       if (from !== next.outcome) would_change.push({ invoice_id: row.id, headline: headline(next, invoice, beneficiary, lang), from, to: next.outcome });
     }
-    return c.json({ policy: saved, would_change });
+    // The banner's "el agente pagará <n> factura(s)" (AC-31 Clarified).
+    const will_pay = would_change.filter((w) => w.to === 'PAGAR').length;
+    return c.json({ policy: saved, would_change, will_pay });
   })
 
   // Pending and ESCALAR invoices after the cursor (AC-31, R-60); runAgent picks them for the 'reevaluate' trigger.

@@ -187,6 +187,9 @@ const es: Record<string, string> = {
   'trace.act.unsent': 'La pregunta quedó en el tablero; no hay registro de envío de correo.',
   'trace.human.approved': '{email} aprobó {channel}; volví a verificar las reglas y el resultado es {outcome}.',
   'trace.human.rejected': '{email} rechazó {channel}; el resultado es {outcome} y no preparé orden de pago.',
+  'trace.human.approved_reason': '{email} aprobó {channel}; volví a verificar las reglas y el resultado es {outcome}: {reason}.',
+  'trace.reevaluated': 'Reevalué la factura con la política v{version}: {counts}. Decidí {outcome}.',
+  'trace.reevaluated_reason': 'Reevalué la factura con la política v{version}: {counts}. Decidí {outcome}: {reason}.',
   // Escalation question (AC-65, D25, R-26, R-27): "<Nombre>, la factura #<n> de <beneficiario> por <monto> <motivos>. ¿La pago?"
   'question.sentence': 'la factura {number} {payee} {amount} {motives}.',
   'question.number': '#{n}',

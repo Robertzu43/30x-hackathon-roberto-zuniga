@@ -140,7 +140,11 @@ const Answer = z.object({
 });
 
 // R-129 (AC-12): a sentence is never an account. 6+ ASCII digits anywhere, or an email-shaped Pix key (R-73 (b)).
-const looksLikeAccount = (v: string | null): string | null => (v && (/(?:\d\D*){6}/.test(v) || /\S+@\S+\.\S+/.test(v)) ? v : null);
+// Tested on the first 200 chars: model output is untrusted, and `\S@\S+\.\S` is the same set as `\S+@\S+\.\S+` without its cubic backtracking.
+const looksLikeAccount = (v: string | null): string | null => {
+  const head = v?.slice(0, 200) ?? '';
+  return v && (/(?:\d\D*){6}/.test(head) || /\S@\S+\.\S/.test(head)) ? v : null;
+};
 
 const toNumber = (v: number | string | null): number | null => (typeof v === 'string' ? parseAmount(v) : v);
 

@@ -174,6 +174,17 @@ describe('extractFields: the shape of bank_account (AC-12, R-129)', () => {
       const out = await extractFields(model({ ...good, bank_account: account }), 'x');
       expect(out).toEqual({ ...good, bank_account: null, ...WAI });
     });
+  it.each([['a@b.c', true], ['x a@b.cd y', true], ['a@.b', false], ['@a.b', false], ['a@b.', false], ['@@.@', false]])(
+    'email shape «%s» is kept: %s', async (account, kept) => {
+      expect((await extractFields(model({ ...good, bank_account: account }), 'x')).bank_account).toBe(kept ? account : null);
+    });
+  it.each(['@', 'a@'])('a 4000-character run of «%s» is judged in under 500 ms', async (unit) => {
+    const account = unit.repeat(4000 / unit.length);
+    const t0 = performance.now();
+    const out = await extractFields(model({ ...good, bank_account: account }), 'x');
+    expect(performance.now() - t0).toBeLessThan(500);
+    expect(out.bank_account).toBeNull();
+  });
   it('applies to a Bedrock read too', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => Response.json({ output: { message: { content: [{ text: JSON.stringify({ ...good, bank_account: 'la cuenta registrada' }) }] } } })));
     const env = { ...model(good), BEDROCK_MODEL_ID: 'amazon.nova-lite-v1:0', BEDROCK_REGION: 'us-east-2', AWS_BEDROCK_ACCESS_KEY_ID: 'AKIDEXAMPLE', AWS_BEDROCK_SECRET_ACCESS_KEY: 'secret' } as Env;

@@ -255,7 +255,9 @@ Clarified (D28-D38, Task 35 is the only README writer of this round): README gai
 Clarified (D39-D41; Task 35b is the README writer):
 - "How to enter" in the first 10 lines names both doors: «Probar con mi propia empresa» (a private copy, no email) and «Entrar como Andina Labs» (the shared view).
 - A section «Para el jurado» says what a juror can do in their own copy, that it lasts through judging, and how «Guardar mi acceso» works.
-- «Velocidad» links `docs/perf.md`.
+- «Velocidad» links `docs/perf.md`. It also says, in plain words (R-139, R-140):
+  - creating a trial company takes about <latest QA range> seconds, once, with visible progress, bounded at 30 s;
+  - the first visitor to `/demo` after a minute with no visits waits about <latest miss median> for the demo numbers, while the heading and the buttons show at once; later visitors get the cached figure.
 - "What's not done" adds three items:
   - emails attached with «Guardar mi acceso» are not verified, because autoconfirm is on while SES is in sandbox (R-118);
   - trial workspaces are never deleted;
@@ -790,6 +792,12 @@ The guardrails do not move:
 - One primary. The button is the one primary action on both screens (R-120).
 - Time. From the click to a Bandeja that lists every DATASET.md row with its expected outcome takes at most 30 s on the deployed URL, measured by wall clock. That is AC-47's bound, and progress is visible the whole time (AC-91 item 4).
 - Failure. If the sign-in fails (AC-96's rate limit, network, Auth down), the page shows, in place: «No pude crear tu empresa de prueba ahora. Intenta de nuevo en unos minutos, o entra como Andina Labs.» / "I couldn't create your trial company right now. Try again in a few minutes, or enter as Andina Labs." It offers «Entrar como Andina Labs» as the next step and never shows a blank screen.
+- Clarified (R-139, launcher watchdog 21:42Z, 17 Oct): the door's speed is measured in two parts, and the behaviour does not change.
+  - The door itself: `/login` and `/demo`, with «Probar con mi propia empresa» visible and enabled, load in under 2.000 ms. That is D40's first-load target, measured by AC-97 target 1.
+  - The one-time first run, from the click until Bandeja is shown: at most 30 s by wall clock, with «Decidiendo tus facturas pendientes… n de m» visible the whole time. This is a progress state (AC-91 item 4, R-120), not a screen, so D40's 2 s does not apply to it. QA's measured 14.6-18.4 s passes.
+  - Bandeja opens only after the pass ends, as R-120 ruled. It is not opened while the agent is still deciding.
+  - If a call in the pass fails, AC-40 Clarified applies. Bandeja opens, those rows show «Pendiente» with the muted grey chip, and the cron decides them later. AC-67's count line (R-138) counts them under «pendientes». No row is ever shown with an outcome before the server has written it (R-122).
+  - Evidence: unchanged. QA records the click-to-Bandeja wall-clock time in the ledger at every door QA run. README «Velocidad» states the latest range and the 30 s bound (AC-49 Clarified, R-139).
 
 Evidence:
 - `bash scripts/auth-config.sh --check` prints `external_anonymous_users_enabled true`. It prints no secret.
@@ -924,6 +932,15 @@ Trace: D41 ("Abuse guard … AI quota per user (R-87) applies"), D36 (cost hygie
   - Any FAIL is a failed AC-91 item 7 on that screen, a blocking finding.
   - The table committed before the video has every line PASS (AC-50 Clarified).
   - A miss still open at FREEZE goes to product under R-126.
+- Clarified (R-140, launcher watchdog 21:42Z, 17 Oct): how `/api/demo/overview` is judged.
+  - Target 3 for `/api/demo/overview` is measured as written: p95 over 20 sequential requests after 2 warm-ups, on the deployed URL. With R-122's 60 s edge cache, that measures the path most visitors get. It stays MUST and never cut, and a FAIL there is blocking.
+  - A single timed request, from the watchdog, a curl or anyone else, is not AC-97's measurement. It never passes or fails this AC.
+  - The cache miss is the first visitor after 60 s idle. It is measured and published, but it does not pass or fail:
+    - `perf.mjs` adds one row, `demo overview (cache miss)`: the median of 3 requests whose cache header (`cf-cache-status`, or the Worker's own cache header) is not `HIT`. It waits more than 60 s between samples, so the cache has expired.
+    - The row's status is `INFO`. It never counts as a FAIL, and the "every line PASS" rule skips it.
+    - README «Velocidad» states the latest miss median in plain words (AC-49 Clarified, R-140).
+  - The `login` row measures the door: the page counts as usable when its heading and its one primary action («Probar con mi propia empresa», R-120) are visible and enabled. A run where QA sees the door usable by hand but the row says "not usable" is a harness defect, fixed in Task 44b. It is not a product FAIL, and it is not a PASS until the script measures it.
+  - Perf never blocks a deploy. Deploys are how a fix gets measured. The blocking moment is unchanged: the final table, committed before the video, has every PASS/FAIL line PASS.
 
 Evidence:
 - `docs/perf.md`.
@@ -1568,6 +1585,34 @@ Rulings on the D41 door QA questions Q-P and Q-Q (product, 17 Oct; product quest
 - **R-138 Bandeja's ask context carries exact counts per outcome (AC-67, UX-05).** Fix, junior, a small task in `src/routes/ask.ts` and `src/prompts/ask.ts`, the same pattern as Task 23c's Periodo labels. A finance user asking "how many are escalated" gets a number to act on. The model must quote a count made by code, not count a list. Principle: evidence (the record answers, the model only phrases it). Loser's best argument: "the answer is labelled «puede equivocarse» and the headlines are all in the context; adding counts is prompt tuning".
 - Observation, no AC, for README «Lo que no está hecho»: `src/agent/scheduled.ts` lists pending companies from one PostgREST select capped at 1.000 rows. With many scripted trial companies holding pending rows at once, some companies could miss cron turns until the backlog drains. R-133 bounds the rows per trial company, not the number of trial companies. The orchestrator adds one README line, and nothing is built for it now.
 
+Rulings on the launcher watchdog observations of 21:42Z (product, 17 Oct; product questions, not disputes; nobody was asked):
+- **R-139 The door keeps its progress screen. Bandeja does not open while the agent decides (AC-92 Clarified, AC-49 Clarified; R-120 stands).** Option (c): neither (a) nor (b). Why:
+  - R-120 already ruled on this exact proposal and rejected it. A ruling is never reopened. The new number does not change R-120's facts: R-120 accepted up to 30 s, and QA measured 14.6-18.4 s with progress visible, so AC-92 passed on the deployed URL.
+  - R-120's reasons still hold, and they are stronger now:
+    - rows would change under the tour's spotlight, which breaks AC-91's CLS bar and the tour anchors;
+    - AC-92's evidence ("Bandeja matches DATASET.md, tour step 1 on screen") would no longer hold at landing;
+    - it is new behaviour at 21:42Z, with D39 mounts landing and the UI freeze (checkpoint C) at 02:00Z.
+  - (b) was rejected because no QA or gate finding says the progress state is unclear. Changing it spends a seat that D39 and D40 need, for no AC.
+  - D40's 2 s applies to the door screens themselves (they load in 0.85-1.19 s), not to the one-time pass.
+  - Unchanged: AC-93..AC-96; AC-16 and AC-69 (no model writes PAGAR); R-115..R-119; AC-78's panel; R-138's counts.
+  - No task. The launcher's idea is already in docs/IDEAS.md for Monday.
+  - Principle: scope (never reopen a ruling; a passing MUST gets no new work the night before), then company-can-deploy-Monday.
+  - Loser's best argument: "land on Bandeja immediately after the trial company is seeded (invoices visible as pending, under 2 s) and let the agent decide them in front of the juror, with the «Actividad del agente» panel streaming the decisions, so the wait becomes the showcase (D29c)".
+- **R-140 `/api/demo/overview` is judged by AC-97's p95 method; the cache miss is published, not graded (AC-97 Clarified, AC-49 Clarified).** Why:
+  - AC-97 target 3 is MUST and never cut (R-126), so it cannot become a README-only limit. Its method is fixed by R-121: p95 over 20 sequential requests after warm-ups. On E2, QA measured 76 ms p95 for it, a PASS. The watchdog's 2.66 s and 1.48 s are single requests, almost surely cache misses, because an hourly probe always arrives after the 60 s TTL.
+  - The miss is real for the first visitor after a quiet minute. A juror is the company's actual user, so it is measured and published honestly in `docs/perf.md` (an INFO row) and in README. It is not graded, because R-122 chose the 60 s cache as this endpoint's lever on purpose. Grading the miss would reopen R-122, and the only remaining levers are longer staleness or caching member data, which R-122 refused.
+  - It does not block the next deploy. Blocking a deploy would block the fixes that get measured (tie-breaker: does it block another task).
+  - Built by Task 44b (junior): the INFO row, and the `login` row's measurement fix.
+  - Re-measure on the deployed URL after the next deploy (E3 or later): the full `node scripts/perf.mjs --base <deployed URL>`. In particular:
+    - `/api/demo/overview` p95, and the new miss row;
+    - the rows that failed on E2: Detalle navigation skeleton under 100 ms (was 243/297 ms), Periodo's critical-path API p95 under 600 ms (was `/api/period` at 680 ms, now `/api/screen/period`), and `login` usable under 2.000 ms;
+    - `inbox` as a trial user;
+    - JS under 250 KB for `/login`, `/demo` and Bandeja;
+    - and, by QA, AC-98's one data request on Bandeja's load in the network tab (FAIL on E2, before Task 43).
+    The final table at checkpoint C stays the binding one.
+  - Principle: evidence (measure what the AC defines, and publish what it does not grade).
+  - Loser's best argument: "the watchdog measured 2.66 s on the deployed URL; D40 says API under 600 ms; a juror who opens /demo first sees the slow path, so it should block like any other FAIL".
+
 ---
 
 ## Task to AC map
@@ -1635,6 +1680,7 @@ Rulings on the D41 door QA questions Q-P and Q-Q (product, 17 Oct; product quest
 | 42 D40 backend: screen functions, one round trip, local JWT, demo cache, Smart Placement | AC-98, AC-99 (placement), AC-97 (API p95), AC-07 Clarified |
 | 43 D40 web: code splitting, screen loaders, skeletons, prefetch, tab cache, pending state | AC-99, AC-100 (SHOULD), AC-97 (first load, navigation, JS budget), AC-91 |
 | 44 D40 perf harness + baseline + final table; new gate screen ids | AC-97 (`scripts/perf.mjs`, `docs/perf.md`), AC-91 Clarified (screen ids) |
+| 44b Perf harness: demo overview cache-miss INFO row, login row measures the door (R-140) | AC-97 Clarified |
 | 45 D39 data: dashboard fields in the screen functions, `doc_marks` | AC-101, AC-102 (`doc_marks`), AC-103, AC-104 (contracts), AC-106 (real data) |
 | 46 D39 chart primitives `web/charts/` | AC-106, AC-99 (lazy) |
 | 47 D39 Bandeja dashboard | AC-101, AC-106, AC-91 (gate: `inbox` + states, demo and trial) |
@@ -1692,6 +1738,7 @@ Order is binding: D41, then D40, then D39 (R-126). New work starts in new files 
 | 42 | D40 backend: screen functions, `/api/screen/*`, local JWT, demo edge cache, Smart Placement | senior (3rd) | AC-98, AC-99 (placement), AC-97 (API) | starts once a seat is free; rebases onto 39 | 39 → 42 → 45 | E3: db-push 001000 |
 | 43 | D40 web: route splitting, screen loaders, skeletons, prefetch, tab cache, pending state | senior (4th) | AC-99, AC-100, AC-97, AC-91 | after 32a merges (mocks of AC-98); merges after 42 and 40 | 40/41 → 43 → 47-51 | E4 |
 | 44 | Perf harness `scripts/perf.mjs`, baseline now, final table at C; gate screen ids | junior (1st) | AC-97, AC-91 Cl. | none, now | own files | none (runs at E2 and E6) |
+| 44b | Perf harness: `demo overview (cache miss)` INFO row; `login` row measures the door's primary (R-140) | junior | AC-97 Cl. | 44 merged; before the post-E3 run | `scripts/perf.mjs` (44 only, merged) | none (its run follows the next deploy) |
 | 45 | D39 data: dashboard fields, `doc_marks` | senior (5th) | AC-101..AC-104 contracts, AC-106 | new SQL now; merges after 42 | 42 → 45 | E4: db-push 001100 |
 | 46 | D39 chart primitives `web/charts/` | junior (2nd) | AC-106, AC-99 | none, now | own files | none |
 | 47 | Bandeja dashboard | senior | AC-101, AC-106, AC-91 | new files on mocks; mounts after 43; data after 45 | 43 → 47 | E5 |

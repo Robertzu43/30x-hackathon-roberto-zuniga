@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import type { PageRoute } from '../App';
 import { supabase } from '../api';
 import { useT } from '../i18n';
@@ -12,6 +12,7 @@ export const route: PageRoute = { path: '/login', public: true, fullBleed: true 
 export default function Login() {
   const { t, lang, setLang } = useT();
   const navigate = useNavigate();
+  const from: unknown = useLocation().state?.from; // the deep link RequireAuth sent here from (R-62)
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [sent, setSent] = useState(false);
@@ -51,7 +52,7 @@ export default function Login() {
     // First login: decide what is pending, in budgeted calls (AC-70). A failure is not fatal: the 5-minute cron decides them (D23).
     setDeciding(null);
     await runUntilDone({ first: '/api/invoices/run', onProgress: setDeciding });
-    navigate('/', { replace: true });
+    navigate(typeof from === 'string' ? from : '/', { replace: true });
   };
 
   return (

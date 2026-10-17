@@ -2,7 +2,7 @@ import { useEffect, useState, type ComponentType, type ReactNode } from 'react';
 import { matchPath, Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import type { Lang } from '../src/i18n';
 import { supabase } from './api';
-import { isDemoUser, RequireAuth, shouldStartTour, useSession } from './auth';
+import { isDemoUser, RequireAuth, shouldStartTour, takeDemoTour, useSession } from './auth';
 import Tour from './components/Tour';
 import { useT } from './i18n';
 
@@ -63,7 +63,12 @@ export default function App() {
   const user = session?.user;
   const [touring, setTouring] = useState(false);
 
+  const { pathname } = useLocation();
   useEffect(() => setTouring(!!user && shouldStartTour(user, demoEmail)), [user?.id, demoEmail]); // keyed on the id: USER_UPDATED (tour_seen) must not restart it
+  // R-62: the demo click may sign in the same user id again, so the marker is also checked when the click navigates.
+  useEffect(() => {
+    if (isDemoUser(user, demoEmail) && takeDemoTour()) setTouring(true);
+  }, [user?.id, demoEmail, pathname]);
 
   const endTour = () => {
     setTouring(false);
@@ -71,7 +76,6 @@ export default function App() {
   };
   const startTour = () => setTouring(true);
   // One Tour outside <Routes> keeps its step across navigation; it never shows on public pages (/demo, /approve).
-  const { pathname } = useLocation();
   const onPublic = pages.find((p) => matchPath(p.route.path, pathname))?.route.public;
 
   return (

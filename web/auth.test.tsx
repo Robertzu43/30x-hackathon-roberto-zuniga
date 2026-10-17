@@ -35,10 +35,10 @@ test('useSession exposes the session and the demo email from /api/config', async
   expect(await screen.findByText(`ana@empresa.co ${DEMO_EMAIL}`)).toBeTruthy();
 });
 
-test('tour starts for a user who has not seen it, not after it was seen, and always for the demo user (R-17)', () => {
+test('tour starts for a user who has not seen it, not after it was seen, and never on its own for the demo user (R-62)', () => {
   expect(shouldStartTour(fakeSession('ana@empresa.co').user, DEMO_EMAIL)).toBe(true);
   expect(shouldStartTour(fakeSession('ana@empresa.co', { tour_seen: true }).user, DEMO_EMAIL)).toBe(false);
-  expect(shouldStartTour(fakeSession(DEMO_EMAIL, { tour_seen: true }).user, DEMO_EMAIL)).toBe(true);
+  expect(shouldStartTour(fakeSession(DEMO_EMAIL).user, DEMO_EMAIL)).toBe(false);
 });
 
 function Lang() {

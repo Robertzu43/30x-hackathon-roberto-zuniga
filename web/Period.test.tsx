@@ -40,7 +40,22 @@ test('shows money, outcome counts and the per-beneficiary table', async () => {
   const row = screen.getByText('Nube Sur LLC').closest('tr') as HTMLElement;
   expect(within(row).getByText(/4\.200/)).toBeTruthy();
   expect(screen.getByText('PAGAR: 3')).toBeTruthy();
-  expect(screen.getByText('—')).toBeTruthy(); // beneficiary with no name
+  expect(within(screen.getByText('Beneficiario no leído').closest('tr')!).getByText('2')).toBeTruthy(); // R-63: never "—"
+  expect(screen.queryByText('—')).toBeNull();
+});
+
+test('an unread-payee row flagged unread is labelled in the UI language (R-63)', async () => {
+  localStorage.setItem('lang', 'en');
+  mockApi({ [`GET /api/period?month=${month}`]: { ...body, by_beneficiary: [{ beneficiary: null, unread: true, paid_usd: 0, committed_usd: 0, count: 3 }] } });
+  show();
+  expect(await screen.findByText('Payee not read')).toBeTruthy();
+});
+
+test('"100 %" never breaks from its number (R-63)', async () => {
+  mockApi({ [`GET /api/period?month=${month}`]: body });
+  show();
+  expect((await screen.findByText('Decisiones explicadas 100 %')).textContent).toBe('Decisiones explicadas 100\u00a0%');
+  expect(screen.getByText('Autonomía 75 %').textContent).toBe('Autonomía 75\u00a0%');
 });
 
 test('a violation is spelled out in words, not only by color', async () => {

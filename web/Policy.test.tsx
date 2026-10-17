@@ -56,6 +56,59 @@ test('saving with a 1000 payment limit puts the rules, shows the version the dat
   expect(screen.getByText(/Pixel Lab: 4\.200 USD supera el límite/).textContent).toContain('PAGAR → FRENAR');
 });
 
+test('in English the would-change list uses the English outcome words (R-65)', async () => {
+  localStorage.setItem('lang', 'en');
+  setup({ 'PUT /api/policy': { policy: { ...versions[0], version: 3 }, would_change: [{ invoice_id: 'i2', headline: 'Nube Sur', from: 'ESCALAR', to: 'FRENAR' }] } });
+  renderAt(<Policy />);
+  fireEvent.change(await screen.findByLabelText('Per-payment limit (USD)'), { target: { value: '1000' } });
+  fireEvent.click(screen.getByRole('button', { name: /^Save as version/ }));
+  expect((await screen.findByText(/Nube Sur/)).textContent).toContain('ESCALATE → STOP');
+  expect(document.body.textContent).not.toMatch(/PAGAR|FRENAR|ESCALAR/);
+});
+
+const toPay = [
+  { invoice_id: 'i1', headline: 'Nube Sur', from: 'ESCALAR', to: 'FRENAR' },
+  { invoice_id: 'i2', headline: 'Diego Ruiz', from: 'ESCALAR', to: 'PAGAR' },
+];
+const PAY_ES = /^Si pulsas «Reevaluar pendientes», el agente pagará (\d+) factura\(s\) que hoy no están pagadas, porque con esta política cumplen todas las reglas\.$/;
+
+test('a preview with rows ending in PAGAR says above the list how many the agent will pay (R-61)', async () => {
+  setup({ 'PUT /api/policy': { policy: { ...versions[0], version: 3 }, would_change: toPay } });
+  renderAt(<Policy />);
+  await limit();
+  save();
+  const line = await screen.findByText(PAY_ES);
+  expect(line.textContent!.match(PAY_ES)![1]).toBe('1');
+  expect(line.compareDocumentPosition(screen.getByText(/Diego Ruiz/)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.getByText(/Diego Ruiz/).textContent).toContain('ESCALAR → PAGAR');
+});
+
+test('the count comes from will_pay when the API sends it (R-61)', async () => {
+  setup({ 'PUT /api/policy': { policy: { ...versions[0], version: 3 }, would_change: toPay, will_pay: 2 } });
+  renderAt(<Policy />);
+  await limit();
+  save();
+  expect((await screen.findByText(PAY_ES)).textContent).toContain('pagará 2 factura(s)');
+});
+
+test('no row ends in PAGAR: no payment sentence (R-61)', async () => {
+  setup({ 'PUT /api/policy': { policy: { ...versions[0], version: 3 }, would_change: toPay.slice(0, 1), will_pay: 0 } });
+  renderAt(<Policy />);
+  await limit();
+  save();
+  await screen.findByText('1 factura pendiente cambiaría de resultado');
+  expect(screen.queryByText(/el agente pagará/)).toBeNull();
+});
+
+test('the payment sentence in English (R-61)', async () => {
+  localStorage.setItem('lang', 'en');
+  setup({ 'PUT /api/policy': { policy: { ...versions[0], version: 3 }, would_change: toPay } });
+  renderAt(<Policy />);
+  await screen.findByLabelText('Per-payment limit (USD)');
+  fireEvent.click(screen.getByRole('button', { name: /^Save as version/ }));
+  expect(await screen.findByText('If you press "Re-evaluate pending", the agent will pay 1 invoice(s) that are not paid today, because under this policy they pass every rule.')).toBeTruthy();
+});
+
 test('an empty rule is sent as null and a version name is sent when typed (AC-18)', async () => {
   const f = setup({ 'PUT /api/policy': { policy: { ...versions[0], version: 3 }, would_change: [] } });
   renderAt(<Policy />);

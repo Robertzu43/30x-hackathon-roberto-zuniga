@@ -78,6 +78,7 @@ test('"Entrar como Andina Labs" signs in with the config demo email and the publ
   fireEvent.click(screen.getByRole('button', { name: 'Entrar como Andina Labs' }));
   expect(await screen.findByText('Bandeja abierta')).toBeTruthy();
   expect(fakeAuth.signInWithPassword).toHaveBeenCalledWith({ email: DEMO_EMAIL, password: 'andina-demo-2026' });
+  expect(sessionStorage.getItem('demo-tour')).toBe('1'); // the click asks for the tour once (R-62)
 });
 
 test('a failed sign-in stays on /demo with a message', async () => {
@@ -87,6 +88,7 @@ test('a failed sign-in stays on /demo with a message', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Entrar como Andina Labs' }));
   expect((await screen.findByRole('alert')).textContent).toMatch(/No pude entrar/);
   expect(screen.queryByText('Bandeja abierta')).toBeNull();
+  expect(sessionStorage.getItem('demo-tour')).toBeNull(); // no sign-in, no pending tour
 });
 
 test('"Reiniciar demo" is hidden for visitors and for other users', async () => {

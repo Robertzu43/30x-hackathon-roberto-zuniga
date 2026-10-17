@@ -80,6 +80,7 @@ export default function Policy() {
   const [err, setErr] = useState<Failure | null>(null);
   const [saved, setSaved] = useState<number | null>(null);
   const [would, setWould] = useState<Change[] | null>(null);
+  const [willPay, setWillPay] = useState(0);
   const run = useRunAgent({ first: '/api/policy/reevaluate' });
 
   const load = async (fill: boolean) => {
@@ -102,9 +103,10 @@ export default function Policy() {
       allowed_beneficiaries_only: f.allowed,
     };
     try {
-      const r = await send<{ policy: Version; would_change: Change[] }>('PUT', '/api/policy', { name: f.name.trim() || undefined, rules });
+      const r = await send<{ policy: Version; would_change: Change[]; will_pay?: number }>('PUT', '/api/policy', { name: f.name.trim() || undefined, rules });
       setSaved(r.policy.version); // the number the database assigned (R-41), not the one the button showed
       setWould(r.would_change);
+      setWillPay(r.will_pay ?? r.would_change.filter((w) => w.to === 'PAGAR').length); // R-61
       await load(false);
     } catch (x) {
       setErr(failure(x));
@@ -171,10 +173,11 @@ export default function Policy() {
         {would && (
           <div className="banner" role="status">
             <p>{would.length === 0 ? t('policy.would_change_none') : would.length === 1 ? t('policy.would_change_one') : t('policy.would_change_other', { n: would.length })}</p>
+            {willPay > 0 && <p>{t('policy.will_pay', { n: willPay })}</p>}
             {would.length > 0 && (
               <ul>
                 {would.map((w) => (
-                  <li key={w.invoice_id}>{w.headline} <span className="mono">{w.from} → {w.to}</span></li>
+                  <li key={w.invoice_id}>{w.headline} <span className="mono">{t(`outcome.${w.from}`)} → {t(`outcome.${w.to}`)}</span></li>
                 ))}
               </ul>
             )}

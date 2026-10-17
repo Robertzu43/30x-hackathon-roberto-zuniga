@@ -21,4 +21,5 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks(); // spies only (vi.spyOn)
   localStorage.clear();
+  sessionStorage.clear();
 });

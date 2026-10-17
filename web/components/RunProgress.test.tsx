@@ -70,6 +70,7 @@ test('English copy', async () => {
   renderAt(<Harness />);
   go();
   expect(await screen.findByText('I could not decide 1 invoice(s); they stay pending and I will try again at the next automatic check (every 5 minutes).')).toBeTruthy();
+  expect(screen.getByText('1 PAY · 0 STOP · 0 ESCALATE')).toBeTruthy(); // R-65: English display words
 });
 
 test('a failure after some decisions still shows the decisions that exist (R-57)', async () => {

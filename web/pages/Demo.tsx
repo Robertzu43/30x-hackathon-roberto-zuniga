@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { PageRoute } from '../App';
 import { config, supabase } from '../api';
-import { isDemoUser, useSession } from '../auth';
+import { DEMO_TOUR, isDemoUser, useSession } from '../auth';
 import { RunProgress, useRunAgent } from '../components/RunProgress';
 import { useT } from '../i18n';
 import './demo.css';
@@ -39,10 +39,12 @@ export default function Demo() {
   const enter = async () => {
     setEntering(true);
     setEnterFailed(false);
+    sessionStorage.setItem(DEMO_TOUR, '1'); // before signing in: the sign-in event may reach the app first (R-62)
     const { error } = await Promise.all([supabase(), config()])
       .then(([sb, c]) => sb.auth.signInWithPassword({ email: c.demo_email, password: DEMO_PASSWORD }))
       .catch((e: Error) => ({ error: e }));
     if (!error) return navigate('/');
+    sessionStorage.removeItem(DEMO_TOUR);
     setEntering(false);
     setEnterFailed(true);
   };

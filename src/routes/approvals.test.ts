@@ -290,6 +290,35 @@ describe('POST /api/approve/:token (AC-34, AC-36, AC-37, R-02, R-03, R-55)', () 
   });
 });
 
+// AC-74, R-85.6: an approval decides on the stored rates and never fetches; Moneda stays non-overridable (R-21).
+describe('answers on market rates (AC-74)', () => {
+  const COP = (fetched_at: string) => ({ day: fetched_at.slice(0, 10), currency: 'COP', usd_per_unit: 0.00025, source: 'Yahoo Finance', fetched_at });
+  async function copEscalation() {
+    await setup(['22']); // 13.000.000 COP over the threshold: ESCALAR
+    db.tables.policies!.push({ company_id: 'A', version: 2, rules: { ...SEED.rules, fx_rates: {} } }); // market rates from now on
+    const net = vi.fn(async () => new Response('{}'));
+    vi.stubGlobal('fetch', net);
+    return net;
+  }
+  afterEach(() => vi.unstubAllGlobals());
+  it('a stale market rate: "Aprobar" re-escalates with Moneda no se pudo verificar, nothing fetched', async () => {
+    const net = await copEscalation();
+    db.tables.fx_latest = [COP('2026-10-14T15:00:00.000Z')];
+    const res = await dashboard(uid('A-22'), 'approve', 1);
+    const { decision } = await res.json() as { decision: StoredDecision };
+    expect([res.status, decision.outcome, check(decision, 'moneda').verdict, check(decision, 'moneda').overridden]).toEqual([200, 'ESCALAR', 'no_verificado', undefined]);
+    expect(decision.question_es).toContain('no tengo una tasa de cambio vigente para COP');
+    expect(net).not.toHaveBeenCalled();
+  });
+  it('a fresh market rate: "Aprobar" pays at exactly the stored rate, recorded with its source', async () => {
+    const net = await copEscalation();
+    db.tables.fx_latest = [COP('2026-10-17T11:00:00.000Z')];
+    const { decision } = await (await dashboard(uid('A-22'), 'approve', 1)).json() as { decision: StoredDecision };
+    expect([decision.outcome, decision.amount_usd, check(decision, 'moneda').values.rate_source]).toEqual(['PAGAR', 3250, 'Yahoo Finance']);
+    expect(net).not.toHaveBeenCalled();
+  });
+});
+
 describe('dashboard answers (AC-34, AC-37, R-03)', () => {
   it('approve: actor_email from the verified session, never from the body; channel dashboard; no approval_uses row', async () => {
     await setup(['11']);

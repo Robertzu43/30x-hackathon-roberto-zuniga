@@ -1,0 +1,21 @@
+{
+  "output": {
+    "message": {
+      "role": "assistant",
+      "content": [
+        {
+          "text": "{\"answer\": \"La frené porque el monto supera el límite por pago de la política.\"}"
+        }
+      ]
+    }
+  },
+  "stopReason": "end_turn",
+  "usage": {
+    "inputTokens": 980,
+    "outputTokens": 31,
+    "totalTokens": 1011
+  },
+  "metrics": {
+    "latencyMs": 812
+  }
+}

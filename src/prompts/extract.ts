@@ -40,3 +40,7 @@ Copy each field exactly as printed; never guess and never fill a field from an e
 If the text says the image is blurry or unreadable, or it is not an invoice, every field is null with confidence 0.`;
 
 export const VISION_PROMPT = 'Transcribe every text in this invoice exactly.';
+
+// Converse has no response_format, so Nova gets the schema in the prompt; zod still validates every answer (AC-89).
+export const JSON_ONLY = (schema: object) =>
+  `Answer with one JSON object only, no prose and no code fence, valid against this JSON schema: ${JSON.stringify(schema)}`;

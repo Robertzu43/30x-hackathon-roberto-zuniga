@@ -7,7 +7,7 @@ import es from '../i18n/es';
 import { findBeneficiary } from './checks';
 import { decide, decideWithOverrides } from './decide';
 import { explainCheck, headline, whatWouldPay } from './explain';
-import { CHECK_IDS, type Beneficiary, type Check, type CheckId, type Invoice, type InvoiceFields, type PeriodState, type PolicyRules } from './types';
+import { CHECK_IDS, type Beneficiary, type Check, type CheckId, type Invoice, type InvoiceFields, type MarketRates, type PeriodState, type PolicyRules } from './types';
 
 const SEED = JSON.parse(sql.match(/\$seed\$([\s\S]*?)\$seed\$/)?.[1] ?? 'null');
 const RULES: PolicyRules = SEED.rules;
@@ -103,6 +103,55 @@ describe('explainCheck (AC-27, AC-28, AC-22, R-22)', () => {
     expect(explainCheck(c, 'es', RECEIVED)).toBe('Límite por pago: falta el monto en USD o el límite por pago en la política → no se pudo verificar');
     const u: Check = { id: 'umbral_aprobacion', verdict: 'cumple', actual: '', threshold: '', values: {} };
     expect(explainCheck(u, 'es', RECEIVED)).toBe('Umbral de aprobación: desconocido USD ≤ desconocido USD → cumple');
+  });
+});
+
+// AC-74, AC-22 Superseded in part: the rate's source and time are printed from what the Moneda check recorded (R-29).
+describe('market and pinned rates in the record (AC-74)', () => {
+  const COP_FIELDS = { payee_name: 'Contadores Andinos S.A.S.', amount: 1500000, currency: 'COP', invoice_number: 'CA-5521', bank_account: 'Davivienda corriente 4569-8812-0034', concept: 'Contabilidad' };
+  const NO_PINS: PolicyRules = { ...RULES, fx_rates: {} };
+  const at = (rules: PolicyRules, market: MarketRates, f: Partial<InvoiceFields> = COP_FIELDS) => {
+    const i = inv(f), b = findBeneficiary(i.fields.payee_name, DIRECTORY);
+    return { i, b, d: decide(i, b, rules, EMPTY, NOW, market) };
+  };
+  const yahoo = (usd_per_unit: number, fetched_at: string): MarketRates => ({ COP: { currency: 'COP', usd_per_unit, source: 'Yahoo Finance', fetched_at } });
+  const line = (d: { checks: Check[] }, lang: 'es' | 'en', v?: number) => explainCheck(get(d.checks, 'moneda'), lang, RECEIVED, v);
+  it('market rate: every stored significant digit, source and Bogotá time, es and en', () => {
+    const { d } = at(NO_PINS, yahoo(0.00024876, '2026-10-17T15:00:00Z'));
+    expect(line(d, 'es', 2)).toBe('Moneda: 1.500.000 COP × 0,00024876 = 373,14 USD (Yahoo Finance, 17 oct 2026 10:00) → cumple');
+    expect(line(d, 'en', 2)).toBe('Currency: 1,500,000 COP × 0.00024876 = 373.14 USD (Yahoo Finance, Oct 17, 2026 10:00) → passes');
+    const { d: d8 } = at(NO_PINS, yahoo(0.00031538976, '2026-10-17T13:09:12.345Z'));
+    expect(line(d8, 'es')).toBe('Moneda: 1.500.000 COP × 0,00031538976 = 473,08 USD (Yahoo Finance, 17 oct 2026 08:09) → cumple');
+  });
+  it('pinned rate names the stored decision\'s policy version, es and en', () => {
+    const { d } = at({ ...NO_PINS, fx_rates: { COP: 0.00025 } }, yahoo(0.00024876, '2026-10-17T15:00:00Z'));
+    expect(line(d, 'es', 2)).toBe('Moneda: 1.500.000 COP × 0,00025 = 375 USD (tasa fijada por la política v2) → cumple');
+    expect(line(d, 'en', 2)).toBe('Currency: 1,500,000 COP × 0.00025 = 375 USD (rate pinned by policy v2) → passes');
+  });
+  it('stale market rate, es and en', () => {
+    const { d } = at(NO_PINS, yahoo(0.00024876, '2026-10-14T15:00:00Z'));
+    expect(line(d, 'es')).toBe('Moneda: la última tasa de mercado de COP es del 14 oct 2026 10:00, de hace más de 48 horas → no se pudo verificar');
+    expect(line(d, 'en')).toBe('Currency: the latest market rate for COP is from Oct 14, 2026 10:00, more than 48 hours old → could not be verified');
+  });
+  it('no market and no pinned rate, es and en', () => {
+    const { d } = at(NO_PINS, {}, { ...COP_FIELDS, currency: 'GBP' });
+    expect(line(d, 'es')).toBe('Moneda: no tengo tasa de mercado ni tasa fijada para GBP → no se pudo verificar');
+    expect(line(d, 'en')).toBe('Currency: I have no market or pinned rate for GBP → could not be verified');
+  });
+  it.each([['stale', yahoo(0.00024876, '2026-10-14T15:00:00Z')], ['missing', {}]] as const)('%s: one headline reason and one fix line, es and en', (_, market) => {
+    const { d, i, b } = at(NO_PINS, market);
+    expect(headline(d, i, b, 'es')).toBe('ESCALAR · 1.500.000 COP a Contadores Andinos SAS: no tengo una tasa de cambio vigente para COP');
+    expect(headline(d, i, b, 'en')).toBe('ESCALATE · 1,500,000 COP to Contadores Andinos SAS: I have no current exchange rate for COP');
+    expect(whatWouldPay(d, 'es')).toEqual(['Que se actualice la tasa de mercado de COP o que la política fije una tasa']);
+    expect(whatWouldPay(d, 'en')).toEqual(['That the market rate for COP is refreshed, or the policy pins a rate']);
+  });
+  it('another failing check is still named after the rate', () => {
+    const { d, i, b } = at(NO_PINS, {}, { ...COP_FIELDS, bank_account: 'Nequi 300-555-7310' });
+    expect(headline(d, i, b, 'es')).toBe('ESCALAR · 1.500.000 COP a Contadores Andinos SAS: no tengo una tasa de cambio vigente para COP y 1 motivo más');
+  });
+  it('a check stored before Task 21 (no rate_source) keeps "(tasa de la política v<n>)" (AC-22, R-29)', () => {
+    const c: Check = { id: 'moneda', verdict: 'cumple', actual: 'COP', threshold: '0.000245', values: { amount: 1500000, currency: 'COP', rate: 0.000245, amount_usd: 367.5 } };
+    expect(explainCheck(c, 'es', RECEIVED, 1)).toBe('Moneda: 1.500.000 COP × 0,000245 = 367,50 USD (tasa de la política v1) → cumple');
   });
 });
 

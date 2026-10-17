@@ -37,6 +37,26 @@ for w in 'revoke insert on public.decisions, public.approval_tokens, public.appr
   'create or replace function public.decisions_guard()' PAGAR_OUTSIDE_RULES \
   umbral_aprobacion beneficiario_permitido beneficiario_cuenta acuerdo duplicado_probable vencimiento periodo lectura; do
   echo "$lock" | grep -qF "$w" || fail "lockdown migration lacks: $w (AC-68, AC-69)"; done
+# AC-73, AC-68 Clarified (R-85.5): fx_rates is RLS-on, members read it, no member write policy or privilege exists
+FX=supabase/migrations/20261017000600_fx_rates.sql
+[ -f "$FX" ] || fail "missing $FX"
+fx=$(sed 's/--.*$//' "$FX")
+echo "$fx" | grep -q 'create table public.fx_rates (' || fail "no create table public.fx_rates (AC-73)"
+[ "$(echo "$fx" | grep -c 'alter table public.fx_rates enable row level security')" = 1 ] || fail "RLS not enabled once on fx_rates (AC-73)"
+echo "$fx" | grep -q 'primary key (day, currency)' || fail "fx_rates key is not (day, currency) (AC-73)"
+echo "$fx" | grep -q 'create policy members_select_fx_rates on public.fx_rates for select to authenticated' || fail "no member read policy on fx_rates (AC-73)"
+echo "$fx" | grep -qiE 'on public\.fx_rates for (insert|update|all)' && fail "a member write policy on fx_rates (AC-68, R-85.5)"
+echo "$fx" | grep -q 'revoke all on public.fx_rates from public, anon, authenticated;' || fail "fx_rates privileges not revoked from members (AC-68)"
+# AC-67/AC-68 Clarified (R-87): the question quota, one table with RLS on and no member policy, one service-role function
+AI=supabase/migrations/20261017000700_ai_usage.sql
+[ -f "$AI" ] || fail "missing $AI"
+ai=$(sed 's/--.*$//' "$AI")
+for w in 'create table public.ai_usage (' 'primary key (day, key)' 'alter table public.ai_usage enable row level security;' \
+  'revoke all on public.ai_usage from public, anon, authenticated;' 'security definer' \
+  'revoke execute on function public.take_question(text) from public, anon, authenticated;' \
+  'grant execute on function public.take_question(text) to service_role;'; do
+  echo "$ai" | grep -qF "$w" || fail "ai_usage migration lacks: $w (AC-67, AC-68)"; done
+echo "$ai" | grep -qi 'create policy' && fail "a member policy on ai_usage (AC-68)"
 
 # Task 25 (AC-83..AC-86; AC-07, AC-68 Clarified; R-90): the portal migration's new tables are locked to the service role
 PORTAL=supabase/migrations/20261017000800_portal.sql
@@ -217,4 +237,35 @@ expect svc "select string_agg(coalesce(public.intake_hit('invoice', 'ip-' || n, 
 expect svc "select string_agg(coalesce(public.intake_hit('status', '9.9.9.9', null), 'ok'), ',') from generate_series(1, 61)" '^(ok,){60}status$' "61st status view in a minute (AC-85)"
 expect svc "select coalesce(public.intake_hit('email', null, '$CA'), 'ok')" 'INVALID_KIND' "unknown kind"
 [ "$(sql -c "select count(*) from public.intake_rate_limits where key like '%9.9.9.9%'")" = 0 ] || fail "raw IP stored in intake_rate_limits"
+# AC-73, AC-68 Clarified: members read fx_rates and fx_latest, write neither; only the service role upserts
+FXROW="('2026-10-16', 'COP', 0.0003, 'Yahoo Finance', '2026-10-16T11:00:00Z'), ('2026-10-17', 'COP', 0.00031538976, 'Yahoo Finance', '2026-10-17T11:00:00Z')"
+expect svc "insert into public.fx_rates (day, currency, usd_per_unit, source, fetched_at) values $FXROW; select count(*) from public.fx_rates" '^2$' "service role writes fx_rates (record.ts)"
+expect svc "insert into public.fx_rates values ('2026-10-17', 'COP', 0.000315, 'open.er-api.com', now()) on conflict (day, currency) do update set usd_per_unit = excluded.usd_per_unit, source = excluded.source returning source" '^open.er-api.com$' "service role upserts by (day, currency) (AC-73)"
+expect "$UA" "select day || '|' || currency || '|' || usd_per_unit || '|' || source from public.fx_latest" '^2026-10-17\|COP\|0.000315\|open.er-api.com$' "member reads the newest rate per currency (AC-73)"
+expect "$UA" "select count(*) from public.fx_rates" '^2$' "member reads fx_rates (AC-73)"
+expect "$UA" "insert into public.fx_rates values ('2026-10-18', 'COP', 1, 'x', now())" 'permission denied' "member inserts fx_rates (AC-68)"
+expect "$UA" "update public.fx_rates set usd_per_unit = 1" 'permission denied' "member updates fx_rates (AC-68)"
+expect "$UA" "insert into public.fx_latest values ('2026-10-18', 'COP', 1, 'x', now())" 'permission denied|cannot insert' "member inserts through fx_latest (AC-68)"
+expect 33333333-3333-4333-8333-333333333333 "select count(*) from public.fx_latest" '^0$' "a signed-in non-member reads fx rates (AC-73)"
+out=$(printf "set role anon;\nselect count(*) from public.fx_rates;\n" | sql -f -); echo "$out" | grep -q 'permission denied' || fail "anon reads fx_rates (got: $out)"
+expect svc "insert into public.fx_rates values ('2026-10-18', 'COP', 0, 'x', now())" 'check constraint' "a rate <= 0 is refused (R-85)"
+is_rows=$(sql -c "select count(*) from public.fx_rates"); [ "$is_rows" = 2 ] || fail "member writes changed fx_rates (got $is_rows rows)"
+# AC-67 (R-87): 10 questions per key and UTC day, 500 for the deployment, counted before the model call; members cannot count
+take(){ as svc "select public.take_question('$1')"; }
+expect "$UA" "select public.take_question('u:x')" 'permission denied' "member executes take_question (AC-68)"
+expect "$UA" "insert into public.ai_usage values (current_date, 'global', 0)" 'permission denied' "member writes ai_usage (AC-68)"
+expect "$UA" "select count(*) from public.ai_usage" 'permission denied' "member reads ai_usage (AC-68)"
+printf "set role anon;\nselect public.take_question('u:x');\n" | sql -f - | grep -q 'permission denied' || fail "anon executes take_question (AC-68)"
+got=$(for i in $(seq 1 11); do take u:a; done | tr '\n' ' ')
+[ "$got" = '{"remaining": 9} {"remaining": 8} {"remaining": 7} {"remaining": 6} {"remaining": 5} {"remaining": 4} {"remaining": 3} {"remaining": 2} {"remaining": 1} {"remaining": 0} {"reason": "user_cap"} ' ] || fail "10 per user then user_cap (got: $got)"
+[ "$(take u:b)" = '{"remaining": 9}' ] || fail "a second key is counted apart"
+expect svc "select n from public.ai_usage where key = 'global' and day = (now() at time zone 'utc')::date" '^11$' "global counts every taken question, not user_cap ones"
+expect svc "select public.take_question('global')" 'BAD_KEY' "a caller key may not be the global row"
+sql -c "update public.ai_usage set n = 500 where key = 'global'" >/dev/null || fail "fill the global cap"
+[ "$(take u:c)" = '{"reason": "ai_quota"}' ] || fail "the 501st question of the day is ai_quota"
+expect svc "select count(*) from public.ai_usage where key = 'u:c'" '^0$' "an ai_quota question still counted for its user"
+expect svc "select n from public.ai_usage where key = 'global'" '^500$' "global went past 500"
+sql -c "insert into public.ai_usage values ((now() at time zone 'utc')::date - 1, 'u:d', 10)" >/dev/null
+sql -c "update public.ai_usage set n = 0 where key = 'global'" >/dev/null
+[ "$(take u:d)" = '{"remaining": 9}' ] || fail "yesterday's count carried into today (UTC day)"
 echo "schema.test: greps and live Postgres checks passed"

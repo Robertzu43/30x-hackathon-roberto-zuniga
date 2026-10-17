@@ -368,6 +368,56 @@ describe('GET /api/invoices/:id (AC-26, AC-08, AC-64, AC-65)', () => {
   });
 });
 
+// AC-77, R-88: who read the invoice (recorded at read time) and, per field, the line of the stored text where code found it.
+describe('"Leído por IA" reading (AC-77)', () => {
+  type Reading = { provider: string; fields: Array<{ name: string; value: unknown; confidence: number | null; snippet: string | null; match: [number, number] | null }> };
+  const detail = async (id: unknown, e: Env = env) => json<{ reading: Reading | null }>(await call('GET', `/api/invoices/${id}`, undefined, 'tok-a', e));
+  const printed = (f: Reading['fields'][number]) => (f.snippet && f.match ? f.snippet.slice(...f.match) : null);
+
+  it('an ingested invoice returns the provider and each field with its value, confidence, snippet and highlight span', async () => {
+    db = testDb(workspace([]));
+    const text = 'De: Laura Méndez\nFactura 1050, USD 2.500, Bancolombia ahorros 0012-3456-4821';
+    const { invoice } = await json<{ invoice: Row }>(await call('POST', '/api/invoices', { source: 'email', text }));
+    const { reading } = await detail(invoice.id);
+    expect(reading!.provider).toBe('Workers AI · m');
+    expect(reading!.fields.map((f) => f.name)).toEqual(['payee_name', 'amount', 'currency', 'invoice_number', 'issue_date', 'due_date', 'concept', 'bank_account']);
+    const by = Object.fromEntries(reading!.fields.map((f) => [f.name, f]));
+    expect(by.payee_name).toEqual({ name: 'payee_name', value: 'Laura Méndez', confidence: 0.95, snippet: 'De: Laura Méndez', match: [4, 16] });
+    expect(printed(by.amount!)).toBe('2.500');
+    expect(by.amount!.snippet).toBe('Factura 1050, USD 2.500, Bancolombia ahorros 0012-3456-4821');
+    expect(printed(by.invoice_number!)).toBe('1050');
+    expect(printed(by.currency!)).toBe('USD');
+    expect(printed(by.bank_account!)).toBe('Bancolombia ahorros 0012-3456-4821');
+    expect(by.due_date).toMatchObject({ value: '2026-12-01', snippet: null, match: null }); // not printed: never invented
+  });
+
+  it('the provider is the one recorded at read time, not the current model var', async () => {
+    db = testDb(workspace([]));
+    const { invoice } = await json<{ invoice: Row }>(await call('POST', '/api/invoices', { source: 'chat', text: 'Laura Méndez 1050' }));
+    expect((await detail(invoice.id, { ...env, WORKERS_AI_MODEL: 'otro' } as Env)).reading!.provider).toBe('Workers AI · m');
+  });
+
+  it('a file ingest stores its document text in raw_text, capped at 20.000 characters, and finds snippets in it', async () => {
+    db = testDb(workspace([]));
+    const r = await call('POST', '/api/invoices', upload(await pdfFixture(), 'factura.pdf', 'application/pdf'));
+    const { invoice } = await json<{ invoice: Row }>(r);
+    expect(String(db.tables.invoices!.find((i) => i.id === invoice.id)!.raw_text)).toContain('Laura Méndez');
+    expect(printed((await detail(invoice.id)).reading!.fields[0]!)).toBe('Laura Méndez');
+    ai.run.mockImplementationOnce(async () => ({ response: `Laura Méndez ${'x'.repeat(25000)}` })); // the vision transcription
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+    const { invoice: img } = await json<{ invoice: Row }>(await call('POST', '/api/invoices', upload(png, 'f.png', 'image/png')));
+    expect(String(db.tables.invoices!.find((i) => i.id === img.id)!.raw_text)).toHaveLength(20000);
+  });
+
+  it('a seeded invoice, one inserted with fields, and an unread one have reading null', async () => {
+    db = testDb(workspace(['01', '13']));
+    db.tables.invoices!.push({ id: uid('A-x'), company_id: 'A', source: 'chat', raw_text: 'Factura 1050', archived: false, received_at: NOW, fields: null });
+    expect((await detail(uid('A-01'))).reading).toBeNull();
+    expect((await detail(uid('A-13'))).reading).toBeNull();
+    expect((await detail(uid('A-x'))).reading).toBeNull();
+  });
+});
+
 // 7c live regression: an invoice inserted through REST with `fields` null is read by the loop at `lee`, which never writes
 // `invoices` (AC-38). Every view then shows what the decision's stored checks recorded, never a 500 or "not read".
 describe('an invoice inserted without fields, then decided (AC-26, AC-31, AC-44, AC-64)', () => {
@@ -519,6 +569,42 @@ describe('policy (AC-30, AC-31, R-14, R-41)', () => {
     expect(decisionsOf(uid('A-11')).map((d) => d.outcome)).toEqual(['ESCALAR', 'FRENAR']);
     expect(decisionsOf(uid('A-04'))).toHaveLength(1);
     expect(db.tables.agent_runs!.map((x) => [x.company_id, x.trigger])).toEqual([['A', 'reevaluate']]);
+  });
+});
+
+// AC-73, AC-74, R-85.6: the preview uses the stored market rates and never fetches (R-61: it equals "Reevaluar").
+describe('policy preview on market rates (AC-74, R-85)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it.each([
+    ['a row from today', 'PAGAR', [{ day: '2026-10-17', currency: 'COP', usd_per_unit: 0.000245, source: 'Yahoo Finance', fetched_at: '2026-10-17T11:00:00Z' }]],
+    ['no row', 'ESCALAR', []],
+  ])('with %s, a pending COP invoice would be %s; nothing fetched', async (_, to, rates) => {
+    const net = vi.fn(async () => new Response('{}'));
+    vi.stubGlobal('fetch', net);
+    db = testDb({ ...workspace(['07']), fx_latest: rates });
+    const out = await json<{ would_change: Row[] }>(await call('PUT', '/api/policy', { rules: { ...SEED.rules, fx_rates: {} } }));
+    expect(out.would_change.map((w) => [w.invoice_id, w.to])).toEqual([[uid('A-07'), to]]);
+    expect(net).not.toHaveBeenCalled();
+  });
+});
+
+// AC-76's contract, served by Task 21: the newest row per currency, sorted, with 1 USD in units and freshness (48 h).
+describe('GET /api/fx (AC-73, AC-76)', () => {
+  const row = (currency: string, usd_per_unit: number, fetched_at: string, source = 'Yahoo Finance') =>
+    ({ day: fetched_at.slice(0, 10), currency, usd_per_unit, source, fetched_at });
+  it('answers the provider and the stored rates, newest per currency, sorted by currency, with their UTC day (AC-73 QA)', async () => {
+    db = testDb({ fx_latest: [row('MXN', 0.054115482, '2026-10-17T11:00:00Z'), row('COP', 0.00031538976, '2026-10-14T11:00:00Z', 'open.er-api.com')] });
+    const r = await call('GET', '/api/fx');
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({ provider: 'yahoo', rates: [
+      { currency: 'COP', day: '2026-10-14', usd_per_unit: 0.00031538976, units_per_usd: 3170.68, source: 'open.er-api.com', fetched_at: '2026-10-14T11:00:00Z', stale: true },
+      { currency: 'MXN', day: '2026-10-17', usd_per_unit: 0.054115482, units_per_usd: 18.479, source: 'Yahoo Finance', fetched_at: '2026-10-17T11:00:00Z', stale: false },
+    ] });
+  });
+  it('names er-api when FX_PROVIDER says so; empty table -> no rates; no session -> 401', async () => {
+    db = testDb();
+    expect(await json(await call('GET', '/api/fx', undefined, 'tok-a', { ...env, FX_PROVIDER: 'er-api' }))).toEqual({ provider: 'er-api', rates: [] });
+    expect((await call('GET', '/api/fx', undefined, null)).status).toBe(401);
   });
 });
 

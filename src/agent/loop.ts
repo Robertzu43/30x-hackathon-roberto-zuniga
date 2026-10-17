@@ -2,17 +2,19 @@
 // rindeCuentas once per run. No model picks a tool, the order or an outcome: the only model call is the reader at `lee`.
 // Every path that decides an invoice calls runAgent: ingest, "Ejecutar agente", login, "Reevaluar", "Reiniciar demo", cron.
 import { z } from 'zod';
+import { validFields } from '../engine/checks';
 import { headline } from '../engine/explain';
-import type { Check, Decision, Invoice, InvoiceFields, Outcome } from '../engine/types';
+import type { Check, Decision, Invoice, InvoiceFields, MarketRates, Outcome } from '../engine/types';
 import type { Env } from '../env';
 import { escalationEmail, sendEmail } from '../lib/email';
+import { fetchChain, providers } from '../lib/fx';
 import { documentToText, extractFields } from '../lib/llm';
 import { must, type Budget, type Db } from '../lib/supabase';
 import { hashToken, signToken, TOKEN_TTL_MS } from '../lib/tokens';
 import { escalationQuestion } from './question';
 import { recorder, type Counts, type DecisionInput, type Recorder, type Trigger, type Via } from './record';
 import { recordedFields, type StoredDecision } from './trace';
-import { decide, directorio, duplicados, findBeneficiary, periodo, politica } from './tools';
+import { decide, directorio, duplicados, findBeneficiary, periodo, politica, tasas } from './tools';
 
 // db reads under the caller's authority: the user's JWT client (RLS) in a request, the service-role client in the cron.
 // budget is the invocation's one subrequest counter (R-56): db and the recorder's client count through it.
@@ -24,10 +26,11 @@ type Row = Omit<Invoice, 'fields'> & { fields: InvoiceFields | null; raw_text: s
 const RETRIES = 3; // STALE_PERIOD = another decision changed the month's committed amount meanwhile (AC-24)
 // Counted subrequests (R-56). An attempt: period state, duplicates, the ownership re-read and insert_decision. A new
 // escalation's mail: the token pair's ownership re-read, its insert and the email. The reader: one Workers AI call. A run:
-// invoices, company, directory and policy, then its run row.
-const ATTEMPT = 4, MAIL = 3, READ = 1, RUN_ROW = 1;
+// invoices, company, directory and policy, then its run row. Market rates (AC-73), only for a currency that needs them:
+// the stored rates once per call, and a fetch of at most one call per provider of the chain plus the upsert.
+const ATTEMPT = 4, MAIL = 3, READ = 1, RATES = 1, FX = 3, RUN_ROW = 1;
 // The worst case for a run to decide one invoice; the cron starts a company only if this fits.
-export const FIRST_INVOICE = 4 + READ + ATTEMPT + MAIL + RUN_ROW;
+export const FIRST_INVOICE = 4 + READ + RATES + FX + ATTEMPT + MAIL + RUN_ROW;
 const TOO_MANY = /too many subrequests/i; // the Workers limit itself, should anything uncounted push past the budget
 
 // The cursor (R-56): (received_at in microseconds, id) of the last invoice a call attempted. Opaque to clients.
@@ -62,6 +65,12 @@ export async function runAgent(deps: AgentDeps, companyId: string, invoiceIds: s
     must(await db.from('companies').select('approver_email, is_demo').eq('id', companyId).single());
   const [directory, policy] = await Promise.all([directorio(db, companyId), politica(db, companyId)]);
   const rules = policy?.rules ?? null;
+  // AC-73, AC-74: a currency that is not USD and not pinned is decided on the stored market rates, read once per call.
+  // If its newest stored rate is not from today (UTC) it is fetched first, once per invocation (budget.fxTried); "Reevaluar" never fetches (R-85.6).
+  let market: MarketRates | null = null;
+  const today = new Date().toISOString().slice(0, 10);
+  const needsMarket = (c: string | null): c is string => !!c && c !== 'USD' && !(Number(rules?.fx_rates?.[c]) > 0);
+  const fxCost = (c: string | null) => !needsMarket(c) ? 0 : (market ? 0 : RATES) + (trigger === 'reevaluate' || budget.fxTried.has(c) ? 0 : FX);
   const counts: Counts = { PAGAR: 0, FRENAR: 0, ESCALAR: 0 };
   let errors = 0;
   let pos: Cursor = from ?? [0, ''];
@@ -74,7 +83,7 @@ export async function runAgent(deps: AgentDeps, companyId: string, invoiceIds: s
     const fits = ATTEMPT + (mailable ? MAIL : 0) + RUN_ROW;
     // R-77: stored fields, else those its latest decision recorded; only a never-read, never-decided invoice calls the reader.
     const known = recordedFields(row.fields, row.decisions?.[0]?.checks);
-    if (budget.left() < (known ? 0 : READ) + fits) break;
+    if (budget.left() < (known ? fxCost(validFields(known).currency) : READ) + fits) break;
     try {
       stage('percibe', row.id);
       stage('lee', row.id);
@@ -83,12 +92,25 @@ export async function runAgent(deps: AgentDeps, companyId: string, invoiceIds: s
       const fields = known ?? await extractFields(env, await documentToText(env, { kind: 'text', text: row.raw_text ?? '' }));
       const invoice: Invoice = { id: row.id, received_at: row.received_at, source: row.source, fields };
       const beneficiary = findBeneficiary(fields.payee_name, directory);
+      const currency = validFields(fields).currency;
+      // A just-read currency whose rates do not fit: the read is spent, the invoice stays untouched for the next call (R-56).
+      if (!known && budget.left() < fxCost(currency) + fits) break;
+      if (needsMarket(currency)) {
+        market ??= await tasas(db);
+        if (trigger !== 'reevaluate' && !budget.fxTried.has(currency) && (market[currency] ? new Date(market[currency].fetched_at).toISOString().slice(0, 10) : null) !== today) {
+          budget.fxTried.add(currency);
+          const stored = market[currency];
+          const rows = await fetchChain(providers(env.FX_PROVIDER, budget.fetch), [currency], stored ? { [currency]: stored.usd_per_unit } : {});
+          await record.fxRates(rows);
+          for (const r of rows) market[r.currency] = r;
+        }
+      }
       for (let attempt = 0; ; attempt++) {
         if (attempt > 0 && budget.left() < fits) break invoices; // a STALE_PERIOD retry only as a whole attempt
         stage('consulta', row.id);
         const period = { ...await periodo(db, companyId, invoice), previous: await duplicados(db, companyId, invoice, rules, directory) };
         stage('decide', row.id);
-        const d = decide(invoice, beneficiary, rules, period, new Date().toISOString());
+        const d = decide(invoice, beneficiary, rules, period, new Date().toISOString(), market ?? {});
         stage('actua', row.id);
         const question = (lang: 'es' | 'en') => escalationQuestion({ approverEmail: company.approver_email ?? '', invoice, decision: d }, lang);
         const esc = d.outcome === 'ESCALAR';

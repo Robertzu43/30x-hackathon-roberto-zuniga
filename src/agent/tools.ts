@@ -1,7 +1,7 @@
 // The deterministic tools the agent consults (D22, AC-61): directorio, política, periodo, duplicados, and the engine's
 // pure decide(). Every query names the company explicitly: the cron's client bypasses RLS (R-23).
 import { bogotaDay, findBeneficiary } from '../engine/checks';
-import type { Beneficiary, Check, Invoice, PeriodState, PolicyRules, PreviousInvoice } from '../engine/types';
+import type { Beneficiary, Check, Invoice, MarketRates, PeriodState, PolicyRules, PreviousInvoice } from '../engine/types';
 import { round2 } from '../lib/money';
 import { must, type Db } from '../lib/supabase';
 import { recordedFields } from './trace';
@@ -17,6 +17,14 @@ export const directorio = async (db: Db, companyId: string): Promise<Beneficiary
 export const politica = async (db: Db, companyId: string): Promise<{ version: number; rules: PolicyRules } | null> =>
   must(await db.from('policies').select('version, rules').eq('company_id', companyId)
     .order('version', { ascending: false }).limit(1).maybeSingle());
+
+// The newest stored market rate per currency (view fx_latest, AC-73), as the engine takes them (AC-74). Shared by every
+// company: no company filter exists to add.
+export async function tasas(db: Db): Promise<MarketRates> {
+  const rows: Array<{ currency: string; usd_per_unit: number | string; source: string; fetched_at: string }> =
+    must(await db.from('fx_latest').select('currency, usd_per_unit, source, fetched_at'));
+  return Object.fromEntries(rows.map((r) => [r.currency, { ...r, usd_per_unit: Number(r.usd_per_unit) }]));
+}
 
 // The invoice's own Bogotá month, without the invoice itself, as insert_decision recomputes it (R-45).
 export async function periodo(db: Db, companyId: string, inv: Invoice): Promise<Omit<PeriodState, 'previous'>> {

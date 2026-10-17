@@ -91,6 +91,15 @@ describe('escalationQuestion (AC-65, D25)', () => {
     const i = inv({ payee_name: 'Nube Sur\r\nBcc: x@evil.co' });
     expect(ask(i, run(i))).not.toMatch(/[\r\n]/);
   });
+  it.each([['stale', { COP: { currency: 'COP', usd_per_unit: 0.00024876, source: 'Yahoo Finance', fetched_at: '2026-10-14T15:00:00Z' } }], ['missing', {}]] as const)(
+    'no current rate (%s): the AC-74 motive with the R-27 ending, es and en', (_, market) => {
+      const i = inv({ payee_name: 'Contadores Andinos S.A.S.', amount: 1500000, currency: 'COP', invoice_number: 'CA-5521', bank_account: 'Davivienda corriente 4569-8812-0034' });
+      const d = decide(i, findBeneficiary(i.fields.payee_name, DIRECTORY), { ...RULES, fx_rates: {} }, EMPTY, NOW, market);
+      expect(ask(i, d)).toBe('Juan, la factura #CA-5521 de Contadores Andinos S.A.S. por 1.500.000 COP no tengo una tasa de cambio vigente para COP. ' +
+        'Aunque la apruebes no la puedo pagar hasta que se actualice la tasa de mercado de COP o que la política fije una tasa. ¿La rechazo?');
+      expect(ask(i, d, 'en')).toBe('Juan, invoice #CA-5521 from Contadores Andinos S.A.S. for 1,500,000 COP I have no current exchange rate for COP. ' +
+        'Even if you approve it I cannot pay it until the market rate for COP is refreshed, or the policy pins a rate. Should I reject it?');
+    });
   it('every non-cumple check has a motive template in es and en', () => {
     for (const id of CHECK_IDS) for (const v of ['no_cumple', 'no_verificado']) {
       expect(es[`question.motive.${id}.${v}`], `${id}.${v}`).toBeTruthy();

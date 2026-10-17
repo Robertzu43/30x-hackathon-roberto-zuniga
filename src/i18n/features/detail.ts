@@ -45,10 +45,6 @@ export const es: Record<string, string> = {
   'detail.err.already_decided': 'Alguien ya respondió esta factura. Abajo está el resultado actualizado.',
   'detail.err.busy': 'No pude registrar tu respuesta; inténtalo de nuevo en unos segundos.',
   'detail.err.other': 'No pude registrar tu respuesta. Recarga la página e inténtalo de nuevo.',
-  // Tour step 4 (AC-79): names «Leído por IA» and the chat (web/tour-steps.ts).
-  'tour.invoice-row-ai.title': 'Detalle de decisión',
-  'tour.invoice-row-ai.body':
-    'Abre una factura para ver lo que hizo el agente paso a paso, cada regla que verificó y qué tendría que pasar para pagarla. «Leído por IA» dice qué modelo la leyó y en qué línea del documento encontré cada dato. En «Pregúntale a Thesaurus» le preguntas al registro; la respuesta nunca aprueba ni paga nada.',
 };
 
 export const en: Record<string, string> = {
@@ -96,7 +92,4 @@ export const en: Record<string, string> = {
   'detail.err.already_decided': 'Someone already answered this invoice. The updated result is below.',
   'detail.err.busy': 'I could not record your answer; try again in a few seconds.',
   'detail.err.other': 'I could not record your answer. Reload the page and try again.',
-  'tour.invoice-row-ai.title': 'Decision detail',
-  'tour.invoice-row-ai.body':
-    'Open an invoice to see what the agent did step by step, every rule it checked and what would have to change to pay it. "Read by AI" says which model read it and on which line of the document I found each value. In "Ask Thesaurus" you ask the record; the answer never approves or pays anything.',
 };

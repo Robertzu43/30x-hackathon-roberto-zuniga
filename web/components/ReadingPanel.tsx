@@ -8,16 +8,10 @@ export type ReadField = {
   value: string | number | null;
   confidence: number | null;
   snippet: string | null;
-  /** [start, end) of the value inside `snippet`, as code found it; without it the value's own text is searched. */
-  match?: [number, number] | null;
+  /** [start, end) of the value as printed inside `snippet`, from src/lib/snippet.ts; null when there is no snippet. Never searched here. */
+  match: [number, number] | null;
 };
 export type Reading = { provider: string; fields: ReadField[] };
-
-const span = ({ value, snippet, match }: ReadField): [number, number] | null => {
-  if (match) return match;
-  const i = value === null || !snippet ? -1 : snippet.toLowerCase().indexOf(String(value).toLowerCase());
-  return i < 0 ? null : [i, i + String(value).length];
-};
 
 export default function ReadingPanel({ fields, show }: { fields: ReadField[]; show: (name: string, v: string | number) => string }) {
   const { t, lang } = useT();
@@ -26,7 +20,7 @@ export default function ReadingPanel({ fields, show }: { fields: ReadField[]; sh
   return (
     <dl className="detail-fields">
       {fields.map((f) => {
-        const s = span(f);
+        const s = f.match;
         return (
           <div key={f.name}>
             <dt>{t(`detail.field.${f.name}`)}</dt>

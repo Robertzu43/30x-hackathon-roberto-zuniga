@@ -268,9 +268,9 @@ const reading = (provider = NOVA) => ({
   fields: [
     { name: 'payee_name', value: 'Nube Sur LLC', confidence: 0.97, snippet: 'Emisor: Nube Sur LLC, NIT 900.123', match: [8, 20] },
     { name: 'amount', value: 4200, confidence: 0.92, snippet: 'Total a pagar: USD 4,200.00', match: [19, 27] },
-    { name: 'invoice_number', value: '2044', confidence: 0.9, snippet: 'Factura No. 2044' }, // no span sent: found by its text
-    { name: 'due_date', value: '2026-10-31', confidence: 0.6, snippet: null },
-    { name: 'bank_account', value: null, confidence: null, snippet: null },
+    { name: 'invoice_number', value: '2044', confidence: 0.9, snippet: 'Factura No. 2044', match: [12, 16] },
+    { name: 'due_date', value: '2026-10-31', confidence: 0.6, snippet: null, match: null },
+    { name: 'bank_account', value: null, confidence: null, snippet: null, match: null },
   ],
 });
 const fieldRow = (label: string) => screen.getByText(label, { selector: 'dt' }).parentElement!;
@@ -343,4 +343,31 @@ test('the record carries «Pregúntale a Thesaurus», which asks about this invo
   expect(await screen.findByText('Es un duplicado exacto de la factura #2044.')).toBeTruthy();
   const posted = f.mock.calls.find(([u]) => u === '/api/ask')![1]!;
   expect(JSON.parse(String(posted.body))).toEqual({ question: '¿por qué frenaste esta factura?', lang: 'es', invoice_id: 'inv-1' });
+});
+
+// AC-77 (product ruling): the web marks exactly snippet.slice(start, end), the value as printed, and never searches the snippet.
+test('the highlight is the span the API sends, as printed in the document (AC-77)', async () => {
+  const fields = [
+    { name: 'amount', value: 1000, confidence: 0.9, snippet: 'Total a pagar: COP 1.000,00', match: [19, 27] },
+    { name: 'concept', value: 'x', confidence: 0.9, snippet: 'Total due: USD 1,000.00', match: [15, 23] },
+    { name: 'due_date', value: '2026-10-31', confidence: 0.9, snippet: 'Vence: 31/10/2026', match: [7, 17] },
+  ];
+  mockApi({ [GET]: { ...escalated, reading: { provider: NOVA, fields } } });
+  open();
+  await screen.findByText(`Leído por IA · ${NOVA}`);
+  expect(fieldRow('Monto').querySelector('mark')?.textContent).toBe('1.000,00');
+  expect(fieldRow('Concepto').querySelector('mark')?.textContent).toBe('1,000.00');
+  expect(fieldRow('Vencimiento').querySelector('mark')?.textContent).toBe('31/10/2026');
+});
+
+test('no <mark> when match is null or missing, even if the value appears in the snippet (AC-77)', async () => {
+  const fields = [
+    { name: 'invoice_number', value: '2044', confidence: 0.9, snippet: 'Factura No. 2044', match: null },
+    { name: 'payee_name', value: 'Nube Sur LLC', confidence: 0.9, snippet: 'Emisor: Nube Sur LLC' },
+  ];
+  mockApi({ [GET]: { ...escalated, reading: { provider: NOVA, fields } } });
+  open();
+  await screen.findByText(`Leído por IA · ${NOVA}`);
+  expect(fieldRow('Número de factura').textContent).toContain('Factura No. 2044');
+  expect(document.querySelector('mark')).toBeNull();
 });

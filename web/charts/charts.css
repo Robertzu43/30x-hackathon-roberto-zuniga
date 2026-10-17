@@ -6,7 +6,9 @@
 .chart-body { display: flex; flex-direction: column; margin: 0.5rem 0; }
 .chart-empty { margin: auto 0; padding: 1rem; text-align: center; color: var(--ink-2); font-size: var(--text-sm); border: 1px dashed var(--line); border-radius: var(--radius); }
 .chart-summary, .chart-note { margin: 0.5rem 0 0; color: var(--ink-2); font-size: var(--text-sm); }
-.chart-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+/* Visually hidden data table. A table grows to its content, so the table and each caption and cell are their own 1px clipped boxes. */
+.chart-sr { display: block; position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.chart-sr caption, .chart-sr th, .chart-sr td { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
 .tone-pagar { background: #346538; }
 .tone-frenar { background: #9f2f2d; }

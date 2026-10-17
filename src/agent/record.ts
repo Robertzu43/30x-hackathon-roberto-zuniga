@@ -1,5 +1,5 @@
 // The record writer (R-32, AC-38, AC-68): the only code that writes `decisions` (through insert_decision),
-// `approval_tokens` and `agent_runs`. Members cannot write them, so it uses the service-role client; to stay inside the
+// `approval_tokens`, `approval_uses` and `agent_runs`. Members cannot write them, so it uses the service-role client; to stay inside the
 // caller's authority it re-reads the invoice before each invoice write and refuses another company's invoice.
 import type { Outcome } from '../engine/types';
 import type { Env } from '../env';
@@ -34,6 +34,13 @@ export function recorder(env: Env, companyId: string | null) {
     async tokens(rows: TokenRow[]): Promise<void> {
       for (const id of new Set(rows.map((r) => r.invoice_id))) await owned(id);
       must(await admin.from('approval_tokens').insert(rows.map((r) => ({ ...r, company_id: companyId }))));
+    },
+    // A link answer spends its escalation's approve/reject pair (R-03, R-55): decision_id is unique, so a second use of
+    // either link fails with TOKEN_USED. Dashboard answers write no row (AC-36).
+    async approvalUse(invoiceId: string, tokenHash: string, decisionId: string): Promise<void> {
+      await owned(invoiceId);
+      const { error } = await admin.from('approval_uses').insert({ token_hash: tokenHash, decision_id: decisionId, company_id: companyId });
+      if (error) throw new Error(error.code === '23505' ? 'TOKEN_USED' : error.message);
     },
     async run(trigger: Trigger, decided: Counts | null, errors: number): Promise<void> {
       must(await admin.from('agent_runs').insert({ company_id: companyId, trigger, decided, errors }));

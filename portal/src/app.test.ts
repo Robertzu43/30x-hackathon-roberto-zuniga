@@ -69,6 +69,20 @@ describe('chat page (AC-83, AC-90)', () => {
     expect(document.documentElement.lang).toBe('es');
   });
 
+  it('an explicit ?lang= is remembered on the next visit with no query, and ?lang=es overrides a stored en (R-101)', async () => {
+    const view = { view: 'chat', company: 'Andina Labs Inc.' };
+    await open(view, '/andina-labs', 'en');
+    await open(view);
+    expect(document.documentElement.lang).toBe('en');
+    await open({ view: 'unavailable' }, `/estado/${'a'.repeat(43)}`);
+    expect(document.documentElement.lang).toBe('en');
+    await open(view, '/andina-labs', 'es');
+    await open(view);
+    expect(document.documentElement.lang).toBe('es');
+    await open(view, '/andina-labs', 'fr');
+    expect(localStorage.getItem('portal.lang')).toBe('es');
+  });
+
   it('on send: the vendor bubble and «Recibido…» at once, the button busy, then the reply as text with the status link', async () => {
     await open({ view: 'chat', company: 'Andina Labs Inc.' });
     let answer!: (r: Response) => void;

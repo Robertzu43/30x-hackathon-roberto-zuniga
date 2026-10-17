@@ -9,8 +9,11 @@ const MESSAGE_VIEWS = { not_found: 'portal.not_found', invalid: 'portal.status_i
 const SEND_ERRORS = { not_found: 'portal.not_found', file: 'portal.error.file', text: 'portal.error.text', rate_ip: 'portal.error.rate_ip', rate_company: 'portal.error.rate_company' };
 
 const stored = () => { try { return localStorage.getItem('portal.lang'); } catch { return null; } };
+const remember = (l) => { try { localStorage.setItem('portal.lang', l); } catch { /* private mode: the choice lasts this page only */ } };
 // Spanish unless the vendor chose English (?lang=en or the switch, remembered on this device).
-let lang = [new URLSearchParams(location.search).get('lang'), stored()].find((l) => l === 'es' || l === 'en') || 'es';
+const queried = new URLSearchParams(location.search).get('lang');
+let lang = [queried, stored()].find((l) => l === 'es' || l === 'en') || 'es';
+if (queried === lang) remember(lang);
 // {company}. after «Andina Labs Inc.» keeps one period.
 const tr = (key, vars = {}) => (boot.t[lang][key] ?? '').replace(/\{(\w+)\}(\.?)/g, (m, k, dot) => {
   const v = String(vars[k] ?? `{${k}}`);
@@ -194,7 +197,7 @@ function paint() {
 for (const b of document.querySelectorAll('button[data-lang]')) {
   b.addEventListener('click', () => {
     lang = b.dataset.lang;
-    try { localStorage.setItem('portal.lang', lang); } catch { /* private mode: the choice lasts this page only */ }
+    remember(lang);
     paint();
   });
 }

@@ -178,6 +178,16 @@ describe('intake: each input kind (AC-83)', () => {
     const r = await ok({ text: 'factura 1050' });
     expect([r.reply.es.at(-1), r.reply.en.at(-1)]).toEqual(['Estado: rechazada (duplicada)', 'Status: rejected (duplicate)']);
   });
+
+  it.each([
+    [4000, 'Estado: requiere aprobación de Acme: Latam', 'Status: needs approval from Acme: Latam'],
+    [900000, 'Estado: rechazada (no cumple las condiciones de pago de Acme: Latam)', "Status: rejected (does not meet Acme: Latam's payment terms)"],
+  ])('a company name with a colon keeps the status words intact: %s (AC-84)', async (amount, es, en) => {
+    db.tables.companies![0]!.name = 'Acme: Latam';
+    PROVIDER = () => read({ amount });
+    const r = await ok({ text: 'factura' });
+    expect([r.reply.es.at(-1), r.reply.en.at(-1)]).toEqual([es, en]);
+  });
 });
 
 describe('intake: abuse cases (AC-85 items 2, 3 and 5)', () => {

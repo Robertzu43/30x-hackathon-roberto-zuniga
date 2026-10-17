@@ -38,15 +38,6 @@ test('7 steps, one per area, each anchored on a data-tour selector (AC-42)', () 
   expect(tourSteps.map((s) => s.selector)).toEqual(ALL.map((a) => `[data-tour="${a}"]`));
 });
 
-test('step 1 (Bandeja) in es presents the agent, its six-stage loop and the 5-minute cron (AC-66)', async () => {
-  setup();
-  expect(await screen.findByRole('heading', { name: 'Bandeja' })).toBeTruthy();
-  const dialog = screen.getByRole('dialog');
-  expect(dialog.textContent).toContain('percibe → lee → consulta sus herramientas → decide → actúa → rinde cuentas');
-  expect(dialog.textContent).toContain('cada 5 minutos');
-  expect(dialog.textContent).toContain('1 de 7');
-});
-
 test('"Siguiente" advances to step 2 and "Atrás" returns to step 1', async () => {
   setup();
   await screen.findByRole('heading', { name: 'Bandeja' });
@@ -128,4 +119,106 @@ test('while the tour is shown, the top bar sits above the dim layer and stays on
   const rule = css.match(/body:has\(\.tour\) \.topbar \{([^}]*)\}/)?.[1] ?? '';
   expect(rule).toMatch(/position: sticky/);
   expect(Number(rule.match(/z-index: (\d+)/)?.[1])).toBeGreaterThan(Number(css.match(/\.tour \{[^}]*z-index: (\d+)/)?.[1]));
+});
+
+// AC-79: step 1 says where the AI acts and where code decides; the Detalle step names «Leído por IA» and the chat.
+const WHERE = 'Dónde actúa la IA: lee cada factura (Amazon Nova Lite en AWS Bedrock) y responde tus preguntas sobre el registro («Pregúntale a Thesaurus»). Dónde decide el código: las 13 reglas, la tabla de consecuencias y la tasa de cambio del día; solo el código puede escribir PAGAR.';
+
+test('the Detalle step names «Leído por IA» and «Pregúntale a Thesaurus», in es and en (AC-79)', async () => {
+  setup();
+  for (const title of ['Bandeja', 'Nueva factura', 'Ejecutar agente']) {
+    await screen.findByRole('heading', { name: title });
+    next();
+  }
+  await screen.findByRole('heading', { name: 'Detalle de decisión' });
+  expect(screen.getByRole('dialog').textContent).toMatch(/«Leído por IA».*«Pregúntale a Thesaurus»/);
+  fireEvent.click(screen.getByRole('button', { name: 'to-en' }));
+  await screen.findByRole('heading', { name: 'Decision detail' });
+  expect(screen.getByRole('dialog').textContent).toMatch(/"Read by AI".*"Ask Thesaurus"/);
+  fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+  await screen.findByRole('heading', { name: 'Inbox' });
+  expect(screen.getByRole('dialog').textContent).toContain('Where code decides: the 13 rules');
+});
+
+// R-105: step 1 is exactly AC-79's sentence, then the loop. Nothing else (no opener, no 5-minute sentence).
+const WHERE_EN = 'Where the AI acts: it reads each invoice (Amazon Nova Lite on AWS Bedrock) and answers your questions about the record ("Ask Thesaurus"). Where code decides: the 13 rules, the consequence table and the day\'s exchange rate; only code can write PAY.';
+const LOOP = 'Con cada factura, Thesaurus percibe → lee → consulta sus herramientas → decide → actúa → rinde cuentas.';
+const LOOP_EN = 'With every invoice, Thesaurus perceives → reads → consults its tools → decides → acts → accounts for it.';
+const body = () => screen.getByRole('dialog').querySelector('.tour-body')!;
+const paras = () => [...body().querySelectorAll('p')].map((p) => p.textContent);
+
+test('step 1 is two paragraphs, AC-79\'s sentence then the loop, in es and en (R-105, AC-79, AC-66)', async () => {
+  setup();
+  await screen.findByRole('heading', { name: 'Bandeja' });
+  expect(paras()).toEqual([WHERE, LOOP]);
+  fireEvent.click(screen.getByRole('button', { name: 'to-en' }));
+  await screen.findByRole('heading', { name: 'Inbox' });
+  expect(paras()).toEqual([WHERE_EN, LOOP_EN]);
+});
+
+test('the card stacks header, a focusable scrolling body and the footer buttons (R-105)', async () => {
+  setup();
+  await screen.findByRole('heading', { name: 'Bandeja' });
+  const parts = [...screen.getByRole('dialog').children].map((c) => c.className || c.tagName);
+  expect(parts).toEqual(['HEADER', 'tour-body', 'tour-actions']);
+  expect(body().getAttribute('tabindex')).toBe('0'); // axe scrollable-region-focusable
+  expect(screen.getByRole('dialog').querySelector('header')!.textContent).toBe('1 de 7Bandeja');
+});
+
+// jsdom has no layout: the body's scrollHeight / clientHeight are stubbed.
+function stubBody(scrollHeight: number, clientHeight: number) {
+  vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function (this: HTMLElement) {
+    return this.classList.contains('tour-body') ? scrollHeight : 0;
+  });
+  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) {
+    return this.classList.contains('tour-body') ? clientHeight : 0;
+  });
+}
+const CUE = 'Desliza para ver más';
+
+test('the scroll cue shows while the body overflows and hides once scrolled to the end (R-105)', async () => {
+  stubBody(400, 200);
+  setup();
+  await screen.findByRole('heading', { name: 'Bandeja' });
+  expect(await screen.findByText(CUE)).toBeTruthy();
+  body().scrollTop = 200;
+  fireEvent.scroll(body());
+  await waitFor(() => expect(screen.queryByText(CUE)).toBeNull());
+  vi.restoreAllMocks();
+});
+
+test('no scroll cue when the text fits; the cue is English in en (R-105)', async () => {
+  stubBody(200, 200);
+  setup();
+  await screen.findByRole('heading', { name: 'Bandeja' });
+  expect(screen.queryByText(CUE)).toBeNull();
+  vi.restoreAllMocks();
+  stubBody(400, 200);
+  fireEvent.click(screen.getByRole('button', { name: 'to-en' }));
+  expect(await screen.findByText('Scroll for more')).toBeTruthy();
+  vi.restoreAllMocks();
+});
+
+test('the card is capped below the top bar; at <= 480 px it is a bottom sheet, body text never shrunk (R-105)', async () => {
+  const bar = document.body.appendChild(Object.assign(document.createElement('header'), { className: 'topbar' }));
+  vi.spyOn(bar, 'getBoundingClientRect').mockReturnValue({ bottom: 212 } as DOMRect);
+  setup();
+  await screen.findByRole('heading', { name: 'Bandeja' });
+  expect(screen.getByRole('dialog').style.getPropertyValue('--tour-top')).toBe('212px');
+  bar.remove();
+  const { readFileSync } = (await import('node:fs' as string)) as { readFileSync(p: string, enc: string): string };
+  const css = readFileSync('web/styles.css', 'utf8');
+  const card = css.match(/\n\.tour-card \{([^}]*)\}/)?.[1] ?? '';
+  expect(card).toMatch(/max-height: calc\(100dvh - var\(--tour-top, 0px\) - 3rem\)/);
+  expect(card).toMatch(/display: flex/);
+  expect(css).toMatch(/\.tour-body \{[^}]*overflow-y: auto/);
+  const phone = css.match(/@media \(max-width: 480px\) \{\s*\.tour-card \{([^}]*)\}/)?.[1] ?? '';
+  expect(phone).toMatch(/bottom: calc\(0\.75rem \+ env\(safe-area-inset-bottom\)\)/);
+  expect(phone).toMatch(/left: 0\.75rem/);
+  expect(phone).toMatch(/width: calc\(100vw - 1\.5rem\)/);
+  expect(phone).toMatch(/padding: 1rem 1\.25rem/);
+  expect(phone).toMatch(/max-height: calc\(100dvh - var\(--tour-top, 0px\) - 1\.5rem\)/);
+  expect(css).not.toMatch(/\.tour-body[^{]*\{[^}]*font-size/);
 });

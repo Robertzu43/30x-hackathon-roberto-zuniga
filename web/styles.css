@@ -132,16 +132,33 @@ body:has(.tour) .topbar { position: sticky; top: 0; z-index: 1001; }
   position: fixed;
   left: 50%;
   bottom: 2rem;
-  transform: translateX(-50%);
+  translate: -50% 0; /* not transform, so tour-in's slide works with and without centring */
   width: min(32rem, calc(100vw - 2rem));
   background: var(--surface);
   border-radius: var(--radius);
   padding: 1.5rem 1.75rem;
+  max-height: calc(100dvh - var(--tour-top, 0px) - 3rem); /* --tour-top: the top bar's bottom, set by Tour.tsx */
+  display: flex;
+  flex-direction: column;
 }
+/* R-105: header and footer never scroll; only the body does, with a plain text cue while more text is below. */
+.tour-body { overflow-y: auto; min-height: 0; margin-bottom: 1rem; }
 .tour-card h2 { font: 400 var(--text-xl) / 1.2 var(--font-serif); letter-spacing: -0.02em; margin: 0.25rem 0 0.5rem; }
-.tour-card p { margin: 0 0 1rem; }
+.tour-card p { margin: 0 0 0.75rem; }
+.tour-body p:last-of-type { margin-bottom: 0; }
 .tour-card p.muted { margin: 0; font-size: var(--text-sm); }
-.tour-actions { display: flex; gap: 0.5rem; align-items: center; }
+.tour-more { display: block; position: sticky; bottom: 0; background: var(--surface); font-size: var(--text-sm); padding-top: 0.25rem; }
+.tour-actions { display: flex; gap: 0.5rem; align-items: center; flex-shrink: 0; }
+@media (max-width: 480px) {
+  .tour-card {
+    left: 0.75rem;
+    bottom: calc(0.75rem + env(safe-area-inset-bottom));
+    translate: none;
+    width: calc(100vw - 1.5rem);
+    padding: 1rem 1.25rem;
+    max-height: calc(100dvh - var(--tour-top, 0px) - 1.5rem);
+  }
+}
 .tour-actions span { flex: 1; }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -150,5 +167,5 @@ body:has(.tour) .topbar { position: sticky; top: 0; z-index: 1001; }
   .login-lead { animation-delay: 80ms; }
   .login-form { animation-delay: 160ms; }
 }
-@keyframes tour-in { from { opacity: 0; transform: translate(-50%, 12px); } }
+@keyframes tour-in { from { opacity: 0; transform: translateY(12px); } }
 @keyframes rise { from { opacity: 0; transform: translateY(12px); } }

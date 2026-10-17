@@ -373,7 +373,7 @@ describe('company (AC-32, R-34, R-31)', () => {
 
 describe('policy (AC-30, AC-31, R-14, R-41)', () => {
   const rules = { ...SEED.rules, per_payment_limit_usd: 1000 };
-  // A-01 pending (PAGAR under v1), A-11 ESCALAR, A-04 FRENAR: lowering the limit to 1.000 changes A-01 and A-11 only.
+  // A-01 pending, A-11 ESCALAR, A-04 FRENAR: lowering the limit to 1.000 changes A-01 and A-11 only.
   const decided = () => {
     db = testDb(workspace(['01', '04', '11']));
     db.tables.decisions!.push(
@@ -410,7 +410,7 @@ describe('policy (AC-30, AC-31, R-14, R-41)', () => {
     const out = (await r.json()) as { policy: Row; would_change: Row[] };
     expect(out.policy).toMatchObject({ company_id: 'A', version: 2, name: 'Límite 1.000', rules });
     expect(db.writes.map((w) => w.payload)).toEqual([{ company_id: 'A', name: 'Límite 1.000', rules }]); // no version sent (R-41)
-    expect(out.would_change.map((w) => [w.invoice_id, w.from, w.to])).toEqual([['A-01', 'PAGAR', 'FRENAR'], ['A-11', 'ESCALAR', 'FRENAR']]);
+    expect(out.would_change.map((w) => [w.invoice_id, w.from, w.to])).toEqual([['A-01', null, 'FRENAR'], ['A-11', 'ESCALAR', 'FRENAR']]); // a pending row's from is null (R-68)
     expect(String(out.would_change[0]!.headline)).toMatch(/^FRENAR · 2\.500 USD a Laura Méndez/);
     expect(db.tables.decisions).toHaveLength(2);
     expect(db.rpcs.filter((x) => x.name === 'insert_decision')).toEqual([]);
@@ -712,5 +712,57 @@ describe('budgeted, resumable runs over HTTP (AC-70, R-56, R-57, R-59, R-60)', (
     expect(listed.filter((x) => x[1] === 'ESCALAR' && x[2] === 'FRENAR').length).toBeGreaterThan(1);
     expect(listed.filter((x) => x[1] === 'ESCALAR' && x[2] === 'PAGAR').length).toBeGreaterThan(0); // unlocked by the freed budget
     expect(out.will_pay).toBe(listed.filter((x) => x[2] === 'PAGAR').length);
+  });
+
+  // R-68: the preview of a policy save, and what a reevaluate run then really does on the same data.
+  const previewAndReevaluate = async () => {
+    const latest = () => new Map(db.tables.invoices!.filter((i) => i.company_id === 'A').map((i) => [String(i.id),
+      decisionsOf(String(i.id)).sort((a, b) => Number(a.seq) - Number(b.seq)).at(-1)?.outcome ?? null]));
+    const before = latest();
+    const r = await call('PUT', '/api/policy', { rules: { ...SEED.rules, per_payment_limit_usd: 1000 } });
+    expect(r.status).toBe(200);
+    const out = await json<{ will_pay: number; unread_pending?: number; would_change: Array<{ invoice_id: string; from: string | null; to: string | null }> }>(r);
+    await runAgent({ db: db as never, env, budget: new Budget(Infinity) }, 'A', 'pending', 'reevaluate');
+    return { before, after: latest(), out, listed: out.would_change.map((w) => [w.invoice_id, w.from, w.to]) };
+  };
+
+  it('R-68 acceptance: with only pending invoices the preview lists every one with from null, and will_pay is what a reevaluate run pays', async () => {
+    db = testDb(workspace());
+    const { after, out, listed } = await previewAndReevaluate();
+    const mine = [...after].filter(([id]) => id.startsWith('A-'));
+    expect(listed.sort()).toEqual(mine.map(([id, o]) => [id, null, o]).sort());
+    expect(listed).toHaveLength(29);
+    expect(out.will_pay).toBe(mine.filter(([, o]) => o === 'PAGAR').length);
+    expect(out.will_pay).toBeGreaterThan(0);
+    expect(out.unread_pending ?? 0).toBe(0);
+  });
+
+  it('R-68 acceptance: pending and ESCALAR mixed, freed budget included: pending rows all listed, ESCALAR only when it changes', async () => {
+    db = testDb(workspace());
+    db.tables.invoices!.push(...seedInvoices('A').slice(0, 20).map((i) => ({ ...i, id: `${i.id}-n`, received_at: NOW, // later than the decided ones
+      fields: { ...i.fields, invoice_number: `${(i.fields as { invoice_number?: string }).invoice_number}-n` } })));
+    const decide = db.tables.invoices!.filter((i) => i.company_id === 'A' && !String(i.id).endsWith('-n'));
+    const pending = db.tables.invoices!.filter((i) => String(i.id).endsWith('-n'));
+    db.tables.invoices = db.tables.invoices!.filter((i) => !pending.includes(i));
+    await runAgent({ db: db as never, env, budget: new Budget(Infinity) }, 'A', 'pending', 'manual');
+    expect(decide.length).toBeGreaterThan(0);
+    db.tables.invoices.push(...pending);
+    const { before, after, listed } = await previewAndReevaluate();
+    const mine = [...after].filter(([id, o]) => id.startsWith('A-') && (before.get(id) === null || before.get(id) !== o));
+    expect(listed.sort()).toEqual(mine.map(([id, o]) => [id, before.get(id), o]).sort());
+    expect([...before.values()].filter((o) => o === 'ESCALAR').length).toBeGreaterThan(0);
+    expect(listed.some((x) => x[1] === null)).toBe(true);
+    expect(listed.some((x) => x[1] === 'ESCALAR')).toBe(true);
+    expect(listed.some((x) => x[1] === 'ESCALAR' && x[2] === 'ESCALAR')).toBe(false);
+  });
+
+  it('R-68: a pending invoice with no read fields is listed with to null, counted in unread_pending and not in will_pay', async () => {
+    db = testDb(workspace(['01', '04']));
+    db.tables.invoices!.find((i) => i.id === 'A-04')!.fields = null;
+    const r = await call('PUT', '/api/policy', { rules: { ...SEED.rules, per_payment_limit_usd: 1000 } });
+    const out = await json<{ will_pay: number; unread_pending: number; would_change: Array<{ invoice_id: string; from: unknown; to: unknown }> }>(r);
+    expect(out.would_change.map((w) => [w.invoice_id, w.from, w.to])).toEqual([['A-01', null, 'FRENAR'], ['A-04', null, null]]);
+    expect(out.unread_pending).toBe(1);
+    expect(out.will_pay).toBe(0);
   });
 });

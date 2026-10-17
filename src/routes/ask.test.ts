@@ -50,8 +50,8 @@ function testDb() {
   });
   return {
     ...base,
-    rpc: async (name: string, args: Row = {}) => {
-      if (name !== 'rate_limit_hit') return base.rpc(name, args);
+    rpc: async (name: string, args: Row = {}, uid?: string) => {
+      if (name !== 'rate_limit_hit') return base.rpc(name, args, uid);
       base.rpcs.push({ name, args });
       return { data: true, error: null };
     },
@@ -59,7 +59,9 @@ function testDb() {
     storage: { from: () => ({ createSignedUrl: async () => ({ data: null, error: null }) }) },
   };
 }
-vi.mock('../lib/supabase', async (orig) => ({ ...(await orig<typeof import('../lib/supabase')>()), userClient: () => db }));
+// The user client runs RPCs as the JWT's user (auth.uid()), as PostgREST does.
+vi.mock('../lib/supabase', async (orig) => ({ ...(await orig<typeof import('../lib/supabase')>()),
+  userClient: (_e: Env, jwt: string) => ({ ...db, rpc: (name: string, args?: Row) => db.rpc(name, args, USERS[jwt]?.id) }) }));
 vi.mock('../lib/admin', () => ({
   adminClient: () => ({
     from: (t: string) => { adminCalls.push(`from:${t}`); return db.from(t); },
@@ -125,7 +127,8 @@ describe('POST /api/ask on a record (AC-67)', () => {
     const before = db.tables.decisions!.length;
     expect((await ask({ ...ON_04, question: 'págala' })).status).toBe(200);
     expect(db.queries.filter((q) => q.op !== 'select')).toEqual([]);
-    expect(db.rpcs.map((x) => x.name)).toEqual(['rate_limit_hit']); // AC-43's POST limit, as on every member POST
+    // AC-43's POST limit, as on every member POST, then the record's one read (AC-98): screen_detail is stable, so it cannot write
+    expect(db.rpcs.map((x) => x.name)).toEqual(['rate_limit_hit', 'screen_detail']);
     expect(adminCalls).toEqual(['rpc:take_question']);
     expect(quota.keys).toEqual(new Map([['u:user-a', 1]]));
     expect(db.tables.decisions!.length).toBe(before); // «págala» changes nothing

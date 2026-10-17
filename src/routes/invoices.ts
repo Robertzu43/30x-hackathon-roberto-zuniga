@@ -1,20 +1,20 @@
 // Bandeja, ingest and the decision detail (AC-08, AC-11, AC-12, AC-13, AC-15, AC-26, AC-29, AC-64, AC-65, AC-77).
 // Every read and write uses the user's JWT client (RLS); decisions and runs are written only by runAgent's record.ts.
-import type { Context } from 'hono';
+import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { decodeCursor, runAgent } from '../agent/loop';
 import { takeQuestion, type LecturaCheck } from '../agent/record';
-import { directorio, findBeneficiary } from '../agent/tools';
+import { findBeneficiary } from '../agent/tools';
 import { agentTrace, recordedFields, type StoredDecision } from '../agent/trace';
 import { explainCheck, whatWouldPay } from '../engine/explain';
 import { validFields } from '../engine/checks';
-import type { Invoice, InvoiceFields } from '../engine/types';
+import type { Beneficiary, Invoice, InvoiceFields } from '../engine/types';
 import type { Lang } from '../i18n';
 import * as trialText from '../i18n/features/trial-record';
 import { documentToText, extractFields, type ReadFields } from '../lib/llm';
-import type { AppEnv } from '../lib/auth';
+import { requireAuth, type AppEnv, type AuthEnv } from '../lib/auth';
 import { locate } from '../lib/snippet';
-import { isUuid, must } from '../lib/supabase';
+import { isUuid, must, type Db } from '../lib/supabase';
 import { memberRoutes } from './agent';
 
 // One invoice_current row: the invoice and its latest decision's columns (outcome null = pending).
@@ -113,12 +113,14 @@ export const invoices = memberRoutes()
       db.from('decisions').select('*').eq('invoice_id', id).order('seq', { ascending: false }).limit(1).maybeSingle().then(must),
     ]);
     return c.json({ invoice, decision }, 201);
-  })
-
-  .get('/:id', async (c) => {
-    const d = isUuid(c.req.param('id')) ? await invoiceDetail(c.var, c.req.param('id'), c.var.lang) : null; // R-74
-    return d ? c.json(d) : c.json({ error: 'Factura no encontrada' }, 404);
   });
+
+// Detalle (AC-98): the JWT check and one RPC, screen_detail, with no membership read: the function finds the company from
+// auth.uid(). Mounted before `invoices` in src/index.ts, so its requireUser never runs for this GET.
+export const invoiceScreen = new Hono<AuthEnv>().get('/:id', requireAuth, async (c) => {
+  const d = isUuid(c.req.param('id')) ? await invoiceDetail(c.var, c.req.param('id'), c.var.lang) : null; // R-74
+  return d ? c.json(d) : c.json({ error: 'Factura no encontrada' }, 404);
+});
 
 // AC-77, R-88, R-97: who read it, as recorded at read time (fields.read_by, else the run read recorded on the first agent
 // decision's Lectura check), and per field the line of the stored text where code found the value. reading_status is the
@@ -140,17 +142,23 @@ function readingOf(stored: ReadFields | null, first: StoredDecision | undefined,
   return { reading_status, reading: null };
 }
 
-// The decision detail of one of the company's invoices in `lang`, or null when it has none with that id. Also the record
-// «Pregúntale a Thesaurus» answers from (AC-67).
-export async function invoiceDetail({ db, companyId }: AppEnv['Variables'], id: string, lang: Lang) {
-  const row: Current | null = must(await db.from('invoice_current').select('*').eq('company_id', companyId).eq('id', id).maybeSingle());
-  if (!row) return null;
-  const [decisions, directory, company, notification]: [StoredDecision[], Awaited<ReturnType<typeof directorio>>, { is_demo: boolean; is_trial: boolean }, { email_sent: boolean; sent_to: string } | null] = await Promise.all([
-    db.from('decisions').select('*').eq('company_id', companyId).eq('invoice_id', row.id).order('seq').then(must),
-    directorio(db, companyId),
-    db.from('companies').select('is_demo, is_trial').eq('id', companyId).single().then(must),
-    db.from('approval_tokens').select('email_sent, sent_to').eq('invoice_id', row.id).order('created_at', { ascending: false }).limit(1).maybeSingle().then(must),
-  ]);
+// screen_detail's rows (migration 20261017001000): the reads Detalle needs, in one round trip.
+interface DetailRows {
+  company_id: string;
+  invoice: Current;
+  decisions: StoredDecision[];
+  directory: Beneficiary[];
+  company: { is_demo: boolean; is_trial: boolean };
+  notification: { email_sent: boolean; sent_to: string } | null;
+  policy: { name: string; version: number; created_at: string } | null;
+}
+
+// The decision detail of one of the caller's company's invoices in `lang`, or null when it has none with that id. Also the
+// record «Pregúntale a Thesaurus» answers from (AC-67). The texts are rendered here from the stored data (R-29).
+export async function invoiceDetail({ db }: { db: Db }, id: string, lang: Lang) {
+  const d: DetailRows | null = must(await db.rpc('screen_detail', { p_id: id }));
+  if (!d) return null;
+  const { invoice: row, decisions, directory, company, notification, policy, company_id: companyId } = d;
   const latest = decisions.at(-1);
   // file_path is member-writable (R-31): only the seed's static documents pass as is, only the company's own Storage keys are signed.
   const path = row.file_path;
@@ -158,8 +166,6 @@ export async function invoiceDetail({ db, companyId }: AppEnv['Variables'], id: 
     : path.startsWith('/demo/invoices/') ? path
     : path.startsWith(`${companyId}/`) ? (await db.storage.from('files').createSignedUrl(path, SIGNED_URL_SECONDS)).data?.signedUrl ?? null
     : null;
-  const policy = latest?.policy_version == null ? null
-    : must(await db.from('policies').select('name, version, created_at').eq('company_id', companyId).eq('version', latest.policy_version).maybeSingle());
   // R-71: "Lo que leí" shows a field the engine cannot trust as unknown, as every check saw it.
   const read = recordedFields(row.fields, latest?.checks);
   const invoice = { ...row, fields: (read && validFields(read)) as InvoiceFields };

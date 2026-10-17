@@ -27,3 +27,9 @@ test('the Worker serves the app and runs the cron (AC-62)', () => {
 });
 
 test('the Worker receives email (AC-87)', () => expect(worker.email).toBe(inbound));
+
+test('Smart Placement runs the Worker near Supabase, so each screen\'s round trips are short (AC-99, D40)', async () => {
+  const { readFileSync } = (await import('node:fs' as string)) as { readFileSync(u: URL, enc: 'utf8'): string };
+  const toml = readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf8');
+  expect(toml).toMatch(/^\[placement\]\nmode = "smart"$/m);
+});

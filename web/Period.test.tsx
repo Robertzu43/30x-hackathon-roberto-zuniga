@@ -44,6 +44,12 @@ test('shows money, outcome counts and the per-beneficiary table', async () => {
   expect(screen.queryByText('—')).toBeNull();
 });
 
+test('the per-beneficiary table scrolls inside its own wrapper on a narrow screen (AC-72)', async () => {
+  mockApi({ [`GET /api/period?month=${month}`]: body });
+  show();
+  expect((await screen.findByRole('table')).parentElement!.className).toBe('table-wrap');
+});
+
 test('an unread-payee row flagged unread is labelled in the UI language (R-63)', async () => {
   localStorage.setItem('lang', 'en');
   mockApi({ [`GET /api/period?month=${month}`]: { ...body, by_beneficiary: [{ beneficiary: null, unread: true, paid_usd: 0, committed_usd: 0, count: 3 }] } });

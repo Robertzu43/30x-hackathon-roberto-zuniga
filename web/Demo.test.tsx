@@ -115,8 +115,39 @@ test('the demo user sees "Reiniciar demo"; it resets, then runs the budgeted loo
   });
   app();
   fireEvent.click(await screen.findByRole('button', { name: 'Reiniciar demo' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Reiniciar' }));
   expect(await screen.findByText('16 PAGAR · 8 FRENAR · 5 ESCALAR')).toBeTruthy();
   const run = f.mock.calls.find(([u]) => String(u) === '/api/invoices/run');
   expect(JSON.parse(String(run![1]!.body))).toEqual({ cursor: 'c1' });
   await waitFor(() => expect(f.mock.calls.filter(([u]) => String(u) === '/api/demo/overview').length).toBeGreaterThan(1));
+});
+
+const ASK_ES = '¿Reiniciar la demo? Las facturas actuales se archivan y vuelve el conjunto de ejemplo; los cambios de otros visitantes también se pierden.';
+const resets = (f: ReturnType<typeof mockApi>) => f.mock.calls.filter(([u]) => String(u) === '/api/demo/reset').length;
+
+test('"Reiniciar demo" asks in place first; "Cancelar" changes nothing (AC-71)', async () => {
+  signedInAs(DEMO_EMAIL);
+  const f = mockApi({ 'GET /api/demo/overview': overview, 'POST /api/demo/reset': { PAGAR: 0, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null } });
+  app();
+  fireEvent.click(await screen.findByRole('button', { name: 'Reiniciar demo' }));
+  expect(screen.getByText(ASK_ES)).toBeTruthy();
+  expect(resets(f)).toBe(0);
+  fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+  expect(screen.queryByText(ASK_ES)).toBeNull();
+  expect(screen.getByRole('button', { name: 'Reiniciar demo' })).toBeTruthy();
+  await new Promise((r) => setTimeout(r, 50));
+  expect(resets(f)).toBe(0);
+});
+
+test('the reset question in English: "Reset" resets (AC-71)', async () => {
+  localStorage.setItem('lang', 'en');
+  signedInAs(DEMO_EMAIL);
+  const f = mockApi({ 'GET /api/demo/overview': overview, 'POST /api/demo/reset': { PAGAR: 1, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null } });
+  app();
+  fireEvent.click(await screen.findByRole('button', { name: 'Reset demo' }));
+  expect(screen.getByText("Reset the demo? Current invoices are archived and the sample set comes back; other visitors' changes are lost too.")).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
+  expect(await screen.findByText('1 PAY · 0 STOP · 0 ESCALATE')).toBeTruthy();
+  expect(resets(f)).toBe(1);
 });

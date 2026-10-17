@@ -85,26 +85,28 @@ export default function Period() {
           {data.by_beneficiary.length === 0 ? (
             <p className="muted">{t('period.none')}</p>
           ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>{t('period.beneficiary')}</th>
-                  <th className="num">{t('period.invoices')}</th>
-                  <th className="num">{t('period.paid')}</th>
-                  <th className="num">{t('period.committed')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.by_beneficiary.map((b, i) => (
-                  <tr key={b.beneficiary ?? i}>
-                    <td>{b.unread || !b.beneficiary ? t('period.unread') : b.beneficiary}</td>
-                    <td className="num">{b.count}</td>
-                    <td className="num">{usd(b.paid_usd)}</td>
-                    <td className="num">{usd(b.committed_usd)}</td>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>{t('period.beneficiary')}</th>
+                    <th className="num">{t('period.invoices')}</th>
+                    <th className="num">{t('period.paid')}</th>
+                    <th className="num">{t('period.committed')}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {data.by_beneficiary.map((b, i) => (
+                    <tr key={b.beneficiary ?? i}>
+                      <td>{b.unread || !b.beneficiary ? t('period.unread') : b.beneficiary}</td>
+                      <td className="num">{b.count}</td>
+                      <td className="num">{usd(b.paid_usd)}</td>
+                      <td className="num">{usd(b.committed_usd)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </>
       )}

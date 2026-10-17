@@ -25,6 +25,7 @@ export default function Demo() {
   const [failed, setFailed] = useState(false);
   const [entering, setEntering] = useState(false);
   const [enterFailed, setEnterFailed] = useState(false);
+  const [asking, setAsking] = useState(false); // AC-71: the shared demo is reset only after an in-place "Reiniciar"
   const run = useRunAgent({ first: '/api/demo/reset', next: '/api/invoices/run' });
 
   // Public and cached 60 s by the API; a retry or a reset skips the browser cache.
@@ -81,9 +82,16 @@ export default function Demo() {
           <button type="button" className="primary" disabled={entering} onClick={() => void enter()}>{t(entering ? 'demo.entering' : 'demo.enter')}</button>
           <a href="/demo/happy-path.webm">{t('demo.video')} →</a>
           {isDemoUser(session?.user, demoEmail) && (
-            <button type="button" disabled={run.running} onClick={() => void reset()}>{t('demo.reset')}</button>
+            <button type="button" disabled={run.running || asking} onClick={() => setAsking(true)}>{t('demo.reset')}</button>
           )}
         </div>
+        {asking && (
+          <div className="demo-confirm">
+            <p>{t('demo.reset.ask')}</p>
+            <button type="button" className="primary" onClick={() => { setAsking(false); void reset(); }}>{t('demo.reset.yes')}</button>
+            <button type="button" onClick={() => setAsking(false)}>{t('demo.reset.no')}</button>
+          </div>
+        )}
         {enterFailed && <p role="alert" className="error">{t('demo.enter_failed')}</p>}
         <RunProgress run={run} mode="pending" />
       </header>

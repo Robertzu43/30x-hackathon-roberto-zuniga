@@ -1,7 +1,8 @@
-/* global Buffer */
+/* global Buffer, document */
 // The perf harness's own checks (AC-97): median, p95, gzip sum, the critical path and the table, on fixtures. No browser, no network.
+import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
-import { coloOf, criticalApis, gzSum, judge, median, navRows, p95, portalRows, renderPerf, ROW0 } from './perf.mjs';
+import { coloOf, criticalApis, gzSum, isHit, judge, median, missRow, navRows, p95, portalRows, PRIMARY, renderPerf, ROW0, usable } from './perf.mjs';
 import { SCREENS } from './ux-gate.mjs';
 
 describe('statistics', () => {
@@ -101,4 +102,65 @@ describe('unmeasured is never green (AC-97)', () => {
     expect(md).toContain('FAILED ROWS: 1');
   });
   it('a known portal base adds no row', () => expect(portalRows(true)).toEqual([]));
+});
+
+describe('demo overview, cache miss (AC-97 Clarified, R-140)', () => {
+  const sample = (ms, cache) => ({ ms, headers: cache ? { 'cf-cache-status': cache } : {} });
+  const run = (queue) => { const waits = []; const once = async () => queue.shift(); return missRow({ once, wait: async () => waits.push(1) }).then((row) => ({ row, waits: waits.length })); };
+  it('is the median of 3 samples, waiting before each one', async () => {
+    const { row, waits } = await run([sample(2400, 'MISS'), sample(900, 'EXPIRED'), sample(1700, 'MISS')]);
+    expect(row.value).toBe(1700);
+    expect(waits).toBe(3);
+  });
+  it('rejects a HIT sample, waits again and takes a fresh one', async () => {
+    const { row, waits } = await run([sample(40, 'HIT'), sample(2400), sample(2000), sample(1800)]);
+    expect(row.value).toBe(2000);
+    expect(waits).toBe(4);
+  });
+  it('a cache that never expires is not measured, with the reason', async () => {
+    const { row } = await run(Array.from({ length: 9 }, () => sample(40, 'HIT')));
+    expect(row.value).toBeNull();
+    expect(row.why).toMatch(/HIT/);
+  });
+  it('recognises a HIT by cf-cache-status, whatever the case', () => {
+    expect(isHit({ 'cf-cache-status': 'hit' })).toBe(true);
+    expect(isHit({ 'cf-cache-status': 'MISS' })).toBe(false);
+    expect(isHit({})).toBe(false);
+  });
+  it('is INFO in the table, never a FAIL, even above the 600 ms target or not measured', () => {
+    const rows = [
+      { screen: 'inbox', metric: 'First load, median of 3', value: 1200, unit: 'ms', target: 2000 },
+      { screen: 'demo overview (cache miss)', metric: 'Median of 3 uncached requests', value: 2270, unit: 'ms', info: true },
+      { screen: 'demo overview (cache miss)', metric: 'again', value: null, why: 'cache never expired', unit: 'ms', info: true },
+    ];
+    const md = renderPerf({ when: '2026-10-17T20:00:00.000Z', base: 'https://x.test', colo: '?', country: '?', rows });
+    expect(md).toMatch(/\| demo overview \(cache miss\) \| Median of 3 uncached requests \| 2270 ms \| not graded \| INFO \|/);
+    expect(md).toMatch(/\| again \| not measured \(cache never expired\) \| not graded \| INFO \|/);
+    expect(md).toContain('FAILED ROWS: 0');
+  });
+});
+
+describe('login readiness (AC-97 Clarified, AC-91 item 7)', () => {
+  // The login markup: the heading is the logo image (AC-80), the door is the one primary action (TrialButton).
+  const dom = (html) => { const w = new JSDOM(html).window; w.Element.prototype.checkVisibility = () => true; globalThis.document = w.document; }; // the page function reads the global document
+  const page = (button) => dom(`<h1><img alt="Thesaurus" src="/x.svg"></h1>${button}`);
+  const door = (attrs = '') => `<button type="button" class="primary" ${attrs}>Probar con mi propia empresa</button><button type="submit">Enviar código</button>`;
+  it('the primary selector finds the door and nothing else', () => {
+    page(door());
+    expect([...document.querySelectorAll(PRIMARY)].map((b) => b.textContent)).toEqual(['Probar con mi propia empresa']);
+  });
+  it('is usable when the logo heading and the enabled door show', () => {
+    page(door());
+    expect(usable({ sel: PRIMARY, need: true })).toBeGreaterThan(0);
+  });
+  it('is not usable while the door is disabled or missing', () => {
+    page(door('disabled'));
+    expect(usable({ sel: PRIMARY, need: true })).toBe(false);
+    page('<button type="submit">Enviar código</button>');
+    expect(usable({ sel: PRIMARY, need: true })).toBe(false);
+  });
+  it('is not usable without a heading name', () => {
+    dom(`<h1></h1>${door()}`);
+    expect(usable({ sel: PRIMARY, need: true })).toBe(false);
+  });
 });

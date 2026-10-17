@@ -23,8 +23,8 @@ test('at phone width every button and select (top bar, es/en, Nueva factura, Edi
   expect(rule('button')).not.toMatch(/min-height/);
 });
 
-test('at phone width the section links are 44 px tall (UX-05)', () => {
-  expect(media('max-width: 640px')).toMatch(/\.screens a \{[^}]*min-height: 44px/);
+test('at phone width the section links are 44 x 44 (UX-05; «Inbox» is 36 px wide as text)', () => {
+  expect(media('max-width: 640px')).toMatch(/\.screens a \{[^}]*min-height: 44px; min-width: 44px/);
 });
 
 test('at 768 px and below every field is 16 px, page styles included, so a phone never zooms in (UX-06)', () => {

@@ -130,6 +130,11 @@ test('a month with no payments says what to do next: another month or the Bandej
   expect(screen.getByRole('link', { name: 'Ir a la Bandeja' }).getAttribute('href')).toBe('/');
 });
 
+test('the empty-state link is a 44 px tap target (UX-05)', async () => {
+  const { readFileSync } = (await import('node:fs' as string)) as { readFileSync(p: string, enc: string): string };
+  expect(readFileSync('web/pages/period.css', 'utf8')).toMatch(/\.period-state a \{[^}]*min-height: 44px/);
+});
+
 test('the per-beneficiary table scroll region is reachable by keyboard and named (UX-22)', async () => {
   mockApi({ [`GET /api/period?month=${month}`]: body });
   show();

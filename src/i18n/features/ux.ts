@@ -8,6 +8,7 @@ export const es: Record<string, string> = {
   'inbox.new.no_file': 'Elige un archivo',
   'inbox.new.choose': 'Elegir archivo',
   'inbox.new.none_chosen': 'Ningún archivo elegido',
+  'inbox.new.chosen': 'Archivo elegido: {name}',
   'approve.title.dead': 'No puedo mostrar este pago',
   'approve.dead.next': 'Si todavía hay que responderlo, pídele a tu equipo de pagos un enlace nuevo.',
 };
@@ -21,6 +22,7 @@ export const en: Record<string, string> = {
   'inbox.new.no_file': 'Choose a file',
   'inbox.new.choose': 'Choose file',
   'inbox.new.none_chosen': 'No file chosen',
+  'inbox.new.chosen': 'Chosen file: {name}',
   'approve.title.dead': "I can't show this payment",
   'approve.dead.next': 'If it still needs an answer, ask your payments team for a new link.',
 };

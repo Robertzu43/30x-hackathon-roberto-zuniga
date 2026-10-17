@@ -1,6 +1,6 @@
 // The 13 checks (D15, AC-16..AC-23). Each is pure: (ctx) => Check. Missing input or rule = 'no_verificado' (AC-18).
-import { round2 } from '../lib/money';
-import type { Beneficiary, Check, CheckId, Invoice, PeriodState, PolicyRules, PreviousInvoice, Verdict } from './types';
+import { MAX_AMOUNT, round2 } from '../lib/money';
+import type { Beneficiary, Check, CheckId, Invoice, InvoiceFields, PeriodState, PolicyRules, PreviousInvoice, Verdict } from './types';
 
 export interface CheckContext {
   invoice: Invoice;
@@ -38,11 +38,31 @@ function earlier({ invoice, beneficiary, period }: CheckContext): PreviousInvoic
     (beneficiary ? p.beneficiary_id === beneficiary.id : !p.beneficiary_id && nameKey(p.payee_name) === nameKey(invoice.fields.payee_name)));
 }
 
+// R-71: a field the engine cannot trust is unknown (null for every check): no confidence entry >= 0.8, or the wrong
+// type or shape. Never repaired: "100" as a string is unknown even when it reads right.
+const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v : null);
+const day = (v: unknown) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`)) &&
+  new Date(`${v}T00:00:00Z`).toISOString().startsWith(v) ? v : null); // 2026-02-31 parses as 03-03: not a real date
+const currency = (v: unknown) => (typeof v === 'string' && /^[A-Z]{3}$/.test(v.trim()) ? v.trim() : null);
+const amount = (v: unknown) => (typeof v === 'number' && v > 0 && v <= MAX_AMOUNT ? v : null); // NaN and Infinity fail too
+export function validFields(f: InvoiceFields): InvoiceFields {
+  const conf: Record<string, unknown> = f.confidence ?? {};
+  const pick = <T>(k: keyof InvoiceFields, ok: (v: unknown) => T | null) => {
+    const c = conf[k];
+    return typeof c === 'number' && c >= 0.8 ? ok(f[k]) : null;
+  };
+  return {
+    ...f, payee_name: pick('payee_name', text), amount: pick('amount', amount), currency: pick('currency', currency),
+    invoice_number: pick('invoice_number', text), issue_date: pick('issue_date', day), due_date: pick('due_date', day),
+    concept: pick('concept', text), bank_account: pick('bank_account', text),
+  };
+}
+
+// Runs on validFields' output: unknown = null.
 const READ = ['payee_name', 'amount', 'currency', 'invoice_number'] as const;
 export function lectura({ invoice: { fields: f } }: CheckContext): Check {
-  const missing = READ.filter((k) => f[k] === null || (f.confidence?.[k] ?? 1) < 0.8);
-  const bad = missing.length > 0 || !(f.amount !== null && f.amount > 0);
-  return make('lectura', bad ? 'no_verificado' : 'cumple', missing.join(', ') || f.amount, null, { missing: missing.join(', ') || null });
+  const missing = READ.filter((k) => f[k] === null);
+  return make('lectura', missing.length ? 'no_verificado' : 'cumple', missing.join(', ') || f.amount, null, { missing: missing.join(', ') || null });
 }
 
 export function beneficiario_permitido({ invoice, beneficiary, rules }: CheckContext): Check {
@@ -137,6 +157,8 @@ export function periodo({ invoice, now }: CheckContext): Check {
 
 export function moneda({ invoice: { fields: f }, rules, amountUsd }: CheckContext): Check {
   const rate = f.currency === 'USD' ? 1 : (rules?.fx_rates?.[f.currency ?? ''] ?? null);
-  const v: Verdict = !f.currency || (!rules?.fx_rates && f.currency !== 'USD') ? 'no_verificado' : rate !== null && rate > 0 ? 'cumple' : 'no_cumple';
+  // A known amount whose USD value is unusable (not finite or above 1e11, R-71) cannot be checked against USD rules.
+  const v: Verdict = !f.currency || (!rules?.fx_rates && f.currency !== 'USD') ? 'no_verificado'
+    : !(rate !== null && rate > 0) ? 'no_cumple' : f.amount !== null && amountUsd === null ? 'no_verificado' : 'cumple';
   return make('moneda', v, f.currency, rate, { amount: f.amount, currency: f.currency, rate, amount_usd: amountUsd });
 }

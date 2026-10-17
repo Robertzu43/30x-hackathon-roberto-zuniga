@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { FULL_CONFIDENCE } from '../engine/__fixtures__/seed';
 import type { Env } from '../env';
 import type { Decision, Invoice } from '../engine/types';
 import { escalationEmail, sendEmail } from './email';
@@ -59,7 +60,7 @@ describe('escalationEmail (AC-39, AC-65, R-28)', () => {
   const QUESTION = 'Juan, la factura #2044 de Nube Sur LLC por 4.200 USD supera tu umbral de aprobación de 2.500 USD. ¿La pago?';
   const invoice: Invoice = { id: 'i', received_at: '2026-10-10T15:00:00Z', source: 'pdf', fields: {
     payee_name: 'Nube Sur LLC', amount: 4200, currency: 'USD', invoice_number: '2044', issue_date: '2026-10-10', due_date: '2026-11-24',
-    concept: 'Suscripción mensual plataforma de datos', bank_account: 'ACH routing 026009593 cuenta 483920175', confidence: {} } };
+    concept: 'Suscripción mensual plataforma de datos', bank_account: 'ACH routing 026009593 cuenta 483920175', confidence: FULL_CONFIDENCE } };
   const decision: Decision = { outcome: 'ESCALAR', amount_usd: 4200, payment: null, checks: [
     { id: 'limite_pago', verdict: 'cumple', actual: '4200', threshold: '5000', values: { amount_usd: 4200, limit_usd: 5000 } },
     { id: 'umbral_aprobacion', verdict: 'no_cumple', actual: '4200', threshold: '2500', values: { amount_usd: 4200, limit_usd: 2500 } },
@@ -68,6 +69,11 @@ describe('escalationEmail (AC-39, AC-65, R-28)', () => {
   const mail = (o: Partial<Parameters<typeof escalationEmail>[0]> = {}) =>
     escalationEmail({ lang: 'es', question: QUESTION, invoice, decision, ...urls, ...o });
 
+  it('"Lo que leí" shows a field the engine cannot trust as desconocido (R-71)', () => {
+    const text = mail({ invoice: { ...invoice, fields: { ...invoice.fields, due_date: 'not-a-date' } } }).text;
+    expect(text).toContain('Vencimiento: desconocido');
+    expect(text).not.toContain('not-a-date');
+  });
   it('subject and first line equal the stored question', () => {
     const m = mail();
     expect(m.subject).toBe(QUESTION);

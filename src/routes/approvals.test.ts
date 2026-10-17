@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { seedConfidence } from '../engine/__fixtures__/seed';
 import sql from '../../supabase/migrations/20261017000300_seed_andina.sql?raw';
 import { fakeDb, type FakeDb } from '../agent/__fixtures__/fake-db';
 import type { StoredDecision } from '../agent/trace';
@@ -36,7 +37,7 @@ function workspace(only?: string[]) {
     const received_at = new Date(r.prev_month ? start - 5 * 864e5 : start + ((Date.parse(NOW) - start) * Number(r.nn)) / 30).toISOString();
     const day = bogotaDay(received_at);
     return { id: `A-${r.nn}`, company_id: 'A', source: r.source, raw_text: r.raw_text, archived: false, received_at,
-      fields: { ...r.fields, issue_date: r.issue === null ? null : addDays(day, r.issue), due_date: r.due === null ? null : addDays(day, r.due), confidence: {} } };
+      fields: { ...r.fields, issue_date: r.issue === null ? null : addDays(day, r.issue), due_date: r.due === null ? null : addDays(day, r.due), confidence: seedConfidence(r.fields) } };
   });
   return {
     companies: [{ id: 'A', approver_email: APPROVER, is_demo: false }, { id: 'B', approver_email: 'x@b.example', is_demo: false }],

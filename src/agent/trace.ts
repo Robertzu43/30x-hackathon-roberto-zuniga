@@ -1,6 +1,7 @@
 // "Lo que hice" (AC-64, D24): the agent's steps, rendered only from what was recorded (R-29): the stored decisions,
 // the invoice, the company's demo flag and the recorded send result. Templates only, no model.
 import { agreementText, fieldList, fill, list, money, motives } from '../engine/explain';
+import { validFields } from '../engine/checks';
 import { outcomeOf } from '../engine/decide';
 import type { Check, CheckId, Decision, Invoice, Outcome } from '../engine/types';
 import { t, type Lang } from '../i18n';
@@ -36,7 +37,8 @@ export interface TraceArgs {
 
 const READ = ['payee_name', 'amount', 'currency', 'invoice_number'] as const;
 
-function read({ source, fields: f }: Invoice, lang: Lang): string {
+function read({ source, fields }: Invoice, lang: Lang): string {
+  const f = validFields(fields); // R-71: what the engine could not trust was not read
   const src = t(lang, `trace.source.${source}`);
   const found = [
     f.payee_name && fill(lang, 'trace.payee', { payee: f.payee_name }),

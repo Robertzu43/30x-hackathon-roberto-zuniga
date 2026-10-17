@@ -1,5 +1,6 @@
 // The escalation question (AC-65, D25): one template filled with the checks still blocking the payment. Generated once
 // per language at decision time and stored (R-28); the Spanish text is the email subject and first line (AC-39).
+import { validFields } from '../engine/checks';
 import { HUMAN_OVERRIDABLE } from '../engine/decide';
 import { fill, list, money, whatWouldPay } from '../engine/explain';
 import type { Decision, Invoice } from '../engine/types';
@@ -12,7 +13,7 @@ const nameOf = (email: string) => {
 };
 
 export function escalationQuestion(args: { approverEmail: string; invoice: Invoice; decision: Pick<Decision, 'checks'> }, lang: Lang): string {
-  const f = args.invoice.fields;
+  const f = validFields(args.invoice.fields); // R-71
   const failing = args.decision.checks.filter((c) => c.verdict !== 'cumple' && !c.overridden);
   const motives = failing.map((c) => fill(lang, `question.motive.${c.id}.${c.verdict}`,
     Object.fromEntries(Object.entries(c.values).map(([k, v]) => [k, typeof v === 'number' ? money(v, lang) : v]))));

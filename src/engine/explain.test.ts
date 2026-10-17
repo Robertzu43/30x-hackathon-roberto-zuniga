@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import { describe, expect, it } from 'vitest';
+import { FULL_CONFIDENCE } from './__fixtures__/seed';
 import sql from '../../supabase/migrations/20261017000300_seed_andina.sql?raw';
 import en from '../i18n/en';
 import es from '../i18n/es';
@@ -15,7 +16,7 @@ const NOW = '2026-10-17T15:00:00Z';
 const EMPTY: PeriodState = { committed_usd: 0, paid_usd: 0, previous: [] };
 const LAURA: InvoiceFields = {
   payee_name: 'Laura Méndez', amount: 2500, currency: 'USD', invoice_number: '1042', issue_date: '2026-10-10',
-  due_date: '2026-11-24', concept: 'Retainer mensual de desarrollo', bank_account: 'Bancolombia ahorros 0012-3456-4821', confidence: {},
+  due_date: '2026-11-24', concept: 'Retainer mensual de desarrollo', bank_account: 'Bancolombia ahorros 0012-3456-4821', confidence: FULL_CONFIDENCE,
 };
 const NUBE: InvoiceFields = { ...LAURA, payee_name: 'Nube Sur LLC', amount: 4200, invoice_number: '2044',
   concept: 'Suscripción mensual plataforma de datos', bank_account: 'ACH routing 026009593 cuenta 483920175' };
@@ -114,6 +115,10 @@ describe('headline (AC-27, AC-13)', () => {
     const { d, i, b } = run({});
     expect(headline(d, i, b, 'es')).toBe('PAGAR · 2.500 USD a Laura Méndez, retainer de octubre, dentro de reglas');
     expect(headline(d, i, b, 'en')).toBe('PAY · 2,500 USD to Laura Méndez, October retainer, within the rules');
+  });
+  it('an amount the engine cannot trust reads as unknown, never as printed (R-71)', () => {
+    const { d, i, b } = run({ amount: 1e15 });
+    expect(headline(d, i, b, 'es')).toMatch(/^ESCALAR · monto desconocido a Laura Méndez: /);
   });
   it('ESCALAR over the approval threshold, es and en', () => {
     const { d, i, b } = run(NUBE);

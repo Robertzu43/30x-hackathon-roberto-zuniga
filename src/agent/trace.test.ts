@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import { describe, expect, it } from 'vitest';
+import { FULL_CONFIDENCE } from '../engine/__fixtures__/seed';
 import sql from '../../supabase/migrations/20261017000300_seed_andina.sql?raw';
 import { findBeneficiary } from '../engine/checks';
 import { decide, decideWithOverrides } from '../engine/decide';
@@ -14,7 +15,7 @@ const NOW = '2026-10-17T15:00:00Z';
 const EMPTY: PeriodState = { committed_usd: 0, paid_usd: 0, previous: [] };
 const LAURA: InvoiceFields = {
   payee_name: 'Laura Méndez', amount: 2500, currency: 'USD', invoice_number: '1042', issue_date: '2026-10-10',
-  due_date: '2026-11-24', concept: 'Retainer mensual de desarrollo', bank_account: 'Bancolombia ahorros 0012-3456-4821', confidence: {},
+  due_date: '2026-11-24', concept: 'Retainer mensual de desarrollo', bank_account: 'Bancolombia ahorros 0012-3456-4821', confidence: FULL_CONFIDENCE,
 };
 const NUBE: Partial<InvoiceFields> = { payee_name: 'Nube Sur LLC', amount: 4200, invoice_number: '2044',
   concept: 'Suscripción mensual plataforma de datos', bank_account: 'ACH routing 026009593 cuenta 483920175' };
@@ -89,6 +90,10 @@ describe('agentTrace "Lo que hice" (AC-64, D24, R-29)', () => {
   it('ESCALAR with no recorded send does not claim one', () => {
     const { i, d } = escalated();
     expect(trace(i, [d])[4]?.text).toBe('La pregunta quedó en el tablero; no hay registro de envío de correo.');
+  });
+  it('a field the engine cannot trust is reported as not read (R-71)', () => {
+    const i = inv({ amount: '100' as unknown as number });
+    expect(trace(i, [stored(run(i))])[0]?.text).toBe('Leí el PDF y encontré a Laura Méndez, factura #1042; no pude leer el monto.');
   });
   it('an illegible image', () => {
     const i = inv({ payee_name: null, amount: null, currency: null, invoice_number: null, bank_account: null, concept: 'ilegible' }, 'image');

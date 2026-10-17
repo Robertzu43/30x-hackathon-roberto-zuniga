@@ -2,7 +2,8 @@
 import { describe, expect, it } from 'vitest';
 import sql from '../../supabase/migrations/20261017000300_seed_andina.sql?raw';
 import { round2 } from '../lib/money';
-import { bogotaDay, findBeneficiary } from './checks';
+import { FULL_CONFIDENCE, seedConfidence } from './__fixtures__/seed';
+import { bogotaDay, findBeneficiary, validFields } from './checks';
 import { decide, decideWithOverrides, HUMAN_OVERRIDABLE, outcomeOf } from './decide';
 import {
   CHECK_IDS, type Beneficiary, type Check, type CheckId, type Decision, type Invoice, type InvoiceFields,
@@ -24,7 +25,7 @@ const BY = { email: 'roberto@hacketix.com', channel: 'dashboard' as const };
 const fields = (p: Partial<InvoiceFields> = {}): InvoiceFields => ({
   payee_name: 'Laura Méndez', amount: 2500, currency: 'USD', invoice_number: '1042', issue_date: '2026-10-10',
   due_date: '2026-11-24', concept: 'Retainer mensual de desarrollo', bank_account: 'Bancolombia ahorros 0012-3456-4821',
-  confidence: {}, ...p,
+  confidence: FULL_CONFIDENCE, ...p,
 });
 const inv = (p: Partial<InvoiceFields> = {}, received_at = RECEIVED): Invoice =>
   ({ id: 'inv-x', received_at, source: 'pdf', fields: fields(p) });
@@ -130,12 +131,76 @@ describe('reading (AC-14, R-10)', () => {
     expect([d.outcome, check(d, 'lectura').verdict, d.amount_usd]).toEqual(['ESCALAR', 'no_verificado', null]);
   });
   it('a field read with confidence below 0.8 is not trusted', () => {
-    expect(check(run({ confidence: { amount: 0.79 } }), 'lectura').verdict).toBe('no_verificado');
-    expect(check(run({ confidence: { amount: 0.8 } }), 'lectura').verdict).toBe('cumple');
+    expect(check(run({ confidence: { ...FULL_CONFIDENCE, amount: 0.79 } }), 'lectura').verdict).toBe('no_verificado');
+    expect(check(run({ confidence: { ...FULL_CONFIDENCE, amount: 0.8 } }), 'lectura').verdict).toBe('cumple');
   });
   it('zero or negative amount is not a payable reading', () => {
     expect(run({ amount: 0 }).outcome).toBe('ESCALAR');
     expect(check(run({ amount: -2500 }), 'lectura').verdict).toBe('no_verificado');
+  });
+});
+
+// R-71: a field the engine cannot trust is unknown (null for every check), and unknown is never cumple.
+describe('field contract: unknown is never cumple (AC-16, R-71)', () => {
+  const bad = (p: Record<string, unknown>, o?: Opts) => run(p as Partial<InvoiceFields>, o);
+  const expectEscalar = (d: Decision, id: CheckId) => {
+    expect(d.outcome).toBe('ESCALAR');
+    expect([id, check(d, id).verdict]).toEqual([id, 'no_verificado']);
+  };
+  it("due_date 'not-a-date' -> vencimiento no_verificado, ESCALAR (never PAGAR)", () => {
+    const d = bad({ due_date: 'not-a-date' });
+    expectEscalar(d, 'vencimiento');
+    expect(failing(d)).toEqual(['vencimiento']);
+  });
+  it('an impossible calendar date (2026-02-31) is unknown', () => {
+    expectEscalar(bad({ due_date: '2026-02-31' }), 'vencimiento');
+    expectEscalar(bad({ due_date: '2026-11-24T00:00:00Z' }), 'vencimiento');
+  });
+  it('confidence {} -> every field unknown, Lectura no_verificado, ESCALAR', () => {
+    const d = bad({ confidence: {} });
+    expectEscalar(d, 'lectura');
+    for (const id of ['beneficiario_cuenta', 'duplicado_probable', 'vencimiento'] as const) expect(check(d, id).verdict).toBe('no_verificado');
+    expect(d.payment).toBeNull();
+  });
+  it('a missing or non-numeric confidence entry makes only that field unknown', () => {
+    const noBank = Object.fromEntries(Object.entries(FULL_CONFIDENCE).filter(([k]) => k !== 'bank_account'));
+    expect(failing(bad({ confidence: noBank }))).toEqual(['beneficiario_cuenta']);
+    expect(failing(bad({ confidence: { ...FULL_CONFIDENCE, concept: '0.99' } }))).toEqual(['duplicado_probable']);
+    expect(failing(bad({ confidence: { ...FULL_CONFIDENCE, payee_name: 0.79 } }))).toContain('lectura');
+  });
+  it('amount "100" (a string, even if it reads right) -> Lectura no_verificado, ESCALAR', () => {
+    const d = bad({ amount: '100' });
+    expectEscalar(d, 'lectura');
+    expect(d.amount_usd).toBeNull();
+  });
+  it('amount 1e15 -> ESCALAR with amount_usd null, never throws', () => {
+    let d: Decision | undefined;
+    expect(() => { d = bad({ amount: 1e15 }); }).not.toThrow();
+    expectEscalar(d!, 'lectura');
+    expect(d!.amount_usd).toBeNull();
+  });
+  it('amount NaN, Infinity or 0 -> unknown; exactly 1e11 is a valid reading', () => {
+    for (const amount of [NaN, Infinity, 0]) expectEscalar(bad({ amount }), 'lectura');
+    expect(check(bad({ amount: 1e11 }), 'lectura').verdict).toBe('cumple');
+  });
+  it('a policy rate that pushes amount_usd over 1e11 -> amount_usd null, moneda and USD checks no_verificado, ESCALAR', () => {
+    const d = bad({ amount: 1e10, currency: 'COP' }, { rules: { ...RULES, fx_rates: { ...RULES.fx_rates, COP: 100 } } });
+    expect(d.amount_usd).toBeNull();
+    for (const id of ['moneda', 'limite_pago', 'umbral_aprobacion', 'presupuesto_periodo', 'saldo_cuenta'] as const) expectEscalar(d, id);
+    expect(bad({ amount: 1e10, currency: 'COP' }, { rules: { ...RULES, fx_rates: { COP: 1e308 } } }).amount_usd).toBeNull();
+  });
+  it.each(['eur1', 'usd1', 'usd', 'US', ''])('currency %j -> Lectura no_verificado, ESCALAR', (currency) => {
+    expectEscalar(bad({ currency }), 'lectura');
+  });
+  it('currency is trimmed before use', () => expect(bad({ currency: ' USD ' }).outcome).toBe('PAGAR'));
+  it('a blank or non-string text field is unknown', () => {
+    expectEscalar(bad({ payee_name: '   ' }), 'lectura');
+    expectEscalar(bad({ concept: 42 }), 'duplicado_probable');
+    expectEscalar(bad({ bank_account: ' ' }), 'beneficiario_cuenta');
+  });
+  it('validFields nulls each invalid field and keeps the rest', () => {
+    const f = validFields({ ...fields(), issue_date: '2025-02-29', amount: '100' as unknown as number, confidence: { ...FULL_CONFIDENCE, concept: 0.5 } });
+    expect([f.issue_date, f.amount, f.concept, f.payee_name, f.due_date]).toEqual([null, null, null, 'Laura Méndez', '2026-11-24']);
   });
 });
 
@@ -334,7 +399,7 @@ function seedInvoices(now: string): Array<{ inv: Invoice; row: SeedRow }> {
     const at = row.prev_month ? start - 5 * 864e5 : start + ((Date.parse(now) - start) * Number(row.nn)) / 30;
     const received_at = new Date(at).toISOString();
     const day = bogotaDay(received_at);
-    const f = { ...row.fields, issue_date: row.issue === null ? null : addDays(day, row.issue), due_date: row.due === null ? null : addDays(day, row.due), confidence: {} };
+    const f = { ...row.fields, issue_date: row.issue === null ? null : addDays(day, row.issue), due_date: row.due === null ? null : addDays(day, row.due), confidence: seedConfidence(row.fields) };
     return { row, inv: { id: `seed-${row.nn}`, received_at, source: row.source, fields: f } };
   }).sort((a, b) => a.inv.received_at.localeCompare(b.inv.received_at) || a.row.nn.localeCompare(b.row.nn));
 }

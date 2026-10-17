@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 // Route tests for Task 8b: the app from src/index.ts with fake Supabase clients, never the real Supabase.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { seedConfidence } from '../engine/__fixtures__/seed';
 import sql from '../../supabase/migrations/20261017000300_seed_andina.sql?raw';
 import { fakeDb } from '../agent/__fixtures__/fake-db';
 import { bogotaDay } from '../engine/checks';
@@ -109,7 +110,7 @@ function seedInvoices(id: string, only?: string[]) {
     return {
       id: `${id}-${r.nn}`, company_id: id, source: r.source, raw_text: r.raw_text, archived: false, expected_outcome: r.expected_outcome, received_at,
       file_path: r.source === 'pdf' ? `/demo/invoices/${r.nn}.pdf` : r.source === 'image' ? `/demo/invoices/${r.nn}.png` : null,
-      fields: { ...r.fields, issue_date: r.issue === null ? null : addDays(day, r.issue), due_date: r.due === null ? null : addDays(day, r.due), confidence: {} },
+      fields: { ...r.fields, issue_date: r.issue === null ? null : addDays(day, r.issue), due_date: r.due === null ? null : addDays(day, r.due), confidence: seedConfidence(r.fields) },
     };
   });
 }
@@ -321,6 +322,12 @@ describe('GET /api/invoices/:id (AC-26, AC-08, AC-64, AC-65)', () => {
     expect((await json(await call('GET', '/api/invoices/A-14'))).file_url).toBe('https://signed.test/files/A/abc.jpg?expires=300');
   });
 
+  it('"Lo que leí" shows a field the engine cannot trust as unknown (null), confidence kept (R-71)', async () => {
+    db = testDb(workspace(['13']));
+    Object.assign(db.tables.invoices!.find((i) => i.id === 'A-13')!.fields as Row, { due_date: 'not-a-date', amount: '2400' });
+    const d = await json<{ invoice: { fields: Row } }>(await call('GET', '/api/invoices/A-13'));
+    expect(d.invoice.fields).toMatchObject({ due_date: null, amount: null, payee_name: 'Pixel Lab', confidence: { amount: 0.97 } });
+  });
   it('a pending invoice has no trace, no question and no explanations', async () => {
     db = testDb(workspace(['13']));
     const d = await json(await call('GET', '/api/invoices/A-13'));

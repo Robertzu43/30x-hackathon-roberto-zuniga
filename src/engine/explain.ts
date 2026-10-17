@@ -1,5 +1,6 @@
 // Record sentences (AC-27, AC-28, D7): fixed templates filled with stored values, never written by a model.
 import { t, type Lang } from '../i18n';
+import { validFields } from './checks';
 import { outcomeOf } from './decide';
 import type { Beneficiary, Check, Decision, Invoice } from './types';
 
@@ -82,7 +83,7 @@ export const whatWouldPay = (decision: Pick<Decision, 'checks'>, lang: Lang): st
 
 // "ESCALAR · 4.200 USD a Nube Sur LLC: supera el umbral de aprobación de 2.500 USD".
 export function headline(decision: Pick<Decision, 'outcome' | 'checks'>, invoice: Invoice, beneficiary: Beneficiary | null, lang: Lang): string {
-  const { amount, currency, payee_name } = invoice.fields;
+  const { amount, currency, payee_name } = validFields(invoice.fields); // R-71: an untrusted value is never printed as read
   const base = {
     outcome: t(lang, `outcome.${decision.outcome}`),
     amount: amount === null ? t(lang, 'value.unknown_amount') : `${money(amount, lang)} ${currency ?? ''}`.trim(),

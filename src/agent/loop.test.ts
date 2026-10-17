@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { seedConfidence } from '../engine/__fixtures__/seed';
 import sql from '../../supabase/migrations/20261017000300_seed_andina.sql?raw';
 import { bogotaDay } from '../engine/checks';
 import type { Env } from '../env';
@@ -32,7 +33,7 @@ function seedInvoices(companyId: string, only?: string[]) {
     return {
       id: `${companyId}-${r.nn}`, company_id: companyId, source: r.source, file_path: null, raw_text: r.raw_text, archived: false,
       expected_outcome: r.expected_outcome, received_at,
-      fields: { ...r.fields, issue_date: r.issue === null ? null : addDays(day, r.issue), due_date: r.due === null ? null : addDays(day, r.due), confidence: {} },
+      fields: { ...r.fields, issue_date: r.issue === null ? null : addDays(day, r.issue), due_date: r.due === null ? null : addDays(day, r.due), confidence: seedConfidence(r.fields) },
     };
   });
 }

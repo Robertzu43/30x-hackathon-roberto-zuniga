@@ -47,10 +47,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // AC-41, once per signed-in user: the language saved on the user wins over whatever this browser holds.
   // Saving happens only where a choice is made (top bar, Login), never from localStorage, so a stale browser value cannot overwrite it.
+  // R-78: the shared demo user is every judge, so its stored language is ignored; the tab's own choice stands.
   const user = auth.session?.user;
   useEffect(() => {
     const stored: unknown = user?.user_metadata?.lang;
-    if (stored === 'es' || stored === 'en') setLang(stored);
+    if ((stored === 'es' || stored === 'en') && !isDemoUser(user, auth.demoEmail)) setLang(stored);
   }, [user?.id]); // keyed on the id: USER_UPDATED (tour_seen, lang) must not re-run it
 
   return <AuthCtx.Provider value={auth}>{children}</AuthCtx.Provider>;

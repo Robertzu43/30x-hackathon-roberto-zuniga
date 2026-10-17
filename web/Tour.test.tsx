@@ -2,6 +2,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import { Route, Routes, useLocation } from 'react-router-dom';
 import Tour from './components/Tour';
+import { useT } from './i18n';
 import { tourSteps } from './tour-steps';
 import { renderAt } from './test/utils';
 
@@ -22,9 +23,14 @@ function setup(present = ALL) {
     <>
       <Routes><Route path="*" element={<Page />} /></Routes>
       <Tour onDone={onDone} />
+      <LangSwitch />
     </>,
   );
   return onDone;
+}
+function LangSwitch() {
+  const { setLang } = useT();
+  return <button type="button" onClick={() => setLang('en')}>to-en</button>;
 }
 const next = () => fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }));
 
@@ -96,4 +102,30 @@ test('the spotlight sits on the target and dims the rest of the page', async () 
   await waitFor(() => expect(spot.style.top).toBe('92px'));
   expect([spot.style.left, spot.style.width, spot.style.height]).toEqual(['32px', '316px', '66px']);
   expect(spot.style.boxShadow).toContain('9999px');
+});
+
+test('Escape does what "Saltar" does (R-78)', async () => {
+  const onDone = setup();
+  await screen.findByRole('heading', { name: 'Bandeja' });
+  fireEvent.keyDown(document, { key: 'Escape' });
+  expect(onDone).toHaveBeenCalledOnce();
+});
+
+test('a language switch during a step keeps the same step, now in the new language (R-78)', async () => {
+  setup();
+  await screen.findByRole('heading', { name: 'Bandeja' });
+  next();
+  await screen.findByRole('heading', { name: 'Nueva factura' });
+  fireEvent.click(screen.getByRole('button', { name: 'to-en' }));
+  expect(await screen.findByRole('heading', { name: 'New invoice' })).toBeTruthy();
+  expect(screen.getByRole('dialog').textContent).toContain('2 of 7');
+});
+
+// jsdom has no stacking or hit-testing; Chromium was checked by hand (task 11d report). This guards the rule that does it.
+test('while the tour is shown, the top bar sits above the dim layer and stays on screen (R-78)', async () => {
+  const { readFileSync } = (await import('node:fs' as string)) as { readFileSync(p: string, enc: string): string };
+  const css = readFileSync('web/styles.css', 'utf8');
+  const rule = css.match(/body:has\(\.tour\) \.topbar \{([^}]*)\}/)?.[1] ?? '';
+  expect(rule).toMatch(/position: sticky/);
+  expect(Number(rule.match(/z-index: (\d+)/)?.[1])).toBeGreaterThan(Number(css.match(/\.tour \{[^}]*z-index: (\d+)/)?.[1]));
 });

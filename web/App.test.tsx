@@ -184,3 +184,61 @@ test('signing out then signing in as someone else opens Bandeja, not the page th
   fireEvent.click(screen.getByRole('button', { name: 'Entrar' }));
   expect(await screen.findByRole('heading', { name: 'Bandeja', level: 1 })).toBeTruthy();
 });
+
+// R-78: the shared demo user's language lives only in this tab's session; /demo opens in Spanish; the tour never blocks the top bar.
+const demoWithStoredLang = (lang: string) =>
+  fakeAuth.signInWithPassword.mockImplementationOnce(async ({ email }) => {
+    signedInAs(email, { lang }); // an earlier judge's choice, stored on the shared user
+    await fakeAuth.updateUser({ data: {} });
+    return { data: {}, error: null };
+  });
+
+test('the demo user top-bar language changes this tab only: nothing is written on the user or for other tabs (R-78)', async () => {
+  signedInAs(DEMO_EMAIL, SEEN);
+  renderAt(<App />);
+  await signedInTopBar();
+  fireEvent.click(screen.getByRole('button', { name: 'en' }));
+  expect(await screen.findByRole('button', { name: 'Show tutorial' })).toBeTruthy();
+  await act(async () => {});
+  expect(fakeAuth.updateUser).not.toHaveBeenCalled();
+  expect(localStorage.getItem('lang')).toBeNull();
+  expect(sessionStorage.getItem('lang')).toBe('en');
+});
+
+test('/demo opens in Spanish whatever an earlier judge chose, and "Entrar" opens a Spanish dashboard and tour (R-78)', async () => {
+  localStorage.setItem('lang', 'en');
+  demoWithStoredLang('en');
+  renderAt(<App />, { at: '/demo' });
+  await enterAsDemo();
+  const dialog = await screen.findByRole('dialog');
+  expect(within(dialog).getByRole('heading', { name: 'Bandeja', level: 2 })).toBeTruthy();
+  await act(async () => {});
+  expect(screen.getByRole('button', { name: 'Ver tutorial' })).toBeTruthy();
+});
+
+test('/demo switched to English: "Sign in as Andina Labs" opens an English dashboard and tour (R-78)', async () => {
+  demoWithStoredLang('es');
+  renderAt(<App />, { at: '/demo' });
+  mockApi({ 'GET /api/invoices': [], 'GET /api/agent/last-run': null, 'GET /api/demo/overview': new Response('{}', { status: 503 }) });
+  fireEvent.click(await screen.findByRole('button', { name: 'English' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Sign in as Andina Labs' }));
+  const dialog = await screen.findByRole('dialog');
+  expect(within(dialog).getByRole('heading', { name: 'Inbox', level: 2 })).toBeTruthy();
+  await act(async () => {});
+  expect(screen.getByRole('button', { name: 'Show tutorial' })).toBeTruthy();
+  expect(fakeAuth.updateUser).not.toHaveBeenCalledWith({ data: { lang: 'en' } });
+});
+
+test('during a tour step the top-bar language switch keeps the step; Escape does what "Saltar" does (R-78)', async () => {
+  signedInAs('ana@empresa.co', SEEN);
+  renderAt(<App />);
+  fireEvent.click(await signedInTopBar());
+  await screen.findByRole('heading', { name: 'Bandeja', level: 2 });
+  fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }));
+  await screen.findByRole('heading', { name: 'Nueva factura', level: 2 });
+  fireEvent.click(screen.getByRole('button', { name: 'en' }));
+  expect(await screen.findByRole('heading', { name: 'New invoice', level: 2 })).toBeTruthy();
+  fireEvent.keyDown(document, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  await waitFor(() => expect(fakeAuth.updateUser).toHaveBeenCalledWith({ data: { tour_seen: true } }));
+});

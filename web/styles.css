@@ -122,6 +122,8 @@ main { max-width: 64rem; margin: 0 auto; padding: 6rem 2rem; }
 /* Tour (AC-42). The spotlight's inline style in Tour.tsx carries the only shadow in web/ (AC-53). */
 .tour { position: fixed; inset: 0; z-index: 1000; }
 .tour-waiting { background: rgba(0, 0, 0, 0.6); }
+/* R-78: the top bar (language, Ver tutorial, Cerrar sesión) stays on screen and clickable above the dim layer. */
+body:has(.tour) .topbar { position: sticky; top: 0; z-index: 1001; }
 .tour-spotlight { position: fixed; border-radius: var(--radius); pointer-events: none; }
 .tour-card {
   position: fixed;

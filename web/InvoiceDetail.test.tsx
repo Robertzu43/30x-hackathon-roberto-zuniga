@@ -225,6 +225,29 @@ test('the timeline has an avatar per actor: the Thesaurus mark, a person\'s init
   expect(screen.getAllByRole('listitem')[3]!.textContent).toContain('Invitado 3f9a1c2b');
 });
 
+test('the record mounts the D39 parts from GET /api/invoices/:id: marked text, the rules bar, the FX card, the avatars (AC-102)', async () => {
+  const fx = checks(['umbral_aprobacion']).map((c) => (c.id === 'moneda' ? { ...c, values: market } : c));
+  mockApi({ [GET]: { ...escalated, invoice: { ...escalated.invoice, raw_text: RAW }, doc_marks: MARKS,
+    decisions: [escalated.decisions[0], decision(2, 'ESCALAR', { checks: fx })] } });
+  const { container } = open();
+  expect(await screen.findByText('12 de 13 cumplen')).toBeTruthy();
+  expect(screen.getByTitle('Documento de la factura').getAttribute('src')).toBe('/demo/invoices/11.pdf');
+  const text = container.querySelector('pre.detail-doc')!;
+  expect(text.hasAttribute('data-user')).toBe(true);
+  expect([...text.querySelectorAll('mark')].map((m) => m.textContent)).toEqual(['2044', 'Nube Sur LLC', '4.200,00']);
+  expect(screen.getAllByText('no cumple', { selector: '.check-verdict' })).toHaveLength(1);
+  expect(screen.getByText('1 USD = 4.020,10 COP · Yahoo Finance · 17 oct 2026 10:00 · 1.500.000 COP = 373,14 USD')).toBeTruthy();
+  const history = screen.getByRole('list', { name: 'Historial' });
+  expect(history.querySelectorAll('.avatar img[src="/brand/thesaurus-mark.svg"]')).toHaveLength(2);
+});
+
+test('the record shows no FX card when the Moneda check stored no rate (AC-102)', async () => {
+  mockApi({ [GET]: escalated });
+  open();
+  expect(await screen.findByText('12 de 13 cumplen')).toBeTruthy();
+  expect(screen.queryByRole('heading', { name: 'Tasa de cambio' })).toBeNull();
+});
+
 test('ESCALAR shows the stored question above Aprobar and Rechazar; Aprobar posts the shown seq, then the new entry appears (AC-65, R-55)', async () => {
   let answered = false;
   const fetchMock = mockApi({

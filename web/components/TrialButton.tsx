@@ -3,7 +3,6 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '../auth';
 import { useT } from '../i18n';
-import type { Progress } from '../runAgent';
 import { enterDemo, isTrial, startTrial } from '../trial';
 import './trial.css';
 
@@ -12,10 +11,9 @@ export default function TrialButton() {
   const navigate = useNavigate();
   const { session } = useSession();
   const [busy, setBusy] = useState(false);
-  const [progress, setProgress] = useState<Progress | null>(null);
   const [failed, setFailed] = useState<'trial' | 'demo' | null>(null);
 
-  // The sign-in below makes this a trial session mid-run: the progress stays until Bandeja opens.
+  // The sign-in below makes this a trial session mid-click: the busy text stays until Bandeja opens.
   if (isTrial(session?.user) && !busy)
     return <button type="button" className="primary" onClick={() => navigate('/')}>{t('trial.back')}</button>;
 
@@ -23,8 +21,7 @@ export default function TrialButton() {
     if (busy) return;
     setBusy(true);
     setFailed(null);
-    setProgress(null);
-    if (await startTrial(lang, setProgress)) return navigate('/', { replace: true });
+    if (await startTrial(lang)) return navigate('/', { replace: true });
     setBusy(false);
     setFailed('trial');
   };
@@ -36,7 +33,7 @@ export default function TrialButton() {
   return (
     <div className="trial-door">
       <button type="button" className="primary" disabled={busy} aria-busy={busy} onClick={() => void start()}>
-        {!busy ? t('trial.start') : isTrial(session?.user) ? t('login.deciding', { n: progress?.n ?? 0, m: progress?.m ?? '…' }) : t('trial.creating')}
+        {t(busy ? 'trial.creating' : 'trial.start')}
       </button>
       <p className="muted">{t('trial.lead')}</p>
       {failed && (

@@ -18,7 +18,8 @@ export type DashboardData = {
   approvals_total: number;
 };
 
-export default function Dashboard({ data, onMore }: { data: DashboardData; onMore: () => void }) {
+/** `deciding`: the pending count while the first-login pass runs; an empty section then says so instead (AC-107, R-145). */
+export default function Dashboard({ data, onMore, deciding = 0 }: { data: DashboardData; onMore: () => void; deciding?: number }) {
   const { t, lang, locale } = useT();
   const { kpis: k } = data;
   const usd = new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format;
@@ -28,6 +29,7 @@ export default function Dashboard({ data, onMore }: { data: DashboardData; onMor
   const payee = (p: string | null) => (p ? <span data-user="">{p}</span> : t('period.unread'));
   const moreAsking = data.approvals_total - data.approvals.length;
   const moreDue = data.due_soon_total - data.due_soon.length;
+  const empty = (key: string) => <p className="muted">{deciding ? t('entry.still_deciding', { n: deciding }) : t(key)}</p>;
   return (
     <div className="dash">
       <div className="dash-kpis">
@@ -41,7 +43,8 @@ export default function Dashboard({ data, onMore }: { data: DashboardData; onMor
 
       <section className="dash-card dash-approvals" aria-labelledby="dash-approvals">
         <h2 id="dash-approvals">{t('dash.approvals.title')}</h2>
-        {data.approvals.length === 0 ? <p className="muted">{t('dash.approvals.empty')}</p> : (
+        <div className="dash-box">
+        {data.approvals.length === 0 ? empty('dash.approvals.empty') : (
           <ul className="dash-list">
             {data.approvals.map((a) => (
               <li key={a.invoice_id}>
@@ -55,6 +58,7 @@ export default function Dashboard({ data, onMore }: { data: DashboardData; onMor
         {moreAsking > 0 && (
           <a className="dash-more" href="#invoices" onClick={onMore}>{t('dash.more', { n: moreAsking })}</a>
         )}
+        </div>
       </section>
 
       <div className="dash-card dash-wide">
@@ -70,9 +74,10 @@ export default function Dashboard({ data, onMore }: { data: DashboardData; onMor
         <HBars title={t('dash.by_country.title')} unit="USD" rows={data.by_country.map((c) => ({ label: c.country ? country(c.country) : t('dash.no_country'), values: [c.usd] }))} />
       </div>
 
-      <section className="dash-card dash-wide" aria-labelledby="dash-due">
+      <section className="dash-card dash-wide dash-due" aria-labelledby="dash-due">
         <h2 id="dash-due">{t('dash.due.title')}</h2>
-        {data.due_soon.length === 0 ? <p className="muted">{t('dash.due.empty')}</p> : (
+        <div className="dash-box">
+        {data.due_soon.length === 0 ? empty('dash.due.empty') : (
           <ul className="dash-list">
             {data.due_soon.map((d) => (
               <li key={d.invoice_id}>
@@ -86,6 +91,7 @@ export default function Dashboard({ data, onMore }: { data: DashboardData; onMor
           </ul>
         )}
         {moreDue > 0 && <p className="muted">{t('dash.more', { n: moreDue })}</p>}
+        </div>
       </section>
     </div>
   );

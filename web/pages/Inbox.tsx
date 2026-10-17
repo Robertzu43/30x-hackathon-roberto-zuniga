@@ -2,7 +2,9 @@
 // agent last ran; then the finance dashboard, the portal link card (AC-86), «Actividad del agente» (AC-78), «Pregúntale a Thesaurus»
 // (AC-67) right before the invoice table, which comes last (AC-101). While loading, the dashboard and the table are their own
 // markup with made-up data, hidden, so nothing moves when the answer arrives (AC-91 item 4, AC-99).
-import { useState } from 'react';
+// AC-107 (R-145): the shell's first-login pass shows here, in RunProgress's place; each of its calls refreshes the screen and the
+// activity panel. Once it ran in this tab, the sections that grow as decisions arrive keep their box (dashboard.css).
+import { useEffect, useRef, useState } from 'react';
 import { screens, useScreen } from '../api';
 import AgentActivity from '../components/AgentActivity';
 import AskThesaurus from '../components/AskThesaurus';
@@ -11,6 +13,7 @@ import PortalLinkCard, { type PortalLink } from '../components/PortalLinkCard';
 import { RunProgress, useRunAgent } from '../components/RunProgress';
 import Dashboard, { type DashboardData } from '../dashboard/Dashboard';
 import InvoiceTable, { type Row } from '../dashboard/InvoiceTable';
+import { useFirstRun } from '../firstRun';
 import { useT } from '../i18n';
 import './inbox.css';
 
@@ -43,16 +46,38 @@ export default function Inbox() {
   const lastRun = d?.last_run;
   const link = d && (typeof d.portal?.portal_url === 'string' ? d.portal : null); // null: no URL in the answer, no card
 
-  const run = useRunAgent({ first: '/api/invoices/run', onBatch: () => { void screen.reload(); setBatches((n) => n + 1); } });
+  // One screen request in flight: a call answered meanwhile asks for one more refresh after it (AC-107).
+  const refreshing = useRef(false);
+  const again = useRef(false);
+  const refresh = () => {
+    if (refreshing.current) return void (again.current = true);
+    refreshing.current = true;
+    void screen.reload().finally(() => {
+      refreshing.current = false;
+      if (again.current) {
+        again.current = false;
+        refresh();
+      }
+    });
+  };
+  const run = useRunAgent({ first: '/api/invoices/run', onBatch: () => { refresh(); setBatches((n) => n + 1); } });
+  const pass = useFirstRun();
+  const base = useRef(pass.batches).current; // the calls answered before this screen mounted are in its first load
+  useEffect(() => {
+    if (pass.batches > base) refresh();
+  }, [pass.batches]);
+  const shown = run.running || run.result ? run : pass; // «Ejecutar agente» pressed after the pass shows its own run
+  const busy = run.running || pass.running;
+  const held = pass.running || pass.result !== null;
   const mins = lastRun ? Math.floor((Date.now() - Date.parse(lastRun.at)) / 60_000) : 0;
 
   return (
-    <section className="inbox" data-tour="inbox">
+    <section className={held ? 'inbox inbox-held' : 'inbox'} data-tour="inbox">
       <header className="inbox-head">
         <h1>{t('screen.inbox')}</h1>
         <div className="inbox-actions">
           <button type="button" data-tour="new-invoice" aria-expanded={adding} onClick={() => setAdding(!adding)}>{t('inbox.new')}</button>
-          <button type="button" className={adding ? undefined : 'primary'} data-tour="run-agent" disabled={run.running} onClick={() => void run.start().then(screen.reload)}>
+          <button type="button" className={adding ? undefined : 'primary'} data-tour="run-agent" disabled={busy} aria-busy={busy || undefined} onClick={() => void run.start().then(refresh)}>
             {t('inbox.run')}
           </button>
         </div>
@@ -68,7 +93,7 @@ export default function Inbox() {
               })}
       </p>
       <p className="muted">{t('inbox.reevaluate_note')}</p>
-      <RunProgress run={run} mode="pending" />
+      <RunProgress run={shown} mode="pending" progressKey={shown === pass ? 'entry.deciding' : undefined} />
       {adding && <NewInvoice />}
 
       {failed ? (
@@ -80,9 +105,11 @@ export default function Inbox() {
         </>
       ) : (
         <>
-          {d.dashboard && <Dashboard data={d.dashboard} onMore={() => setOutcome('ESCALAR')} />}
+          {d.dashboard && <Dashboard data={d.dashboard} onMore={() => setOutcome('ESCALAR')} deciding={pass.running ? d.invoices.filter((r) => !r.outcome).length : 0} />}
           {link && <PortalLinkCard link={link} />}
-          <AgentActivity refresh={batches} />
+          <div className="activity-box" tabIndex={held ? 0 : undefined}>{/* held: it scrolls inside, so it takes focus (axe) */}
+            <AgentActivity refresh={batches + pass.batches - base} />
+          </div>
         </>
       )}
       <AskThesaurus />

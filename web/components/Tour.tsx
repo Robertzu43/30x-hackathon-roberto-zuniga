@@ -85,8 +85,12 @@ export default function Tour({ onDone }: { onDone: () => void }) {
     find();
     addEventListener('resize', measure);
     addEventListener('scroll', measure, true);
+    // R-144: the page re-renders under the spotlight as the first-login pass refreshes its data; measure again after each change.
+    const changes = new MutationObserver(measure);
+    changes.observe(document.body, { childList: true, subtree: true, characterData: true });
     return () => {
       clearInterval(timer);
+      changes.disconnect();
       removeEventListener('resize', measure);
       removeEventListener('scroll', measure, true);
     };

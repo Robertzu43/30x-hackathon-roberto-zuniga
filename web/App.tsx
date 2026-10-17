@@ -6,6 +6,7 @@ import { isDemoUser, RequireAuth, shouldStartTour, takeDemoTour, useSession } fr
 import { useLeaveGuard } from './components/LeaveTrialWarning';
 import Logo from './components/Logo';
 import Tour from './components/Tour';
+import { FirstRunProvider } from './firstRun';
 import { useT } from './i18n';
 import { isTrial } from './trial';
 
@@ -136,7 +137,7 @@ export default function App() {
   const onPublic = pages.find((p) => matchPath(p.route.path, pathname))?.route.public;
 
   return (
-    <>
+    <FirstRunProvider>{/* the first-login pass belongs to the shell: navigation never stops or restarts it (AC-107) */}
       <Routes>
         {pages.map(({ route, Page }) => {
           const loaded = <PageBoundary key={route.path}><Suspense fallback={<Loading />}><Page /></Suspense></PageBoundary>;
@@ -146,6 +147,6 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       {touring && user && !onPublic && <Tour onDone={endTour} />}
-    </>
+    </FirstRunProvider>
   );
 }

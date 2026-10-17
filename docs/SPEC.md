@@ -173,6 +173,11 @@ Trace: S-Directory, D4. Rubric: Impacto. Tasks: 8, 14.
 ## 9. Escalation and human approval
 
 **AC-34 (MUST)** When a person approves an escalated invoice (link or dashboard "Aprobar"), the system overrides only the checks that were not passing in the escalated decision and are human-overridable (umbral de aprobación, beneficiario nuevo, cuenta cambiada, acuerdo, posible duplicado, vencida, fuera del periodo, lectura), re-runs every other check with fresh period state, and appends the result: PAGAR if everything else passes, otherwise ESCALAR again (for example when the budget is gone by then). Budget, balance, per-payment limit, exact duplicate and currency without rate are never overridable; their "qué tendría que pasar" line names the policy change needed. Approval that ends in PAGAR consumes period budget; "Rechazar" appends FRENAR by the human and releases it. Evidence: unit tests (approve after budget exhausted -> ESCALAR; reject -> FRENAR human; override set = failed ∩ overridable); QA on a fresh workspace (R-35): approve Nube Sur first, it re-escalates with "presupuesto del periodo" `no cumple`; reject the "cuenta cambiada" invoice #15, "comprometido" goes down by 2.500; approve Nube Sur from the dashboard, it ends in PAGAR, Periodo "comprometido" unchanged and "pagado" up by 4.200. (R-02, R-35)
+- Clarified (R-136, D41 door QA UX-04, 17 Oct): the stale-answer message depends on where the person clicked.
+  - On the approval-link page (R-55), it stays «Esta factura cambió desde que abriste el enlace; ábrelo de nuevo.».
+  - From the dashboard, the same 409 shows «Esta factura cambió mientras la tenías abierta. Recarga la página para ver su estado actual.» / "This invoice changed while you had it open. Reload the page to see where it stands now.".
+  - The server's 409 body may stay as it is. The dashboard maps the `changed` reason to its own dictionary key, in es and en.
+  - Evidence: `web/InvoiceDetail.test.tsx` (dashboard 409 `changed` gives the dashboard text) and `web/Approve.test.tsx` (unchanged).
 Clarified (R-77, Task 7c): an approval or rejection, by link or from the dashboard, never calls the model. It re-checks the fields the escalation was decided on: the invoice's stored `fields` when not null, otherwise those recorded in the escalated decision's checks. The approver confirms the data they were shown on the page (R-55). So does "Reevaluar pendientes": it re-decides an ESCALAR invoice from those same fields and never re-reads it. The model is called only for an invoice that has no stored fields and no decision (AC-61). Evidence: `npx vitest run src/routes/approvals.test.ts src/agent/loop.test.ts`: with a fake `AI.run` that counts calls, approving and rejecting an invoice whose `fields` is null (link and dashboard), and a Reevaluar over it, make 0 model calls and re-check the recorded fields (a recorded amount over the threshold, approved, ends PAGAR when everything else passes).
 Trace: S-Escalation, D2, D5. Rubric: Impacto. Axis: Seguridad. Tasks: 4, 9, 13, 8h.
 
@@ -425,6 +430,12 @@ Trace: D28 ("the README and the Política screen say plainly…"). Rubric: V. im
   - `failed`, for any other error, an invalid output or a timeout: «No pude responder ahora; revisa el registro.» / "I could not answer right now; check the record."
 - A successful answer also returns `remaining`, and the UI shows «Te quedan <n> preguntas hoy» / "<n> questions left today".
 - Clarified (R-128, finance-web QA Q-M, 17 Oct): "answered question" means every question that passes the 1-500 character check and is not refused by `user_cap` or the 500 global cap. The quota is taken before the model call, so a question counts whatever comes back: a grounded answer, «No tengo ese dato en el registro.» / "That is not in the record.", a refusal to act («págala»), `failed` or a provider `ai_quota`. For one quota key, consecutive successful answers return `remaining` 9, 8, 7, … with no repeat and no skip. The shared demo user's key is (user, `CF-Connecting-IP`) per R-87, so a tester whose egress IP changes sees two counters; that is expected and is not a defect. Every other user (Roberto, real customers, trial users of AC-92) has one key per user, and is what QA uses to check the count. Evidence additions: `src/routes/ask.test.ts`, same user and IP, fake provider answering a normal answer, then «No tengo ese dato en el registro.», then a normal answer: `remaining` is 9, 8, 7, and the quota function is called once per question before the provider; the same with a fake provider that throws: the quota is still taken. QA live (counts against R-94's 5 questions): on a trial user, three questions where the second is «págala»: «Te quedan 9», «8», «7».
+- Clarified (R-138, D41 door QA UX-05, 17 Oct): Bandeja's context carries exact counts.
+  - Code counts the same non-archived invoices whose headlines it lists, by latest outcome. The context then holds one labelled line: «Facturas por resultado ahora (conteo exacto): PAGAR <n>, FRENAR <n>, ESCALAR <n>, pendientes <n>, total <n>» (and the en equivalent).
+  - `src/prompts/ask.ts` tells the model to quote that line for any "how many" question and never to count the list itself.
+  - Evidence: `src/routes/ask.test.ts`: with a fake db of 2 PAGAR, 1 FRENAR, 3 ESCALAR and 1 pending (plus 1 archived ESCALAR), the prompt contains `ESCALAR 3` and `total 7`.
+  - QA live (1 question, within R-94's 5): on a trial user, ask «¿Cuántas facturas están escaladas ahora mismo?», and the number equals Bandeja's ESCALAR count.
+  - The context line is the requirement. If it is right and the model still misquotes, that is the labelled «puede equivocarse» case. It is ledgered, not a code defect.
 - An empty question, or one over 500 characters, gives 400 «Escribe una pregunta de 1 a 500 caracteres.».
 - Clarified (R-106, Task 24 UX pass 2 B2 and placement), on a decision record:
   - Placement: «Pregúntale a Thesaurus» sits immediately before «Historial», after the escalation card (when present) and the «Política: … versión …» line. In the two-column layout (> 860 px) it is in the same column as «Historial», directly above it. In one column it is in the same order. No jump link and no other new control is added. Bandeja keeps its current placement (above the list, Task 24 fix round 1).
@@ -832,6 +843,7 @@ Trace: D41, D34, D29(a), D8, D4, S-Auth (RLS on `company_id`), PROBLEM "Segurida
   - «Salir de todos modos» / "Leave anyway" goes ahead.
   - «Cancelar» or Escape keeps the session.
   Once access is saved (AC-95), these actions go ahead with no warning.
+- Clarified (R-137, D41 door QA UX-07, 17 Oct): coming back keeps the address. When any user with a stored session opens a deep link (`/policy`, `/invoices/<id>`, `/period`, …) in a new tab or after a browser restart, the system opens that screen, not Bandeja. While the session is being restored, the screen shows its skeleton and does not redirect. With no stored session, the current redirect to `/login` is unchanged. Evidence: `web/App.test.tsx` (or the auth test): with a stored session that resolves after a delay, `/policy` renders Política and never navigates to `/`. QA, with a persistent profile: close the browser on Bandeja, reopen at `/policy`, and Política shows.
 
 Evidence:
 - `npx vitest run web/Trial.test.tsx`: each of the leaving actions shows the warning; «Salir de todos modos» goes ahead; «Cancelar» and Escape keep the session; the returning primary shows when an anonymous session exists.
@@ -843,11 +855,11 @@ Trace: D41 ("lasts the whole judging period, and the browser keeps the session")
 **AC-95 (MUST; never cut)** When a trial user clicks «Guardar mi acceso» and enters an email and a password, the system attaches both to the same Auth user and keeps the same company and data.
 - Form. The password needs at least 8 characters and has a show/hide toggle.
 - Mechanism. Supabase `updateUser`, with `mailer_autoconfirm` on as D41 says. No mail is sent or needed. R-118 covers the fallback.
-- Success. «Listo: ya puedes entrar desde cualquier dispositivo con <correo> y tu contraseña.» / "Done: you can now sign in from any device with <email> and your password." The top bar then shows the email.
+- Success. «Listo: ya puedes entrar desde cualquier dispositivo con <correo> y tu contraseña.» / "Done: you can now sign in from any device with <email> and your password." The top bar then shows the company name and the email. The email takes the place of «Acceso sin guardar», and the company name stays (R-135, D41 door QA UX-02). Evidence: `web/SaveAccess.test.tsx` checks that both are present after success, and QA sees «Empresa de prueba <n>» and the email in the top bar at 360 and 1440.
 - Signing in elsewhere. From another browser, `/login` → «Entrar con contraseña» / "Sign in with password" (secondary) → email + password opens the same workspace, with no OTP. The tour does not repeat, because "seen" is stored per user.
 - Errors:
   - email already registered: «Ese correo ya tiene una cuenta en Thesaurus. Usa otro correo, o entra con ese correo desde la pantalla de inicio.» / "That email already has a Thesaurus account. Use another email, or sign in with it from the start screen.";
-  - short password: «La contraseña debe tener al menos 8 caracteres.» / "The password needs at least 8 characters.";
+  - short password: «La contraseña debe tener al menos 8 caracteres.» / "The password needs at least 8 characters.". This applies on the save form and also on the «Entrar con contraseña» login form. There it shows in place with no network call (R-134, D41 door QA UX-01). Evidence: `web/Login.test.tsx` shows a 7-character password gives this message and makes 0 `signInWithPassword` calls;
   - wrong credentials at login: «Correo o contraseña incorrectos.» / "Wrong email or password.";
   - network: «No pude guardar tu acceso ahora; intenta de nuevo.» / "I couldn't save your access right now; try again."
 - What does not change. The company stays a trial company and sends no mail (R-115). OTP login (AC-40) is unchanged.
@@ -870,6 +882,17 @@ Trace: D41 ("«Guardar mi acceso» … autoconfirm on … come back from another
   - The count is taken in the database before any read, through the existing quota function on `ai_usage`, with key `ingest:<user id>`.
   - The 31st answers 429 «Llegaste al límite de 30 facturas por día en tu empresa de prueba. Se renueva a las 19:00, hora de Bogotá.» / "You reached the limit of 30 invoices a day in your trial company. It renews at 19:00 Bogotá time (00:00 UTC)." It stores nothing and calls no model.
   - Users who are not on a trial are not capped by this rule.
+- Clarified (R-133, D41 door QA BUG-01, 17 Oct): the database holds the same cap, so no path skips it, the direct REST insert included.
+  - Members may still insert invoices through REST (AC-68, AC-38). An additive `before insert` trigger on `invoices` refuses a member insert into a company with `is_trial = true` once that company already has 30 member-inserted invoices in the current UTC day. It raises `TRIAL_INVOICE_LIMIT` and stores nothing.
+  - "Member insert" means the caller's role is `authenticated` or `anon`, the test `invoices_member_insert` already uses. Inside a `security definer` function `current_user` is the owner, so the builder must take the caller's role correctly (a security-invoker function, or the JWT role). Service-role writes (portal, email intake, record.ts) and the signup trigger's seed copy are never counted and never refused. So a fresh trial company has all 30 available.
+  - Count: that company's rows with `origin = 'app'`, `expected_outcome is null` and `received_at` at or after 00:00 UTC today. A member insert forces all three, and seeded rows carry an `expected_outcome`. Take a per-company transaction lock (`pg_advisory_xact_lock`) before counting, so parallel inserts cannot reach 31.
+  - The function has `set search_path = ''`. Nothing is deleted, and the migration is forward-only.
+  - The Worker keeps its `ingest:<user id>` count and its friendly 429. If the insert in `POST /api/invoices` is refused with `TRIAL_INVOICE_LIMIT`, the Worker answers the same 429 message, not a 500. Its read may already have been spent. That waste is accepted, because it is bounded by the Worker's own 30.
+  - Companies that are not trials are untouched.
+  - Evidence:
+    - `bash scripts/tests/run.sh` (schema test): the trigger exists, its function has an empty `search_path`, and the migration contains no `drop`, `delete` or `truncate`.
+    - `npx vitest run src/routes`: a mocked insert error `TRIAL_INVOICE_LIMIT` gives the AC-96 429 and stores nothing.
+    - QA live on a fresh trial T, through REST with T's JWT: 30 `POST /rest/v1/invoices` with T's `company_id`, `source 'chat'`, `raw_text 'qa-cap'` and `fields` copied from a DATASET.md row. Fields are set, so the agent decides them by code and no model read is spent. All 30 answer 201, and the 31st is refused with `TRIAL_INVOICE_LIMIT`. Then, as `service_role`, `select count(*) from invoices where company_id = '<T>' and raw_text = 'qa-cap'` is 30. Never run this on the shared demo company.
 - Other limits that apply unchanged: R-87's question caps (10 per user per day, 500 per deployment), AC-43's per-user POST limit, and AC-85's portal limits.
 - No deletion. Nothing deletes anonymous users or their companies; there is no Auth user deletion anywhere (CLAUDE.md). Trial workspaces accumulate, and that is accepted (Q17).
 
@@ -1530,6 +1553,21 @@ Contract ruling (product, 17 Oct; product question from Task 42, not a dispute; 
   - Loser's best argument, for (a) option (b): "group by the payee names in `invoices`; no directory is needed, and a beneficiary with no invoices is not filterable, which is fine". This fails R-79's directory-name label.
   - Loser's best argument, for (b) leaving the copies: "cost: two copies held equal by tests".
 
+Rulings on the D41 door QA questions Q-P and Q-Q (product, 17 Oct; product questions, not disputes; nobody was asked):
+- **R-133 The trial invoice cap lives in the database too (AC-96 Clarified, Q-P / BUG-01).** Option (a). Why:
+  - The REST bypass is not only clutter. The cron reads every pending invoice that has no fields through the model (`raw_text` goes to `extractFields`). A scripted trial JWT could turn REST rows into Bedrock reads with no per-company bound. Only R-56's per-tick budget would limit them, and that budget is shared with every real company's turn.
+  - (b) would leave AC-96's "a trial user can create at most 30 invoices" false on the deployed URL. Any juror can check it with the anon key.
+  - (c) changes AC-68 and AC-38 and the members' upload path. It is rejected.
+  - Built by a small Task 39c (senior): one additive migration, the Worker's error mapping, and tests.
+  - Principle: evidence (the AC must be true on every path) and company-can-deploy-Monday (cost and noise bounded by the database, not by convention).
+  - Loser's best argument, (b): "the cron's per-tick budget and the sign-in limit already bound the cost; a trigger on the hottest table adds a count to every member insert for a risk that exists only during judging".
+- **R-134 Login refuses a short password client-side (AC-95, UX-01).** Fix, junior, in the web fix task. Principle: completeness (the AC-95 error list applies to the form a returning juror actually uses). Loser's best argument: "the server already answers «Correo o contraseña incorrectos.»; a valid account never has a short password".
+- **R-135 After saving access the top bar shows the company name and the email (AC-95, UX-02).** Fix, junior. The company name is how a juror recognises their workspace (AC-92 evidence), and AC-95's "shows the email" was never meant to drop it. Principle: the company's actual user. Loser's best argument: "AC-95 literally says the top bar then shows the email".
+- **R-136 The dashboard has its own stale-answer text (AC-34, UX-04).** Fix, junior, web only. A dashboard user never opened a link, so «ábrelo de nuevo» tells them to do something impossible. Principle: the company's actual user (Explicabilidad). Loser's best argument: "the 409 is rare and the server message is shared; one text is less to keep in sync".
+- **R-137 A deep link survives a browser restart with a stored session (AC-94, UX-07).** Fix, junior. AC-94 promises you come back to your workspace, and a bookmarked Política or a shared invoice link is part of that workspace. Redirecting to `/` before the session restores is a race, not a design. Principle: completeness. Loser's best argument: "AC-94 promises the same workspace, not the same page; Bandeja is one click from Política".
+- **R-138 Bandeja's ask context carries exact counts per outcome (AC-67, UX-05).** Fix, junior, a small task in `src/routes/ask.ts` and `src/prompts/ask.ts`, the same pattern as Task 23c's Periodo labels. A finance user asking "how many are escalated" gets a number to act on. The model must quote a count made by code, not count a list. Principle: evidence (the record answers, the model only phrases it). Loser's best argument: "the answer is labelled «puede equivocarse» and the headlines are all in the context; adding counts is prompt tuning".
+- Observation, no AC, for README «Lo que no está hecho»: `src/agent/scheduled.ts` lists pending companies from one PostgREST select capped at 1.000 rows. With many scripted trial companies holding pending rows at once, some companies could miss cron turns until the backlog drains. R-133 bounds the rows per trial company, not the number of trial companies. The orchestrator adds one README line, and nothing is built for it now.
+
 ---
 
 ## Task to AC map
@@ -1591,6 +1629,9 @@ Contract ruling (product, 17 Oct; product question from Task 42, not a dispute; 
 | 39 D41 backend: trial trigger, guest identity, no-mail, ingest cap, Auth config script, save-access probe | AC-92 (trigger, config), AC-93, AC-94 (config), AC-95 (config, probe, fallback route only if needed), AC-96, AC-03 / AC-07 / AC-37 / AC-64 Clarified |
 | 40 D41 door (web) | AC-92, AC-93 (Política read-only approver), AC-94, AC-40 / AC-45 Clarified, AC-91 (gate: `login`, `demo`, `trial`, `leave-trial`, `inbox` top bar) |
 | 41 D41 «Guardar mi acceso» + «Entrar con contraseña» | AC-95, AC-91 (gate: `save-access`, `login-password`) |
+| 39c Trial invoice cap in the database (R-133) | AC-96 Clarified, AC-07, AC-68 |
+| D41 door web fixes (R-134..R-137) | AC-95 (login short password, top bar), AC-34 Clarified (dashboard stale text), AC-94 Clarified (deep link), AC-91 (gate: `login-password`, trial top bar) |
+| Ask counts (R-138) | AC-67 Clarified |
 | 42 D40 backend: screen functions, one round trip, local JWT, demo cache, Smart Placement | AC-98, AC-99 (placement), AC-97 (API p95), AC-07 Clarified |
 | 43 D40 web: code splitting, screen loaders, skeletons, prefetch, tab cache, pending state | AC-99, AC-100 (SHOULD), AC-97 (first load, navigation, JS budget), AC-91 |
 | 44 D40 perf harness + baseline + final table; new gate screen ids | AC-97 (`scripts/perf.mjs`, `docs/perf.md`), AC-91 Clarified (screen ids) |

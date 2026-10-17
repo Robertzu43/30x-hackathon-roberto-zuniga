@@ -143,6 +143,18 @@ test('lazy wrappers load the chart on demand and render it', async () => {
   expect(container.querySelector('.chart-body')).toBeTruthy();
 });
 
+test('the Kpi placeholder is the real tile before it loads: same class, label, hint and min-height, so nothing moves (AC-91 CLS)', async () => {
+  const { container } = renderAt(<lazy.Kpi label="Por pagar hoy" value={1500.5} kind="usd" hint="3 órdenes preparadas hoy" />);
+  const hole = container.querySelector('.chart-kpi') as HTMLElement;
+  expect(hole.getAttribute('role')).toBeNull();
+  expect(hole.textContent).toContain('Por pagar hoy');
+  expect(hole.textContent).toContain('3 órdenes preparadas hoy');
+  expect(hole.textContent).not.toMatch(/1[.,]500/);
+  const placeholder = { cls: hole.className, h: hole.style.minHeight };
+  const real = (await screen.findByRole('group')) as HTMLElement;
+  expect({ cls: real.className, h: real.style.minHeight }).toEqual(placeholder);
+});
+
 test('axe finds no serious or critical violation in any chart state', async () => {
   const all = [stacked, hbars, grouped, line, spark, segments, <Kpi key="k" label="Autonomía" value={75} kind="pct" />,
     <HBars key="e" title="Vacío" unit="USD" rows={[]} />];

@@ -13,7 +13,6 @@ export const CRON_MAX_INVOICES = 50;
 
 export async function scheduled(_controller: ScheduledController, env: Env): Promise<void> {
   const admin = adminClient(env);
-  let errors = 0;
   try {
     const pending: Array<{ id: string; company_id: string }> = must(await admin.from('invoice_current').select('id, company_id')
       .is('outcome', null).order('received_at').order('id').limit(CRON_MAX_INVOICES));
@@ -21,17 +20,16 @@ export async function scheduled(_controller: ScheduledController, env: Env): Pro
     for (const p of pending) byCompany.set(p.company_id, [...(byCompany.get(p.company_id) ?? []), p.id]);
     for (const [companyId, ids] of byCompany) {
       try {
-        errors += (await runAgent({ db: admin, env }, companyId, ids, 'cron')).errors;
+        await runAgent({ db: admin, env }, companyId, ids, 'cron');
       } catch (e) {
-        errors++;
         console.error('cron: company not run', companyId, e instanceof Error ? e.message : e);
       }
     }
   } catch (e) {
-    errors++;
     console.error('cron: pending invoices not read', e instanceof Error ? e.message : e);
   } finally {
-    // One row per tick, even when nothing was pending (AC-63). No counts: members of every company can read it.
-    await recorder(env, null).run('cron', null, errors);
+    // One row per tick, even when nothing was pending (AC-63). Always decided null, errors 0 (R-54): members of every company
+    // can read it, so no cross-company aggregate. Each company's counts live on its own runAgent row; failures outside any run are logged above.
+    await recorder(env, null).run('cron', null, 0);
   }
 }

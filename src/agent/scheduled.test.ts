@@ -87,12 +87,22 @@ describe('the 5-minute cron (D23, AC-62, R-23, R-24, R-25)', () => {
     expect(db.tables.approval_tokens!.map((t) => t.invoice_id)).toEqual(['N-11', 'N-11']);
   });
 
-  it('writes one run row per company and one cron tick row with the error count and no counts', async () => {
+  it('writes one run row per company and one cron tick row with no counts and errors 0 (R-54)', async () => {
     await tick();
     expect(db.tables.agent_runs).toEqual([
       { company_id: 'D', trigger: 'cron', decided: { PAGAR: 1, FRENAR: 0, ESCALAR: 1 }, errors: 0 },
       { company_id: 'N', trigger: 'cron', decided: { PAGAR: 1, FRENAR: 0, ESCALAR: 1 }, errors: 1 },
-      { company_id: null, trigger: 'cron', decided: null, errors: 2 },
+      { company_id: null, trigger: 'cron', decided: null, errors: 0 },
+    ]);
+  });
+
+  it('a company whose tools throw: its own row carries the error, the tick row stays errors 0 and decided null (R-54, AC-63)', async () => {
+    db = fakeDb(workspace('N', { only: ['03'] }));
+    db.fail.period_state = () => 'boom';
+    await tick();
+    expect(db.tables.agent_runs).toEqual([
+      { company_id: 'N', trigger: 'cron', decided: { PAGAR: 0, FRENAR: 0, ESCALAR: 0 }, errors: 1 },
+      { company_id: null, trigger: 'cron', decided: null, errors: 0 },
     ]);
   });
 

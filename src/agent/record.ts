@@ -4,7 +4,7 @@
 import type { Outcome } from '../engine/types';
 import type { Env } from '../env';
 import { adminClient } from '../lib/admin';
-import { must } from '../lib/supabase';
+import { must, type Budget } from '../lib/supabase';
 import type { StoredDecision } from './trace';
 
 export type Trigger = 'cron' | 'ingest' | 'manual' | 'login' | 'reevaluate' | 'reset';
@@ -17,8 +17,8 @@ export interface TokenRow { token_hash: string; invoice_id: string; decision_id:
 
 // companyId = the company the caller was authorised for: the requireUser membership (user JWT), a verified approval
 // token's invoice, or the cron's explicit company filter. null = the cron tick itself, which may write only its run row.
-export function recorder(env: Env, companyId: string | null) {
-  const admin = adminClient(env);
+export function recorder(env: Env, companyId: string | null, budget?: Budget) {
+  const admin = adminClient(env, budget);
   const owned = async (invoiceId: string) => {
     const inv = must(await admin.from('invoices').select('company_id').eq('id', invoiceId).maybeSingle());
     if (!companyId || inv?.company_id !== companyId) throw new Error('COMPANY_MISMATCH');

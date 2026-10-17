@@ -2,6 +2,7 @@
 // `invoice_current`, `insert_decision` and `period_state` mirror migrations 000200/000250 (lock aside).
 import { bogotaDay } from '../../engine/checks';
 import { round2 } from '../../lib/money';
+import type { Budget } from '../../lib/supabase';
 
 type Row = Record<string, unknown>;
 type Result = { data: unknown; error: { message: string } | null };
@@ -16,8 +17,11 @@ export function fakeDb(seed: Record<string, Row[]> = {}) {
   const queries: Query[] = [];
   const rpcs: Array<{ name: string; args: Row }> = [];
   // Per-call failure injection: return an error message to make that call fail.
-  const fail: Partial<Record<'insert_decision' | 'period_state', (args: Row) => string | undefined>> = {};
+  const fail: Partial<Record<'insert_decision' | 'period_state', (args: Row) => string | undefined>> & { query?: (q: Query) => string | undefined } = {};
   let ids = 0;
+  // Every call that would be one HTTP request to Supabase: counted here, and on the invocation's Budget when a client was
+  // built with one (the mocked userClient/adminClient set it), the way the real clients count through Budget.fetch.
+  const meter = { calls: 0, budget: undefined as Budget | undefined, hit() { meter.calls++; meter.budget?.count(); } };
 
   const latest = (invoiceId: unknown) =>
     tables.decisions!.filter((d) => d.invoice_id === invoiceId).sort((a, b) => Number(b.seq) - Number(a.seq))[0];
@@ -71,7 +75,11 @@ export function fakeDb(seed: Record<string, Row[]> = {}) {
     maybeSingle() { this.mode = 'maybe'; return this; }
     insert(p: Row | Row[]) { this.payload = p; return this; }
     private run(): Result {
-      queries.push({ table: this.table, op: this.payload ? 'insert' : 'select', eq: this.eqs });
+      meter.hit();
+      const q: Query = { table: this.table, op: this.payload ? 'insert' : 'select', eq: this.eqs };
+      queries.push(q);
+      const injected = fail.query?.(q);
+      if (injected) return { data: null, error: { message: injected } };
       if (this.payload) {
         tables[this.table] ??= [];
         tables[this.table]!.push(...[this.payload].flat());
@@ -92,11 +100,12 @@ export function fakeDb(seed: Record<string, Row[]> = {}) {
   }
 
   return {
-    tables, queries, rpcs, fail,
+    tables, queries, rpcs, fail, meter,
     from: (table: string) => new Builder(table),
     rpc: async (name: string, args: Row): Promise<Result> => {
+      meter.hit();
       rpcs.push({ name, args });
-      const injected = fail[name as keyof typeof fail]?.(args);
+      const injected = fail[name as 'insert_decision' | 'period_state']?.(args);
       if (injected) return { data: null, error: { message: injected } };
       return procs[name]!(args);
     },

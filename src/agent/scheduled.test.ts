@@ -7,14 +7,23 @@ import { sendEmail } from '../lib/email';
 import { fakeDb, type FakeDb } from './__fixtures__/fake-db';
 
 let db: FakeDb;
-vi.mock('../lib/admin', () => ({ adminClient: () => db }));
+import type { Budget } from '../lib/supabase';
+vi.mock('../lib/admin', () => ({ adminClient: (_env: Env, budget?: Budget) => { if (budget) db.meter.budget = budget; return db; } }));
 vi.mock('../lib/email', async (orig) => ({ ...(await orig<typeof import('../lib/email')>()), sendEmail: vi.fn(async () => ({ sent: true })) }));
-const { scheduled, CRON_MAX_INVOICES } = await import('./scheduled');
+const { scheduled } = await import('./scheduled');
 
 const SEED = JSON.parse(sql.match(/\$seed\$([\s\S]*?)\$seed\$/)?.[1] ?? 'null');
 const NOW = '2026-10-17T15:00:00Z';
-const env = { AI: { run: async () => { throw new Error('down'); } }, APP_URL: 'https://app.test', APPROVAL_HMAC_SECRET: 'secret' } as unknown as Env;
-const tick = () => scheduled({} as ScheduledController, env);
+const ai = { run: vi.fn(async () => { throw new Error('down'); }) };
+const env = { AI: ai, APP_URL: 'https://app.test', APPROVAL_HMAC_SECRET: 'secret' } as unknown as Env;
+const TICK = 300_000; // */5 * * * *
+const tick = (n = 0) => scheduled({ scheduledTime: n * TICK } as ScheduledController, env);
+// Every subrequest a tick makes: Supabase calls (fake db), Workers AI calls and emails.
+async function counted(n: number) {
+  const before = db.meter.calls + ai.run.mock.calls.length + send.mock.calls.length;
+  await tick(n);
+  return db.meter.calls + ai.run.mock.calls.length + send.mock.calls.length - before;
+}
 const send = vi.mocked(sendEmail);
 
 const addDays = (day: string, n: number) => new Date(Date.parse(`${day}T00:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
@@ -43,6 +52,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(NOW);
   send.mockClear();
+  ai.run.mockClear();
   vi.spyOn(console, 'log').mockImplementation(() => {});
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
@@ -115,21 +125,50 @@ describe('the 5-minute cron (D23, AC-62, R-23, R-24, R-25)', () => {
   });
 });
 
-describe('cron cap and idle ticks', () => {
+describe('budgeted ticks and company turns (R-58, AC-62, AC-70)', () => {
   it('writes the tick row even when nothing is pending', async () => {
     db = fakeDb();
     await tick();
     expect(db.tables.agent_runs).toEqual([{ company_id: null, trigger: 'cron', decided: null, errors: 0 }]);
   });
 
-  it('takes at most CRON_MAX_INVOICES per tick, the oldest; the rest wait and still end as expected', async () => {
-    db = fakeDb(merge(workspace('A', { demo: true }), workspace('B', { demo: true }), workspace('C', { demo: true })));
-    const all = db.tables.invoices!.map((i) => ({ id: String(i.id), at: String(i.received_at) }))
-      .sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id)).map((i) => i.id);
-    expect(all.length).toBeGreaterThan(CRON_MAX_INVOICES);
-    await tick();
-    expect([...inserted()].sort()).toEqual(all.slice(0, CRON_MAX_INVOICES).sort());
-    await tick();
+  it('companies with pending invoices take turns: tick t starts with company floor(t / 300000) mod C, sorted by id', async () => {
+    const firsts: string[] = [];
+    for (const n of [0, 1, 2, 3, 7]) {
+      db = fakeDb(merge(workspace('C', { only: ['01', '03'] }), workspace('A', { only: ['01', '03'] }), workspace('B', { only: ['01', '03'] })));
+      await tick(n);
+      firsts.push(String(inserted()[0]));
+    }
+    expect(firsts).toEqual(['A-01', 'B-01', 'C-01', 'A-01', 'B-01']);
+  });
+
+  it('k = 4: in the worst case (every invoice a mailed escalation the reader must read) one tick decides 4 invoices of one company, within 40 counted subrequests', async () => {
+    const w = workspace('N', { only: ['01', '03', '05', '06', '07', '08', '09', '10'] });
+    for (const i of w.invoices) Object.assign(i, { fields: null, raw_text: 'texto ilegible' }); // AI down -> ilegible -> ESCALAR, mailed
+    db = fakeDb(w);
+    expect(await counted(0)).toBeLessThanOrEqual(40);
+    expect(inserted()).toEqual(['N-01', 'N-03', 'N-05', 'N-06']);
+    expect(send).toHaveBeenCalledTimes(4);
+    expect(db.tables.approval_tokens).toHaveLength(8); // every written ESCALAR has its pair
+    expect(db.tables.agent_runs!.at(-1)).toEqual({ company_id: null, trigger: 'cron', decided: null, errors: 0 });
+  });
+
+  it('a backlog of three companies drains tick by tick: every tick within 40, decides at least one, oldest first, outcomes as expected', async () => {
+    db = fakeDb(merge(workspace('A', { demo: true }), workspace('B'), workspace('C', { demo: true })));
+    const pending = () => db.tables.invoices!.filter((i) => decisionsOf(String(i.id)).length === 0).length;
+    let ticks = 0;
+    while (pending() > 0 && ticks < 3 * Math.ceil(29 / 4)) { // C x ceil(N / k)
+      const before = pending();
+      expect(await counted(ticks++)).toBeLessThanOrEqual(40);
+      expect(pending()).toBeLessThan(before);
+    }
+    expect(pending()).toBe(0);
     for (const inv of db.tables.invoices!) expect([inv.id, decisionsOf(String(inv.id)).map((d) => d.outcome)]).toEqual([inv.id, [inv.expected_outcome]]);
+    for (const c of ['A', 'B', 'C']) {
+      const order = inserted().filter((id) => String(id).startsWith(c));
+      expect(order).toEqual(db.tables.invoices!.filter((i) => i.company_id === c)
+        .sort((a, b) => String(a.received_at).localeCompare(String(b.received_at)) || String(a.id).localeCompare(String(b.id))).map((i) => i.id));
+    }
+    expect(db.tables.agent_runs!.filter((r) => r.company_id === null).every((r) => r.errors === 0 && r.decided === null)).toBe(true);
   });
 });

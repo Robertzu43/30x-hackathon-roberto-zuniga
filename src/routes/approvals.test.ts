@@ -8,7 +8,7 @@ import { HUMAN_OVERRIDABLE, outcomeOf } from '../engine/decide';
 import type { Check } from '../engine/types';
 import type { Env } from '../env';
 import { sendEmail } from '../lib/email';
-import type { Db } from '../lib/supabase';
+import { Budget, type Db } from '../lib/supabase';
 import { signToken, verifyToken } from '../lib/tokens';
 
 type TestDb = FakeDb & { auth: { getUser: (jwt: string) => Promise<unknown> } };
@@ -63,7 +63,7 @@ async function setup(only?: string[]) {
   };
   await agent('pending', 'manual');
 }
-const agent = (ids: string[] | 'pending', trigger: 'manual' | 'reevaluate') => runAgent({ db: db as unknown as Db, env }, 'A', ids, trigger);
+const agent = (ids: string[] | 'pending', trigger: 'manual' | 'reevaluate') => runAgent({ db: db as unknown as Db, env, budget: new Budget(Infinity) }, 'A', ids, trigger);
 const decisionsOf = (id: string) => db.tables.decisions!.filter((d) => d.invoice_id === id) as unknown as StoredDecision[];
 const latest = (id: string) => decisionsOf(id).sort((a, b) => b.seq - a.seq)[0];
 const humans = (id: string) => decisionsOf(id).filter((d) => d.actor === 'human');

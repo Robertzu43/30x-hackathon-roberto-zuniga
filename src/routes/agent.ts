@@ -6,8 +6,9 @@ import { must } from '../lib/supabase';
 // Every member route: a verified JWT and the user's own company (requireUser), then at most 60 POSTs a minute per user
 // (wrangler.toml RATE_LIMIT). No binding (unit tests, local dev) means no limit.
 export const memberRoutes = () => new Hono<AppEnv>().use('*', requireUser, async (c, next) => {
-  if (c.req.method === 'POST' && c.env.RATE_LIMIT && !(await c.env.RATE_LIMIT.limit({ key: c.var.user.id })).success) {
-    return c.json({ error: 'Demasiadas solicitudes, intenta en un minuto' }, 429);
+  if (c.req.method === 'POST' && c.env.RATE_LIMIT) {
+    c.var.budget.count(); // a binding call (R-56)
+    if (!(await c.env.RATE_LIMIT.limit({ key: c.var.user.id })).success) return c.json({ error: 'Demasiadas solicitudes, intenta en un minuto' }, 429);
   }
   await next();
 });

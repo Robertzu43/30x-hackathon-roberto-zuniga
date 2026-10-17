@@ -135,13 +135,39 @@ describe('consulta: duplicados (AC-19)', () => {
 });
 
 describe('lee: the reader only when fields are missing (AC-61, AC-13)', () => {
-  it('reads an invoice without fields from its text; a failed read escalates as illegible', async () => {
+  const lecturaOf = (id: string) => (decisionsOf(id)[0]!.checks as Array<{ id: string; verdict: string; values: Record<string, unknown> }>).find((c) => c.id === 'lectura');
+  it('reads an invoice without fields from its text; no answer from the reader escalates «sin leer» and fields stay null (R-75, AC-38)', async () => {
     db = fakeDb(workspace('A', { only: ['13'] }));
     db.tables.invoices![0]!.fields = null;
+    expect(await runAgent(deps(), 'A', 'pending', 'manual')).toMatchObject({ ESCALAR: 1, errors: 0 });
+    expect(ai.run).toHaveBeenCalledOnce(); // no automatic retry
+    expect(lecturaOf('A-13')).toMatchObject({ verdict: 'no_verificado', values: { reason: 'lector_no_disponible' } });
+    expect(decisionsOf('A-13')[0]).toMatchObject({
+      headline_es: 'ESCALAR · factura sin leer: el lector de facturas no estaba disponible; vuelve a ingresarla más tarde',
+      headline_en: 'ESCALATE · unread invoice: the invoice reader was unavailable; enter it again later',
+      question_es: expect.stringMatching(/^Juan, no pude leer una factura que llegó por chat: el lector de facturas no estaba disponible\./),
+    });
+    expect(db.tables.invoices![0]!.fields).toBeNull();
+  });
+  it('a reader that times out after 20 s is «sin leer» too (R-75)', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    db = fakeDb(workspace('A', { only: ['13'] }));
+    db.tables.invoices![0]!.fields = null;
+    ai.run.mockImplementationOnce(() => new Promise(() => {}));
+    const p = runAgent(deps(), 'A', 'pending', 'manual');
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(await p).toMatchObject({ ESCALAR: 1, errors: 0 });
+    expect(lecturaOf('A-13')?.values.reason).toBe('lector_no_disponible');
+  });
+  it('a model answer that is not JSON escalates as «ilegible», with no reason (R-75)', async () => {
+    db = fakeDb(workspace('A', { only: ['13'] }));
+    db.tables.invoices![0]!.fields = null;
+    ai.run.mockImplementationOnce(async () => ({ response: 'lo siento' }) as never);
     expect(await runAgent(deps(), 'A', 'pending', 'manual')).toMatchObject({ ESCALAR: 1 });
-    expect(ai.run).toHaveBeenCalledOnce();
-    const lectura = (decisionsOf('A-13')[0]!.checks as Array<{ id: string; verdict: string }>).find((c) => c.id === 'lectura');
-    expect(lectura?.verdict).toBe('no_verificado');
+    expect(lecturaOf('A-13')).toMatchObject({ verdict: 'no_verificado' });
+    expect(lecturaOf('A-13')?.values).not.toHaveProperty('reason');
+    expect(decisionsOf('A-13')[0]!.headline_es).toMatch(/: ilegible y \d+ motivos más$/);
   });
 });
 

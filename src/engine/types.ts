@@ -20,6 +20,8 @@ export interface InvoiceFields {
   concept: string | null;
   bank_account: string | null;
   confidence: Record<string, number>;
+  // R-75: no answer came from the model for this invoice (quota, HTTP or network error, unknown model, timeout).
+  read_error?: 'lector_no_disponible';
 }
 
 export interface Invoice {

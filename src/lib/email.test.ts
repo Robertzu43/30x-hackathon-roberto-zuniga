@@ -112,3 +112,21 @@ describe('escalationEmail (AC-39, AC-65, R-28)', () => {
     expect(html).toContain('&lt;img src=x onerror=alert(1)&gt; &amp; &quot;Co&quot;');
   });
 });
+
+describe('escalationEmail when the reader was unavailable (AC-13 Clarified, R-75)', () => {
+  it('subject and first line are the stored question; the body has the headline and the Lectura row', async () => {
+    const { decide } = await import('../engine/decide');
+    const inv: Invoice = { id: 'u', received_at: '2026-10-10T15:00:00Z', source: 'email', fields: { payee_name: null, amount: null, currency: null,
+      invoice_number: null, issue_date: null, due_date: null, concept: null, bank_account: null, confidence: {}, read_error: 'lector_no_disponible' } };
+    const decision: Decision = decide(inv, null, { per_payment_limit_usd: 5000 }, { committed_usd: 0, paid_usd: 0, previous: [] }, '2026-10-17T15:00:00Z');
+    const question = 'No pude leer una factura que llegó por correo: el lector de facturas no estaba disponible. No la pago sin leerla; vuelve a ingresarla más tarde. ¿Rechazo esta copia sin leer?';
+    const m = escalationEmail({ lang: 'es', question, invoice: inv, decision, approveUrl: 'https://a', rejectUrl: 'https://r' });
+    expect(m.subject).toBe(question);
+    const lines = m.text.split('\n');
+    expect(lines[0]).toBe(question);
+    expect(lines[2]).toBe('ESCALAR · factura sin leer: el lector de facturas no estaba disponible; vuelve a ingresarla más tarde');
+    expect(m.text).toContain('- Lectura: el lector de facturas no estaba disponible cuando llegó (límite diario del servicio o falla temporal); no se leyó ningún dato → no se pudo verificar');
+    expect(m.text).not.toContain('ilegible');
+  });
+});
+

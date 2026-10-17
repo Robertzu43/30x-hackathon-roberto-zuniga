@@ -188,3 +188,42 @@ describe('whatWouldPay (AC-26, AC-27)', () => {
   });
   it('PAGAR has nothing to add', () => expect(whatWouldPay(run({}).d, 'es')).toEqual([]));
 });
+
+// R-75 (AC-13 Clarified): no answer came from the reader. The record says so, in the exact es/en texts, and never pays.
+describe('reader unavailable: lector_no_disponible (AC-13 Clarified, R-75)', () => {
+  const UNREAD: InvoiceFields = { payee_name: null, amount: null, currency: null, invoice_number: null, issue_date: null, due_date: null,
+    concept: null, bank_account: null, confidence: {}, read_error: 'lector_no_disponible' };
+  const i: Invoice = { id: 'u', received_at: RECEIVED, source: 'email', fields: UNREAD };
+  const d = decide(i, null, RULES, EMPTY, NOW);
+  const lectura = get(d.checks, 'lectura');
+
+  it('decides ESCALAR with Lectura no_verificado and stores the reason in the check', () => {
+    expect(d.outcome).toBe('ESCALAR');
+    expect(lectura).toMatchObject({ verdict: 'no_verificado', values: { reason: 'lector_no_disponible' } });
+  });
+  it('the headline, with no "y n motivos más", es and en', () => {
+    expect(headline(d, i, null, 'es')).toBe('ESCALAR · factura sin leer: el lector de facturas no estaba disponible; vuelve a ingresarla más tarde');
+    expect(headline(d, i, null, 'en')).toBe('ESCALATE · unread invoice: the invoice reader was unavailable; enter it again later');
+  });
+  it('the Lectura check row, es and en; the other 12 rows keep their own sentences', () => {
+    expect(explainCheck(lectura, 'es', RECEIVED)).toBe('Lectura: el lector de facturas no estaba disponible cuando llegó (límite diario del servicio o falla temporal); no se leyó ningún dato → no se pudo verificar');
+    expect(explainCheck(lectura, 'en', RECEIVED)).toBe('Reading: the invoice reader was unavailable when it arrived (daily service limit or temporary failure); no data was read → could not be verified');
+    expect(explainCheck(get(d.checks, 'limite_pago'), 'es', RECEIVED)).not.toMatch(/lector/);
+  });
+  it('the «qué tendría que pasar» Lectura line, es and en', () => {
+    expect(whatWouldPay(d, 'es')[0]).toBe('Que vuelvas a ingresar la factura cuando el lector esté disponible y rechaces esta copia sin leer');
+    expect(whatWouldPay(d, 'en')[0]).toBe('That you enter the invoice again once the reader is available, and reject this unread copy');
+  });
+  it('an approval overrides Lectura but re-escalates: the USD checks are not overridable, never PAGAR; the headline keeps the reason', () => {
+    const failing = d.checks.filter((c) => c.verdict !== 'cumple').map((c) => c.id);
+    const a = decideWithOverrides(failing, { email: 'r@x.co', channel: 'dashboard' }, i, null, RULES, EMPTY, NOW);
+    expect(a.outcome).toBe('ESCALAR');
+    expect(get(a.checks, 'lectura').values.reason).toBe('lector_no_disponible');
+    expect(headline(a, i, null, 'es')).toBe('ESCALAR · factura sin leer: el lector de facturas no estaba disponible; vuelve a ingresarla más tarde');
+  });
+  it('an illegible invoice (the model answered) keeps the "ilegible" texts and no reason', () => {
+    const r = run({ payee_name: null, amount: null, currency: null, invoice_number: null, bank_account: null, concept: 'ilegible' });
+    expect(get(r.d.checks, 'lectura').values.reason).toBeUndefined();
+    expect(headline(r.d, r.i, r.b, 'es')).toMatch(/^ESCALAR · monto desconocido a beneficiario desconocido: ilegible y \d+ motivos más$/);
+  });
+});

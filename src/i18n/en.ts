@@ -241,5 +241,16 @@ const en: Record<string, string> = {
   'email.field.concept': 'Concept',
   'email.field.issue_date': 'Issue date',
   'email.field.due_date': 'Due date',
+  // R-75 (AC-13 Clarified): the reader gave no answer for this invoice ("lector_no_disponible").
+  'lector.headline': '{outcome} · unread invoice: the invoice reader was unavailable; enter it again later',
+  'lector.check': 'the invoice reader was unavailable when it arrived (daily service limit or temporary failure); no data was read',
+  'lector.fix': 'That you enter the invoice again once the reader is available, and reject this unread copy',
+  'lector.motive': 'the invoice reader was unavailable',
+  'lector.trace.read': 'I tried to read {source}, but the invoice reader was unavailable; I did not make up any data.',
+  'lector.question': 'I could not read an invoice that arrived {source}: the invoice reader was unavailable. I will not pay it without reading it; enter it again later. Shall I reject this unread copy?',
+  'lector.source.pdf': 'as a PDF',
+  'lector.source.image': 'as an image',
+  'lector.source.email': 'by email',
+  'lector.source.chat': 'by chat',
 };
 export default en;

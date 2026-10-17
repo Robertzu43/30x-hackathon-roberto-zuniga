@@ -6,7 +6,7 @@ import { findBeneficiary } from '../engine/checks';
 import { decide, decideWithOverrides } from '../engine/decide';
 import type { Beneficiary, Decision, Invoice, InvoiceFields, PeriodState, PolicyRules } from '../engine/types';
 import src from './trace.ts?raw';
-import { agentTrace, type StoredDecision, type TraceStep } from './trace';
+import { agentTrace, recordedFields, type StoredDecision, type TraceStep } from './trace';
 
 const SEED = JSON.parse(sql.match(/\$seed\$([\s\S]*?)\$seed\$/)?.[1] ?? 'null');
 const RULES: PolicyRules = SEED.rules;
@@ -173,3 +173,45 @@ describe('agentTrace "Lo que hice" (AC-64, D24, R-29)', () => {
   it('no decision yet -> no steps', () => expect(trace(inv(), [])).toEqual([]));
   it('is built from templates only: no model import (R-29, AC-28)', () => expect(src).not.toMatch(/lib\/llm|AI\.run/));
 });
+
+// R-75 (AC-13 Clarified): no answer came from the reader. Steps 1 and 4 say so; 2, 3 and 5 are unchanged.
+describe('agentTrace when the reader was unavailable (AC-13 Clarified, R-75, R-77)', () => {
+  const UNREAD: InvoiceFields = { payee_name: null, amount: null, currency: null, invoice_number: null, issue_date: null, due_date: null,
+    concept: null, bank_account: null, confidence: {}, read_error: 'lector_no_disponible' };
+  const unread = (source: Invoice['source']): Invoice => ({ id: 'u', received_at: '2026-10-10T15:00:00Z', source, fields: UNREAD });
+
+  it('steps 1-5 for a pasted email on the demo company, es and en', () => {
+    const i = unread('email');
+    const d = stored(run(i));
+    expect(trace(i, [d], { isDemo: true }).map((s) => s.text)).toEqual([
+      'Intenté leer el correo, pero el lector de facturas no estaba disponible; no inventé ningún dato.',
+      'No la encontré en el directorio.',
+      expect.stringMatching(/^Verifiqué 13 reglas: /),
+      'Decidí ESCALAR: el lector de facturas no estaba disponible.',
+      'Empresa demo: la pregunta quedó en el tablero, sin correo.',
+    ]);
+    const en = trace(i, [d], { isDemo: true }, 'en').map((s) => s.text);
+    expect([en[0], en[3]]).toEqual(['I tried to read the email, but the invoice reader was unavailable; I did not make up any data.',
+      'I decided ESCALATE: the invoice reader was unavailable.']);
+  });
+  it.each([['pdf', 'el PDF'], ['image', 'la imagen'], ['chat', 'el chat']] as const)('step 1 names the %s', (source, name) => {
+    const i = unread(source);
+    expect(trace(i, [stored(run(i))])[0]?.text).toBe(`Intenté leer ${name}, pero el lector de facturas no estaba disponible; no inventé ningún dato.`);
+  });
+  it('an invoice stored without fields (read by a run) is narrated from its decision: recordedFields carries read_error (R-77)', () => {
+    const d = stored(run(unread('chat')));
+    const fields = recordedFields(null, d.checks)!;
+    expect(fields.read_error).toBe('lector_no_disponible');
+    expect(trace({ ...unread('chat'), fields }, [d])[0]?.text).toMatch(/^Intenté leer el chat, pero el lector/);
+  });
+  it('an approval re-escalates and its step keeps the true reason; never PAGAR', () => {
+    const i = unread('email');
+    const d = stored(run(i));
+    const failing = d.checks.filter((c) => c.verdict !== 'cumple').map((c) => c.id);
+    const a = decideWithOverrides(failing, { email: 'r@x.co', channel: 'dashboard' }, i, null, RULES, EMPTY, NOW);
+    expect(a.outcome).toBe('ESCALAR');
+    const h = stored(a, { id: 'd2', seq: 2, actor: 'human', actor_email: 'r@x.co', channel: 'dashboard' });
+    expect(trace(i, [d, h])[5]?.text).toMatch(/el resultado es ESCALAR: el lector de facturas no estaba disponible\.$/);
+  });
+});
+

@@ -241,5 +241,16 @@ const es: Record<string, string> = {
   'email.field.concept': 'Concepto',
   'email.field.issue_date': 'Fecha de emisión',
   'email.field.due_date': 'Vencimiento',
+  // R-75 (AC-13 Clarified): the reader gave no answer for this invoice ("lector_no_disponible").
+  'lector.headline': '{outcome} · factura sin leer: el lector de facturas no estaba disponible; vuelve a ingresarla más tarde',
+  'lector.check': 'el lector de facturas no estaba disponible cuando llegó (límite diario del servicio o falla temporal); no se leyó ningún dato',
+  'lector.fix': 'Que vuelvas a ingresar la factura cuando el lector esté disponible y rechaces esta copia sin leer',
+  'lector.motive': 'el lector de facturas no estaba disponible',
+  'lector.trace.read': 'Intenté leer {source}, pero el lector de facturas no estaba disponible; no inventé ningún dato.',
+  'lector.question': 'no pude leer una factura que llegó {source}: el lector de facturas no estaba disponible. No la pago sin leerla; vuelve a ingresarla más tarde. ¿Rechazo esta copia sin leer?',
+  'lector.source.pdf': 'en PDF',
+  'lector.source.image': 'en imagen',
+  'lector.source.email': 'por correo',
+  'lector.source.chat': 'por chat',
 };
 export default es;

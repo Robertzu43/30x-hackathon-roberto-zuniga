@@ -100,3 +100,93 @@ describe('amountGuard: every seed document and every /demo/invoices file reads c
     expect(amountGuard(`CONCEPTO VALOR (${currency})\n${concept} ${m}\nTotal a pagar ${currency} ${m}`, amount)).toBeNull();
   });
 });
+
+// R-81 (AC-14 Amended): every input verbatim, `\n` a real line break.
+describe('amountGuard R-81: flagged nota_credito', () => {
+  it.each([
+    ['Total:\n-150', 'Total: -150'],
+    ['Total:\n(150.00)', 'Total: (150.00)'],
+    ['Total: –500', 'Total: –500'],
+    ['Total: —500', 'Total: —500'],
+    ['Total: －500', 'Total: －500'],
+    ['Total: ﹣500', 'Total: ﹣500'],
+    ['Total: 500-', 'Total: 500-'],
+    ['Total: USD 500.00-', 'Total: USD 500.00-'],
+    ['NOTAS CRÉDITO aplicadas\nTotal USD 80', 'NOTAS CRÉDITO'],
+    ['Credit notes issued\nTotal USD 80', 'Credit notes'],
+    ['notacredito 45\nTotal USD 80', 'notacredito'],
+    ['Nota-Crédito No. 45\nTotal USD 80', 'Nota-Crédito'],
+    ['nota_de_credito 45\nTotal USD 80', 'nota_de_credito'],
+    ['CREDIT-MEMO 7\nTotal USD 80', 'CREDIT-MEMO'],
+    ['No-cobrar\nTotal USD 80', 'No-cobrar'],
+    ['Documento NC-0045\nTotal USD 80', 'NC-0045'],
+  ])('%j', (text, signal) => {
+    for (const read of [null, 80, 150, 500]) expect(amountGuard(text, read)).toEqual({ read_error: 'nota_credito', read_detail: { signal } });
+  });
+});
+
+describe('amountGuard R-81: flagged total_no_cuadra', () => {
+  const n = null;
+  it.each([
+    ['Subtotal: USD 100.00\nIVA: USD 19.00\nTotal:\nUSD 150.00', n, [100, 19, 119, '150']],
+    ['Total a pagar\n\nUSD 2,500.00', 1500, [n, n, n, '2500']],
+    ['Subtotal 200.00\nIVA: 19% 38.00\nTotal 219.00', n, [200, 38, 238, '219']],
+    ['Subtotal 200\nIVA 38\nTotal IVA 38\nTotal 300', n, [200, 38, 238, '300']],
+    ['Subtotal 1.000.000\nIVA 190.000\nReteFuente 25.000\nTotal a pagar 1.165.000', n, [1000000, 190000, 1190000, '1165000']],
+    ['Subtotal 100.00\nDescuento 10.00\nIVA 17.10\nTotal 107.10', n, [100, 17.1, 117.1, '107.1']],
+  ] as const)('%j (model %s)', (text, read, [subtotal, tax, sum, totals]) => {
+    expect(amountGuard(text, read)).toEqual({ read_error: 'total_no_cuadra', read_detail: { subtotal, tax, sum, totals, amount_read: read } });
+  });
+});
+
+describe('amountGuard R-81: not flagged', () => {
+  it.each([
+    ['Subtotal\n100.00\nIVA\n19.00\nTotal\n119.00', 119],
+    ['Descripción Cantidad Total\n1 Consultoría 2,500.00\nTotal: USD 2,500.00', 2500],
+    ['Total\n40 horas\nTotal a pagar: USD 2,500.00', 2500],
+    ['Total: 500 USD - pago a 30 días', 500],
+    ['Periodo 2026-10\nTotal: USD 500', 500],
+    ['Abono a la cuenta de ahorros Bancolombia 123\nTotal USD 80', 80],
+    ['Política de devoluciones: 30 días\nTotal USD 80', 80],
+    ['Reembolso de gastos de viaje\nTotal USD 80', 80],
+    ['Refund policy: no refunds after 30 days\nTotal USD 80', 80],
+    ['Raleigh, NC 27601\nTotal USD 80', 80],
+    ['Factura FE-0045\nTotal USD 80', 80],
+    ['Subtotal 200.00\nIVA: 19% 38.00\nTotal 238.00', 238],
+    ['Subtotal 200.000\nIVA (19%): 38.000\nTotal 238.000', 238000],
+    ['Subtotal 200,00\nIVA: 19 % $ 38,00\nTotal 238,00', 238],
+    ['Subtotal 200.00\nIVA 19% 38.00\nTotal IVA 38.00\nTotal a pagar 238.00', 238],
+    ['Subtotal 200.000\nIVA 38.000\nImpoconsumo 16.000\nTotal impuestos 54.000\nTotal 254.000', 254000],
+    ['Subtotal 100.00\nImpoconsumo 8% 8.00\nTotal 108.00', 108],
+    ['Subtotal 1.000.000\nIVA 190.000\nReteIVA 28.500\nTotal 1.190.000', 1190000],
+    ['Total: 1 500,00 EUR', 1500],
+    ['Total: 1 500,00 EUR', 900], // F2: the space-grouped token is ignored, so there is no printed total
+    ['Total: 1 500,00', 1500],
+    ['Total: 1 500,00 EUR', 900],
+  ])('%j (model %s)', (text, read) => expect(amountGuard(text, read)).toBeNull());
+});
+
+// F1: the guard runs on every read and every cron tick inside a 10 ms CPU budget; no input may backtrack.
+describe('amountGuard: linear time on hostile and large text', () => {
+  const ms = (text: string) => { const t = performance.now(); amountGuard(text, 1); return performance.now() - t; };
+  const ordinary = SEED.invoices.map((i) => i.raw_text ?? '').join('\n');
+  it.each([
+    ['Total + 120 spaces + x', `Total${' '.repeat(120)}x`],
+    ['Total + 5000 spaces + x', `Total${' '.repeat(5000)}x`],
+    ['IVA + 5000 spaces + x', `IVA${' '.repeat(5000)}x`],
+    ['Subtotal + 5000 spaces + x', `Subtotal${' '.repeat(5000)}x`],
+    ['Total + 5000 NBSP/tabs + x', `Total${' \t'.repeat(2500)}x`],
+    ['Total + 5000 spaces + newline', `Total${' '.repeat(5000)}\n`],
+    ['Total: + 20000 newlines + x', `Total:${'\n'.repeat(20000)}x`],
+    ['"Total " x 20000', 'Total '.repeat(20000)],
+    ['"IVA 19 % " x 20000', 'IVA 19 % '.repeat(20000)],
+    ['"(" x 20000', `Total: ${'('.repeat(20000)}`],
+    ['"-" x 20000', `Total: ${'-'.repeat(20000)}1`],
+    ['digits x 20000 then %', `Total ${'1'.repeat(20000)}%`],
+    ['"1." x 20000', `Total ${'1.'.repeat(20000)}`],
+    ['nota + 20000 separators + x', `nota${'-_. \n'.repeat(5000)}x`],
+    ['saldo a + 20000 spaces', `saldo a${' '.repeat(20000)}x`],
+    ['"Total:\\n" x 20000', 'Total:\n'.repeat(20000)],
+    ['200 KB ordinary text', ordinary.repeat(Math.ceil(200_000 / ordinary.length))],
+  ])('%s', (_name, text) => expect(ms(text)).toBeLessThan(50));
+});

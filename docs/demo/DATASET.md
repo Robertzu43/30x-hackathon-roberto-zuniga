@@ -1,0 +1,45 @@
+# Andina Labs Inc.: data set de la demo
+
+Generado por `node scripts/gen-invoices.mjs` desde el JSON de `supabase/migrations/20261017000300_seed_andina.sql` (la única fuente). No editar a mano.
+
+29 facturas: 15 PAGAR, 3 FRENAR, 11 ESCALAR. 8 beneficiarios. Ninguna decisión se guarda en el seed: el agente decide cada factura y debe llegar a "Resultado esperado" (AC-10).
+
+**Política v1 "Política general"**: límite por pago 5.000,00 USD, umbral de aprobación 2.500,00 USD, presupuesto del periodo 40.000,00 USD, saldo de la cuenta 20.000,00 USD, ventana de duplicados 30 días, tolerancia del acuerdo 1 %, gracia de vencimiento 0 días, solo beneficiarios permitidos; tasas: COP 0,000245, MXN 0,054, BRL 0,18, ARS 0,00095, EUR 1,08, USD 1.
+
+**Cómo se calcula cada trampa** (R-08): el saldo (20.000,00) está por debajo del presupuesto (40.000,00). Comprometido = PAGAR + ESCALAR pendientes del mes; pagado = solo PAGAR. Los montos de la razón son los acumulados del mes antes de esa factura, en orden de llegada. La #28 falla el saldo por lo pagado (18.502,21 + 2.376 > 20.000) sin tocar el presupuesto; la #29, la última del mes, falla el presupuesto por lo comprometido (39.363,42 + 810 > 40.000) sin tocar el saldo. Las comparaciones son inclusivas (monto ≤ límite cumple). La columna Trampa muestra primero el control propio de la trampa y luego los que fallan con él por construcción.
+
+**Fechas relativas al momento del seed** (R-09), mes M = mes actual en America/Bogota: la factura NN llega en inicio(M) + (ahora − inicio(M)) × NN / 30, así NN es el orden de llegada y todas caen dentro de M; la #02 llega en inicio(M) − 5 días (mes anterior). Emisión y vencimiento = fecha de llegada (Bogotá) + los días `issue` y `due` del JSON. Los documentos de `/demo/invoices/` muestran las fechas del día en que se generaron.
+
+**Documentos**: `/demo/invoices/NN.pdf` (PDF con capa de texto) o `/demo/invoices/NN.png` (fuente imagen; la #18 está borrosa a propósito). Las facturas de correo y chat no tienen archivo: su texto está en el seed (`raw_text`).
+
+| id | beneficiario | monto | moneda | fuente | trampa | resultado esperado | razón |
+|---|---|---|---|---|---|---|---|
+| 01 | Laura Méndez | 2.500,00 | USD | pdf | normal | PAGAR | Retainer de 2.500 USD igual al acuerdo, cuenta registrada, 2.500 ≤ umbral 2.500. Presupuesto 0 + 2.500 ≤ 40.000; saldo 0 + 2.500 ≤ 20.000. |
+| 02 | Northstar Group | 200,00 | USD | email | fuera del periodo · `periodo` | ESCALAR | Llegó el mes anterior (recibida = inicio del mes − 5 días): solo falla Periodo. Es la más antigua, así que se decide primero, con el mes en 0 USD. |
+| 03 | Ana Souza | 10.000,00 | BRL | image | normal | PAGAR | 10.000 BRL × 0,18 = 1.800 USD = retainer de 1.800. Presupuesto 2.500 + 1.800 ≤ 40.000; saldo 2.500 + 1.800 ≤ 20.000. |
+| 04 | Nube Sur LLC | 9.800,00 | USD | pdf | sobre el límite por pago · `limite_pago`, `umbral_aprobacion`, `acuerdo` | FRENAR | 9.800 USD > límite por pago 5.000: FRENAR. También supera el umbral 2.500 y no es la suscripción de 4.200 (inevitable con ese monto). Presupuesto 4.300 + 9.800 y saldo 4.300 + 9.800 cumplen. |
+| 05 | Diego Ruiz | 9.000,00 | MXN | chat | normal | PAGAR | 9.000 MXN × 0,054 = 486 USD; horas del mes 486 ≤ tope 3.000. Presupuesto 4.300 + 486; saldo 4.300 + 486 cumplen. |
+| 06 | Martín López | 2.316.000,00 | ARS | pdf | normal | PAGAR | 2.316.000 ARS × 0,00095 = 2.200,20 USD, a 0,01 % del retainer de 2.200 (tolerancia 1 %). Presupuesto 4.786 + 2.200,20; saldo igual: cumplen. |
+| 07 | Contadores Andinos S.A.S. | 3.673.500 | COP | pdf | normal | PAGAR | 3.673.500 COP × 0,000245 = 900,01 USD = retainer de 900. El nombre con "S.A.S." coincide con el directorio sin sufijo. Presupuesto 6.986,20 + 900,01 cumple. |
+| 08 | Contadores Andinos S.A.S. | 25.000.000 | COP | pdf | COP sobre el límite por pago · `limite_pago`, `umbral_aprobacion`, `acuerdo` | FRENAR | 25.000.000 COP × 0,000245 = 6.125 USD > límite 5.000: FRENAR (R-07). También supera el umbral y el retainer de 900 (inevitable). Saldo 7.886,21 + 6.125 cumple. |
+| 09 | Forma Studio | 2.000,00 | EUR | pdf | normal | PAGAR | 2.000 EUR × 1,08 = 2.160 USD ≤ umbral; acuerdo único. Presupuesto 7.886,21 + 2.160; saldo igual: cumplen. |
+| 10 | Ana Souza | 10.000,00 | BRL | email | duplicado exacto · `duplicado_exacto` | FRENAR | Mismo beneficiario y mismo número AS-0087 que la #03, dentro de la ventana de 30 días: FRENAR. Todo lo demás cumple (saldo 10.046,21 + 1.800 ≤ 20.000). |
+| 11 | Nube Sur LLC | 4.200,00 | USD | pdf | sobre el umbral de aprobación · `umbral_aprobacion` | ESCALAR | La del video (D25): 4.200 USD > umbral 2.500 y ≤ límite 5.000; es la suscripción acordada. Presupuesto 10.046,21 + 4.200; saldo 10.046,21 + 4.200: cumplen. |
+| 12 | Northstar Group | 1.200,00 | USD | email | normal | PAGAR | 1.200 USD, horas del mes 1.200 ≤ tope 2.000. Presupuesto 14.246,21 + 1.200; saldo 10.046,21 + 1.200: cumplen. |
+| 13 | Pixel Lab | 2.400,00 | USD | chat | beneficiario nuevo · `beneficiario_permitido`, `beneficiario_cuenta`, `acuerdo` | ESCALAR | Pixel Lab no está en el directorio: beneficiario nuevo. Sin ficha no se pueden comparar cuenta ni acuerdo (no verificables). Montos dentro de umbral, presupuesto y saldo. |
+| 14 | Diego Ruiz | 7.000,00 | MXN | email | normal | PAGAR | 7.000 MXN × 0,054 = 378 USD; horas del mes 864 ≤ 3.000. Presupuesto 17.846,21 + 378; saldo 11.246,21 + 378: cumplen. |
+| 15 | Laura Méndez | 2.500,00 | USD | email | cuenta cambiada · `beneficiario_cuenta` | ESCALAR | Laura Méndez existe, pero la cuenta de la factura termina en 7310 y la registrada en 4821: cuenta cambiada. Monto igual al retainer, dentro de umbral, presupuesto y saldo. |
+| 16 | Forma Studio | 1.900,00 | EUR | email | normal | PAGAR | 1.900 EUR × 1,08 = 2.052 USD ≤ umbral; acuerdo único. Presupuesto 20.724,21 + 2.052; saldo 11.624,21 + 2.052: cumplen. |
+| 17 | Martín López | 2.316.000,00 | ARS | email | duplicado con otro número · `duplicado_probable` | ESCALAR | Mismo beneficiario, mismo concepto y mismo mes que la #06, con otro número (ML-0311 vs ML-0310): posible duplicado. Monto y cuenta cumplen. |
+| 18 | desconocido | desconocido | desconocida | image | ilegible · `lectura`, `beneficiario_permitido`, `beneficiario_cuenta`, `acuerdo`, `duplicado_exacto`, `duplicado_probable`, `limite_pago`, `umbral_aprobacion`, `presupuesto_periodo`, `saldo_cuenta`, `vencimiento`, `moneda` | ESCALAR | Foto borrosa: no se lee ningún campo, Lectura no se pudo verificar. Todo control que necesita un campo queda no verificable; solo Periodo (por fecha de llegada) cumple. |
+| 19 | Diego Ruiz | 11.000,00 | MXN | chat | normal | PAGAR | 11.000 MXN × 0,054 = 594 USD; horas del mes 1.458 ≤ 3.000. Presupuesto 24.976,41 + 594; saldo 13.676,21 + 594: cumplen. |
+| 20 | Laura Méndez | 3.100,00 | USD | pdf | no cuadra con el retainer · `acuerdo`, `umbral_aprobacion` | ESCALAR | 3.100 USD contra retainer de 2.500 (24 % > tolerancia 1 %): no cuadra con lo acordado. 3.100 también supera el umbral 2.500 (inevitable, D25 fija el umbral). Saldo 14.270,21 + 3.100 cumple. |
+| 21 | Forma Studio | 1.500,00 | EUR | image | normal | PAGAR | 1.500 EUR × 1,08 = 1.620 USD. Presupuesto 28.670,41 + 1.620; saldo 14.270,21 + 1.620: cumplen. |
+| 22 | Forma Studio | 13.000.000 | COP | pdf | COP sobre el umbral de aprobación · `umbral_aprobacion` | ESCALAR | 13.000.000 COP × 0,000245 = 3.185 USD > umbral 2.500 y ≤ límite 5.000 (el caso extra de R-07). Acuerdo único. Saldo 15.890,21 + 3.185 = 19.075,21 ≤ 20.000. |
+| 23 | Northstar Group | 400,00 | USD | chat | normal | PAGAR | 400 USD; horas del mes 1.600 ≤ tope 2.000. Presupuesto 33.475,41 + 400; saldo 15.890,21 + 400: cumplen. |
+| 24 | Contadores Andinos S.A.S. | 3.673.500 | COP | email | vencida · `vencimiento` | ESCALAR | Vence 10 días antes de llegar (gracia 0): vencida. Llegó este mes, monto = retainer de 900, concepto distinto del de la #07. Presupuesto y saldo cumplen. |
+| 25 | Diego Ruiz | 12.000,00 | MXN | email | normal | PAGAR | 12.000 MXN × 0,054 = 648 USD; horas del mes 2.106 ≤ 3.000. Presupuesto 34.775,42 + 648; saldo 16.290,21 + 648: cumplen. |
+| 26 | Forma Studio | 1.300,00 | EUR | pdf | normal | PAGAR | 1.300 EUR × 1,08 = 1.404 USD. Presupuesto 35.423,42 + 1.404 = 36.827,42; saldo 16.938,21 + 1.404 = 18.342,21: cumplen. |
+| 27 | Northstar Group | 160,00 | USD | chat | normal | PAGAR | 160 USD; horas del mes 1.760 ≤ 2.000. Presupuesto 36.827,42 + 160 = 36.987,42; saldo 18.342,21 + 160 = 18.502,21: cumplen. |
+| 28 | Forma Studio | 2.200,00 | EUR | pdf | supera el saldo de la cuenta · `saldo_cuenta` | ESCALAR | 2.200 EUR × 1,08 = 2.376 USD. Pagado 18.502,21 + 2.376 = 20.878,21 > saldo 20.000: saldo insuficiente. Comprometido 36.987,42 + 2.376 = 39.363,42 ≤ presupuesto 40.000 (cumple). |
+| 29 | Diego Ruiz | 15.000,00 | MXN | chat | agota el presupuesto del mes · `presupuesto_periodo` | ESCALAR | 15.000 MXN × 0,054 = 810 USD. Comprometido (pagado + escalado pendiente) 39.363,42 + 810 = 40.173,42 > presupuesto 40.000. Pagado 18.502,21 + 810 = 19.312,21 ≤ saldo (cumple); horas 2.916 ≤ 3.000. |

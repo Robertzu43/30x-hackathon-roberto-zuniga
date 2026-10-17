@@ -535,3 +535,78 @@ test('the document image has a 4:3 box reserved before it loads', async () => {
   const { readFileSync } = (await import('node:fs' as string)) as { readFileSync(p: string, enc: string): string };
   expect(readFileSync('web/pages/detail.css', 'utf8')).toMatch(/\nimg\.detail-doc \{[^}]*aspect-ratio: 4 \/ 3;[^}]*object-fit: contain/);
 });
+
+// AC-100 (R-122): approve and reject show only "sending" until the server answers; the outcome is never predicted.
+test.each([
+  ['es', 'Aprobar', 'Enviando tu respuesta…'],
+  ['en', 'Approve', 'Sending your answer…'],
+])('while the answer is in flight (%s) the buttons are disabled and the card says it is sending, with no outcome yet', async (lang, approve, sending) => {
+  localStorage.setItem('lang', lang);
+  let answer: (r: Response) => void = () => {};
+  let answered = false;
+  mockApi({
+    [GET]: () => (answered ? paid : escalated),
+    'POST /api/invoices/inv-1/approve': () => new Promise<Response>((r) => (answer = r)),
+  });
+  open();
+  const card = await screen.findByRole('region', { name: lang === 'es' ? 'Necesito tu respuesta' : 'I need your answer' });
+  fireEvent.click(within(card).getByRole('button', { name: approve }));
+  expect(within(card).getByRole('status').textContent).toBe(sending); // synchronously, well within 100 ms
+  expect(within(card).getAllByRole('button').every((b) => (b as HTMLButtonElement).disabled)).toBe(true);
+  expect(card.getAttribute('aria-busy')).toBe('true');
+  expect(screen.queryByRole('region', { name: lang === 'es' ? 'Orden de pago' : 'Payment order' })).toBeNull();
+  await new Promise((r) => setTimeout(r, 30));
+  expect(screen.queryByRole('region', { name: lang === 'es' ? 'Orden de pago' : 'Payment order' })).toBeNull();
+  answered = true;
+  answer(new Response(JSON.stringify({ decision: paid.decisions[2] })));
+  expect(await screen.findByRole('region', { name: lang === 'es' ? 'Orden de pago' : 'Payment order' })).toBeTruthy();
+  expect(screen.queryByText(sending)).toBeNull();
+});
+
+test('after the server accepts, the card keeps saying «Enviando…» until the new record is shown, never the old buttons', async () => {
+  let reload: (r: Response) => void = () => {};
+  let answered = false;
+  mockApi({
+    [GET]: () => (answered ? new Promise<Response>((r) => (reload = r)) : escalated),
+    'POST /api/invoices/inv-1/approve': () => ((answered = true), { decision: paid.decisions[2] }),
+  });
+  open();
+  fireEvent.click(await screen.findByRole('button', { name: 'Aprobar' }));
+  await waitFor(() => expect(answered).toBe(true));
+  await new Promise((r) => setTimeout(r, 30));
+  expect(screen.getByText('Enviando tu respuesta…')).toBeTruthy();
+  expect((screen.getByRole('button', { name: 'Aprobar' }) as HTMLButtonElement).disabled).toBe(true);
+  reload(new Response(JSON.stringify(paid)));
+  expect(await screen.findByRole('region', { name: 'Orden de pago' })).toBeTruthy();
+});
+
+test('on an error the card comes back with the server message and enabled buttons', async () => {
+  mockApi({ [GET]: escalated, 'POST /api/invoices/inv-1/approve': json({ error: 'busy', message: 'x' }, 503) });
+  open();
+  fireEvent.click(await screen.findByRole('button', { name: 'Aprobar' }));
+  expect(await screen.findByText('No pude registrar tu respuesta; inténtalo de nuevo en unos segundos.')).toBeTruthy();
+  expect(screen.queryByText('Enviando tu respuesta…')).toBeNull();
+  const card = screen.getByRole('region', { name: 'Necesito tu respuesta' });
+  expect(card.hasAttribute('aria-busy')).toBe(false);
+  expect(within(card).getAllByRole('button').every((b) => !(b as HTMLButtonElement).disabled)).toBe(true);
+});
+
+// AC-99 (R-109): while it loads, the detail is drawn in its loaded markup with placeholder data, hidden; the way back stays usable.
+test('while loading, the detail is a skeleton with the loaded markup and the back link works', () => {
+  mockApi({ [GET]: () => new Promise(() => {}) });
+  const { container } = open();
+  const skeleton = container.querySelector('.detail .skeleton') as HTMLElement;
+  expect(skeleton.getAttribute('aria-hidden')).toBe('true');
+  expect(skeleton.hasAttribute('inert')).toBe(true);
+  expect(skeleton.querySelector('h1')).toBeTruthy();
+  expect(skeleton.querySelector('.detail-cols')).toBeTruthy();
+  expect(screen.getByRole('link', { name: 'Volver a la bandeja' })).toBeTruthy();
+  expect(screen.getByRole('status').textContent).toBe('Cargando la factura…');
+});
+
+test('the skeleton is gone once the invoice arrives', async () => {
+  mockApi({ [GET]: escalated });
+  const { container } = open();
+  await screen.findByRole('heading', { level: 1, name: escalated.headline });
+  expect(container.querySelector('.skeleton')).toBeNull();
+});

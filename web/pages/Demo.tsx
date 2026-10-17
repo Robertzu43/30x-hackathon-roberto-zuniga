@@ -22,6 +22,12 @@ const TAG: Record<string, 'ai' | 'code'> = { lee: 'ai', consulta: 'code', decide
 type Outcome = 'PAGAR' | 'FRENAR' | 'ESCALAR';
 type Row = { id: string; outcome: Outcome | null; headline_es: string | null; headline_en: string | null };
 type Overview = { invoices: Row[]; period: { autonomy: { n: number; m: number }; autonomy_pct: number | null; violations: number; explained_pct: number } };
+// AC-99 (R-109): while the overview loads, the rows and figures are the loaded markup with these placeholders, hidden by .skeleton.
+const SKELETON: Overview = {
+  invoices: ['s1', 's2', 's3', 's4'].map((id) => ({ id, outcome: null, headline_es: null, headline_en: null })),
+  period: { autonomy: { n: 1, m: 1 }, autonomy_pct: 100, violations: 0, explained_pct: 100 },
+};
+const hide = (loading: boolean) => (loading ? { 'aria-hidden': true, inert: true } as const : {});
 
 export default function Demo() {
   const { t, lang, setLang } = useT();
@@ -69,7 +75,8 @@ export default function Demo() {
     const prefix = `${label(r.outcome)} · `;
     return h.startsWith(prefix) ? h.slice(prefix.length) : h;
   };
-  const p = data?.period;
+  const shown = data ?? SKELETON;
+  const p = shown.period;
 
   return (
     <div className="demo">
@@ -134,10 +141,10 @@ export default function Demo() {
             <button type="button" onClick={() => load(true)}>{t('demo.inbox.retry')}</button>
           </div>
         )}
-        {!failed && !data && <p className="muted">{t('demo.inbox.loading')}</p>}
-        {data && (
-          <ul className="demo-rows" data-ui aria-label={t('demo.inbox.label')}>
-            {data.invoices.map((r) => (
+        {!failed && !data && <p role="status" className="sr-only">{t('demo.inbox.loading')}</p>}
+        {!failed && (
+          <ul className={data ? 'demo-rows' : 'demo-rows skeleton'} data-ui aria-label={t('demo.inbox.label')} {...hide(!data)}>
+            {shown.invoices.map((r) => (
               <li key={r.id}>
                 <span className={`demo-chip demo-chip-${r.outcome ?? 'pending'}`}>{label(r.outcome)}</span>
                 <span>{reason(r)}</span>
@@ -149,8 +156,8 @@ export default function Demo() {
 
       <section className="demo-period" aria-labelledby="demo-period-title">
         <h2 id="demo-period-title">{t('demo.period.title')}</h2>
-        {p && (
-          <dl>
+        {!failed && (
+          <dl className={data ? undefined : 'skeleton'} {...hide(!data)}>
             <dt>{p.autonomy_pct === null ? '—' : `${p.autonomy_pct} %`}</dt>
             <dd>{t('demo.period.autonomy', p.autonomy)}</dd>
             <dt>{p.violations}</dt>

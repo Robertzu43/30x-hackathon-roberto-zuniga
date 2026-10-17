@@ -139,7 +139,7 @@ test('while an anonymous session exists the door reads «Volver a mi empresa de 
 
 test('a trial user landing on Bandeja gets the guided tour (AC-92, AC-42)', async () => {
   anonymous();
-  mockApi({ 'GET /api/invoices': [], 'GET /api/agent/last-run': null });
+  mockApi({ 'GET /api/screen/inbox?lang=es': { invoices: [], last_run: null, portal: null, beneficiaries: [], dashboard: null } }); // AC-98
   renderAt(<App />);
   expect(await screen.findByRole('dialog')).toBeTruthy();
 });

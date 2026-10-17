@@ -20,11 +20,26 @@ const minsAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
 const batch = (o = {}) => ({ PAGAR: 0, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null, ...o });
 const calls = (f: ReturnType<typeof mockApi>, method: string, path: string) =>
   f.mock.calls.filter(([u, i]) => u === path && (i?.method ?? 'GET') === method);
+const screenCalls = (f: ReturnType<typeof mockApi>) => f.mock.calls.filter(([u]) => String(u).startsWith('/api/screen/inbox'));
 
+// AC-98: Bandeja loads one GET /api/screen/inbox. Tests still name its parts by the old endpoints; the mock composes them,
+// and any part that fails (a Response) fails the whole screen request.
+const PARTS = { 'GET /api/invoices': 'invoices', 'GET /api/agent/last-run': 'last_run', 'GET /api/portal-link': 'portal', 'GET /api/beneficiaries': 'beneficiaries' };
 function setup(routes: Record<string, unknown> = {}) {
   signedInAs('ana@empresa.co');
-  const f = mockApi({ 'GET /api/invoices': ROWS, 'GET /api/agent/last-run': { at: minsAgo(7), trigger: 'cron' },
-    'GET /api/portal-link': { portal_url: PORTAL, email_address: null }, 'GET /api/agent/activity': { items: [] }, ...routes });
+  const all: Record<string, unknown> = { 'GET /api/invoices': ROWS, 'GET /api/agent/last-run': { at: minsAgo(7), trigger: 'cron' },
+    'GET /api/portal-link': { portal_url: PORTAL, email_address: null }, 'GET /api/beneficiaries': [], 'GET /api/agent/activity': { items: [] }, ...routes };
+  const inbox = async () => {
+    const body: Record<string, unknown> = { dashboard: null };
+    for (const [k, field] of Object.entries(PARTS)) {
+      const v = typeof all[k] === 'function' ? await (all[k] as () => unknown)() : all[k];
+      if (v instanceof Response) return v;
+      body[field] = v;
+    }
+    return body;
+  };
+  const rest = Object.fromEntries(Object.entries(all).filter(([k]) => !(k in PARTS)));
+  const f = mockApi({ ...rest, 'GET /api/screen/inbox?lang=es': inbox, 'GET /api/screen/inbox?lang=en': inbox });
   const view = renderAt(
     <Routes>
       <Route path="/" element={<Inbox />} />
@@ -108,7 +123,7 @@ test('"Ejecutar agente" runs the loop: progress, list reloads, summed summary, l
   expect(await screen.findByText('1 PAGAR · 0 FRENAR · 1 ESCALAR')).toBeTruthy();
   expect(await screen.findByText('El agente revisó las facturas pendientes hace menos de 1 min · manual')).toBeTruthy();
   expect(btn.disabled).toBe(false);
-  expect(calls(f, 'GET', '/api/invoices').length).toBeGreaterThanOrEqual(3); // first load + one per batch
+  expect(screenCalls(f).length).toBeGreaterThanOrEqual(3); // first load + one per batch
   expect(JSON.parse(String(calls(f, 'POST', '/api/invoices/run')[1]![1]?.body))).toEqual({ cursor: 'c1' });
 });
 
@@ -329,11 +344,6 @@ test('a refused clipboard shows the press-and-hold text (R-102)', async () => {
   expect(await screen.findByText('No pude copiarlo; mantén presionado el enlace.')).toBeTruthy();
 });
 
-test('a failed portal-link call says so with a next step; an answer without a URL shows no card', async () => {
-  setup({ 'GET /api/portal-link': new Response(JSON.stringify({ error: 'boom' }), { status: 500 }) });
-  expect(await screen.findByText('No pude cargar tu enlace para proveedores. Recarga la página para intentar de nuevo.')).toBeTruthy();
-});
-
 test('an answer without a portal URL (empty) shows no card and no developer words', async () => {
   setup({ 'GET /api/portal-link': [] });
   await screen.findByRole('heading', { name: 'Actividad del agente' });
@@ -377,4 +387,28 @@ test('opening «Nueva factura» demotes «Ejecutar agente» to secondary; closin
   expect(primaries()).toEqual(['Enviar al agente']);
   open();
   expect(primaries()).toEqual(['Ejecutar agente']);
+});
+
+// AC-98: one data request on load; the activity poll (AC-78) is off the critical path.
+test('Bandeja loads its data with one request to /api/screen/inbox in the tab language', async () => {
+  const { f } = setup();
+  await screen.findByText(/supera el umbral/);
+  const data = f.mock.calls.map(([u]) => String(u)).filter((u) => u !== '/api/config' && u !== '/api/agent/activity');
+  expect(data).toEqual(['/api/screen/inbox?lang=es']);
+});
+
+// AC-99 (R-109): while it loads, the list is drawn with placeholder rows in the loaded markup, hidden; the last-run line too.
+test('while loading, the list and the last-run line are a skeleton with the loaded markup', () => {
+  const { view } = setup({ 'GET /api/invoices': () => new Promise(() => {}) });
+  const list = view.container.querySelector('.inbox-list.skeleton') as HTMLElement;
+  expect(list.getAttribute('aria-hidden')).toBe('true');
+  expect(list.hasAttribute('inert')).toBe(true);
+  expect(list.querySelectorAll('li a').length).toBeGreaterThan(0);
+  expect(view.container.querySelector('.inbox-last-run.skeleton')).not.toBeNull();
+});
+
+test('the skeleton is gone once the rows arrive', async () => {
+  const { view } = setup();
+  await screen.findByText(/supera el umbral/);
+  expect(view.container.querySelector('.skeleton')).toBeNull();
 });

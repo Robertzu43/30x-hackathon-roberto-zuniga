@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { api, ApiError, config } from './api';
+import { api, ApiError, cacheOwner, cached, config, load, prefetch } from './api';
 import { mockApi, signedInAs } from './test/utils';
 import { send } from './withField';
 
@@ -66,4 +66,57 @@ test('withField send carries the tab language as X-Lang for es and en', async ()
   sessionStorage.setItem('lang', 'es');
   await send('POST', '/api/beneficiaries', {});
   expect(new Headers(fetchMock.mock.calls.at(-1)![1]!.headers).get('X-Lang')).toBe('es');
+});
+
+// AC-100: the per-tab screen cache. A screen GET is remembered for this tab; any write from this tab drops it.
+test('load remembers a screen answer for this tab; a prefetch and the screen share one request', async () => {
+  signedInAs('ana@empresa.co');
+  const fetchMock = mockApi({ 'GET /api/screen/policy': { versions: [] } });
+  prefetch('/api/screen/policy');
+  expect(await load('/api/screen/policy')).toEqual({ versions: [] });
+  expect(fetchMock.mock.calls.filter(([u]) => u === '/api/screen/policy')).toHaveLength(1);
+  expect(cached('/api/screen/policy')).toEqual({ versions: [] });
+  prefetch('/api/screen/policy'); // already here: no second request
+  expect(fetchMock.mock.calls.filter(([u]) => u === '/api/screen/policy')).toHaveLength(1);
+});
+
+test.each([
+  ['api.post', () => api.post('/api/invoices/run')],
+  ['api.put', () => api.put('/api/company', {})],
+  ['withField send', () => send('POST', '/api/beneficiaries', {})],
+  ['a failed write', () => api.post('/api/nope').catch(() => {})],
+])('%s drops the cache (AC-100)', async (_, write) => {
+  mockApi({ 'GET /api/screen/beneficiaries': { beneficiaries: [] }, 'POST /api/invoices/run': {}, 'PUT /api/company': {}, 'POST /api/beneficiaries': {} });
+  await load('/api/screen/beneficiaries');
+  await write();
+  expect(cached('/api/screen/beneficiaries')).toBeUndefined();
+});
+
+test('an answer that left before a write is never cached after it', async () => {
+  let release: (r: Response) => void = () => {};
+  mockApi({ 'GET /api/screen/period?month=2026-10': () => new Promise<Response>((r) => (release = r)), 'POST /api/invoices/run': {} });
+  const late = load('/api/screen/period?month=2026-10');
+  await new Promise((r) => setTimeout(r, 0));
+  await api.post('/api/invoices/run');
+  release(new Response(JSON.stringify({ period: 'old' })));
+  await late;
+  expect(cached('/api/screen/period?month=2026-10')).toBeUndefined();
+});
+
+test('another signed-in user drops the cache; the same user keeps it', async () => {
+  mockApi({ 'GET /api/screen/policy': { versions: [] } });
+  cacheOwner('id:ana');
+  await load('/api/screen/policy');
+  cacheOwner('id:ana');
+  expect(cached('/api/screen/policy')).toBeDefined();
+  cacheOwner('id:luis');
+  expect(cached('/api/screen/policy')).toBeUndefined();
+});
+
+test('the cache is per language: an answer in es is not shown to an en tab', async () => {
+  mockApi({ 'GET /api/invoices/inv-1': { headline: 'PAGAR · …' } });
+  sessionStorage.setItem('lang', 'es');
+  await load('/api/invoices/inv-1');
+  sessionStorage.setItem('lang', 'en');
+  expect(cached('/api/invoices/inv-1')).toBeUndefined();
 });

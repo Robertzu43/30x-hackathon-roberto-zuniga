@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import type { PageRoute } from '../App';
 import type { Beneficiary } from '../../src/engine/types';
-import { api } from '../api';
+import { screens, useScreen } from '../api';
 import { useT } from '../i18n';
 import '../policy.css';
 import { failure, send } from '../withField';
@@ -14,6 +14,9 @@ type Row = Beneficiary & { country: string | null };
 const ROUTES = ['ACH', 'Wire', 'SWIFT', 'Pix', 'CBU', 'Transferencia COP', 'USDC'];
 const TYPES = ['retainer', 'hourly', 'subscription', 'one_off'] as const;
 const TEXT = ['name', 'country', 'currency', 'bank_account', 'category'] as const;
+// AC-99 (R-109): the loading table is the loaded markup with these made-up rows, hidden by .skeleton.
+const SKELETON: Row[] = ['s1', 's2', 's3'].map((id) => ({ id, name: 'Laura Méndez', country: 'CO', currency: 'USD', bank_account: null, route: 'ACH',
+  category: 'Desarrollo', agreement: { type: 'retainer', amount_usd: 2500, period: 'monthly' } }));
 
 const toForm = (b?: Row) => ({
   name: b?.name ?? '', country: b?.country ?? '', currency: b?.currency ?? '', bank_account: b?.bank_account ?? '', route: b?.route ?? '',
@@ -23,7 +26,9 @@ const toForm = (b?: Row) => ({
 
 export default function Beneficiaries() {
   const { t, locale } = useT();
-  const [rows, setRows] = useState<Row[] | null>(null);
+  const screen = useScreen<{ beneficiaries: Row[] }>(screens.beneficiaries()); // AC-98
+  const rows = screen.data?.beneficiaries ?? null;
+  const loadFailed = !rows && screen.error !== undefined;
   const [f, setF] = useState(toForm());
   const [editing, setEditing] = useState<Row | null>(null);
   const [err, setErr] = useState<ReturnType<typeof failure> | null>(null);
@@ -31,8 +36,6 @@ export default function Beneficiaries() {
   const [busy, setBusy] = useState(false);
   const formRef = useRef<HTMLElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
-  const load = () => api.get<Row[]>('/api/beneficiaries').then(setRows);
-  useEffect(() => void load().catch((e) => setErr(failure(e))), []);
 
   const edit = (b: Row | null) => {
     setEditing(b);
@@ -64,7 +67,7 @@ export default function Beneficiaries() {
       await (editing ? send('PUT', `/api/beneficiaries/${editing.id}`, data) : send('POST', '/api/beneficiaries', data));
       edit(null);
       setSaved(true);
-      await load();
+      await screen.reload();
     } catch (x) {
       setErr(failure(x));
     }
@@ -83,21 +86,21 @@ export default function Beneficiaries() {
       <p className="muted">{t('ben.intro')}</p>
 
       <section className="card table-wrap" aria-label={t('ben.list')} tabIndex={0}>
-        {!rows && !err && <p className="muted">{t('policy.loading')}</p>}
-        {!rows && err && <p role="alert" className="error">{t('ben.load_error')}</p>}
+        {!rows && !loadFailed && <p role="status" className="sr-only">{t('policy.loading')}</p>}
+        {loadFailed && <p role="alert" className="error">{t('ben.load_error')}</p>}
         {rows?.length === 0 && (
           <div className="empty">
             <p className="muted">{t('ben.empty')} {t('ben.empty_next')}</p>
             <button type="button" onClick={() => openForm(null)}>{t('ben.add')}</button>
           </div>
         )}
-        {!!rows?.length && (
-          <table>
+        {(rows ? rows.length > 0 : !loadFailed) && (
+          <table className={rows ? undefined : 'skeleton'} aria-hidden={rows ? undefined : true} inert={!rows}>
             <thead>
               <tr>{['name', 'country', 'currency', 'route', 'category', 'agreement'].map((c) => <th key={c}>{t(`ben.col.${c}`)}</th>)}<th /></tr>
             </thead>
             <tbody>
-              {rows.map((b) => (
+              {(rows ?? SKELETON).map((b) => (
                 <tr key={b.id}>
                   <td>{b.name}</td>
                   <td>{b.country ?? '—'}</td>

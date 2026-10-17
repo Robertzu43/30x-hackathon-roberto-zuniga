@@ -13,8 +13,10 @@ const signedInTopBar = async (name = 'Ver tutorial') => {
   return button;
 };
 
-// The real Bandeja mounts on /: answer what it loads so it never lands on its error state mid-test.
-beforeEach(() => mockApi({ 'GET /api/invoices': [], 'GET /api/agent/last-run': null }));
+// The real Bandeja mounts on /: answer what it loads (AC-98, one screen request) so it never lands on its error state mid-test.
+const EMPTY = { invoices: [], last_run: null, portal: null, beneficiaries: [], dashboard: null };
+const INBOX = { 'GET /api/screen/inbox?lang=es': EMPTY, 'GET /api/screen/inbox?lang=en': EMPTY };
+beforeEach(() => mockApi(INBOX));
 
 test('routes come from web/pages/*.tsx: one page per screen, each with a path and a component', () => {
   expect(pages.map((p) => p.route.path).sort()).toEqual(
@@ -74,7 +76,7 @@ test('a seen user is not shown the tour on load', async () => {
 
 // R-62: the shared demo user gets the tour once per click on "Entrar como Andina Labs", never on reload or deep link.
 const enterAsDemo = async () => {
-  mockApi({ 'GET /api/invoices': [], 'GET /api/agent/last-run': null, 'GET /api/demo/overview': new Response('{}', { status: 503 }) });
+  mockApi({ ...INBOX, 'GET /api/demo/overview': new Response('{}', { status: 503 }) });
   fireEvent.click(await screen.findByRole('button', { name: 'Entrar como Andina Labs' }));
 };
 const reloadAt = (at: string) => {
@@ -119,7 +121,7 @@ test('after the click, a reload never restarts the tour; "Ver tutorial" and a ne
 });
 
 test('a signed-out deep link survives sign-in: the code lands on the page asked for', async () => {
-  mockApi({ 'GET /api/invoices': [], 'GET /api/agent/last-run': null, 'POST /api/invoices/run': { PAGAR: 0, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null } });
+  mockApi({ ...INBOX, 'POST /api/invoices/run': { PAGAR: 0, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null } });
   // A returning user (tour already seen): verifyOtp signs in with the stored metadata.
   fakeAuth.verifyOtp.mockImplementationOnce(async ({ email }) => {
     signedInAs(email, SEEN);
@@ -168,7 +170,7 @@ test('the tour keeps its place across routes: Siguiente from Bandeja reaches Pol
 }, 10000);
 
 test('signing out then signing in as someone else opens Bandeja, not the page the first user left (AC-40)', async () => {
-  mockApi({ 'GET /api/invoices': [], 'GET /api/agent/last-run': null, 'GET /api/policy': [], 'GET /api/company': { id: 'c', name: 'A', approver_email: 'a@a.co', lang: 'es', is_demo: false }, 'POST /api/invoices/run': { PAGAR: 0, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null } });
+  mockApi({ ...INBOX, 'GET /api/screen/policy': { versions: [], company: { id: 'c', name: 'A', approver_email: 'a@a.co', lang: 'es', is_demo: false }, fx: { rates: [] } }, 'POST /api/invoices/run': { PAGAR: 0, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null } });
   signedInAs('ana@empresa.co', SEEN);
   renderAt(<App />, { at: '/policy' });
   await screen.findByRole('heading', { name: 'Política', level: 1 });
@@ -219,7 +221,7 @@ test('/demo opens in Spanish whatever an earlier judge chose, and "Entrar" opens
 test('/demo switched to English: "Sign in as Andina Labs" opens an English dashboard and tour (R-78)', async () => {
   demoWithStoredLang('es');
   renderAt(<App />, { at: '/demo' });
-  mockApi({ 'GET /api/invoices': [], 'GET /api/agent/last-run': null, 'GET /api/demo/overview': new Response('{}', { status: 503 }) });
+  mockApi({ ...INBOX, 'GET /api/demo/overview': new Response('{}', { status: 503 }) });
   fireEvent.click(await screen.findByRole('button', { name: 'English' }));
   fireEvent.click(await screen.findByRole('button', { name: 'Sign in as Andina Labs' }));
   const dialog = await screen.findByRole('dialog');
@@ -246,11 +248,11 @@ test('during a tour step the top-bar language switch keeps the step; Escape does
 // R-98 (AC-28 Clarified): a language switch re-fetches the screen on view, so the record comes back in that language.
 test('switching the language re-fetches the screen on view with the new X-Lang', async () => {
   signedInAs('ana@empresa.co', SEEN);
-  const fetchMock = mockApi({ 'GET /api/invoices': [], 'GET /api/agent/last-run': null, 'GET /api/beneficiaries': [] });
+  const fetchMock = mockApi(INBOX);
   renderAt(<App />);
   await signedInTopBar();
-  const langsOf = () => fetchMock.mock.calls.filter(([u]) => String(u) === '/api/invoices').map(([, i]) => new Headers(i!.headers).get('X-Lang'));
-  await waitFor(() => expect(langsOf()).toEqual(['es']));
+  const langsOf = () => fetchMock.mock.calls.filter(([u]) => String(u).startsWith('/api/screen/inbox')).map(([u, i]) => `${u} ${new Headers(i!.headers).get('X-Lang')}`);
+  await waitFor(() => expect(langsOf()).toEqual(['/api/screen/inbox?lang=es es']));
   fireEvent.click(screen.getByRole('button', { name: 'en' }));
-  await waitFor(() => expect(langsOf()).toEqual(['es', 'en']));
+  await waitFor(() => expect(langsOf()).toEqual(['/api/screen/inbox?lang=es es', '/api/screen/inbox?lang=en en']));
 });

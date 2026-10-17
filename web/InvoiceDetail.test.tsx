@@ -220,3 +220,41 @@ test('English renders the English labels and en-US formats (AC-28)', async () =>
   expect(screen.getByText('ana@blinka.example on the dashboard')).toBeTruthy();
   expect(screen.getAllByText('Agent')).toHaveLength(2);
 });
+
+// AC-13 Clarified (R-75, item 7): the reader never answered, so «Lo que leí» says so above the fields, all «desconocido».
+const NOTICE_ES = 'No leí esta factura: el lector de facturas no estaba disponible cuando llegó. No adiviné ningún campo.';
+const NOTICE_EN = 'I did not read this invoice: the invoice reader was unavailable when it arrived. I did not guess any field.';
+const unread = {
+  ...escalated,
+  invoice: { ...invoice, source: 'email', raw_text: 'Factura de octubre, 300 USD', file_path: null, outcome: 'ESCALAR',
+    fields: { payee_name: null, amount: null, currency: null, invoice_number: null, issue_date: null, due_date: null, concept: null,
+      bank_account: null, confidence: {}, read_error: 'lector_no_disponible' } },
+  file_url: null,
+};
+
+test('an invoice the reader could not reach: the notice tops «Lo que leí», beside the text, every field unknown (AC-13, R-75)', async () => {
+  mockApi({ [GET]: unread });
+  open();
+  const notice = await screen.findByText(NOTICE_ES);
+  const read = screen.getByRole('heading', { name: 'Lo que leí' });
+  const text = screen.getByText('Factura de octubre, 300 USD');
+  expect(read.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(notice.compareDocumentPosition(text) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  const values = [...document.querySelectorAll('.detail-fields dd')].map((dd) => dd.textContent);
+  expect(values).toEqual(Array(8).fill('desconocido'));
+});
+
+test('the reader notice in English (AC-13, R-75)', async () => {
+  localStorage.setItem('lang', 'en');
+  mockApi({ [GET]: unread });
+  open();
+  expect(await screen.findByText(NOTICE_EN)).toBeTruthy();
+  expect([...document.querySelectorAll('.detail-fields dd')].map((dd) => dd.textContent)).toEqual(Array(8).fill('unknown'));
+});
+
+test('an invoice with no read_error (or before the backend sends it) shows no reader notice (AC-13)', async () => {
+  mockApi({ [GET]: escalated });
+  open();
+  await screen.findByText('Nube Sur LLC', { selector: 'dd' });
+  expect(screen.queryByText(NOTICE_ES)).toBeNull();
+});

@@ -12,9 +12,8 @@ import './demo.css';
 export const route: PageRoute = { path: '/demo', public: true, fullBleed: true };
 
 const DEMO_PASSWORD = 'andina-demo-2026'; // public by design (D8, AC-46), same as src/routes/demo.ts
-const OUTCOMES = ['PAGAR', 'FRENAR', 'ESCALAR'] as const;
 const STAGES = ['percibe', 'lee', 'consulta', 'decide', 'actua', 'rinde'];
-type Outcome = (typeof OUTCOMES)[number];
+type Outcome = 'PAGAR' | 'FRENAR' | 'ESCALAR';
 type Row = { id: string; outcome: Outcome | null; headline_es: string | null; headline_en: string | null };
 type Overview = { invoices: Row[]; period: { autonomy: { n: number; m: number }; autonomy_pct: number | null; violations: number; explained_pct: number } };
 
@@ -24,7 +23,6 @@ export default function Demo() {
   const { session, demoEmail } = useSession();
   const [data, setData] = useState<Overview | null>(null);
   const [failed, setFailed] = useState(false);
-  const [filter, setFilter] = useState<Outcome | null>(null);
   const [entering, setEntering] = useState(false);
   const [enterFailed, setEnterFailed] = useState(false);
   const run = useRunAgent({ first: '/api/demo/reset', next: '/api/invoices/run' });
@@ -62,7 +60,6 @@ export default function Demo() {
     const prefix = `${label(r.outcome)} · `;
     return h.startsWith(prefix) ? h.slice(prefix.length) : h;
   };
-  const rows = data?.invoices.filter((r) => !filter || r.outcome === filter) ?? [];
   const p = data?.period;
 
   return (
@@ -80,8 +77,7 @@ export default function Demo() {
         </div>
         <div className="demo-actions">
           <button type="button" className="primary" disabled={entering} onClick={() => void enter()}>{t(entering ? 'demo.entering' : 'demo.enter')}</button>
-          {/* TODO(task18): the recorded happy-path video URL replaces this placeholder. */}
-          <a href="#video">{t('demo.video')} →</a>
+          <a href="/demo/happy-path.webm">{t('demo.video')} →</a>
           {isDemoUser(session?.user, demoEmail) && (
             <button type="button" disabled={run.running} onClick={() => void reset()}>{t('demo.reset')}</button>
           )}
@@ -113,23 +109,14 @@ export default function Demo() {
         )}
         {!failed && !data && <p className="muted">{t('demo.inbox.loading')}</p>}
         {data && (
-          <>
-            <div className="demo-filter" role="group" aria-label={t('demo.inbox.filter')}>
-              {[null, ...OUTCOMES].map((o) => (
-                <button key={o ?? 'all'} type="button" className="link" aria-pressed={filter === o} onClick={() => setFilter(o)}>
-                  {`${o ? label(o) : t('demo.inbox.all')} ${data.invoices.filter((r) => !o || r.outcome === o).length}`}
-                </button>
-              ))}
-            </div>
-            <ul className="demo-rows" data-ui aria-label={t('demo.inbox.label')}>
-              {rows.map((r) => (
-                <li key={r.id}>
-                  <span className={`demo-chip demo-chip-${r.outcome ?? 'pending'}`}>{label(r.outcome)}</span>
-                  <span>{reason(r)}</span>
-                </li>
-              ))}
-            </ul>
-          </>
+          <ul className="demo-rows" data-ui aria-label={t('demo.inbox.label')}>
+            {data.invoices.map((r) => (
+              <li key={r.id}>
+                <span className={`demo-chip demo-chip-${r.outcome ?? 'pending'}`}>{label(r.outcome)}</span>
+                <span>{reason(r)}</span>
+              </li>
+            ))}
+          </ul>
         )}
       </section>
 

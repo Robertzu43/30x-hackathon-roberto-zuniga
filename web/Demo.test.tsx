@@ -38,7 +38,8 @@ test('shows the inbox rows (outcome + one-line reason) and the three Periodo fig
   expect(within(figures).getByText('90 %')).toBeTruthy();
   expect(within(figures).getByText('0')).toBeTruthy();
   expect(within(figures).getByText('100 %')).toBeTruthy();
-  expect(screen.getByRole('link', { name: /Ver el recorrido en video/ }).getAttribute('href')).toBe('#video');
+  expect(screen.getByRole('link', { name: /Ver el recorrido en video/ }).getAttribute('href')).toBe('/demo/happy-path.webm');
+  expect(screen.queryByRole('group', { name: /Filtrar/ })).toBeNull();
 });
 
 test('the problem in three lines, the six-stage loop, the pitch line verbatim and JEV is off (AC-45, AC-66, R-30)', async () => {
@@ -50,16 +51,6 @@ test('the problem in three lines, the six-stage loop, the pitch line verbatim an
   expect(screen.getByText('El LLM lee, JEV duda, el código decide, el agente actúa.')).toBeTruthy();
   expect(screen.getByText('JEV, la intuición rápida, es una capa opcional; en esta demo está apagada.')).toBeTruthy();
   await screen.findByText('90 %');
-});
-
-test('filtering by outcome shows only those rows', async () => {
-  mockApi({ 'GET /api/demo/overview': overview });
-  app();
-  await screen.findByText('90 %');
-  fireEvent.click(screen.getByRole('button', { name: 'FRENAR 1' }));
-  expect(within(inbox()).getAllByRole('listitem')).toHaveLength(1);
-  fireEvent.click(screen.getByRole('button', { name: 'Todas 4' }));
-  expect(within(inbox()).getAllByRole('listitem')).toHaveLength(4);
 });
 
 test('English shows the English headlines', async () => {

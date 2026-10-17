@@ -22,7 +22,6 @@
 .demo-loop blockquote { margin: 4rem 0 0.75rem; font: 400 clamp(1.5rem, 2.4vw, 2.25rem) / 1.2 var(--font-serif); letter-spacing: -0.02em; }
 
 .demo section.demo-inbox { max-width: 48rem; }
-.demo-filter { display: flex; flex-wrap: wrap; gap: 1.25rem; margin: 2rem 0 1rem; }
 .demo-unavailable { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin-top: 2rem; }
 .demo-unavailable p { color: #9f2f2d; }
 .demo-rows { list-style: none; margin: 0; padding: 0.25rem 1.5rem; background: #f1efe9; border-radius: var(--radius); }

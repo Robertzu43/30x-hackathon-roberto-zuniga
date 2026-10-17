@@ -31,8 +31,6 @@ export const es: Record<string, string> = {
   'demo.inbox.lead':
     'Andina Labs es una empresa ficticia con facturas normales y facturas trampa. Cada fila es lo que decidió el agente y por qué, en una línea.',
   'demo.inbox.label': 'Bandeja de Andina Labs',
-  'demo.inbox.filter': 'Filtrar por resultado',
-  'demo.inbox.all': 'Todas',
   'demo.inbox.pending': 'Pendiente',
   'demo.inbox.pending_row': 'Esperando la próxima revisión del agente',
   'demo.inbox.loading': 'Cargando la bandeja…',
@@ -75,8 +73,6 @@ export const en: Record<string, string> = {
   'demo.inbox.lead':
     'Andina Labs is a fictional company with normal invoices and trap invoices. Each row is what the agent decided and why, in one line.',
   'demo.inbox.label': "Andina Labs' inbox",
-  'demo.inbox.filter': 'Filter by outcome',
-  'demo.inbox.all': 'All',
   'demo.inbox.pending': 'Pending',
   'demo.inbox.pending_row': "Waiting for the agent's next check",
   'demo.inbox.loading': 'Loading the inbox…',

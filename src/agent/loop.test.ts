@@ -451,3 +451,52 @@ describe('recorded fields (R-77)', () => {
   });
 });
 
+
+// R-80 (AC-14 Clarified): the amount guard runs at `lee` on the text, before and independently of the model, on every
+// path that reads (here "Ejecutar agente"); the outcome does not depend on what the model answers.
+describe('lee: the amount guard (AC-14 Clarified, R-80, R-77, AC-38)', () => {
+  const lecturaOf = (id: string, n = 0) => (decisionsOf(id)[n]!.checks as Array<{ id: string; verdict: string; values: Record<string, unknown> }>).find((c) => c.id === 'lectura');
+  const ANSWER = { payee_name: 'Pixel Lab', currency: 'USD', invoice_number: 'PX-9', issue_date: null, due_date: null, concept: 'Landing',
+    bank_account: null, confidence: { payee_name: 0.99, amount: 0.99, currency: 0.99, invoice_number: 0.99 } };
+  const CASES = [
+    ['Subtotal: USD 100.00 / IVA: USD 19.00 / Total: USD 150.00', 'total_no_cuadra', /^ESCALAR · el total de la factura de .+ no cuadra: 100,00 \+ 19,00 = 119,00, pero el total dice 150,00$/],
+    ['Total: (USD 500,00) nota credito', 'nota_credito', /^ESCALAR · la factura de .+ parece una nota crédito: dice «Total: \(USD 500,00\)»; no es un cobro y no la pago$/],
+  ] as const;
+  const MODELS: Array<[string, () => Promise<unknown>]> = [
+    ['a plausible amount (150)', async () => ({ response: { ...ANSWER, amount: 150 } })],
+    ['a plausible amount (500)', async () => ({ response: { ...ANSWER, amount: 500 } })],
+    ['a different amount', async () => ({ response: { ...ANSWER, amount: 119 } })],
+    ['a string amount', async () => ({ response: { ...ANSWER, amount: '150,00' } })],
+    ['a 4006 throw', async () => { throw new Error('4006: you have used up your daily free allocation of 10,000 neurons'); }],
+    ['a timeout', () => new Promise(() => {})],
+  ];
+  for (const [text, code, headline] of CASES) {
+    it.each(MODELS)(`${code}: «${text}» with %s escalates with the reason, amount unknown; fields stay null`, async (_n, answer) => {
+      vi.useFakeTimers();
+      vi.setSystemTime(NOW);
+      db = fakeDb(workspace('A', { only: ['13'] }));
+      Object.assign(db.tables.invoices![0]!, { fields: null, raw_text: text });
+      ai.run.mockImplementationOnce(answer as never);
+      const p = runAgent(deps(), 'A', 'pending', 'manual');
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(await p).toMatchObject({ ESCALAR: 1, PAGAR: 0, FRENAR: 0, errors: 0 });
+      expect(lecturaOf('A-13')).toMatchObject({ verdict: 'no_verificado', values: { reason: code } });
+      const d = decisionsOf('A-13')[0]!;
+      expect(d).toMatchObject({ outcome: 'ESCALAR', amount_usd: null, headline_es: expect.stringMatching(headline) });
+      expect((d.checks as Array<{ id: string; values: Record<string, unknown> }>).find((c) => c.id === 'moneda')?.values.amount).toBeNull();
+      expect(db.tables.invoices![0]!.fields).toBeNull(); // the loop never writes invoices (AC-38)
+    });
+  }
+  it('Reevaluar keeps the reason and its values with 0 model calls (R-77)', async () => {
+    db = fakeDb(workspace('A', { only: ['13'] }));
+    Object.assign(db.tables.invoices![0]!, { fields: null, raw_text: CASES[0][0] });
+    ai.run.mockImplementationOnce(async () => ({ response: { ...ANSWER, amount: 150 } }) as never);
+    await runAgent(deps(), 'A', 'pending', 'manual');
+    ai.run.mockClear();
+    expect(await runAgent(deps(), 'A', 'pending', 'reevaluate')).toMatchObject({ ESCALAR: 1 });
+    expect(ai.run).not.toHaveBeenCalled();
+    expect(lecturaOf('A-13', 1)?.values).toMatchObject({ reason: 'total_no_cuadra', subtotal: 100, tax: 19, sum: 119, totals: '150', amount_read: 150 });
+    expect(lecturaOf('A-13', 1)?.values).toEqual(lecturaOf('A-13', 0)?.values);
+    expect(decisionsOf('A-13')[1]!.headline_es).toBe(decisionsOf('A-13')[0]!.headline_es);
+  });
+});

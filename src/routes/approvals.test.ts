@@ -469,5 +469,28 @@ describe('answers run on recorded fields, never on a re-read (R-77, R-75)', () =
     expect(decisionsOf(id).map((d) => d.outcome)).not.toContain('PAGAR');
     expect(aiRun).not.toHaveBeenCalled();
   });
+  // R-80 (AC-14 Clarified): a credit note or a total that does not add up, read by a run (fields stay null, AC-38).
+  it.each([
+    ['Subtotal: USD 100.00 / IVA: USD 19.00 / Total: USD 150.00', 'total_no_cuadra', 'ESCALAR · el total de la factura de un beneficiario que no pude leer no cuadra: 100,00 + 19,00 = 119,00, pero el total dice 150,00'],
+    ['Total: USD 200.00 CR (saldo a favor del cliente, no cobrar)', 'nota_credito', 'ESCALAR · la factura de un beneficiario que no pude leer parece una nota crédito: dice «Total: USD 200.00 CR»; no es un cobro y no la pago'],
+  ])('"Aprobar" on «%s» re-escalates with its reason, link and dashboard; "Rechazar" is FRENAR by the human; never PAGAR (R-80)', async (text, code, HEADLINE) => {
+    await setup([]);
+    const id = uid('A-g');
+    db.tables.invoices!.push({ id, company_id: 'A', source: 'email', raw_text: text, archived: false, received_at: NOW, fields: null });
+    await agent('pending', 'manual');
+    expect(aiRun).toHaveBeenCalledOnce(); // the read, with the model unavailable: the guard's code still wins
+    aiRun.mockClear();
+    expect(latest(id)).toMatchObject({ outcome: 'ESCALAR', headline_es: HEADLINE });
+    expect((await answer((await links(id)).approve, 1)).status).toBe(200);
+    expect(latest(id)).toMatchObject({ seq: 2, actor: 'human', outcome: 'ESCALAR', headline_es: HEADLINE });
+    expect(check(latest(id)!, 'lectura')).toMatchObject({ values: { reason: code }, overridden: { channel: 'link' } });
+    expect(check(latest(id)!, 'limite_pago').verdict).toBe('no_verificado');
+    expect((await dashboard(id, 'approve', 2)).status).toBe(200);
+    expect(latest(id)).toMatchObject({ seq: 3, outcome: 'ESCALAR', headline_es: HEADLINE });
+    expect((await dashboard(id, 'reject', 3)).status).toBe(200);
+    expect(latest(id)).toMatchObject({ seq: 4, outcome: 'FRENAR', actor: 'human' });
+    expect(decisionsOf(id).map((d) => d.outcome)).not.toContain('PAGAR');
+    expect(aiRun).not.toHaveBeenCalled();
+    expect(db.tables.invoices!.find((i) => i.id === id)!.fields).toBeNull();
+  });
 });
-

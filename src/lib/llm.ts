@@ -6,6 +6,7 @@ import { z } from 'zod';
 import type { Env } from '../env';
 import type { InvoiceFields } from '../engine/types';
 import { EXTRACT_SYSTEM, INVOICE_SCHEMA, VISION_PROMPT } from '../prompts/extract';
+import { amountGuard } from './amount-guard';
 import { parseAmount, round2 } from './money';
 
 const TIMEOUT_MS = 20_000;
@@ -81,6 +82,13 @@ const toNumber = (v: number | string | null): number | null => (typeof v === 'st
 export async function extractFields(env: Env, text: string | null): Promise<InvoiceFields> {
   if (text === null) return { ...UNAVAILABLE };
   if (!text.trim()) return { ...ILEGIBLE };
+  const [fields, amountRead] = await modelFields(env, text);
+  const guarded = amountGuard(text, amountRead); // R-80: wins over the model's answer and over lector_no_disponible
+  return guarded ? { ...fields, amount: null, ...guarded } : fields;
+}
+
+// The fields the model read, and the amount it answered before the confidence filter (null when it gave none).
+async function modelFields(env: Env, text: string): Promise<[InvoiceFields, number | null]> {
   let out: { response?: unknown } | null;
   try {
     out = (await ai(env, env.WORKERS_AI_MODEL, {
@@ -90,7 +98,7 @@ export async function extractFields(env: Env, text: string | null): Promise<Invo
     })) as { response?: unknown } | null;
   } catch (e) {
     console.error('reader: lector_no_disponible', reason(e));
-    return { ...UNAVAILABLE };
+    return [{ ...UNAVAILABLE }, null];
   }
   try {
     const raw = out?.response;
@@ -99,7 +107,7 @@ export async function extractFields(env: Env, text: string | null): Promise<Invo
     const consistent = subtotal == null || tax == null || amount == null || round2(Math.abs(round2(subtotal + tax) - amount)) <= 0.01;
     const sure = (k: string) => (a.confidence[k] ?? 0) >= MIN_CONFIDENCE;
     const keep = <T>(k: string, v: T): T | null => (sure(k) ? v : null);
-    return {
+    return [{
       payee_name: keep('payee_name', a.payee_name),
       amount: consistent ? keep('amount', amount ?? null) : null,
       currency: keep('currency', a.currency),
@@ -109,9 +117,9 @@ export async function extractFields(env: Env, text: string | null): Promise<Invo
       concept: keep('concept', a.concept),
       bank_account: keep('bank_account', a.bank_account),
       confidence: Object.fromEntries(Object.entries(a.confidence).filter(([k]) => k in ILEGIBLE && k !== 'confidence')),
-    };
+    }, amount ?? null];
   } catch (e) {
     console.error('reader: ilegible', reason(e));
-    return { ...ILEGIBLE };
+    return [{ ...ILEGIBLE }, null];
   }
 }

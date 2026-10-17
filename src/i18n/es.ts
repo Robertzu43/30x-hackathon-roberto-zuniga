@@ -243,7 +243,7 @@ const es: Record<string, string> = {
   'email.field.due_date': 'Vencimiento',
   // R-75 (AC-13 Clarified): the reader gave no answer for this invoice ("lector_no_disponible").
   'lector.headline': '{outcome} · factura sin leer: el lector de facturas no estaba disponible; vuelve a ingresarla más tarde',
-  'lector.check': 'el lector de facturas no estaba disponible cuando llegó (límite diario del servicio o falla temporal); no se leyó ningún dato',
+  'lector.check': 'el lector de facturas no estaba disponible cuando llegó (límite diario del servicio o falla temporal); no se leyó ningún dato → {verdict}',
   'lector.fix': 'Que vuelvas a ingresar la factura cuando el lector esté disponible y rechaces esta copia sin leer',
   'lector.motive': 'el lector de facturas no estaba disponible',
   'lector.trace.read': 'Intenté leer {source}, pero el lector de facturas no estaba disponible; no inventé ningún dato.',
@@ -252,5 +252,23 @@ const es: Record<string, string> = {
   'lector.source.image': 'en imagen',
   'lector.source.email': 'por correo',
   'lector.source.chat': 'por chat',
+  // R-80 (AC-14 Clarified): the amount guard stopped the amount ("nota_credito", "total_no_cuadra").
+  'value.unread_payee': 'un beneficiario que no pude leer',
+  'value.no_number': 'sin número',
+  'nota_credito.headline': '{outcome} · la factura de {payee} parece una nota crédito: dice «{signal}»; no es un cobro y no la pago',
+  'nota_credito.check': 'el documento dice «{signal}»; no tomo su monto como un cobro → {verdict}',
+  'nota_credito.fix': 'Que no se pague: una nota crédito se descuenta de una factura, no se paga. Recházala; si de verdad es un cobro, que el proveedor envíe una factura sin esa señal',
+  'nota_credito.motive': 'parece una nota crédito, no un cobro',
+  'nota_credito.trace.read': 'Leí {source} y encontré a {payee}, factura {number}; el documento dice «{signal}», así que no tomé su monto como un cobro.',
+  'nota_credito.question': 'la factura {number} de {payee} parece una nota crédito: dice «{signal}». No la pago; ¿la rechazo?',
+  'total_no_cuadra.why.3a': '{subtotal} + {tax} = {sum}, pero el total dice {totals}',
+  'total_no_cuadra.why.3b': 'leí {amount_read}, pero el total impreso es {totals}',
+  'total_no_cuadra.headline': '{outcome} · el total de la factura de {payee} no cuadra: {why}',
+  'total_no_cuadra.check.3a': 'subtotal {subtotal} + impuestos {tax} = {sum}, total impreso {totals} → no cuadra, {verdict}',
+  'total_no_cuadra.check.3b': 'leí el monto {amount_read}, pero el total impreso es {totals} → {verdict}',
+  'total_no_cuadra.fix': 'Que el proveedor envíe la factura con un total que cuadre; rechaza esta',
+  'total_no_cuadra.motive': 'el total no cuadra',
+  'total_no_cuadra.trace.read': 'Leí {source} y encontré a {payee}, factura {number}, pero el total no cuadra ({why}); no tomé ningún monto.',
+  'total_no_cuadra.question': 'la factura {number} de {payee} no cuadra: {why}. No la pago así; ¿la rechazo?',
 };
 export default es;

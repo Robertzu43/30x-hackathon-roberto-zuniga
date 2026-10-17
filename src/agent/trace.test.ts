@@ -215,3 +215,56 @@ describe('agentTrace when the reader was unavailable (AC-13 Clarified, R-75, R-7
   });
 });
 
+
+// R-80 (AC-14 Clarified): the amount guard stopped the amount. Steps 1 and 4 say why; 2, 3 and 5 are unchanged.
+describe('agentTrace when the amount guard fired (AC-14 Clarified, R-80, R-77)', () => {
+  const NOTA: Partial<InvoiceFields> = { amount: null, read_error: 'nota_credito', read_detail: { signal: 'Total: (USD 500,00)' } };
+  const CUADRA: Partial<InvoiceFields> = { amount: null, read_error: 'total_no_cuadra', read_detail: { subtotal: 100, tax: 19, sum: 119, totals: '150', amount_read: 150 } };
+  const steps = (f: Partial<InvoiceFields>, lang: 'es' | 'en' = 'es', source: Invoice['source'] = 'email') => {
+    const i = inv(f, source);
+    return trace(i, [stored(run(i))], { isDemo: true }, lang).map((s) => s.text);
+  };
+  it('nota_credito, es and en', () => {
+    const es = steps(NOTA);
+    expect([es[0], es[3], es[4]]).toEqual(['Leí el correo y encontré a Laura Méndez, factura #1042; el documento dice «Total: (USD 500,00)», así que no tomé su monto como un cobro.',
+      'Decidí ESCALAR: parece una nota crédito, no un cobro.', 'Empresa demo: la pregunta quedó en el tablero, sin correo.']);
+    expect(es[2]).toMatch(/^Verifiqué 13 reglas: /);
+    const en = steps(NOTA, 'en');
+    expect([en[0], en[3]]).toEqual(['I read the email and found Laura Méndez, invoice #1042; the document says "Total: (USD 500,00)", so I did not take its amount as a charge.',
+      'I decided ESCALATE: it looks like a credit note, not a charge.']);
+  });
+  it('total_no_cuadra (3a and 3b), es and en', () => {
+    const es = steps(CUADRA, 'es', 'pdf');
+    expect([es[0], es[3]]).toEqual(['Leí el PDF y encontré a Laura Méndez, factura #1042, pero el total no cuadra (100,00 + 19,00 = 119,00, pero el total dice 150,00); no tomé ningún monto.',
+      'Decidí ESCALAR: el total no cuadra.']);
+    const en = steps(CUADRA, 'en', 'pdf');
+    expect([en[0], en[3]]).toEqual(['I read the PDF and found Laura Méndez, invoice #1042, but the total does not add up (100.00 + 19.00 = 119.00, but the total says 150.00); I did not take any amount.',
+      'I decided ESCALATE: the total does not add up.']);
+    expect(steps({ ...CUADRA, read_detail: { subtotal: null, tax: null, sum: null, totals: '2500', amount_read: 250 } })[0])
+      .toBe('Leí el correo y encontré a Laura Méndez, factura #1042, pero el total no cuadra (leí 250,00, pero el total impreso es 2.500,00); no tomé ningún monto.');
+  });
+  it('an unread payee and number', () => {
+    expect(steps({ ...NOTA, payee_name: null, invoice_number: null }, 'es', 'chat')[0])
+      .toBe('Leí el chat y encontré a un beneficiario que no pude leer, factura sin número; el documento dice «Total: (USD 500,00)», así que no tomé su monto como un cobro.');
+    expect(steps({ ...NOTA, payee_name: null, invoice_number: null }, 'en', 'image')[0])
+      .toBe('I read the image and found a payee I could not read, invoice no number; the document says "Total: (USD 500,00)", so I did not take its amount as a charge.');
+  });
+  it('an invoice stored without fields keeps the reason and the values in recordedFields, so Reevaluar decides the same (R-77)', () => {
+    const i = inv(CUADRA);
+    const d = stored(run(i));
+    const fields = recordedFields(null, d.checks);
+    expect(fields).toMatchObject({ amount: null, read_error: 'total_no_cuadra', read_detail: CUADRA.read_detail, payee_name: 'Laura Méndez' });
+    const again = run({ ...i, fields });
+    expect(again.outcome).toBe('ESCALAR');
+    expect(again.checks.find((c) => c.id === 'lectura')?.values).toEqual(d.checks.find((c) => c.id === 'lectura')?.values);
+  });
+  it('an approval re-escalates and its step keeps the reason; never PAGAR', () => {
+    const i = inv(NOTA);
+    const d = stored(run(i));
+    const a = decideWithOverrides(d.checks.filter((c) => c.verdict !== 'cumple').map((c) => c.id), { email: 'r@x.co', channel: 'link' },
+      i, findBeneficiary(i.fields.payee_name, DIRECTORY), RULES, EMPTY, NOW);
+    expect(a.outcome).toBe('ESCALAR');
+    const h = stored(a, { id: 'd2', seq: 2, actor: 'human', actor_email: 'r@x.co', channel: 'link' });
+    expect(trace(i, [d, h])[5]?.text).toMatch(/el resultado es ESCALAR: parece una nota crédito, no un cobro\.$/);
+  });
+});

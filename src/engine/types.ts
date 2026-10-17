@@ -21,8 +21,12 @@ export interface InvoiceFields {
   bank_account: string | null;
   confidence: Record<string, number>;
   // R-75: no answer came from the model for this invoice (quota, HTTP or network error, unknown model, timeout).
-  read_error?: 'lector_no_disponible';
+  // R-80: the amount guard stopped the amount (a credit note, or a total that does not add up).
+  read_error?: ReadError;
+  // R-80: the guard's values, kept in the Lectura check: {signal} or {subtotal, tax, sum, totals, amount_read}.
+  read_detail?: Record<string, string | number | null>;
 }
+export type ReadError = 'lector_no_disponible' | 'nota_credito' | 'total_no_cuadra';
 
 export interface Invoice {
   id: string;

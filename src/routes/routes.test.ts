@@ -946,3 +946,54 @@ describe('ingest when the reader is unavailable (AC-13 Clarified, R-75)', () => 
     expect(decision.headline_es).toMatch(/^ESCALAR · monto desconocido a beneficiario desconocido: ilegible y \d+ motivos más$/);
   });
 });
+
+// R-80 (AC-14 Clarified): QA live with zero quota, as a route test. Each pasted text is ESCALAR with the guard's texts,
+// not «factura sin leer»; the guard runs on the text before and independently of the model.
+describe('ingest: the amount guard with the reader unavailable (AC-14 Clarified, R-80)', () => {
+  const QUOTA = () => Promise.reject(new Error('4006: you have used up your daily free allocation of 10,000 neurons'));
+  const NONE = 'un beneficiario que no pude leer';
+  const cuadra = (s: string, t: string, sum: string, x: string) => [`ESCALAR · el total de la factura de ${NONE} no cuadra: ${s} + ${t} = ${sum}, pero el total dice ${x}`,
+    `Lectura: subtotal ${s} + impuestos ${t} = ${sum}, total impreso ${x} → no cuadra, no se pudo verificar`,
+    `Leí el correo y encontré a ${NONE}, factura sin número, pero el total no cuadra (${s} + ${t} = ${sum}, pero el total dice ${x}); no tomé ningún monto.`,
+    'Decidí ESCALAR: el total no cuadra.', 'Que el proveedor envíe la factura con un total que cuadre; rechaza esta'];
+  const nota = (signal: string) => [`ESCALAR · la factura de ${NONE} parece una nota crédito: dice «${signal}»; no es un cobro y no la pago`,
+    `Lectura: el documento dice «${signal}»; no tomo su monto como un cobro → no se pudo verificar`,
+    `Leí el correo y encontré a ${NONE}, factura sin número; el documento dice «${signal}», así que no tomé su monto como un cobro.`,
+    'Decidí ESCALAR: parece una nota crédito, no un cobro.',
+    'Que no se pague: una nota crédito se descuenta de una factura, no se paga. Recházala; si de verdad es un cobro, que el proveedor envíe una factura sin esa señal'];
+  it.each([
+    ['Subtotal: USD 100.00 / IVA: USD 19.00 / Total: USD 150.00', 'total_no_cuadra', cuadra('100,00', '19,00', '119,00', '150,00')],
+    ['Subtotal 200 + impuesto 20 = Total 100', 'total_no_cuadra', cuadra('200,00', '20,00', '220,00', '100,00')],
+    ['Subtotal 1000 / Impuestos 190 / Total 1400', 'total_no_cuadra', cuadra('1.000,00', '190,00', '1.190,00', '1.400,00')],
+    ['Subtotal 100 / VAT 19 / Total 300', 'total_no_cuadra', cuadra('100,00', '19,00', '119,00', '300,00')],
+    ['Total: (USD 500,00) nota credito', 'nota_credito', nota('Total: (USD 500,00)')],
+    ['Total: USD 200.00 CR (saldo a favor del cliente, no cobrar)', 'nota_credito', nota('Total: USD 200.00 CR')],
+    ['Total: -500 USD', 'nota_credito', nota('Total: -500 USD')],
+    ['Nota de crédito NC-12 Total USD 80', 'nota_credito', nota('Nota de crédito')],
+  ])('«%s»', async (text, code, [headline, row, step1, step4, fix]) => {
+    db = testDb(workspace([]));
+    ai.run.mockImplementationOnce(QUOTA);
+    const r = await call('POST', '/api/invoices', { source: 'email', text });
+    expect(r.status).toBe(201);
+    const { invoice, decision } = await json<{ invoice: Row; decision: Row }>(r);
+    expect(db.tables.invoices!.find((i) => i.id === invoice.id)!.fields).toMatchObject({ amount: null, read_error: code });
+    expect(decision).toMatchObject({ outcome: 'ESCALAR', headline_es: headline, amount_usd: null });
+    const detail = await json<{ invoice: { fields: Row }; explanations: string[]; fixes: string[]; trace: Array<{ text: string }>; question: string }>(await call('GET', `/api/invoices/${invoice.id}`));
+    expect([detail.explanations[0], detail.trace[0]!.text, detail.trace[3]!.text, detail.fixes[0]]).toEqual([row, step1, step4, fix]);
+    expect(detail.question).toMatch(/^Juan, la factura sin número de un beneficiario que no pude leer (parece una nota crédito|no cuadra): .+ ¿la rechazo\?$/);
+  });
+  it('an image whose vision transcription says «nota crédito» is flagged', async () => {
+    db = testDb(workspace([]));
+    ai.run.mockImplementationOnce(async () => ({ response: 'NOTA CRÉDITO NC-7 · Total USD 300.00' })).mockImplementationOnce(QUOTA);
+    const r = await call('POST', '/api/invoices', upload(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2]), 'f.png', 'image/png'));
+    const { decision } = await json<{ decision: Row }>(r);
+    expect(decision).toMatchObject({ outcome: 'ESCALAR', headline_es: `ESCALAR · la factura de ${NONE} parece una nota crédito: dice «NOTA CRÉDITO»; no es un cobro y no la pago` });
+  });
+  it('AC-11: a consistent «Subtotal / IVA / Total» email is not flagged', async () => {
+    db = testDb(workspace([]));
+    const r = await call('POST', '/api/invoices', { source: 'email', text: 'Factura 1050 de Laura Méndez\nSubtotal: USD 2,100.84\nIVA 19 %: USD 399.16\nTotal: USD 2,500.00' });
+    const { invoice } = await json<{ invoice: Row }>(r);
+    expect(db.tables.invoices!.find((i) => i.id === invoice.id)!.fields).toMatchObject({ amount: 2500 });
+    expect(db.tables.invoices!.find((i) => i.id === invoice.id)!.fields).not.toHaveProperty('read_error');
+  });
+});

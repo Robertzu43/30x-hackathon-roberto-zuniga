@@ -243,7 +243,7 @@ const en: Record<string, string> = {
   'email.field.due_date': 'Due date',
   // R-75 (AC-13 Clarified): the reader gave no answer for this invoice ("lector_no_disponible").
   'lector.headline': '{outcome} · unread invoice: the invoice reader was unavailable; enter it again later',
-  'lector.check': 'the invoice reader was unavailable when it arrived (daily service limit or temporary failure); no data was read',
+  'lector.check': 'the invoice reader was unavailable when it arrived (daily service limit or temporary failure); no data was read → {verdict}',
   'lector.fix': 'That you enter the invoice again once the reader is available, and reject this unread copy',
   'lector.motive': 'the invoice reader was unavailable',
   'lector.trace.read': 'I tried to read {source}, but the invoice reader was unavailable; I did not make up any data.',
@@ -252,5 +252,23 @@ const en: Record<string, string> = {
   'lector.source.image': 'as an image',
   'lector.source.email': 'by email',
   'lector.source.chat': 'by chat',
+  // R-80 (AC-14 Clarified): the amount guard stopped the amount ("nota_credito", "total_no_cuadra").
+  'value.unread_payee': 'a payee I could not read',
+  'value.no_number': 'no number',
+  'nota_credito.headline': '{outcome} · the document from {payee} looks like a credit note: it says "{signal}"; it is not a charge and I will not pay it',
+  'nota_credito.check': 'the document says "{signal}"; I do not take its amount as a charge → {verdict}',
+  'nota_credito.fix': 'That it is not paid: a credit note is deducted from an invoice, not paid. Reject it; if it really is a charge, the vendor sends an invoice without that signal',
+  'nota_credito.motive': 'it looks like a credit note, not a charge',
+  'nota_credito.trace.read': 'I read {source} and found {payee}, invoice {number}; the document says "{signal}", so I did not take its amount as a charge.',
+  'nota_credito.question': 'invoice {number} from {payee} looks like a credit note: it says "{signal}". I will not pay it; shall I reject it?',
+  'total_no_cuadra.why.3a': '{subtotal} + {tax} = {sum}, but the total says {totals}',
+  'total_no_cuadra.why.3b': 'I read {amount_read}, but the printed total is {totals}',
+  'total_no_cuadra.headline': '{outcome} · the total on the invoice from {payee} does not add up: {why}',
+  'total_no_cuadra.check.3a': 'subtotal {subtotal} + taxes {tax} = {sum}, printed total {totals} → does not add up, {verdict}',
+  'total_no_cuadra.check.3b': 'I read the amount {amount_read}, but the printed total is {totals} → {verdict}',
+  'total_no_cuadra.fix': 'That the vendor sends the invoice with a total that adds up; reject this one',
+  'total_no_cuadra.motive': 'the total does not add up',
+  'total_no_cuadra.trace.read': 'I read {source} and found {payee}, invoice {number}, but the total does not add up ({why}); I did not take any amount.',
+  'total_no_cuadra.question': 'invoice {number} from {payee} does not add up: {why}. I will not pay it like this; shall I reject it?',
 };
 export default en;

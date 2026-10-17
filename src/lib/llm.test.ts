@@ -207,3 +207,48 @@ describe('documentToText (AC-11, AC-12)', () => {
     expect(log).toHaveBeenCalledWith('reader: no text', 'quota');
   });
 });
+
+// R-80 (AC-14 Clarified): the amount guard runs on the text at `lee`, before and independently of the model; its code
+// wins over lector_no_disponible, and the amount is stored null whatever the model said.
+describe('extractFields with the amount guard (AC-14 Clarified, R-80)', () => {
+  const CUADRA = 'Subtotal: USD 100.00 / IVA: USD 19.00 / Total: USD 150.00';
+  const NOTA = 'Total: (USD 500,00) nota credito';
+  const answers = (amount: unknown) => model({ ...good, amount });
+  it.each([
+    [CUADRA, 'total_no_cuadra'], [NOTA, 'nota_credito'],
+  ])('%s: amount null and the same read_error for every model answer', async (text, code) => {
+    vi.useFakeTimers();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const hang = extractFields(envWith(() => new Promise(() => {})), text);
+    await vi.advanceTimersByTimeAsync(20_000);
+    const outs = [
+      await extractFields(answers(150), text), await extractFields(answers(500), text), await extractFields(answers(119), text),
+      await extractFields(answers('150,00'), text), await extractFields(envWith(async () => { throw new Error(QUOTA); }), text),
+      await hang, await extractFields(model('lo siento'), text),
+    ];
+    for (const o of outs) expect(o).toMatchObject({ amount: null, read_error: code });
+  });
+  it('keeps the other fields the model read, and stores the guard values', async () => {
+    expect(await extractFields(answers(150), CUADRA)).toEqual({ ...good, amount: null, read_error: 'total_no_cuadra',
+      read_detail: { subtotal: 100, tax: 19, sum: 119, totals: '150', amount_read: 150 } });
+  });
+  it('with the model unavailable: every field null, the guard code instead of lector_no_disponible', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(await extractFields(envWith(async () => { throw new Error(QUOTA); }), NOTA)).toEqual({ ...UNAVAILABLE, read_error: 'nota_credito',
+      read_detail: { signal: 'Total: (USD 500,00)' } });
+  });
+  it('3b: a model amount that is none of the printed totals is total_no_cuadra', async () => {
+    expect(await extractFields(answers(250), 'Total: USD 2,500.00')).toMatchObject({ amount: null, read_error: 'total_no_cuadra',
+      read_detail: { totals: '2500', amount_read: 250 } });
+    expect(await extractFields(answers(2500), 'Total: USD 2,500.00')).toEqual({ ...good, amount: 2500 });
+  });
+  it('an image whose vision transcription says «nota crédito» is flagged (the text model unavailable)', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const env = envWith(async (m) => { if (m === 'vision-model') return { response: 'NOTA CRÉDITO NC-7\nTotal USD 300.00' }; throw new Error(QUOTA); });
+    const text = await documentToText(env, { kind: 'image', bytes: new ArrayBuffer(2) });
+    expect(await extractFields(env, text)).toMatchObject({ amount: null, read_error: 'nota_credito', read_detail: { signal: 'NOTA CRÉDITO' } });
+  });
+  it('a vision step with no answer has no text to guard: lector_no_disponible', async () => {
+    expect(await extractFields(model(null), null)).toEqual(UNAVAILABLE);
+  });
+});

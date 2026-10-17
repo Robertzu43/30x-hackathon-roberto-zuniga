@@ -52,7 +52,8 @@ export function validFields(f: InvoiceFields): InvoiceFields {
     return typeof c === 'number' && c >= 0.8 ? ok(f[k]) : null;
   };
   return {
-    ...f, payee_name: pick('payee_name', text), amount: pick('amount', amount), currency: pick('currency', currency),
+    // R-80: a read_error means the amount was not read, whatever a row says (never overridable into a payment, R-21).
+    ...f, payee_name: pick('payee_name', text), amount: f.read_error ? null : pick('amount', amount), currency: pick('currency', currency),
     invoice_number: pick('invoice_number', text), issue_date: pick('issue_date', day), due_date: pick('due_date', day),
     concept: pick('concept', text), bank_account: pick('bank_account', text),
   };
@@ -62,9 +63,10 @@ export function validFields(f: InvoiceFields): InvoiceFields {
 const READ = ['payee_name', 'amount', 'currency', 'invoice_number'] as const;
 export function lectura({ invoice: { fields: f } }: CheckContext): Check {
   const missing = READ.filter((k) => f[k] === null);
-  const unread = f.read_error === 'lector_no_disponible'; // R-75: the reason travels with every later decision (R-77)
-  return make('lectura', missing.length || unread ? 'no_verificado' : 'cumple', missing.join(', ') || f.amount, null,
-    { missing: missing.join(', ') || null, ...(unread ? { reason: 'lector_no_disponible' } : {}) });
+  // R-75, R-80: the reason (and the guard's values) travel with every later decision (R-77).
+  const reason = f.read_error ? { ...f.read_detail, reason: f.read_error } : {};
+  return make('lectura', missing.length || f.read_error ? 'no_verificado' : 'cumple', missing.join(', ') || f.amount, null,
+    { missing: missing.join(', ') || null, ...reason });
 }
 
 export function beneficiario_permitido({ invoice, beneficiary, rules }: CheckContext): Check {

@@ -2,7 +2,7 @@
 // per language at decision time and stored (R-28); the Spanish text is the email subject and first line (AC-39).
 import { validFields } from '../engine/checks';
 import { HUMAN_OVERRIDABLE } from '../engine/decide';
-import { asRead, fill, list, money, unread, whatWouldPay } from '../engine/explain';
+import { asRead, fill, list, money, reasonText, whatWouldPay } from '../engine/explain';
 import type { Decision, Invoice } from '../engine/types';
 import { t, type Lang } from '../i18n';
 
@@ -20,9 +20,9 @@ export function escalationQuestion(args: { approverEmail: string; invoice: Invoi
   // R-27: approving cannot unlock these, so the agent says what would and offers to reject.
   const fix = whatWouldPay({ checks: failing.filter((c) => !HUMAN_OVERRIDABLE.includes(c.id)) }, lang)
     .map((l) => (lang === 'es' ? l.replace(/^Que /, '') : l.charAt(0).toLowerCase() + l.slice(1)));
-  const s = unread(args.decision.checks) // R-75: no answer from the reader, whatever was approved since
-    ? fill(lang, 'lector.question', { source: t(lang, `lector.source.${args.invoice.source}`) })
-    : `${fill(lang, 'question.sentence', {
+  // R-75, R-80: no answer from the reader, or the amount guard; whatever was approved since
+  const s = reasonText(args.decision.checks, 'question', lang, { source: t(lang, `lector.source.${args.invoice.source}`) }, f)
+    ?? `${fill(lang, 'question.sentence', {
       number: f.invoice_number ? fill(lang, 'question.number', { n: f.invoice_number }) : t(lang, 'question.number_unknown'),
       payee: f.payee_name ? fill(lang, 'question.payee', { payee: f.payee_name }) : t(lang, 'question.payee_unknown'),
       amount: f.amount === null ? t(lang, 'question.amount_unknown') : fill(lang, 'question.amount', { amount: `${money(f.amount, lang)} ${f.currency ?? ''}`.trim() }),

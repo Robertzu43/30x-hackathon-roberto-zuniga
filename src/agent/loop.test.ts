@@ -381,6 +381,12 @@ describe('rindeCuentas (AC-63)', () => {
       { company_id: 'A', trigger: 'manual', decided: { PAGAR: 0, FRENAR: 0, ESCALAR: 0 }, errors: 0 },
     ]);
   });
+
+  it('a portal intake run records trigger ingest with via portal (AC-63 Clarified, R-90)', async () => {
+    db = fakeDb(workspace('A', { only: ['01'] }));
+    await runAgent(deps(), 'A', ['A-01'], 'ingest', null, 'portal');
+    expect(db.tables.agent_runs).toEqual([{ company_id: 'A', trigger: 'ingest', decided: { PAGAR: 1, FRENAR: 0, ESCALAR: 0 }, errors: 0, via: 'portal' }]);
+  });
 });
 
 describe('budgeted, resumable runs (R-56, R-57, AC-70)', () => {
@@ -499,6 +505,16 @@ describe('recorded fields (R-77)', () => {
     db.tables.invoices!.push({ ...orig, id, received_at: new Date(Date.parse(orig.received_at) + 3600e3).toISOString(), fields: { ...orig.fields, ...f } });
   };
   const checkOf = (id: string, check: string) => (decisionsOf(id).at(-1)!.checks as Array<{ id: string; verdict: string }>).find((c) => c.id === check);
+
+  it('a run read records who read it and the model confidences on its Lectura check, a stored reading neither (R-97)', async () => {
+    await restInsertedPaid();
+    const lectura = (id: string) => (decisionsOf(id)[0]!.checks as Array<Record<string, unknown>>).find((c) => c.id === 'lectura')!;
+    expect(lectura('A-01')).toMatchObject({ verdict: 'cumple', read_by: { provider: `Workers AI · ${env.WORKERS_AI_MODEL}` }, confidence: READ_01().confidence });
+    copy('A-copy');
+    await runAgent(deps(), 'A', 'pending', 'manual');
+    expect(lectura('A-copy')).not.toHaveProperty('read_by');
+    expect(lectura('A-copy')).not.toHaveProperty('confidence');
+  });
 
   it('a pasted copy of it is FRENAR «duplicado exacto» (AC-20 Clarified)', async () => {
     await restInsertedPaid();

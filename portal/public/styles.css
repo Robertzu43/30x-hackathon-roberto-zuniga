@@ -1,0 +1,153 @@
+/* The vendor portal (AC-83, AC-90, AC-91): the approved palette and type of web/styles.css (R-93.5, D37), mobile first. */
+:root {
+  --canvas: #fbfbfa;
+  --surface: #ffffff;
+  --ink: #111111;
+  --line: #eaeaea;
+  --accent: #346538;
+  --accent-bg: #edf3ec;
+  --error: #9f2f2d;
+  --error-bg: #fdebec;
+  --font-sans: 'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif;
+  --font-serif: 'Newsreader', 'Instrument Serif', 'Playfair Display', Georgia, serif;
+  --font-mono: 'Geist Mono', 'SF Mono', 'JetBrains Mono', ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--canvas);
+  color: var(--ink);
+  font: 1rem / 1.6 var(--font-sans);
+  -webkit-text-size-adjust: 100%;
+}
+
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 1rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: center; gap: 0.5rem; font: 400 1.375rem / 1 var(--font-serif); letter-spacing: -0.02em; }
+.brand img { display: block; width: 28px; height: 28px; }
+.lang { display: flex; gap: 0.25rem; }
+
+button {
+  font: inherit;
+  font-size: 0.875rem;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+button[aria-pressed='true'] { background: var(--ink); border-color: var(--ink); color: #fff; }
+button:active { transform: scale(0.98); }
+button:disabled { opacity: 0.6; cursor: default; }
+button.primary { background: var(--ink); border-color: var(--ink); color: #fff; font-size: 1rem; padding: 0 1.25rem; }
+button.primary:hover:not(:disabled) { background: #333; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 42rem;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 0;
+}
+
+h1 { font: 400 1.75rem / 1.15 var(--font-serif); letter-spacing: -0.03em; margin: 0 0 1.25rem; overflow-wrap: anywhere; }
+h2 { font-size: 1rem; font-weight: 600; margin: 1.5rem 0 0.5rem; }
+
+.log { flex: 1; list-style: none; margin: 0; padding: 0 0 1.5rem; display: flex; flex-direction: column; gap: 0.75rem; }
+.bubble {
+  max-width: 85%;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.bubble p { margin: 0; }
+.bubble p + p { margin-top: 0.25rem; }
+.bubble.me { align-self: flex-end; background: var(--accent-bg); border-color: var(--accent-bg); }
+.bubble.error { background: var(--error-bg); border-color: var(--error-bg); color: var(--error); }
+.bubble a { display: block; min-height: 44px; padding: 0.5rem 0; color: var(--accent); text-underline-offset: 3px; }
+.bubble .file { font: 0.875rem / 1.5 var(--font-mono); }
+
+.composer {
+  position: sticky;
+  bottom: 0;
+  margin: 0 -1rem;
+  padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom));
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+}
+.composer .row { display: flex; align-items: flex-end; gap: 0.5rem; }
+.attach svg { display: block; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+textarea {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  max-height: 9rem;
+  field-sizing: content;
+  resize: none;
+  padding: 0.5625rem 0.75rem;
+  font: 1rem / 1.5 var(--font-sans);
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 0 0 0.5rem;
+  padding-left: 0.75rem;
+  font: 0.875rem / 1.5 var(--font-mono);
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+}
+.chip .remove { border: 0; background: none; font-size: 1.25rem; }
+
+.card { padding: 1.5rem; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+.card h1 { margin-bottom: 0.5rem; }
+.card h1::first-letter { text-transform: uppercase; } /* «En revisión», the status words start the page */
+.card ul { margin: 0; padding-left: 1.25rem; }
+.card .company { margin: 0; }
+.card .meta { margin: 1.5rem 0 0; color: var(--accent); font-size: 0.875rem; }
+
+@media (min-width: 768px) {
+  main { padding-top: 3rem; }
+  h1 { font-size: 2.5rem; }
+  .card { padding: 2.5rem; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .bubble { animation: enter 600ms cubic-bezier(0.16, 1, 0.3, 1); }
+  @keyframes enter { from { transform: translateY(12px); } } /* movement only: the text keeps full contrast */
+}
+@media (prefers-reduced-motion: reduce) {
+  .bubble { animation: none; }
+}

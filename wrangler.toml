@@ -16,6 +16,7 @@ SES_REGION = "us-east-2"
 JEV_ENABLED = "false"
 DEMO_EMAIL = "demo@andina-labs.example"
 APP_URL = "https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev"  # approval links built outside a request (cron)
+PORTAL_URL = "https://facturas.30x-hackathon-roberto-zuniga.workers.dev"  # the vendor portal Worker (portal/wrangler.toml, AC-83, AC-86)
 FX_PROVIDER = "yahoo"  # first market-rate provider: "yahoo" or "er-api"; the other is the fallback (AC-73)
 
 [triggers]

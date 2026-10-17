@@ -1,18 +1,24 @@
 // The record writer (R-32, AC-38, AC-68): the only code that writes `decisions` (through insert_decision),
 // `approval_tokens`, `approval_uses`, `agent_runs` and `fx_rates` (rows from src/lib/fx.ts only, R-85.5). Members cannot write them, so it uses the service-role client; to stay inside the
 // caller's authority it re-reads the invoice before each invoice write and refuses another company's invoice.
-import type { Outcome } from '../engine/types';
+import type { Check, Outcome } from '../engine/types';
 import type { Env } from '../env';
 import { adminClient } from '../lib/admin';
 import type { Rate } from '../lib/fx';
+import type { ReadFields } from '../lib/llm';
 import { must, type Budget } from '../lib/supabase';
 import type { StoredDecision } from './trace';
 
 export type Trigger = 'cron' | 'ingest' | 'manual' | 'login' | 'reevaluate' | 'reset';
+// The public channel that started an 'ingest' run (AC-63 Clarified); absent for every other run.
+export type Via = 'portal' | 'email';
 export type Counts = Record<Outcome, number>;
 // insert_decision's p_decision; the database sets id, seq, company_id and created_at.
 export type DecisionInput = Pick<StoredDecision, 'outcome' | 'actor' | 'checks' | 'amount_usd' | 'payment' | 'policy_version'
   | 'headline_es' | 'headline_en' | 'question_es' | 'question_en'> & Partial<Pick<StoredDecision, 'actor_email' | 'channel' | 'note'>>;
+// R-97 (AC-77): a run's read keeps who read it and the model's confidences on the decision's Lectura check, next to the
+// values recordedFields reads back; invoices.fields stays null (AC-38). Absent when the run read nothing or no model answered.
+export type LecturaCheck = Check & Partial<Pick<ReadFields, 'read_by' | 'confidence'>>;
 // Only the hash of a token is stored; the row is inserted after the send attempt (R-29).
 export interface TokenRow { token_hash: string; invoice_id: string; decision_id: string; expires_at: string; email_sent: boolean; sent_to: string }
 
@@ -43,8 +49,8 @@ export function recorder(env: Env, companyId: string | null, budget?: Budget) {
       const { error } = await admin.from('approval_uses').insert({ token_hash: tokenHash, decision_id: decisionId, company_id: companyId });
       if (error) throw new Error(error.code === '23505' ? 'TOKEN_USED' : error.message);
     },
-    async run(trigger: Trigger, decided: Counts | null, errors: number): Promise<void> {
-      must(await admin.from('agent_runs').insert({ company_id: companyId, trigger, decided, errors }));
+    async run(trigger: Trigger, decided: Counts | null, errors: number, via?: Via): Promise<void> {
+      must(await admin.from('agent_runs').insert({ company_id: companyId, trigger, decided, errors, ...(via && { via }) }));
     },
     // Market rates (AC-73, AC-38 (a)): only rows fetchChain built from a provider response, never request data. Shared by
     // every company, so no ownership check; upserted per (day, currency), never deleted.

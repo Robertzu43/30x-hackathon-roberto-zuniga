@@ -200,6 +200,12 @@ Trace: D20, D14, D8. Rubric: V. implementación, Presentación. Tasks: 1, 11, 11
 **AC-42 (MUST)** When a user logs in for the first time, or clicks "Ver tutorial" in the top bar, the system runs a 7-step guided tour (Bandeja, Nueva factura, Ejecutar agente, Detalle de decisión, Política, Beneficiarios, Periodo y escalado) in the chosen language: the highlighted element is spotlighted and the rest is dimmed; "Siguiente", "Atrás" and "Saltar" work; finishing or skipping stores "seen" per user so it does not repeat; for the shared demo user it starts on every "Entrar como Andina Labs". No tour library. Evidence: `npx vitest run web/Tour.test.tsx`; QA on the deployed URL: fresh user sees it, reload does not repeat it, "Ver tutorial" restarts it. (R-17)
 Clarified (R-62, final QA B): for the shared demo user, the tour starts once per click on "Entrar como Andina Labs", and only then. A reload (F5), a deep link (`/policy`, `/period`, any app route) or opening a new tab never starts the tour. None of them moves the page to Bandeja. The demo user lands on the route they reloaded or opened, the same as any other user. "Ver tutorial" starts it at any time. "Saltar" or finishing ends it until the next click on the button or "Ver tutorial". Non-demo users are unchanged ("seen" per user). Evidence: private window, `/demo` → "Entrar como Andina Labs": the tour starts; "Saltar"; open Política; F5: still Política, no tour; type `<URL>/period` in the address bar: Periodo, no tour; "Ver tutorial": the tour starts; back to `/demo` → "Entrar como Andina Labs": the tour starts again.
 Clarified (R-78, final QA B): the tour never blocks the top bar. While a step is shown, the language switch, "Ver tutorial" and "Cerrar sesión" stay visible above the dim layer and can be clicked. Switching language keeps the same step and shows it in the new language. The Escape key does what "Saltar" does. Evidence: start "Ver tutorial", click "English" in the top bar: the same step is now in English; press Escape: the tour closes and is stored as seen, the same as "Saltar"; `npx vitest run web/Tour.test.tsx` covers Escape and the language switch during a step.
+Clarified (R-105, Task 24 UX pass 2 B1), the tour card on every step and width:
+- The card has three parts stacked: the header («1 de 7» and the title), the body (the step's paragraphs), and the footer (Saltar, Atrás, Siguiente). Only the body may scroll (`overflow-y: auto`). The header and footer never scroll and are never covered by text. No text is ever cut by the card's edge without the cue below.
+- Scroll cue: when the body's `scrollHeight` exceeds its `clientHeight` and the body is not scrolled to its end, a one-line cue «Desliza para ver más» / "Scroll for more" shows at the bottom of the body, in the muted text colour on the card's surface (no gradient, no shadow). It hides once the body is scrolled to its end, and it is absent when the text fits.
+- At widths ≤ 480 px the card is pinned to the bottom of the viewport: 0.75 rem from the left, right and bottom edges (plus `env(safe-area-inset-bottom)`), with padding 1 rem × 1.25 rem and `max-height: calc(100dvh - var(--tour-top) - 1.5rem)`. Body text stays at `--text-base`; it is never shrunk to make the text fit. Wider screens keep the current placement and get the same three-part structure and cue.
+- Required result: at 360 × 800 and 390 × 844, in es and en, step 1 (copy in AC-79 Clarified R-105) fits without scrolling the body, so the cue is absent. If it does not fit, the builder may tighten only the card's own margins and padding, and the result returns to product; the copy is not cut further.
+- Evidence: `web/Tour.test.tsx` shows the cue when the body's measured `scrollHeight` > `clientHeight` (stubbed) and hides it when it fits and after scrolling to the end; the gate on `tour` at 360 and 390, es and en, with item 1 (no clipped text) passing.
 Trace: D19, D20. Rubric: Presentación, V. implementación. Tasks: 11, 11d.
 
 **AC-43 (MUST)** When one user sends more than 60 POST requests to `/api/*` within a minute, the system answers 429 with "Demasiadas solicitudes, intenta en un minuto". Evidence: route test with a fake `RATE_LIMIT` binding.
@@ -378,6 +384,12 @@ Trace: D28 ("the expected outcomes of the seed must still hold with market rates
 - The D38 gate (AC-91) on `policy`.
 - `grep -n "FxProvider" README.md` (Task 35).
 
+Clarified (R-108..R-111, Task 22 UX pass 2):
+- The pin fieldset's inputs never touch its border. At 360, 390, 768, 1024 and 1440 px, in es and en, and in the loaded, empty and error states, each pin input's right gap to the fieldset's inner border equals its left gap within 2 px (R-108).
+- While `/api/fx` loads, the market slot shows one placeholder row (≤ 768 px: one placeholder card) per currency the pin section lists. It uses the same row or card markup as the loaded table, so its height equals the loaded height by construction. It has no fixed `height` or `min-height`. The empty and error states take only their own height: the message, its next step and the «Reintentar» control. In all three states, the gap from the market slot's last element to the pin fieldset is the page's 40 px section gap (± 8 px), at 360 and 1440 (R-109).
+- The pin section lists currencies in the same order as the market table: alphabetical by code (ARS, BRL, COP, EUR, MXN, then any other policy currency in code order) (R-110).
+- The source sentence keeps its fixed wording in both languages, including the English «see README, section "Tasas de cambio"». The README is in Spanish, and that is its real heading (R-111).
+
 Trace: D28 ("the README and the Política screen say plainly…"). Rubric: V. implementación, Impacto. Tasks: 22, 35.
 
 ### D29 The AI is visible
@@ -393,6 +405,10 @@ Trace: D28 ("the README and the Política screen say plainly…"). Rubric: V. im
   - `failed`, for any other error, an invalid output or a timeout: «No pude responder ahora; revisa el registro.» / "I could not answer right now; check the record."
 - A successful answer also returns `remaining`, and the UI shows «Te quedan <n> preguntas hoy» / "<n> questions left today".
 - An empty question, or one over 500 characters, gives 400 «Escribe una pregunta de 1 a 500 caracteres.».
+- Clarified (R-106, Task 24 UX pass 2 B2 and placement), on a decision record:
+  - Placement: «Pregúntale a Thesaurus» sits immediately before «Historial», after the escalation card (when present) and the «Política: … versión …» line. In the two-column layout (> 860 px) it is in the same column as «Historial», directly above it. In one column it is in the same order. No jump link and no other new control is added. Bandeja keeps its current placement (above the list, Task 24 fix round 1).
+  - Spacing rule: on the detail page every top-level section is separated from what precedes it by the section gap, 2.5 rem (40 px), the same as an `h2`'s top margin today. That holds for the ask card and the escalation («Necesito tu respuesta») card, measured from the previous element's bottom edge (its last divider line included) to the card's top border. «Historial»'s heading after the ask card gets the same 40 px. Bandeja's ask card keeps its own margins.
+  - Evidence: the gate screenshots `detail-escalar-360-es.png`, `detail-escalar-1440-es.png`, `detail-frenar-360-en.png` and `detail-pagar-360-en.png` show the ask card directly above «Historial», with 40 px (± 2) above and below it. `web/InvoiceDetail.test.tsx` asserts the DOM order: the ask section comes before the «Historial» heading.
 
 Evidence:
 - `npx vitest run src/routes/ask.test.ts`, with a fake provider and a fake db. The prompt contains only the given context and the question. There is no insert, update or RPC except the quota function. A user's 11th question gives `user_cap` with 0 model calls; the day's 501st gives `ai_quota` with 0 model calls. Both providers throttled gives `ai_quota`; a throw, a timeout or invalid JSON gives `failed`. The demo user from two IPs is counted separately. 501 characters gives 400.
@@ -417,6 +433,25 @@ Trace: D29(a), D26, D36, D2, D3, CLAUDE.md LLM rule. Rubric: Innovación, Impact
     - `none`: anything else. That covers a pending invoice not yet read, an «ilegible» with no model call (empty text), and a run read whose decision recorded no provider (written before this change). `reading` is null. The page shows no badge, no preloaded notice and no AC-13 notice; AC-13 and AC-64's existing texts still apply.
   - Known limit, accepted: a member can REST-insert their own company's invoice with a made-up `fields.read_by` and get the badge. Decisions, the 13 checks and PAGAR do not depend on `read_by`, and snippets stay code-located over the stored text. README "what's not done" (Task 35) says so in one sentence: «La etiqueta "Leído por IA" de una factura insertada directamente por API la declara quien la inserta; las decisiones no dependen de ella.»
   - Evidence additions: route tests with a fake db for each `reading_status`, including a REST-inserted invoice with `fields` null that a run reads with a fake provider (`ai`, the provider from the decision); `web/InvoiceDetail.test.tsx` renders each status's line, and renders no preloaded notice for `ai`, `unavailable` or `none`.
+- Clarified (R-107, Task 24 UX pass 2 B3): how the «Leído por IA» list shows each field. This replaces "the value, or «desconocido»" above for the web only; the API, `snippet.ts` and their evidence are unchanged.
+  - A field is known when its value is not null and not empty after trimming, and is not the model's own «desconocido»/"unknown". Otherwise it is unknown.
+  - A known field gets its own row, in the current field order, with:
+    - the label;
+    - the value;
+    - when `confidence` is a finite number from 0 to 1, «confianza de la IA: 92 %» / "AI confidence: 92%", rounded to a whole percent in the tab's locale. With no confidence there is no confidence text, never `null` or `NaN`;
+    - below that, the snippet with its `<mark>` when `snippet` is non-null. When `snippet` is null, the line «No encontré este valor literal en el texto» / "I did not find this value verbatim in the text" appears, wording unchanged.
+    - So a known value with 100 % confidence that code could not find verbatim (the FRENAR due date) shows both. That is the evidence AC-77 exists for: the model's self-reported confidence beside code's check. The «de la IA» label shows that the two lines come from different sources.
+  - Unknown fields get no row, no confidence, no snippet and no «No encontré…» line. They are named once, in one plain muted line after the rows, using the row labels in field order:
+    - «La IA no pudo leer 8 campos: Beneficiario, Monto, Moneda, Número de factura, Fecha de emisión, Vencimiento, Concepto, Cuenta bancaria.» / "The AI could not read 8 fields: Beneficiary, Amount, Currency, Invoice number, Issue date, Due date, Concept, Bank account."
+    - Singular: «La IA no pudo leer 1 campo: Monto.» / "The AI could not read 1 field: Amount."
+    - No line at all when there is no unknown field. This line is not collapsible, so no control is added.
+  - When every field is unknown (an «ilegible» read), the panel shows the badge, the document or its text, and only that one line.
+  - Evidence addition: `web/InvoiceDetail.test.tsx`, with:
+    - an ESCALAR fixture with 8 unknown fields: 0 «No encontré» lines, 0 «desconocido» rows, and exactly the 8-field line;
+    - a FRENAR fixture with a known value whose `snippet` is null: the value, «confianza de la IA: 100 %» and the «No encontré…» line;
+    - a field with `confidence: null`: no percentage, and no `null` or `NaN` text;
+    - en renders the English strings.
+    The gate `detail-escalar` and `detail-frenar` screenshots at 360 and 1440 in es and en show this.
 
 Evidence:
 - `npx vitest run src/lib/snippet.test.ts src/routes src/lib/llm.test.ts web/InvoiceDetail.test.tsx`: a snippet is found for the payee, for an amount printed as `1.000,00` and as `1,000.00`, for the number and for dates; for each, `snippet.slice(match[0], match[1])` equals the printed form (`1.000,00`, `1,000.00`, `31/10/2026`); a value found past character 120 of its line still has its span inside the snippet; a value that is not found gives the message and `match: null`; the web renders the `<mark>` text equal to the printed form and renders no `<mark>` when `match` is null; the provider is stored and returned.
@@ -444,6 +479,13 @@ Trace: D29(c), D23, D24. Rubric: Innovación, Presentación. Axis: Autonomía, E
 - The tour's Bandeja step (step 1) gains the sentence. The Detalle step names «Leído por IA» and the chat.
 - README carries it within its first 40 lines (Task 35).
 - AC-66's pitch line and JEV's status (R-30) stay.
+- Clarified (R-105, Task 24 UX pass 2 B1): tour step 1 (Bandeja) holds exactly two paragraphs and nothing else, in this order:
+  - es, paragraph 1 (key `tour.inbox.body`), AC-79's sentence verbatim: «Dónde actúa la IA: lee cada factura (Amazon Nova Lite en AWS Bedrock) y responde tus preguntas sobre el registro («Pregúntale a Thesaurus»). Dónde decide el código: las 13 reglas, la tabla de consecuencias y la tasa de cambio del día; solo el código puede escribir PAGAR.»
+  - es, paragraph 2 (key `tour.inbox.loop`): «Con cada factura, Thesaurus percibe → lee → consulta sus herramientas → decide → actúa → rinde cuentas.»
+  - en, paragraph 1: "Where the AI acts: it reads each invoice (Amazon Nova Lite on AWS Bedrock) and answers your questions about the record ("Ask Thesaurus"). Where code decides: the 13 rules, the consequence table and the day's exchange rate; only code can write PAY."
+  - en, paragraph 2: "With every invoice, Thesaurus perceives → reads → consults its tools → decides → acts → accounts for it."
+  - Removed from step 1: «Thesaurus es un agente:» as an opener and «Revisa las pendientes cada 5 minutos, aunque nadie haya iniciado sesión.» (and the en equivalents). The 5-minute cron stays in README and `/demo` (AC-66). AC-66's "step 1 names the six stages" is met by paragraph 2.
+  - Evidence addition: `web/Tour.test.tsx` asserts step 1's dialog text equals paragraph 1 + paragraph 2 in each language; the gate screenshots `tour-360-es.png`, `tour-360-en.png`, `tour-390-es.png` and `tour-390-en.png` show «…solo el código puede escribir PAGAR.» / "…only code can write PAY." and the whole of paragraph 2 above the buttons, with no scroll cue visible.
 
 Evidence: `grep -rn "Dónde decide el código" README.md web src/i18n`; `/demo` in a private window; "Ver tutorial" step 1; the D38 gate on `demo` and `tour`.
 
@@ -870,6 +912,40 @@ Rulings on the vendor portal QA run 1 questions (product, 17 Oct; product questi
   - Those cases close on the unit tests plus a DB-level check of the deployed counter function and its privileges. That proves the deployed database enforces the limit and that only `service_role` can call the function.
   - With this, AC-85 has a defined, finite evidence set and is not left open. If any of the closing checks fails, that is a defect for the fix task, not a re-scope.
   Principle: evidence (each item proven at the layer where it can be observed) and cost hygiene (D36). Loser's best argument (the QA note): "the live checks of the 11th-invoice and 61st-view rate limits and of the prompt-injection note in a portal message were not run live".
+
+Re-scope of Task 24's screens after UX pass 2 failed (product, 17 Oct; R-93 item 3: simplify the screen, never lower the bar; MUST, no AC is cut; Task 24 UX fix round 2):
+- **R-105 Tour step 1 is reduced to the AI/code sentence plus the loop, and the card never cuts text silently (AC-79 Clarified, AC-42 Clarified, AC-66).** Step 1 had to carry two fixed MUST texts: AC-79's sentence (about 48 words) and AC-66's six stages. Everything else in it was optional, so it goes: the «Thesaurus es un agente» opener and the 5-minute sentence, which README and `/demo` already carry. AC-79's sentence comes first because it is the D29(d) statement the gate cut off. The loop follows in one short sentence. At ≤ 480 px the card becomes a bottom sheet with tighter padding. Only its body scrolls, and when it overflows a text cue says so. Measured against the failed screenshot, which shows 14 lines before the cut, the new copy needs about 12.5 lines at 360 px. It fits with no scroll, and the cue covers any future overflow. Principle: completeness (both MUST texts stay whole) and the company's actual user (no sentence ends in mid-air above the buttons). Best argument for the alternative (the brief): "a height cap with internal scroll already lets the reader reach the end".
+- **R-106 The detail ask box sits directly above «Historial», at the page's 40 px section gap, with no jump link (AC-67 Clarified).** A jump link is a new control on every record, with new copy in two languages. It would sit near «Volver a la bandeja» and, on ESCALAR, compete with Aprobar, the one primary action. R-93 says simplify with fewer elements. The tour's Detalle step already names the chat (AC-79), so the reader is told where it is. Above «Historial», the box comes right after the decision content it answers about, and it never pushes the escalation card down. The 0-10 px gap was a missing top margin, so the box gets the same 2.5 rem every other section break has. Principle: scope (no new control) and company's actual user (the approver's primary action stays first). Loser's best argument (the UX reviewer's discoverability concern): "on a 6,700 px page the ask box at the end is effectively invisible; a jump link near the top makes it findable".
+- **R-107 «Leído por IA» shows a row only for what the AI read; unknown fields collapse into one named line (AC-77 Clarified).**
+  - «No encontré este valor literal en el texto» is code's check that a value the model claimed appears verbatim. For an unknown value there is no claim to check, so the line says nothing, and eight copies of it buried the panel.
+  - Unknown fields are therefore named once: «La IA no pudo leer 8 campos: …». That keeps the evidence of which fields failed without eight rows.
+  - For a known value, 100 % confidence beside «No encontré…» is not a contradiction. It is the exact case AC-77 exists to expose: the model is sure and code cannot find the value in the text. Both stay, and the confidence is labelled «confianza de la IA» so the two sources read as two voices.
+  - API, `snippet.ts` and their tests are untouched.
+  - Principle: evidence (keep every true statement, drop the empty ones) and the company's actual user (an «ilegible» invoice reads in one line, not sixteen). Best argument for hiding the warning on known values (the brief's question): "100 % confianza with «No encontré…» right under it reads as contradictory".
+
+Re-scope of Task 22's `policy` screen after UX pass 2 failed (product, 17 Oct; R-93 item 3: simplify the screen, never lower the bar; MUST, no AC is cut):
+- **R-108 Pin inputs keep symmetric padding inside their fieldset at every width (AC-76 Clarified, AC-91 item 1).** This is a CSS defect, not a design question, and the rule is confirmed. The fix applies at any width, not just at the gate's widths:
+  - the grid column is `minmax(0, 1fr)`;
+  - the fieldset has `min-width: 0`, overriding the browser's `min-content` default, which is the cause;
+  - inputs are `width: 100%` with `box-sizing: border-box`.
+  The UX reviewer checks 360 es and en and the fx-empty and fx-error screens at 360. Principle: company's actual user (a field glued to its border reads as broken on the phone).
+- **R-109 The market slot reserves space by rendering placeholder rows, not a fixed height. Empty and error collapse to their content (AC-76 Clarified, AC-91 item 4).**
+  - D38 item 4 asks for "no layout jump when data arrives (reserved space)". A fixed pixel height guesses the populated size, and it guessed wrong at every width: 90 to 180 px of dead space on the happy path, 350 px in empty and error.
+  - Instead, while loading, render the real table or cards with one placeholder row per currency the pin section lists. The row count is known before the fetch, so the reserved height is the loaded height at every breakpoint and in both languages, with no constants to keep in sync.
+  - In empty and error no data arrives, so item 4's no-jump clause does not apply. The slot shrinks to the message, its next step and «Reintentar», and the pin section follows at the 40 px section gap. A void there tells the finance user the page is broken, which is worse than a one-time shift on a rare path.
+  - Option (b) was rejected. With the pin section above the table, the async table still pushes down the source sentence, «Guardar como versión», «Reevaluar pendientes» and «Versiones», so the shift moves instead of going away. It would also reverse AC-76's fixed order and put the editable section before the reference data it is read against.
+  - `policy`'s CLS ≤ 0.01 still has to pass on the default load.
+  Principle: company's actual user and evidence (height by construction, not by a measured guess). Loser's best argument (option b): "put the pin section above the market table so nothing moves".
+- **R-110 Pin order matches the market table: alphabetical by currency code (AC-76 Clarified).**
+  - The API already sorts by currency (AC-76 contract). The finance user reads a market rate and then pins the same currency, so both lists in the same order means no hunting.
+  - It also makes R-109's placeholder rows line up one-to-one with the loaded rows.
+  - `fx_rates` is an object, so the stored data is unaffected.
+  Principle: company's actual user. Loser's best argument (D28's listing): "COP, MXN, BRL, ARS, EUR is the order D28 names, with the company's home currency first".
+- **R-111 The English source sentence keeps «section "Tasas de cambio"» (AC-76 Clarified; no change).**
+  - The README is written in Spanish (every heading, for example «Cómo desplegarlo»), and Task 35 adds the heading «Tasas de cambio». A translated "Exchange rates" would point the reader to a heading that does not exist.
+  - The quoted name is a reference to a document title, not UI copy in the wrong language.
+  - The sentence is one text node, so AC-91 item 5's whole-node check is not triggered. If the gate flags it anyway, that is a gate false positive for the orchestrator to ledger. The copy does not change, and no exemption is added to the gate.
+  Principle: evidence (the pointer must resolve). Loser's best argument (the reviewer's nit): "an English screen quoting a Spanish section name mixes languages".
 
 ---
 

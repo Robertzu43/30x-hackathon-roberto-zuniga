@@ -47,7 +47,7 @@ export function DiffList({ rows, unchanged }: { rows: DiffRow[]; unchanged?: num
             <Link to={`/invoices/${r.invoice_id}`}>{r.payee ? tu('{p}', { p: r.payee }) : r.headline || t('policy.diff.unread')}</Link>
             {typeof r.amount === 'number' && <span className="mono">{`${r.amount.toLocaleString(locale)} ${r.currency ?? ''}`.trim()}</span>}
             {r.to ? <span className="diff-chips"><OutcomeChip outcome={r.from} /> <span aria-hidden="true">→</span> <OutcomeChip outcome={r.to} /></span> : <span>{t('policy.row_unread')}</span>}
-            {r.reason && <span className="muted">{r.reason}</span>}
+            {(r.reason || r.to === 'PAGAR') && <span className="muted">{r.reason || t('policy.diff.passes')}</span>}
           </li>
         ))}
       </ul>}

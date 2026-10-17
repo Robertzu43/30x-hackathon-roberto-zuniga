@@ -256,7 +256,7 @@ test('only pending rows: the header counts them, the PAGAR sentence follows, and
   expect(header.compareDocumentPosition(pay) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   const rows = screen.getAllByRole('listitem').filter((li) => /^Factura /.test(li.textContent!));
   expect(rows).toHaveLength(29);
-  expect(rows.filter((r) => /Pendiente → PAGAR$/.test(r.textContent!))).toHaveLength(8);
+  expect(rows.filter((r) => /Pendiente → PAGAR(Cumple todas las reglas\.)?$/.test(r.textContent!))).toHaveLength(8);
   expect(rows.filter((r) => /Pendiente → FRENAR$/.test(r.textContent!))).toHaveLength(21);
   expect(document.body.textContent).not.toMatch(/outcome\.|null/);
 });
@@ -636,7 +636,7 @@ test('the cards are named in English too (AC-105)', () => {
 
 const diff = [
   { invoice_id: 'i1', headline: 'Pixel Lab: 4.200 USD supera el límite', payee: 'Pixel Lab', amount: 4200, currency: 'USD', reason: 'Supera el límite por pago.', from: null, to: 'FRENAR' as const },
-  { invoice_id: 'i2', headline: 'Diego Ruiz', payee: 'Diego Ruiz', amount: 15000, currency: 'MXN', reason: 'Cumple todas las reglas.', from: 'ESCALAR' as const, to: 'PAGAR' as const },
+  { invoice_id: 'i2', headline: 'Diego Ruiz', payee: 'Diego Ruiz', amount: 15000, currency: 'MXN', reason: null, from: 'ESCALAR' as const, to: 'PAGAR' as const },
   { invoice_id: 'i3', headline: '', from: null, to: null },
 ];
 
@@ -654,6 +654,12 @@ test('each diff row shows the invoice link, the payee, the amount, from-chip to 
   expect(rows[1]!.textContent).toContain('ESCALAR → PAGAR');
   expect(b.getByText('Cumple todas las reglas.').hasAttribute('data-user')).toBe(false);
   expect(screen.getByText('12 facturas no cambian.')).toBeTruthy();
+});
+
+test('a PAGAR row has no blocking motive from the route (reason null), so it says it passes every rule, in English too (AC-105, R-61)', () => {
+  localStorage.setItem('lang', 'en');
+  renderAt(<DiffList rows={[diff[1]!]} />);
+  expect(screen.getByText('Passes every rule.')).toBeTruthy();
 });
 
 test('an unread invoice says it will be decided once read; rows without the new fields fall back to the headline (AC-105, R-68)', () => {
@@ -723,7 +729,7 @@ test('after saving, «qué cambiaría» is a diff list: invoice, beneficiary, am
     'PUT /api/policy': {
       policy: { ...versions[0], version: 3 }, will_pay: 1, unread_pending: 1, unchanged: 12,
       would_change: [
-        { invoice_id: 'i1', headline: 'Pixel Lab: 4.200 USD', from: null, to: 'PAGAR', payee: 'Pixel Lab', amount: 4200, currency: 'USD', reason: 'Cumple todas las reglas.' },
+        { invoice_id: 'i1', headline: 'Pixel Lab: 4.200 USD', from: null, to: 'PAGAR', payee: 'Pixel Lab', amount: 4200, currency: 'USD', reason: null },
         { invoice_id: 'i2', headline: 'Nube Sur', from: 'ESCALAR', to: 'FRENAR', payee: 'Nube Sur', amount: 15000, currency: 'MXN', reason: 'Supera el límite por pago.' },
         { invoice_id: 'i3', headline: '', from: null, to: null, ...row },
       ],

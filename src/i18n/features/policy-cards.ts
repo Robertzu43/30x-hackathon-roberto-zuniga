@@ -16,6 +16,7 @@ export const es: Record<string, string> = {
   'policy.s.agreement_tolerance_pct': 'Acepto hasta {v} % de diferencia con el monto acordado; si es más, la escalo.',
   'policy.s.due_grace_days': 'Acepto una factura hasta {v} día(s) después de su vencimiento; después, la escalo.',
   'policy.diff.unread': 'Factura sin leer',
+  'policy.diff.passes': 'Cumple todas las reglas.',
   'policy.diff.same.one': '{n} factura no cambia.',
   'policy.diff.same.other': '{n} facturas no cambian.',
 };
@@ -37,6 +38,7 @@ export const en: Record<string, string> = {
   'policy.s.agreement_tolerance_pct': 'I accept up to {v} % difference from the agreed amount; beyond that, I escalate it.',
   'policy.s.due_grace_days': 'I accept an invoice up to {v} day(s) after its due date; after that, I escalate it.',
   'policy.diff.unread': 'Unread invoice',
+  'policy.diff.passes': 'Passes every rule.',
   'policy.diff.same.one': '{n} invoice does not change.',
   'policy.diff.same.other': '{n} invoices do not change.',
 };

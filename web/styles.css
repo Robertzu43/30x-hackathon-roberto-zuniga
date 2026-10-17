@@ -32,17 +32,18 @@ h1 {
 }
 
 .muted { color: var(--ink-2); }
-.logo { display: block; height: 1.75rem; width: auto; }
+.logo { display: block; height: 1.75rem; width: auto; align-self: flex-start; }
 
 .topbar {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 1rem;
   padding: 1rem 2rem;
   border-bottom: 1px solid var(--line);
   background: var(--surface);
   flex-wrap: wrap;
 }
+.topbar .logo { align-self: center; }
 .topbar-actions { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; font-size: var(--text-sm); min-width: 0; }
 .topbar-actions .muted { overflow-wrap: anywhere; }
 .topbar .lang { display: flex; gap: 0.25rem; }

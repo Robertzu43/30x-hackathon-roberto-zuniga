@@ -28,3 +28,18 @@ test('thesaurus-logo.png is the logo at 2x (320 x 64) for email', () => {
 test('index.html links /favicon.svg', () => {
   expect(text('index.html')).toMatch(/<link rel="icon" type="image\/svg\+xml" href="\/favicon\.svg"/);
 });
+
+// AC-80 / docs/ux item 6: the logo must not stretch across a flex column (it would centre inside the stretch), and the top bar centres the tagline on the mark.
+const rule = (sel: string) => text('web/styles.css').match(new RegExp(`^${sel.replace('.', '\\.')}\\s*\\{([^}]*)\\}`, 'm'))?.[1] ?? '';
+
+test('.logo is left-aligned in flex columns (align-self: flex-start)', () => {
+  expect(rule('.logo')).toMatch(/align-self:\s*flex-start/);
+});
+
+test('.topbar centres its items, not baseline', () => {
+  expect(rule('.topbar')).toMatch(/align-items:\s*center/);
+});
+
+test('.topbar .logo re-centres the mark against the flex-start default', () => {
+  expect(text('web/styles.css')).toMatch(/\.topbar \.logo\s*\{[^}]*align-self:\s*center/);
+});

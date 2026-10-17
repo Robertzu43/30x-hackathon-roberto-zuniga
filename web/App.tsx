@@ -3,6 +3,7 @@ import { matchPath, Navigate, NavLink, Route, Routes, useLocation, useNavigate }
 import type { Lang } from '../src/i18n';
 import { supabase } from './api';
 import { isDemoUser, RequireAuth, shouldStartTour, takeDemoTour, useSession } from './auth';
+import Logo from './components/Logo';
 import Tour from './components/Tour';
 import { useT } from './i18n';
 
@@ -29,7 +30,7 @@ function TopBar({ onTour }: { onTour: () => void }) {
   };
   return (
     <header className="topbar">
-      <strong>{t('app.name')}</strong>
+      <Logo />
       <span className="muted">{t('app.tagline')}</span>
       <div className="topbar-actions">
         <div className="lang" role="group" aria-label={t('topbar.language')}>

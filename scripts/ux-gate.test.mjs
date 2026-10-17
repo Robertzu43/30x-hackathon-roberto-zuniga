@@ -1,4 +1,4 @@
-/* global URL, setTimeout */
+/* global URL, setTimeout, console */
 // The gate's own checks (AC-91): a fixture page with one known violation per item, driven by ?bad=<check id>.
 // The clean page must pass every check; each bad variant must fail exactly the check it names.
 import { execFileSync } from 'node:child_process';
@@ -7,7 +7,7 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { aggregate, FONTS, launch, PALETTE, renderGate, runCell, writeGate } from './ux-gate.mjs';
+import { aggregate, FONTS, launch, main, PALETTE, renderGate, runCell, SCREENS, unreadId, writeGate } from './ux-gate.mjs';
 
 const DICTS = {
   es: { 'f.title': 'Bandeja', 'f.empty': 'Todavía no hay facturas.', 'f.retry': 'Reintentar', 'f.send': 'Enviar', 'f.save': 'Guardar cambios', 'f.err': 'No pude cargar los datos. Inténtalo de nuevo.' },
@@ -30,6 +30,7 @@ const page = (bad, lang) => {
   button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid #346538;outline-offset:2px}
   input{display:block;width:100%;min-height:44px;font-size:16px;border:1px solid #eaeaea;border-radius:4px;padding:0 12px;margin:4px 0 12px}
   label{font-size:1rem;color:#111111}
+  .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
   table{border-collapse:collapse} td,th{border:1px solid #eaeaea;padding:4px 8px;text-align:left}
   .err{color:#9f2f2d;background:#fdebec;padding:8px 12px;border-radius:4px;margin:0}
   ${{
@@ -48,8 +49,10 @@ const page = (bad, lang) => {
   <header>${bad === '6.logo' ? '' : '<svg data-logo role="img" aria-label="Logo" width="32" height="32" viewBox="0 0 32 32"><rect width="32" height="32" fill="#111111"/></svg>'}</header>
   <main>
   <h1 id="h">${t['f.title']}</h1>
+  <span class="sr-only">Texto solo para lectores de pantalla</span>
   <div id="list"></div>
   <p>${lang === 'es' ? '1.234,50 COP' : '1,234.50 COP'}</p>
+  <p>160 USD</p><p><span>160</span> USD</p>
   ${bad === '1.scroll' ? '<div class="x"></div>' : ''}
   ${bad === '1.offscreen' ? '<div style="position:absolute;left:150vw;top:0">fuera</div>' : ''}
   ${bad === '1.clip' ? '<div class="clip">Un texto bastante largo que no cabe</div>' : ''}
@@ -59,12 +62,15 @@ const page = (bad, lang) => {
   ${bad === '3.axe' ? '<button type="button"></button>' : ''}
   ${bad === '3.contrast' ? '<p class="low">Texto de bajo contraste</p>' : ''}
   ${bad === '5.words' ? '<p>Total: undefined</p>' : ''}
+  ${bad === '5.words:404' ? '<p>404</p>' : ''}
+  ${bad === '5.words:trace' ? '<p>at render (https://x.test/app.js:10:5)</p>' : ''}
   ${bad === '5.mixed' ? `<p>${DICTS.es['f.save']}</p>` : ''}
   ${bad === '5.locale' ? '<p>Total 1,234.50</p>' : ''}
   ${bad === '6.palette' ? '<p class="pal">Color</p>' : ''}
   ${bad === '6.fonts' ? '<p class="fnt">Fuente</p>' : ''}
   ${bad === '6.images' ? `<img src="${PNG}" width="300" height="100" alt="">` : `<img src="${SVG}" width="8" height="8" alt="">`}
   <form id="f" onsubmit="return false">
+    ${bad === 'compose' ? '<label for="msg">Mensaje</label><textarea id="msg" rows="1" style="display:block;width:100%;font-size:16px"></textarea>' : ''}
     ${bad === '3.labels' ? '<input id="n" type="text">' : '<label for="n">Nombre</label><input id="n" type="text" value="x">'}
     ${bad === '3.enter' ? '<div id="go" class="btn primary" role="button" tabindex="0" style="background:#111111;color:#ffffff">' + t['f.send'] + '</div>' : `<button id="go" class="primary" type="button">${t['f.send']}</button>`}
   </form>
@@ -74,8 +80,9 @@ const page = (bad, lang) => {
   const list = document.getElementById('list');
   const show = (rows) => { list.innerHTML = rows.length ? rows.map((r) => '<p>' + r + '</p>').join('') : bad === '4.state' ? '' : '<p role="status">' + T['f.empty'] + '</p><a class="btn" href="#sube">' + T['f.retry'] + '</a>'; };
   const fail = () => { list.innerHTML = bad === '4.state' ? '' : '<p class="err" role="alert">' + T['f.err'] + '</p><button type="button">' + T['f.retry'] + '</button>'; };
-  fetch('/api/data').then((r) => { if (!r.ok) throw new Error('x'); return r.json(); }).then(show, fail);
+  fetch(bad === 'fx' ? '/api/fx' : '/api/data').then((r) => { if (!r.ok) throw new Error('x'); return r.json(); }).then((d) => show(bad === 'fx' ? d.rates.map((x) => x.c) : d), fail);
   document.getElementById('go').addEventListener('click', (e) => {
+    if (bad === 'compose' && !document.getElementById('msg').value.trim()) return;
     if (bad !== '4.busy') { e.currentTarget.disabled = true; e.currentTarget.setAttribute('aria-busy', 'true'); }
     fetch('/api/act', { method: 'POST' });
   });
@@ -89,13 +96,30 @@ const page = (bad, lang) => {
   return `<!doctype html><html lang="${bad === '3.lang' ? (lang === 'es' ? 'en' : 'es') : lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>f</title><style>${css}</style></head><body>${lateHeading}</body></html>`;
 };
 
+// A vendor page that picks its language like the portal: ?lang= (src q) or localStorage portal.lang (src s), else es.
+const portalPage = (src) => `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>p</title></head><body><main><h1 id="h"></h1><p id="m"></p></main><script>
+const l = (${src === 'q' ? "new URLSearchParams(location.search).get('lang')" : "localStorage.getItem('portal.lang')"}) === 'en' ? 'en' : 'es';
+const T = ${JSON.stringify(DICTS)}[l];
+document.documentElement.lang = l; document.getElementById('h').textContent = T['f.title']; document.getElementById('m').textContent = T['f.empty'];
+</script></body></html>`;
+// The designed 404 page (AC-83): a sentence with the next step, no control. ?sub=1 adds a broken image, ?bare=1 drops the verb.
+const gonePage = (u) => {
+  const lang = u.searchParams.get('lang') === 'en' ? 'en' : 'es';
+  const text = u.searchParams.has('bare') ? 'No existe esta página en el sitio' : lang === 'en' ? 'This link does not exist. Ask the company for the right link.' : 'Este enlace no existe. Pídele el enlace correcto a la empresa.';
+  return `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"><title>g</title></head><body><header><svg data-logo role="img" aria-label="Logo" width="32" height="32"><rect width="32" height="32" fill="#111111"/></svg></header><main><h1>${text}</h1>${u.searchParams.has('sub') ? '<img src="/missing.png" width="8" height="8" alt="">' : ''}</main>${u.searchParams.has('spoof') ? "<script>console.error('Failed to load resource: the server responded with a status of 404 (Not Found)')</script>" : ''}</body></html>`;
+};
+
 let server, base, browser;
 const seen = [];
 beforeAll(async () => {
   server = createServer((req, res) => {
     const u = new URL(req.url, 'http://x');
     if (req.method !== 'GET') seen.push(`${req.method} ${u.pathname}`);
-    if (u.pathname === '/f') return void res.writeHead(200, { 'content-type': 'text/html' }).end(page(u.searchParams.get('bad') ?? '', u.searchParams.get('lang') ?? 'es'));
+    if (u.pathname === '/f') return void res.writeHead(200, { 'content-type': 'text/html', ...(u.searchParams.has('csp') ? { 'content-security-policy': "script-src 'self'" } : {}) }).end(page(u.searchParams.get('bad') ?? '', u.searchParams.get('lang') ?? 'es'));
+    if (u.pathname === '/pq' || u.pathname === '/ps') return void res.writeHead(200, { 'content-type': 'text/html' }).end(portalPage(u.pathname === '/pq' ? 'q' : 's'));
+    if (u.pathname === '/gone') return void res.writeHead(u.searchParams.has('spoof') ? 200 : 404, { 'content-type': 'text/html' }).end(gonePage(u));
+    if (u.pathname === '/api/demo/overview') return void res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(server.overview ?? { invoices: [] }));
+    if (u.pathname === '/api/fx') return void res.writeHead(200, { 'content-type': 'application/json' }).end('{"provider":"gate","rates":[{"c":"USD"}]}');
     if (u.pathname === '/api/data') return void res.writeHead(200, { 'content-type': 'application/json' }).end('["Factura A","Factura B"]');
     res.writeHead(404).end();
   });
@@ -115,6 +139,8 @@ const cell = (bad, o = {}) =>
     opts: { dicts: DICTS, speed: true, shots: false },
     ...o,
   });
+const vendor = (id, path, extra = {}) => ({ id, exp: 'vendor', path, ...extra });
+const run = (screen, o = {}) => runCell(browser, { base, kind: 'static', width: 390, lang: 'es', state: null, screen, opts: { dicts: DICTS, speed: true, shots: false }, ...o });
 const status = (rs, id) => rs.find((r) => r.id === id)?.status;
 const fails = (rs) => rs.filter((r) => r.status === 'fail').map((r) => r.id);
 
@@ -177,11 +203,46 @@ describe('one known violation per item', () => {
   it.each(['3.focus', '3.enter', '4.busy'])('%s', async (id) => {
     expect(status(await cell(id, { kind: 'dynamic' }), id)).toBe('fail');
   }, 60_000);
+  it.each(['5.words:404', '5.words:trace'])('%s', async (bad) => {
+    expect(status(await cell(bad), '5.words')).toBe('fail');
+  }, 60_000);
   it('4.loading', async () => {
     expect(status(await cell('4.loading', { kind: 'loading' }), '4.loading')).toBe('fail');
   }, 60_000);
   it.each(['empty', 'error', 'offline'])('4.state (%s)', async (state) => {
     expect(status(await cell('4.state', { state }), '4.state')).toBe('fail');
+  }, 60_000);
+});
+
+describe('policy forced states (AC-91)', () => {
+  const policy = SCREENS.find((s) => s.id === 'policy');
+  it('policy runs fx-empty and fx-error', () => expect(policy.states).toEqual(['fx-empty', 'fx-error']));
+  it.each([['fx-empty', 'f.empty'], ['fx-error', 'f.err']].flatMap(([s, k]) => ['es', 'en'].map((l) => [s, k, l])))('%s shows its message and next step (%s, %s)', async (state, key, lang) => {
+    const rs = await cell('fx', { state, lang });
+    expect(status(rs, '4.state'), JSON.stringify(rs.find((r) => r.id === '4.state'))).toBe('pass');
+    expect(rs.find((r) => r.id === '4.state').measured).toContain(DICTS[lang][key].slice(0, 12));
+  }, 60_000);
+});
+
+describe('detail-unread (AC-91)', () => {
+  const inv = [{ id: 'a', outcome: 'PAGAR', fields: {} }, { id: 'b', outcome: 'ESCALAR', fields: { read_error: 'lector_no_disponible' } }, { id: 'c', outcome: null }];
+  it('opens an invoice the agent has not decided or could not read', () => {
+    expect(unreadId(inv)).toBe('b');
+    expect(unreadId([inv[0], inv[2]])).toBe('c');
+  });
+  it('is undefined when the demo has none', () => expect(unreadId([inv[0]])).toBeUndefined());
+  it('is reported N/A, not opened, when the demo has none', async () => {
+    const lines = [];
+    const log = console.log;
+    console.log = (l) => lines.push(l);
+    server.overview = { invoices: [inv[0]] };
+    try {
+      expect(await main(['--base', base, '--screens', 'detail-unread', '--only', '0.reach'])).toBe(0);
+    } finally {
+      console.log = log;
+      server.overview = undefined;
+    }
+    expect(lines.join('\n')).toMatch(/detail-unread N\/A/);
   }, 60_000);
 });
 
@@ -222,5 +283,83 @@ describe('report', () => {
     expect(md).toContain('FAILED ITEMS: 1');
     writeFileSync(file, md);
     expect(existsSync(file)).toBe(true);
+  });
+});
+
+describe('portal harness fixes (QA run 1)', () => {
+  it('measures axe on a page served with a strict CSP (no crash)', async () => {
+    const rs = await run({ id: 'csp', exp: 'test', path: '/f?bad=3.axe&csp=1', primary: '#go' });
+    expect(status(rs, '0.run')).toBeUndefined();
+    expect(status(rs, '3.axe'), JSON.stringify(rs.find((r) => r.id === '3.axe'))).toBe('fail');
+  }, 60_000);
+  it('keeps a clean page passing axe under the strict CSP', async () => {
+    const rs = await run({ id: 'csp', exp: 'test', path: '/f?bad=none&csp=1', primary: '#go' });
+    expect(['3.axe', '3.contrast'].map((id) => status(rs, id))).toEqual(['pass', 'pass']);
+  }, 60_000);
+
+  it.each([['/pq', 'the ?lang= query'], ['/ps', 'localStorage portal.lang']])('reaches English through %s on a vendor screen', async (path) => {
+    const rs = await run(vendor('portal', path), { lang: 'en' });
+    expect(status(rs, '3.lang'), JSON.stringify(rs.find((r) => r.id === '3.lang'))).toBe('pass');
+    expect(status(rs, '5.mixed'), JSON.stringify(rs.find((r) => r.id === '5.mixed'))).toBe('pass');
+  }, 60_000);
+  it('keeps the portal in Spanish for es', async () => {
+    const rs = await run(vendor('portal', '/pq'), { lang: 'es' });
+    expect(['3.lang', '5.mixed'].map((id) => status(rs, id))).toEqual(['pass', 'pass']);
+  }, 60_000);
+
+  it('types into the composer before the busy check when the screen names one', async () => {
+    const screen = (compose) => ({ id: 'fixture', exp: 'test', path: '/f?bad=compose', primary: '#go', compose });
+    expect(status(await run(screen(undefined), { kind: 'dynamic' }), '4.busy')).toBe('fail');
+    expect(status(await run(screen('#msg'), { kind: 'dynamic' }), '4.busy')).toBe('pass');
+  }, 60_000);
+});
+
+describe('designed 404 pages (R-103)', () => {
+  const gone = (q = '') => vendor('portal-error', `/gone${q}`, { notFound: true });
+  it.each(['es', 'en'])('6.console excludes exactly the main-document 404 and prints it (%s)', async (lang) => {
+    const rs = await run(gone(), { lang });
+    expect(status(rs, '6.console'), JSON.stringify(rs.find((r) => r.id === '6.console'))).toBe('pass');
+    expect(rs.find((r) => r.id === '6.console').measured).toContain('excluded: expected 404 (AC-83/AC-84)');
+    expect(status(rs, '3.lang')).toBe('pass');
+    expect(status(rs, '5.mixed')).toBe('pass');
+  }, 60_000);
+  it('still fails the same 404 line on any other screen', async () => {
+    expect(status(await run(vendor('portal', '/gone')), '6.console')).toBe('fail');
+  }, 60_000);
+  it('still fails a 404 for a subresource on a designed 404 page', async () => {
+    const r = (await run(gone('?sub=1'))).find((x) => x.id === '6.console');
+    expect(r.status, JSON.stringify(r)).toBe('fail');
+    expect(r.measured).toContain('/missing.png');
+  }, 60_000);
+  it('does not exclude the line when the main response is not a 404', async () => {
+    expect(status(await run(gone('?spoof=1')), '6.console')).toBe('fail');
+  }, 60_000);
+
+  it.each(['es', 'en'])('4.state needs no control: the sentence with its verb is the next step (%s)', async (lang) => {
+    const r = (await run(gone(), { lang })).find((x) => x.id === '4.state');
+    expect(r.status, JSON.stringify(r)).toBe('pass');
+  }, 60_000);
+  it('4.state fails a 404 page whose sentence names no next step', async () => {
+    expect(status(await run(gone('?bare=1')), '4.state')).toBe('fail');
+  }, 60_000);
+
+  it('2.primary and 7.usable carry the design reason, never FAIL', async () => {
+    const rs = await run(gone());
+    const p = rs.find((r) => r.id === '2.primary');
+    expect([p.status, p.measured]).toEqual(['na', 'sin acción por diseño (R-103)']);
+    const u = rs.find((r) => r.id === '7.usable');
+    expect(u.status, JSON.stringify(u)).toBe('pass');
+    expect(u.measured).toContain('sin acción por diseño (R-103)');
+  }, 60_000);
+  it('3.focus, 3.enter and 4.busy are N/A with the design reason', async () => {
+    const rs = await run(gone(), { kind: 'dynamic' });
+    expect(['3.focus', '3.enter', '4.busy'].map((id) => rs.find((r) => r.id === id)).map((r) => [r.status, r.measured])).toEqual(Array(3).fill(['na', 'sin acción por diseño (R-103)']));
+  }, 60_000);
+  it('keeps the primary-action items for every other screen', async () => {
+    expect(status(await run({ id: 'x', exp: 'test', path: '/f?bad=3.focus', primary: '#go' }, { kind: 'dynamic' }), '3.focus')).toBe('fail');
+  }, 60_000);
+  it('marks the two designed 404 screens in SCREENS', () => {
+    expect(SCREENS.filter((s) => s.notFound).map((s) => s.id)).toEqual(['portal-error', 'status-invalid']);
+    expect(SCREENS.find((s) => s.id === 'portal').compose).toBeTruthy();
   });
 });

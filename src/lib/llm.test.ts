@@ -89,8 +89,8 @@ describe('extractFields (AC-12, AC-13, AC-14)', () => {
     ['the answer is not JSON', model('lo siento')],
     ['the answer breaks the schema', model({ ...good, confidence: { amount: 7 } })],
     ['the answer is not an object', model(42)],
-  ])('returns all-null fields with concept ilegible when %s: the model answered (AC-13, R-75)', async (_n, env) => {
-    expect(await extractFields(env, 'x')).toEqual(ALL_NULL);
+  ])('returns all-null fields with concept ilegible when %s: the model answered, so read_by names it (AC-13, R-75, R-97)', async (_n, env) => {
+    expect(await extractFields(env, 'x')).toEqual({ ...ALL_NULL, ...WAI });
   });
 
   it.each([
@@ -114,8 +114,8 @@ describe('extractFields (AC-12, AC-13, AC-14)', () => {
   it.each([
     ['quota', 'reader: lector_no_disponible', UNAVAILABLE, envWith(async () => { throw new Error(QUOTA); })],
     ['model_error', 'reader: lector_no_disponible', UNAVAILABLE, envWith(async () => { throw new Error('boom'); })],
-    ['invalid_json', 'reader: ilegible', ALL_NULL, model('lo siento')],
-    ['schema', 'reader: ilegible', ALL_NULL, model({ ...good, confidence: { amount: 7 } })],
+    ['invalid_json', 'reader: ilegible', { ...ALL_NULL, ...WAI }, model('lo siento')],
+    ['schema', 'reader: ilegible', { ...ALL_NULL, ...WAI }, model({ ...good, confidence: { amount: 7 } })],
   ])('logs the reason code %s without the document text (AC-13)', async (code, line, result, env) => {
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
     expect(await extractFields(env, 'SECRETO factura 1042')).toEqual(result);
@@ -353,10 +353,10 @@ describe('Bedrock first, Workers AI fallback (AC-89, AC-13, AC-77)', () => {
       expect(await extractFields(both(run), 'x')).toEqual(UNAVAILABLE);
     });
 
-    it('Bedrock fails and Workers AI answers nothing usable: ilegible, as today', async () => {
+    it('Bedrock fails and Workers AI answers nothing usable: ilegible, read by Workers AI (R-97)', async () => {
       vi.spyOn(console, 'error').mockImplementation(() => {});
       bedrock(() => json('{}', 500));
-      expect(await extractFields(both(async () => ({ response: 'lo siento' })), 'x')).toEqual(ALL_NULL);
+      expect(await extractFields(both(async () => ({ response: 'lo siento' })), 'x')).toEqual({ ...ALL_NULL, ...WAI });
     });
 
     it('without the Bedrock secrets it goes straight to Workers AI, with no request at all', async () => {

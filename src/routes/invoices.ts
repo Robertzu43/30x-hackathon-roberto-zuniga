@@ -3,6 +3,7 @@
 import type { Context } from 'hono';
 import { z } from 'zod';
 import { decodeCursor, runAgent } from '../agent/loop';
+import type { LecturaCheck } from '../agent/record';
 import { directorio, findBeneficiary } from '../agent/tools';
 import { agentTrace, recordedFields, type StoredDecision } from '../agent/trace';
 import { explainCheck, whatWouldPay } from '../engine/explain';
@@ -113,18 +114,24 @@ export const invoices = memberRoutes()
     return d ? c.json(d) : c.json({ error: 'Factura no encontrada' }, 404);
   });
 
-// AC-77, R-88: who read it, as recorded at read time, and per field the line of the stored text where code found the
-// value. null when no model read it (seeded, inserted with fields, unread or the reader unavailable).
-function readingOf(stored: ReadFields | null, shown: InvoiceFields | null, text: string | null) {
-  const provider = stored?.read_by?.provider;
-  if (typeof provider !== 'string') return null;
-  return {
-    provider,
-    fields: READ.map((name) => {
-      const value = shown?.[name] ?? null, c = stored?.confidence?.[name];
+// AC-77, R-88, R-97: who read it, as recorded at read time (fields.read_by, else the run read recorded on the first agent
+// decision's Lectura check), and per field the line of the stored text where code found the value. reading_status is the
+// API's word on it; the web maps it one to one.
+function readingOf(stored: ReadFields | null, first: StoredDecision | undefined, shown: InvoiceFields | null, text: string | null) {
+  const lectura: LecturaCheck | undefined = stored ? undefined : first?.checks.find((c) => c.id === 'lectura');
+  const src = stored ?? lectura;
+  const provider = src?.read_by?.provider;
+  if (typeof provider === 'string') {
+    return { reading_status: 'ai' as const, reading: { provider, fields: READ.map((name) => {
+      const value = shown?.[name] ?? null, c = src?.confidence?.[name];
       return { name, value, confidence: typeof c === 'number' ? c : null, ...locate(text, name, value) };
-    }),
-  };
+    }) } };
+  }
+  const error = stored ? stored.read_error : lectura?.values.reason;
+  // An «ilegible» ingest with no model call stored its empty text (a corrupt PDF); a seeded one stored null.
+  const unread = stored?.concept === 'ilegible' && text !== null && !text.trim();
+  const reading_status = error === 'lector_no_disponible' ? 'unavailable' as const : stored && !error && !unread ? 'preloaded' as const : 'none' as const;
+  return { reading_status, reading: null };
 }
 
 // The decision detail of one of the company's invoices in `lang`, or null when it has none with that id. Also the record
@@ -162,6 +169,6 @@ export async function invoiceDetail({ db, companyId }: AppEnv['Variables'], id: 
     trace: agentTrace({ invoice, decisions, isDemo: company.is_demo, notification }, lang),
     question: latest?.outcome === 'ESCALAR' ? latest[`question_${lang}`] : null,
     file_url: fileUrl,
-    reading: readingOf(row.fields, invoice.fields, row.raw_text),
+    ...readingOf(row.fields, decisions.find((d) => d.actor === 'agent'), invoice.fields, row.raw_text),
   };
 }

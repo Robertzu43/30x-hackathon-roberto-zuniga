@@ -2,6 +2,7 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { expect, test } from 'vitest';
 import NewInvoice from './components/NewInvoice';
+import { sentence } from './test/text';
 import { mockApi, renderAt } from './test/utils';
 
 const send = (name = 'Enviar al agente') => fireEvent.click(screen.getByRole('button', { name }));
@@ -26,7 +27,7 @@ test('the file picker shows the app wording, not the browser «Choose File / No 
   expect(screen.getByText('Elegir archivo')).toBeTruthy();
   expect(screen.getByText('Ningún archivo elegido')).toBeTruthy();
   fireEvent.change(screen.getByLabelText('Archivo: PDF, PNG o JPG, hasta 10 MB'), { target: { files: [new File(['%PDF'], '01.pdf', { type: 'application/pdf' })] } });
-  expect(screen.getByText('Archivo elegido: 01.pdf')).toBeTruthy(); // never the bare name: «factura.png» alone reads as a code (gate 5.words)
+  expect(screen.getByText(sentence('Archivo elegido: 01.pdf'))).toBeTruthy(); // never the bare name: «factura.png» alone reads as a code (gate 5.words)
 });
 
 test('the selected tab does not look like a primary button: one primary per view (UX-23)', async () => {

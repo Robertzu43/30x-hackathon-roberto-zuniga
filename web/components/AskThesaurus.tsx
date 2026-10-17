@@ -40,7 +40,7 @@ export default function AskThesaurus({ invoiceId }: { invoiceId?: string }) {
       <form onSubmit={(e) => void submit(e)}>
         <label>
           {t('ask.question')}
-          <textarea rows={2} value={question} onChange={(e) => setQuestion(e.target.value)} />
+          <textarea data-user="" rows={2} value={question} onChange={(e) => setQuestion(e.target.value)} />
         </label>
         <button type="submit" disabled={busy} aria-busy={busy}>{t(busy ? 'ask.sending' : 'ask.send')}</button>
       </form>

@@ -561,7 +561,7 @@ export function aggregate(rows) {
     const users = {}; // R-131: per language, the biggest count and every distinct text excluded
     for (const r of g) if (r.users) { const u = (users[r.lang] ??= { n: 0, texts: new Set() }); u.n = Math.max(u.n, r.users.length); r.users.forEach((t) => u.texts.add(t)); }
     const status = failing.length ? 'fail' : g.some((r) => r.status === 'pass') ? 'pass' : g[0].status;
-    return { screen: g[0].screen, id: g[0].id, status, value: worst.value, measured: `${worst.measured} @${worst.width}/${worst.lang}`, cells: g.length, failing: failing.length, users };
+    return { screen: g[0].screen, id: g[0].id, status, value: worst.value, measured: `${worst.measured} @${worst.width}/${worst.lang}`, cells: g.length, failing: failing.length, ...(Object.keys(users).length && { users }) };
   }).sort((a, b) => order(a.id).localeCompare(order(b.id)));
 }
 const WHAT = { '0.reach': 'screen opens', '1.scroll': 'no horizontal scroll', '1.offscreen': 'nothing off-screen', '1.clip': 'no clipped text', '1.overlap': 'no overlapping text', '1.tables': 'tables reflow or scroll', '2.targets': '44 px targets', '2.inputs': '16 px inputs', '2.primary': 'primary action in the lower 60%', '3.axe': 'axe: 0 serious or critical', '3.contrast': 'contrast AA', '3.focus': 'visible focus ring', '3.enter': 'Enter activates', '3.labels': 'inputs have labels', '3.lang': 'lang follows the language', '4.busy': 'busy within 100 ms', '4.loading': 'no blank while loading', '4.cls': 'CLS 0.01 or less', '4.state': 'designed state with next step', '5.words': 'no developer words', '5.mixed': 'one language per screen', '5.locale': 'numbers and dates in locale', '5.marker': 'data-user used for user data only', '6.palette': 'approved palette', '6.fonts': 'approved fonts', '6.logo': 'logo present', '6.console': 'no console errors', '6.images': 'SVG or 2x images', '6.primary_count': 'one primary button (reviewer)', '7.usable': 'usable in under 2 s', '7.longtask': 'no task over 300 ms' };
@@ -574,7 +574,7 @@ const section = (screen, rows, base) => [
   `## ${screen}`, '', `Measured on ${base} at ${new Date().toISOString().slice(0, 16)}Z.`, '',
   '| Item | Result | Measured (worst cell) | Cells failing | Check |', '|---|---|---|---|---|',
   ...rows.map((r) => `| ${r.id} | ${word[r.status]} | ${r.measured.replace(/\|/g, '/')} | ${r.failing}/${r.cells} | ${WHAT[r.id] ?? ''} |`), '',
-  ...excludedList(rows.find((r) => r.users)?.users),
+  ...excludedList(rows.find((r) => Object.keys(r.users ?? {}).length)?.users),
 ].join('\n');
 const assemble = (exp, blocks) => {
   const failed = Object.values(blocks).join('\n').match(/^\| \S+ \| FAIL \|/gm)?.length ?? 0;

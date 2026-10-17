@@ -590,6 +590,16 @@ describe('user data: [data-user] (R-131)', () => {
     expect(md).not.toContain('- es:');
     expect(md).toContain('FAILED ITEMS: 0');
   });
+  it('lists the excluded texts when plain rows without users come first on the screen', () => {
+    const plain = (id) => ({ screen: 'inbox', width: 390, lang: 'en', id, status: 'pass', value: 0, measured: 'ok' });
+    const long = 'y'.repeat(70);
+    const md = renderGate('finance', { inbox: aggregate([plain('0.reach'), plain('1.scroll'), ...['5.locale', '5.mixed'].flatMap((id) => [{ ...marked(['USD 1.800,00']), id, lang: 'en' }, { ...marked([long.slice(0, 60)]), id, lang: 'es' }])]) }, 'http://x');
+    expect(md).toContain('User data excluded from 5.mixed and 5.locale');
+    expect(md).toContain('- en: excluded: 1 user-data nodes');
+    expect(md).toContain('  - USD 1.800,00');
+    expect(md).toContain(`- es: excluded: 1 user-data nodes\n  - ${'y'.repeat(60)}\n`);
+    expect(md).not.toContain('y'.repeat(61));
+  });
   it('prints no list when no screen excluded anything', () => {
     expect(renderGate('finance', { inbox: aggregate([{ ...marked([]), lang: 'es' }]) }, 'http://x')).not.toContain('User data excluded');
   });

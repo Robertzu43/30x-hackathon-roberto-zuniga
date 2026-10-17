@@ -2,12 +2,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Env } from '../env';
 import { ASK_SYSTEM, askMessage } from '../prompts/ask';
+import seed300 from '../../supabase/migrations/20261017000300_seed_andina.sql?raw';
+import seed600 from '../../supabase/migrations/20261017000600_fx_rates.sql?raw';
 import { answerQuestion, documentToText, extractFields } from './llm';
 
 const conf = { payee_name: 0.99, amount: 0.97, currency: 0.99, invoice_number: 0.95, issue_date: 0.9, due_date: 0.9, concept: 0.9, bank_account: 0.9 };
 const good = {
   payee_name: 'Laura Méndez', amount: 2500, currency: 'USD', invoice_number: '1042', issue_date: '2026-10-16',
-  due_date: '2026-11-30', concept: 'Retainer mensual', bank_account: 'Bancolombia ahorros 123', confidence: conf,
+  due_date: '2026-11-30', concept: 'Retainer mensual', bank_account: 'Bancolombia ahorros 0012-3456-4821', confidence: conf,
 };
 const envWith = (run: (model: string, input: unknown) => Promise<unknown>) =>
   ({ AI: { run }, WORKERS_AI_MODEL: 'text-model', WORKERS_AI_VISION_MODEL: 'vision-model' }) as unknown as Env;
@@ -156,6 +158,26 @@ describe('extractFields (AC-12, AC-13, AC-14)', () => {
     const run = vi.fn();
     expect(await extractFields(envWith(run), '  \n')).toEqual(ALL_NULL);
     expect(run).not.toHaveBeenCalled();
+  });
+});
+
+// R-129 (AC-12): a bank account the model returns must look like one: 6+ ASCII digits anywhere, or an email-shaped token.
+describe('extractFields: the shape of bank_account (AC-12, R-129)', () => {
+  const SEED_ACCOUNTS = [...new Set([...`${seed300}${seed600}`.matchAll(/"bank_account":\s*"([^"]+)"/g)].map((m) => m[1]!))];
+  it('the seeds hold accounts to check', () => expect(SEED_ACCOUNTS.length).toBeGreaterThanOrEqual(10));
+  it.each([...SEED_ACCOUNTS, 'Banco de Occidente 0231-77', 'Nequi 300-555-7310', 'Pix chave ana.souza@email.com', 'IBAN ES91 2100 0418 4502 0005 1332'])(
+    'keeps «%s» verbatim', async (account) => {
+      expect((await extractFields(model({ ...good, bank_account: account }), 'x')).bank_account).toBe(account);
+    });
+  it.each(['la cuenta registrada', 'Pagar a la cuenta registrada', 'la misma de siempre', 'cuenta 12345', 'Nequi', ''])(
+    'stores «%s» as unknown (null) at confidence 0.9, and keeps the other fields', async (account) => {
+      const out = await extractFields(model({ ...good, bank_account: account }), 'x');
+      expect(out).toEqual({ ...good, bank_account: null, ...WAI });
+    });
+  it('applies to a Bedrock read too', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ output: { message: { content: [{ text: JSON.stringify({ ...good, bank_account: 'la cuenta registrada' }) }] } } })));
+    const env = { ...model(good), BEDROCK_MODEL_ID: 'amazon.nova-lite-v1:0', BEDROCK_REGION: 'us-east-2', AWS_BEDROCK_ACCESS_KEY_ID: 'AKIDEXAMPLE', AWS_BEDROCK_SECRET_ACCESS_KEY: 'secret' } as Env;
+    expect(await extractFields(env, 'x')).toMatchObject({ bank_account: null, payee_name: 'Laura Méndez', read_by: { provider: 'Amazon Nova Lite (AWS Bedrock)' } });
   });
 });
 

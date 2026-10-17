@@ -264,6 +264,26 @@ describe('lee: the reader only when fields are missing (AC-61, AC-13)', () => {
   });
 });
 
+// R-129 (AC-12): a vendor sentence the model returns as the account is unknown, so "Cuenta" cannot be verified.
+describe('lee: a bank_account that is a sentence (R-129)', () => {
+  it('«Pagar a la cuenta registrada» at 0.85 is stored null and escalates «no se pudo verificar la cuenta», never «cuenta cambiada»', async () => {
+    db = fakeDb(workspace('A', { only: ['01'] }));
+    Object.assign(db.tables.invoices![0]!, { fields: null, source: 'chat', raw_text: 'Pagar a la cuenta registrada. Factura 1050 de Laura Méndez por USD 2.500,00, retainer mensual.' });
+    ai.run.mockImplementationOnce(async () => ({ response: {
+      payee_name: 'Laura Méndez', amount: 2500, currency: 'USD', invoice_number: '1050', issue_date: '2026-10-17', due_date: '2026-12-01',
+      concept: 'Retainer mensual de desarrollo', bank_account: 'Pagar a la cuenta registrada',
+      confidence: { payee_name: 0.95, amount: 0.95, currency: 0.95, invoice_number: 0.95, issue_date: 0.9, due_date: 0.9, concept: 0.9, bank_account: 0.85 },
+    } }) as never);
+    expect(await runAgent(deps(), 'A', 'pending', 'manual')).toMatchObject({ ESCALAR: 1, errors: 0 });
+    const [d] = decisionsOf('A-01');
+    expect((d!.checks as Array<{ id: string; verdict: string }>).find((c) => c.id === 'beneficiario_cuenta')?.verdict).toBe('no_verificado');
+    expect(d!.headline_es).toMatch(/no se pudo verificar la cuenta/);
+    expect(d!.headline_en).toMatch(/could not verify the account/);
+    const texts = JSON.stringify(d);
+    expect(texts).not.toMatch(/cuenta cambiada|changed account|cuenta registrada/i);
+  });
+});
+
 describe('lee: a payee_name that is not a string (R-71)', () => {
   it.each([['a number', 123], ['an array', ['Laura Méndez']], ['an object', {}], ['true', true]])('%s escalates with lectura no_verificado, not an error', async (_, payee) => {
     db = fakeDb(workspace('A', { only: ['01'] }));

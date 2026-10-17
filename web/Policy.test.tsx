@@ -37,14 +37,14 @@ test('/policy is in the nav after Bandeja, with its tour anchor present before d
   expect(container.querySelector('[data-tour="policy"]')).toBeTruthy();
 });
 
-test('shows every rule of the latest version, the six FX rows and "Guardar como versión 3" (AC-30)', async () => {
+test('shows every rule of the latest version, the five pin rows and "Guardar como versión 3" (AC-30)', async () => {
   setup();
   renderAt(<Policy />);
   expect((await limit()).value).toBe('5000');
   for (const l of ['Umbral de aprobación (USD)', 'Presupuesto del periodo (USD)', 'Saldo de la cuenta (USD)', 'Ventana de duplicados (días)', 'Tolerancia del acuerdo (%)', 'Días de gracia de vencimiento'])
     expect(screen.getByLabelText(l)).toBeTruthy();
   expect((screen.getByLabelText('Pagar solo a beneficiarios permitidos') as HTMLInputElement).checked).toBe(true);
-  for (const c of ['COP', 'MXN', 'BRL', 'ARS', 'EUR', 'USD']) expect(screen.getByLabelText(`1 ${c} en USD`)).toBeTruthy();
+  for (const c of ['COP', 'MXN', 'BRL', 'ARS', 'EUR']) expect(screen.getByLabelText(`1 ${c} en USD`)).toBeTruthy();
   expect((screen.getByLabelText('1 COP en USD') as HTMLInputElement).value).toBe('0.000245');
   expect(screen.getByRole('button', { name: 'Guardar como versión 3' })).toBeTruthy();
   expect(screen.getAllByRole('listitem').map((li) => li.textContent)).toEqual([expect.stringContaining('Política general'), expect.stringContaining('Inicial')]);
@@ -286,6 +286,33 @@ test('«Tasas de mercado» lists each rate read-only: 1 USD in units, USD per un
   expect(table.querySelector('input')).toBeNull();
 });
 
+test('every «1 USD =» figure has the same two decimals, so a comma never reads as a thousands mark; USD per unit keeps 6 significant digits (AC-76, AC-91 item 5)', async () => {
+  setup({ 'GET /api/fx': { provider: 'yahoo', rates: [
+    { currency: 'COP', usd_per_unit: 0.000248761234, units_per_usd: 4020.1, source: 'Yahoo Finance', fetched_at: '2026-10-17T15:00:00Z', stale: false },
+    { currency: 'MXN', usd_per_unit: 0.0541, units_per_usd: 18.479, source: 'Yahoo Finance', fetched_at: '2026-10-17T15:00:00Z', stale: false },
+    { currency: 'EUR', usd_per_unit: 1.08, units_per_usd: 0.9259, source: 'Yahoo Finance', fetched_at: '2026-10-17T15:00:00Z', stale: false },
+  ] } });
+  renderAt(<Policy />);
+  const table = await screen.findByRole('table', { name: 'Tasas de mercado' });
+  const cells = within(table).getAllByRole('row').slice(1).map((r) => within(r).getAllByRole('cell').map((c) => c.textContent));
+  expect(cells.map((c) => c[1])).toEqual(['1 USD = 4.020,10 COP', '1 USD = 18,48 MXN', '1 USD = 0,93 EUR']);
+  expect(cells.map((c) => c[2])).toEqual(['0,000248761', '0,0541', '1,08']);
+});
+
+test('the date column header does not repeat the word in its cells (AC-76)', async () => {
+  setup();
+  renderAt(<Policy />);
+  const table = await screen.findByRole('table', { name: 'Tasas de mercado' });
+  expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Moneda', 'Tasa', 'USD por unidad', 'Fuente', 'Fecha', 'Estado']);
+});
+
+test('the pin list has COP, MXN, BRL, ARS and EUR, never «1 USD en USD» (AC-30 Clarified)', async () => {
+  setup();
+  renderAt(<Policy />);
+  await limit();
+  expect(screen.getAllByLabelText(/^1 \w{3} en USD$/).map((l) => l.closest('label')!.textContent)).toEqual(['1 COP en USD', '1 MXN en USD', '1 BRL en USD', '1 ARS en USD', '1 EUR en USD']);
+});
+
 test('a stale row says «vencida: el agente escalará las facturas en esta moneda», a fresh one «vigente» (AC-76)', async () => {
   setup();
   renderAt(<Policy />);
@@ -345,20 +372,53 @@ test('no rates yet: a designed empty message, and no table (AC-91)', async () =>
   expect(screen.queryByRole('table')).toBeNull();
 });
 
-test('/api/fx fails: a designed message with the next step, in both languages, no status code (AC-91)', async () => {
-  setup({ 'GET /api/fx': json({ error: 'boom' }, 500) });
+test('/api/fx fails: a designed message with a «Reintentar» next step that refetches, in both languages, no status code (AC-91)', async () => {
+  let calls = 0;
+  setup({ 'GET /api/fx': () => (++calls === 1 ? json({ error: 'boom' }, 500) : fx) });
   renderAt(<Policy />);
-  const msg = await screen.findByText(/No pude cargar las tasas de mercado\. Recarga la página/);
+  const msg = await screen.findByText('No pude cargar las tasas de mercado.');
   expect(msg.textContent).not.toMatch(/500|boom/);
+  fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
+  expect(await screen.findByRole('table', { name: 'Tasas de mercado' })).toBeTruthy();
+  expect(calls).toBe(2);
   cleanup();
   localStorage.setItem('lang', 'en');
   setup({ 'GET /api/fx': json({ error: 'boom' }, 500) });
   renderAt(<Policy />);
-  expect(await screen.findByText(/I could not load the market rates\. Reload the page/)).toBeTruthy();
+  expect(await screen.findByText('I could not load the market rates.')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
 });
 
-test('while /api/fx loads the section shows a message, not a blank (AC-91)', () => {
+test('while /api/fx loads the section shows a message and a five-row skeleton, so the page does not jump (AC-91 item 4)', async () => {
   setup({ 'GET /api/fx': () => new Promise(() => {}) });
-  renderAt(<Policy />);
+  const { container } = renderAt(<Policy />);
+  await limit();
   expect(screen.getAllByText('Cargando…').length).toBeGreaterThan(0);
+  expect(container.querySelectorAll('.fx-slot .fx-skel')).toHaveLength(5);
+});
+
+test('the market table scrolls inside its own container (AC-91 item 1)', async () => {
+  setup();
+  renderAt(<Policy />);
+  expect((await screen.findByRole('table', { name: 'Tasas de mercado' })).parentElement!.className).toBe('fx-scroll');
+});
+
+// jsdom cannot measure layout (see mobile.test.ts): these guard the rules measured in Chromium at 360, 390 and 1440 px.
+const { readFileSync } = (await import('node:fs' as string)) as { readFileSync(p: string, enc: string): string };
+const css = readFileSync('web/policy.css', 'utf8');
+const rule = (selector: string) => css.match(new RegExp(`(?:^|\\n)${selector.replace(/[.*>]/g, '\\$&')} \\{([^}]*)\\}`))?.[1] ?? '';
+
+test('CSS: the rate table scrolls in its own box, the page grid may shrink, and the help line has a gap (AC-91 items 1 and 6)', () => {
+  expect(rule('.fx-scroll')).toMatch(/overflow-x: auto/);
+  expect(rule('.fx-scroll')).toMatch(/max-width: 100%/);
+  expect(rule('.policy > *')).toMatch(/min-width: 0/);
+  expect(rule('.card form > *')).toMatch(/min-width: 0/);
+  expect(rule('fieldset > .hint')).toMatch(/margin-bottom: 1\.25rem/);
+});
+
+test('CSS: at 768 px and below the pin inputs are 16 px and the rate rows become cards (AC-91 items 1 and 2)', () => {
+  const m = css.split('@media (max-width: 768px) {')[1]?.split('\n}\n')[0] ?? '';
+  expect(m).toMatch(/fieldset input \{[^}]*font-size: 1rem/);
+  expect(m).toMatch(/\.fx-table tr \{[^}]*display: flex/);
+  expect(rule('.fx-slot')).toMatch(/min-height/);
 });

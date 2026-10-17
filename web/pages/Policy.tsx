@@ -16,7 +16,7 @@ type Failure = ReturnType<typeof failure>;
 type Rate = { currency: string; usd_per_unit: number; units_per_usd: number; source: string; fetched_at: string; stale: boolean };
 
 const NUM = ['per_payment_limit_usd', 'approval_threshold_usd', 'period_budget_usd', 'account_balance_usd', 'duplicate_window_days', 'agreement_tolerance_pct', 'due_grace_days'] as const;
-const FX = ['COP', 'MXN', 'BRL', 'ARS', 'EUR', 'USD'];
+const FX = ['COP', 'MXN', 'BRL', 'ARS', 'EUR']; // USD is always 1: nothing to pin
 
 function CompanySection() {
   const { t } = useT();
@@ -71,7 +71,8 @@ function CompanySection() {
 function MarketRates() {
   const { t, locale } = useT();
   const [rates, setRates] = useState<Rate[] | 'error' | null>(null);
-  useEffect(() => void api.get<{ rates: Rate[] }>('/api/fx').then((r) => setRates(r.rates), () => setRates('error')), []);
+  const [tries, setTries] = useState(0);
+  useEffect(() => void api.get<{ rates: Rate[] }>('/api/fx').then((r) => setRates(r.rates), () => setRates('error')), [tries]);
   // es-CO prints «17 de oct de 2026»; AC-76 shows «17 oct 2026» (the replace below)
   const day = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Bogota' });
   const hour = new Intl.DateTimeFormat(locale, { timeStyle: 'short', hour12: false, timeZone: 'America/Bogota' });
@@ -79,34 +80,48 @@ function MarketRates() {
   return (
     <div>
       <h3 id="fx-market-h">{t('policy.fx.market')}</h3>
-      {!rates && <p className="muted">{t('policy.loading')}</p>}
-      {rates === 'error' && <p role="alert" className="error">{t('policy.fx.load_error')}</p>}
-      {Array.isArray(rates) && !rates.length && <p className="muted">{t('policy.fx.empty')}</p>}
-      {Array.isArray(rates) && rates.length > 0 && (
-        // scrolls inside its own container on narrow screens (AC-91 item 1)
-        <div style={{ overflowX: 'auto' }} role="region" aria-labelledby="fx-market-h" tabIndex={0}>
-          <table aria-labelledby="fx-market-h">
-            <thead>
-              <tr>{['currency', 'rate', 'usd', 'source', 'fetched', 'status'].map((c) => <th key={c} scope="col">{t(`policy.fx.col.${c}`)}</th>)}</tr>
-            </thead>
-            <tbody>
-              {rates.map((r) => {
-                const at = new Date(r.fetched_at);
-                return (
-                  <tr key={r.currency}>
-                    <td>{r.currency}</td>
-                    <td>{t('policy.fx.units', { n: num(r.units_per_usd, { minimumFractionDigits: 2, maximumFractionDigits: 4 }), c: r.currency })}</td>
-                    <td className="mono">{num(r.usd_per_unit, { maximumSignificantDigits: 8 })}</td>
-                    <td>{r.source}</td>
-                    <td>{t('policy.fx.fetched', { when: `${day.format(at).replace(/ de /g, ' ')} ${hour.format(at)}` })}</td>
-                    <td>{r.stale ? t('policy.fx.stale') : t('policy.fx.fresh')}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {/* the slot keeps its height in every state, so the pins below never jump (AC-91 item 4) */}
+      <div className="fx-slot">
+        {!rates && (
+          <div role="status">
+            <p className="muted">{t('policy.loading')}</p>
+            {[0, 1, 2, 3, 4].map((i) => <div key={i} className="fx-skel" aria-hidden="true" />)}
+          </div>
+        )}
+        {rates === 'error' && (
+          <>
+            <p role="alert" className="error">{t('policy.fx.load_error')}</p>
+            <button type="button" onClick={() => { setRates(null); setTries((n) => n + 1); }}>{t('policy.fx.retry')}</button>
+          </>
+        )}
+        {Array.isArray(rates) && !rates.length && <p className="muted">{t('policy.fx.empty')}</p>}
+        {Array.isArray(rates) && rates.length > 0 && (
+          // scrolls inside its own container (AC-91 item 1); cards at phone width (policy.css)
+          <div className="fx-scroll" role="region" aria-labelledby="fx-market-h" tabIndex={0}>
+            <table className="fx-table" aria-labelledby="fx-market-h">
+              <thead>
+                <tr>{['currency', 'rate', 'usd', 'source', 'fetched', 'status'].map((c) => <th key={c} scope="col">{t(`policy.fx.col.${c}`)}</th>)}</tr>
+              </thead>
+              <tbody>
+                {rates.map((r) => {
+                  const at = new Date(r.fetched_at);
+                  return (
+                    <tr key={r.currency} className={r.stale ? 'stale' : undefined}>
+                      <td>{r.currency}</td>
+                      {/* one fixed fraction length on every row: in es-CO "18,479" would read as eighteen thousand */}
+                      <td>{t('policy.fx.units', { n: num(r.units_per_usd, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), c: r.currency })}</td>
+                      <td className="mono" data-label={t('policy.fx.col.usd')}>{num(r.usd_per_unit, { maximumSignificantDigits: 6 })}</td>
+                      <td>{r.source}</td>
+                      <td>{t('policy.fx.fetched', { when: `${day.format(at).replace(/ de /g, ' ')} ${hour.format(at)}` })}</td>
+                      <td>{r.stale ? t('policy.fx.stale') : t('policy.fx.fresh')}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

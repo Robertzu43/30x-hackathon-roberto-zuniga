@@ -15,6 +15,15 @@ const ALL_NULL = { payee_name: null, amount: null, currency: null, invoice_numbe
 
 afterEach(() => vi.useRealTimers());
 
+// the repo has no @types/node, so the fs module is typed by hand
+const readFixture = async (path: string): Promise<ArrayBuffer> => {
+  const { readFile } = (await import('node:fs/promises' as string)) as { readFile(u: URL): Promise<Uint8Array> };
+  const b = await readFile(new URL(path, import.meta.url));
+  return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer;
+};
+// The text layer of web/public/demo/invoices/01.pdf as documentToText returns it: issuer on top, the company billed below.
+const TEXT_01 = 'Laura Méndez\nFactura N.º 1042\nFacturar a\nAndina Labs Inc.\n1209 Orange St, Wilmington, DE 19801\nFecha de emisión\n16 de octubre de 2026\nVence\n30 de noviembre de 2026\nCONCEPTO VALOR (USD)\nRetainer mensual de desarrollo 2.500,00\nTotal a pagar USD 2.500,00\nDatos de pago\nBancolombia ahorros 0012-3456-4821';
+
 describe('extractFields (AC-12, AC-13, AC-14)', () => {
   it('returns the validated fields and calls the text model with a JSON schema', async () => {
     const run = vi.fn(async () => ({ response: good }));
@@ -84,6 +93,26 @@ describe('extractFields (AC-12, AC-13, AC-14)', () => {
     expect(await p).toEqual(ALL_NULL);
   });
 
+  it('reads the issuer, not the company billed, from the real 01.pdf text (live QA regression)', async () => {
+    // Like the live model: without an explicit bill-to rule it answers the "Facturar a" company.
+    const run = vi.fn(async (_m: string, input: unknown) => {
+      const { messages } = input as { messages: { role: string; content: string }[] };
+      const told = /Facturar a/.test(messages[0]!.content) && /issue/i.test(messages[0]!.content);
+      return { response: { ...good, payee_name: told ? 'Laura Méndez' : 'Andina Labs Inc.', bank_account: 'Bancolombia ahorros 0012-3456-4821' } };
+    });
+    const out = await extractFields(envWith(run), TEXT_01);
+    expect(out.payee_name).toBe('Laura Méndez');
+    const { messages } = (run.mock.calls[0] as unknown as [string, { messages: { role: string; content: string }[] }])[1];
+    expect(messages[1]).toEqual({ role: 'user', content: TEXT_01 }); // the document goes as data, never into the system prompt
+  });
+
+  it('tells the model a blurry or non-invoice transcription is all null', async () => {
+    const run = vi.fn(async () => ({ response: good }));
+    await extractFields(envWith(run), 'x');
+    const { messages } = (run.mock.calls[0] as unknown as [string, { messages: { content: string }[] }])[1];
+    expect(messages[0]!.content).toMatch(/blurry/i);
+  });
+
   it('does not call the model for blank text', async () => {
     const run = vi.fn();
     expect(await extractFields(envWith(run), '  \n')).toEqual(ALL_NULL);
@@ -97,10 +126,13 @@ describe('documentToText (AC-11, AC-12)', () => {
   });
 
   it('reads the text layer of a PDF', async () => {
-    // the repo has no @types/node, so the fs module is typed by hand
-    const { readFile } = (await import('node:fs/promises' as string)) as { readFile(u: URL): Promise<{ buffer: ArrayBuffer }> };
-    const { buffer: bytes } = await readFile(new URL('./__fixtures__/simple.pdf', import.meta.url));
+    const bytes = await readFixture('./__fixtures__/simple.pdf');
     expect(await documentToText(model(null), { kind: 'pdf', bytes })).toContain('Laura Méndez');
+  });
+
+  it('reads the demo 01.pdf with its printed hyphens (the font maps them to a private-use code)', async () => {
+    const bytes = await readFixture('../../web/public/demo/invoices/01.pdf');
+    expect(await documentToText(model(null), { kind: 'pdf', bytes })).toBe(TEXT_01);
   });
 
   it('transcribes an image with the vision model', async () => {

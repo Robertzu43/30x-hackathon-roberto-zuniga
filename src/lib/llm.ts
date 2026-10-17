@@ -32,7 +32,9 @@ export async function documentToText(
     if (!input.bytes) return '';
     if (input.kind === 'pdf') {
       const pdf = await getDocumentProxy(new Uint8Array(input.bytes));
-      return (await extractText(pdf, { mergePages: true })).text;
+      // Chrome + Inter print the hyphen of "FS-118" as a private-use code point; read it back as the hyphen it shows.
+      // ponytail: any private-use glyph becomes "-"; map by glyph name if a font uses them for other symbols.
+      return (await extractText(pdf, { mergePages: true })).text.replace(/[\uE000-\uF8FF]/g, '-');
     }
     const out = (await ai(env, env.WORKERS_AI_VISION_MODEL, { image: [...new Uint8Array(input.bytes)], prompt: VISION_PROMPT, max_tokens: 2048 })) as
       { response?: string; description?: string } | null;

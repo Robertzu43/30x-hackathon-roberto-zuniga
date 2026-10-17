@@ -1,13 +1,11 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import type { PageRoute } from '../App';
+import { useState, type FormEvent } from 'react';
 import type { PolicyRules } from '../../src/engine/types';
-import { api, ApiError } from '../api';
+import { api, ApiError, screens, useScreen } from '../api';
 import { RunProgress, useRunAgent } from '../components/RunProgress';
 import { useT } from '../i18n';
 import '../policy.css';
 import { failure, send } from '../withField';
 
-export const route: PageRoute = { path: '/policy', nav: { key: 'screen.policy', order: 20 } };
 
 type Version = { id: string; version: number; name: string; rules: PolicyRules; created_at: string };
 type Change = { invoice_id: string; headline: string; from: string | null; to: string | null }; // null from: pending; null to: pending and not read yet (R-68)
@@ -20,12 +18,26 @@ const FX = ['ARS', 'BRL', 'COP', 'EUR', 'MXN']; // code order, like the market t
 const pinList = (fx: Record<string, string>) => [...FX, ...Object.keys(fx).filter((c) => c !== 'USD' && !FX.includes(c)).sort()];
 // the loading rows are real rows with this made-up data, hidden by CSS: same markup, so same height as the loaded table (R-109)
 const placeholder = (currency: string): Rate => ({ currency, usd_per_unit: 0.000249, units_per_usd: 4020.1, source: 'Yahoo Finance', fetched_at: '2026-10-17T15:00:00Z', stale: false });
+// AC-98: GET /api/screen/policy, the data of the old /api/policy, /api/company and /api/fx in one answer.
+type Screen = { versions: Version[]; company: Company; fx: { rates: Rate[] } };
+// AC-99 (R-109): the loading page is the loaded markup with this made-up answer, hidden by .skeleton; the market slot draws
+// its own placeholder rows, one per pin currency.
+const SKELETON = {
+  versions: [{ id: 's', version: 1, name: 'Andina Labs', rules: {} as PolicyRules, created_at: '2026-10-17T10:00:00Z' }],
+  company: { id: 's', name: 'Andina Labs Inc.', approver_email: 'ana@andina.co', lang: 'es', is_demo: false },
+} as const;
+const hidden = { 'aria-hidden': true, inert: true } as const;
 
 // The company answer is loaded by Policy, so every card appears at once and none moves another (UX-09).
-function CompanySection({ initial }: { initial: Company | Failure }) {
+function CompanySection({ initial, skeleton }: { initial: Company; skeleton: boolean }) {
   const { t } = useT();
-  const [c, setC] = useState<Company | null>('id' in initial ? initial : null);
-  const [err, setErr] = useState<Failure | null>('id' in initial ? null : initial);
+  const [c, setC] = useState<Company | null>(initial);
+  const [err, setErr] = useState<Failure | null>(null);
+  const [was, setWas] = useState(skeleton);
+  if (was !== skeleton) { // the answer replaces the placeholder in the same inputs, so nothing remounts or moves
+    setWas(skeleton);
+    setC(initial);
+  }
   const [saved, setSaved] = useState(false);
 
   const submit = async (e: FormEvent) => {
@@ -41,7 +53,7 @@ function CompanySection({ initial }: { initial: Company | Failure }) {
     }
   };
   return (
-    <section className="card" aria-labelledby="company-h">
+    <section className={skeleton ? 'card skeleton' : 'card'} aria-labelledby="company-h" {...(skeleton && hidden)}>
       <h2 id="company-h">{t('policy.company.title')}</h2>
       {c && (
         <form onSubmit={submit} noValidate>
@@ -72,28 +84,18 @@ function CompanySection({ initial }: { initial: Company | Failure }) {
 }
 
 // AC-76: the market rates the agent uses, read-only. Staleness comes from the API (R-85.3), never computed here.
-function MarketRates({ pins }: { pins: string[] }) {
+function MarketRates({ pins, rates }: { pins: string[]; rates: Rate[] | null }) {
   const { t, locale } = useT();
-  const [rates, setRates] = useState<Rate[] | 'error' | null>(null);
-  const [tries, setTries] = useState(0);
-  useEffect(() => void api.get<{ rates: Rate[] }>('/api/fx').then((r) => setRates(r.rates), () => setRates('error')), [tries]);
   // es-CO prints «17 de oct de 2026»; AC-76 shows «17 oct 2026» (the replace below)
   const day = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Bogota' });
   const hour = new Intl.DateTimeFormat(locale, { timeStyle: 'short', hour12: false, timeZone: 'America/Bogota' });
   const num = (n: number, o: Intl.NumberFormatOptions) => n.toLocaleString(locale, o);
-  const shown = Array.isArray(rates) ? rates : rates ? [] : pins.map(placeholder);
+  const shown = rates ?? pins.map(placeholder);
   return (
     <div className="fx-market">
       <h3 id="fx-market-h">{t('policy.fx.market')}</h3>
       <div className="fx-slot">
-        {!rates && <p role="status" className="sr-only">{t('policy.loading')}</p>}
-        {rates === 'error' && (
-          <>
-            <p role="alert" className="error">{t('policy.fx.load_error')}</p>
-            <button type="button" onClick={() => { setRates(null); setTries((n) => n + 1); }}>{t('policy.fx.retry')}</button>
-          </>
-        )}
-        {Array.isArray(rates) && !rates.length && <p className="muted">{t('policy.fx.empty')}</p>}
+        {rates && !rates.length && <p className="muted">{t('policy.fx.empty')}</p>}
         {shown.length > 0 && (
           // scrolls inside its own container (AC-91 item 1); cards at phone width (policy.css)
           <div className="fx-scroll" role={rates ? 'region' : undefined} aria-labelledby={rates ? 'fx-market-h' : undefined} tabIndex={rates ? 0 : undefined} aria-hidden={rates ? undefined : true}>
@@ -134,27 +136,25 @@ const toForm = (v?: Version) => ({
 
 export default function Policy() {
   const { t, locale } = useT();
-  const [versions, setVersions] = useState<Version[] | null>(null);
+  const screen = useScreen<Screen>(screens.policy());
+  const d = screen.data;
+  const loadFailed = !d && screen.error !== undefined;
+  const versions: readonly Version[] = (d ?? SKELETON).versions;
   const [f, setF] = useState(toForm());
+  const [filled, setFilled] = useState(false);
+  if (d && !filled) { // the form starts from the latest version once, at the first answer; later answers only refresh the list
+    setFilled(true);
+    setF(toForm(d.versions[0]));
+  }
   const [err, setErr] = useState<Failure | null>(null);
   const [saved, setSaved] = useState<number | null>(null);
   const [would, setWould] = useState<Change[] | null>(null);
   const [willPay, setWillPay] = useState(0);
   const [unread, setUnread] = useState(0);
   const [saving, setSaving] = useState(false);
-  const [company, setCompany] = useState<Company | Failure | null>(null);
   const [allVersions, setAllVersions] = useState(false);
   const run = useRunAgent({ first: '/api/policy/reevaluate' });
 
-  const load = async (fill: boolean) => {
-    const v = await api.get<Version[]>('/api/policy');
-    setVersions(v);
-    if (fill) setF(toForm(v[0]));
-  };
-  useEffect(() => {
-    void load(true).catch((e) => setErr(failure(e)));
-    void api.get<Company>('/api/company').then(setCompany, (e) => setCompany(failure(e)));
-  }, []);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -175,10 +175,10 @@ export default function Policy() {
       setWould(r.would_change);
       setUnread(r.unread_pending);
       setWillPay(r.will_pay ?? r.would_change.filter((w) => w.to === 'PAGAR').length); // R-61
-      await load(false);
+      await screen.reload();
     } catch (x) {
       setErr(failure(x));
-      if (x instanceof ApiError && x.status === 409) await load(false).catch(() => {}); // another save won: refresh the list and the next number
+      if (x instanceof ApiError && x.status === 409) await screen.reload(); // another save won: refresh the list and the next number
     } finally {
       setSaving(false);
     }
@@ -188,7 +188,8 @@ export default function Policy() {
   const e = would?.filter((w) => w.from === 'ESCALAR').length ?? 0;
   const header = p && e ? t('policy.header_both', { p, e }) : p ? t('policy.header_pending', { p }) : e ? t('policy.header_escalated', { e }) : t('policy.would_change_none');
   const pins = pinList(f.fx);
-  const next = (versions?.[0]?.version ?? 0) + 1;
+  const next = (versions[0]?.version ?? 0) + 1;
+  const card = d ? { className: 'card' } : { className: 'card skeleton', ...hidden };
   const bad = (k: string) => (err?.field === k ? true : undefined);
   const date = (s: string) => new Date(s).toLocaleDateString(locale, { dateStyle: 'medium' });
 
@@ -196,56 +197,59 @@ export default function Policy() {
     <section data-tour="policy" className="policy">
       <h1>{t('screen.policy')}</h1>
       <p className="muted">{t('policy.intro')}</p>
-      {(!company || (!versions && !err)) && <p className="muted">{t('policy.loading')}</p>}
-      {company && (versions || err) && <>
-        <CompanySection initial={company} />
+      {!d && !loadFailed && <p role="status" className="sr-only">{t('policy.loading')}</p>}
+      {loadFailed && (
+        <div>
+          <p role="alert" className="error">{t('policy.load_error')}</p>
+          <button type="button" onClick={() => void screen.reload()}>{t('policy.fx.retry')}</button>
+        </div>
+      )}
+      {!loadFailed && <>
+        <CompanySection initial={(d ?? SKELETON).company} skeleton={!d} />
 
-        <section className="card" aria-labelledby="rules-h">
+        <section {...card} aria-labelledby="rules-h">
           <h2 id="rules-h">{t('policy.rules.title')}</h2>
-          {!versions && err && <p role="alert" className="error">{t('policy.load_error')}</p>}
-          {versions && (
-            <form onSubmit={submit} noValidate>
-              <label className="switch">
-                <input type="checkbox" checked={f.allowed} onChange={(e) => setF({ ...f, allowed: e.target.checked })} aria-describedby="allowed-hint" />
-                {t('policy.allowed')}
-              </label>
-              <p id="allowed-hint" className="muted hint">{t('policy.allowed.hint')}</p>
-              <div className="grid">
-                {NUM.map((k) => (
-                  <div key={k}>
-                    <label>{t(`policy.${k}`)}
-                      <input type="number" min="0" step="any" value={f.num[k]} aria-invalid={bad(k)} aria-describedby={`${k}-hint`}
-                        onChange={(e) => setF({ ...f, num: { ...f.num, [k]: e.target.value } })} />
-                    </label>
-                    <span id={`${k}-hint`} className="muted hint">{t(`policy.${k}.hint`)}</span>
-                  </div>
+          <form onSubmit={submit} noValidate>
+            <label className="switch">
+              <input type="checkbox" checked={f.allowed} onChange={(e) => setF({ ...f, allowed: e.target.checked })} aria-describedby="allowed-hint" />
+              {t('policy.allowed')}
+            </label>
+            <p id="allowed-hint" className="muted hint">{t('policy.allowed.hint')}</p>
+            <div className="grid">
+              {NUM.map((k) => (
+                <div key={k}>
+                  <label>{t(`policy.${k}`)}
+                    <input type="number" min="0" step="any" value={f.num[k]} aria-invalid={bad(k)} aria-describedby={`${k}-hint`}
+                      onChange={(e) => setF({ ...f, num: { ...f.num, [k]: e.target.value } })} />
+                  </label>
+                  <span id={`${k}-hint`} className="muted hint">{t(`policy.${k}.hint`)}</span>
+                </div>
+              ))}
+            </div>
+            <MarketRates pins={pins} rates={d?.fx.rates ?? null} />
+            <fieldset>
+              <legend>{t('policy.fx.title')}</legend>
+              <p className="muted hint">{t('policy.fx.hint')}</p>
+              <div className="grid fx">
+                {pins.map((c) => (
+                  <label key={c}>{t('policy.fx.row', { c })}
+                    <input type="number" min="0" step="any" value={f.fx[c] ?? ''} aria-invalid={bad('fx_rates')}
+                      onChange={(e) => setF({ ...f, fx: { ...f.fx, [c]: e.target.value } })} />
+                  </label>
                 ))}
               </div>
-              <MarketRates pins={pins} />
-              <fieldset>
-                <legend>{t('policy.fx.title')}</legend>
-                <p className="muted hint">{t('policy.fx.hint')}</p>
-                <div className="grid fx">
-                  {pins.map((c) => (
-                    <label key={c}>{t('policy.fx.row', { c })}
-                      <input type="number" min="0" step="any" value={f.fx[c] ?? ''} aria-invalid={bad('fx_rates')}
-                        onChange={(e) => setF({ ...f, fx: { ...f.fx, [c]: e.target.value } })} />
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-              <p className="muted hint">{t('policy.fx.source')}</p>
-              <label>{t('policy.name')}
-                <input value={f.name} placeholder={versions[0]?.name} maxLength={100} onChange={(e) => setF({ ...f, name: e.target.value })} />
-              </label>
-              <button className="primary" disabled={saving} aria-busy={saving || undefined}>{t('policy.save', { n: next })}</button>
-              {saved !== null && <p role="status">{t('policy.saved', { n: saved })}</p>}
-            </form>
-          )}
-          {versions && err && <p role="alert" className="error">{err.text}</p>}
+            </fieldset>
+            <p className="muted hint">{t('policy.fx.source')}</p>
+            <label>{t('policy.name')}
+              <input value={f.name} placeholder={versions[0]?.name} maxLength={100} onChange={(e) => setF({ ...f, name: e.target.value })} />
+            </label>
+            <button className="primary" disabled={saving} aria-busy={saving || undefined}>{t('policy.save', { n: next })}</button>
+            {saved !== null && <p role="status">{t('policy.saved', { n: saved })}</p>}
+          </form>
+          {err && <p role="alert" className="error">{err.text}</p>}
         </section>
 
-        <section className="card" aria-labelledby="reeval-h">
+        <section {...card} aria-labelledby="reeval-h">
           <h2 id="reeval-h">{t('policy.reevaluate')}</h2>
           {would && (
             <div className="banner" role="status">
@@ -266,23 +270,21 @@ export default function Policy() {
           <RunProgress run={run} mode="reevaluate" />
         </section>
 
-        {versions && (
-          <section className="card" aria-labelledby="versions-h">
-            <h2 id="versions-h">{t('policy.versions')}</h2>
-            <ol className="versions" aria-labelledby="versions-h">
-              {(allVersions ? versions : versions.slice(0, 10)).map((v) => (
-                <li key={v.id}>
-                  <strong data-user="">{v.name}</strong>
-                  <span className="mono">{t('policy.version', { n: v.version })}</span>
-                  <span className="muted">{date(v.created_at)}</span>
-                </li>
-              ))}
-            </ol>
-            {!allVersions && versions.length > 10 && (
-              <button type="button" onClick={() => setAllVersions(true)}>{t('policy.versions.all', { n: versions.length })}</button>
-            )}
-          </section>
-        )}
+        <section {...card} aria-labelledby="versions-h">
+          <h2 id="versions-h">{t('policy.versions')}</h2>
+          <ol className="versions" aria-labelledby="versions-h">
+            {(allVersions ? versions : versions.slice(0, 10)).map((v) => (
+              <li key={v.id}>
+                <strong data-user="">{v.name}</strong>
+                <span className="mono">{t('policy.version', { n: v.version })}</span>
+                <span className="muted">{date(v.created_at)}</span>
+              </li>
+            ))}
+          </ol>
+          {!allVersions && versions.length > 10 && (
+            <button type="button" onClick={() => setAllVersions(true)}>{t('policy.versions.all', { n: versions.length })}</button>
+          )}
+        </section>
       </>}
     </section>
   );

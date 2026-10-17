@@ -2,11 +2,12 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { expect, test } from 'vitest';
 import type { StoredDecision } from '../src/agent/trace';
 import type { Check } from '../src/engine/types';
+import { routes } from './App';
 import DocumentPanel from './components/DocumentPanel';
 import FxCard from './components/FxCard';
 import RuleChecklist from './components/RuleChecklist';
 import Timeline from './components/Timeline';
-import InvoiceDetail, { route } from './pages/InvoiceDetail';
+import InvoiceDetail from './pages/InvoiceDetail';
 import { sentence } from './test/text';
 import { mockApi, renderAt, signedInAs } from './test/utils';
 
@@ -71,11 +72,11 @@ const stopped = {
 };
 
 const GET = 'GET /api/invoices/inv-1';
-const open = () => renderAt(<InvoiceDetail />, { at: '/invoices/inv-1', route: route.path });
+const open = () => renderAt(<InvoiceDetail />, { at: '/invoices/inv-1', route: '/invoices/:id' });
 const json = (body: unknown, status: number) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const gets = (f: ReturnType<typeof mockApi>) => f.mock.calls.filter(([u, i]) => u === '/api/invoices/inv-1' && i?.method === 'GET').length;
 
-test('keeps the /invoices/:id route', () => expect(route.path).toBe('/invoices/:id'));
+test('keeps the /invoices/:id route', () => expect(routes.find((r) => r.path === '/invoices/:id')).toBeTruthy());
 
 test('renders the headline and one row per check (13), never a check id or raw key (AC-26)', async () => {
   mockApi({ [GET]: escalated });
@@ -246,7 +247,8 @@ test('ESCALAR shows the stored question above Aprobar and Rechazar; Aprobar post
 test('Rechazar posts the seq with the optional note', async () => {
   const fetchMock = mockApi({ [GET]: escalated, 'POST /api/invoices/inv-1/reject': { decision: {} } });
   open();
-  fireEvent.change(await screen.findByLabelText('Nota (opcional)'), { target: { value: 'No reconozco este cobro' } });
+  await screen.findByRole('heading', { level: 1, name: escalated.headline }); // the skeleton's card is inert until then
+  fireEvent.change(screen.getByLabelText('Nota (opcional)'), { target: { value: 'No reconozco este cobro' } });
   fireEvent.click(screen.getByRole('button', { name: 'Rechazar' }));
   await waitFor(() => expect(fetchMock.mock.calls.some(([u]) => u === '/api/invoices/inv-1/reject')).toBe(true));
   const post = fetchMock.mock.calls.find(([u]) => u === '/api/invoices/inv-1/reject')!;
@@ -642,4 +644,106 @@ test('«Volver a la bandeja» and «Abrir el documento» are 44 px tap targets a
 test('the document image has a 4:3 box reserved before it loads', async () => {
   const { readFileSync } = (await import('node:fs' as string)) as { readFileSync(p: string, enc: string): string };
   expect(readFileSync('web/pages/detail.css', 'utf8')).toMatch(/\nimg\.detail-doc \{[^}]*aspect-ratio: 4 \/ 3;[^}]*object-fit: contain/);
+});
+
+// AC-100 (R-122): approve and reject show only "sending" until the server answers; the outcome is never predicted.
+test.each([
+  ['es', 'Aprobar', 'Enviando tu respuesta…'],
+  ['en', 'Approve', 'Sending your answer…'],
+])('while the answer is in flight (%s) the buttons are disabled and the card says it is sending, with no outcome yet', async (lang, approve, sending) => {
+  localStorage.setItem('lang', lang);
+  let answer: (r: Response) => void = () => {};
+  let answered = false;
+  mockApi({
+    [GET]: () => (answered ? paid : escalated),
+    'POST /api/invoices/inv-1/approve': () => new Promise<Response>((r) => (answer = r)),
+  });
+  open();
+  const card = await screen.findByRole('region', { name: lang === 'es' ? 'Necesito tu respuesta' : 'I need your answer' });
+  fireEvent.click(within(card).getByRole('button', { name: approve }));
+  expect(within(card).getByRole('status').textContent).toBe(sending); // synchronously, well within 100 ms
+  expect(within(card).getAllByRole('button').every((b) => (b as HTMLButtonElement).disabled)).toBe(true);
+  expect(card.getAttribute('aria-busy')).toBe('true');
+  expect(screen.queryByRole('region', { name: lang === 'es' ? 'Orden de pago' : 'Payment order' })).toBeNull();
+  await new Promise((r) => setTimeout(r, 30));
+  expect(screen.queryByRole('region', { name: lang === 'es' ? 'Orden de pago' : 'Payment order' })).toBeNull();
+  answered = true;
+  answer(new Response(JSON.stringify({ decision: paid.decisions[2] })));
+  expect(await screen.findByRole('region', { name: lang === 'es' ? 'Orden de pago' : 'Payment order' })).toBeTruthy();
+  expect(screen.queryByText(sending)).toBeNull();
+});
+
+test('after the server accepts, the card keeps saying «Enviando…» until the new record is shown, never the old buttons', async () => {
+  let reload: (r: Response) => void = () => {};
+  let answered = false;
+  mockApi({
+    [GET]: () => (answered ? new Promise<Response>((r) => (reload = r)) : escalated),
+    'POST /api/invoices/inv-1/approve': () => ((answered = true), { decision: paid.decisions[2] }),
+  });
+  open();
+  fireEvent.click(await screen.findByRole('button', { name: 'Aprobar' }));
+  await waitFor(() => expect(answered).toBe(true));
+  await new Promise((r) => setTimeout(r, 30));
+  expect(screen.getByText('Enviando tu respuesta…')).toBeTruthy();
+  expect((screen.getByRole('button', { name: 'Aprobar' }) as HTMLButtonElement).disabled).toBe(true);
+  reload(new Response(JSON.stringify(paid)));
+  expect(await screen.findByRole('region', { name: 'Orden de pago' })).toBeTruthy();
+});
+
+test('on an error the card comes back with the server message and enabled buttons', async () => {
+  mockApi({ [GET]: escalated, 'POST /api/invoices/inv-1/approve': json({ error: 'busy', message: 'x' }, 503) });
+  open();
+  fireEvent.click(await screen.findByRole('button', { name: 'Aprobar' }));
+  expect(await screen.findByText('No pude registrar tu respuesta; inténtalo de nuevo en unos segundos.')).toBeTruthy();
+  expect(screen.queryByText('Enviando tu respuesta…')).toBeNull();
+  const card = screen.getByRole('region', { name: 'Necesito tu respuesta' });
+  expect(card.hasAttribute('aria-busy')).toBe(false);
+  expect(within(card).getAllByRole('button').every((b) => !(b as HTMLButtonElement).disabled)).toBe(true);
+});
+
+// AC-99 (R-109): while it loads, the detail is drawn in its loaded markup with placeholder data, hidden; the way back stays usable.
+test('while loading, the detail is a skeleton with the loaded markup and the back link works', () => {
+  mockApi({ [GET]: () => new Promise(() => {}) });
+  const { container } = open();
+  const skeleton = container.querySelector('.detail .skeleton') as HTMLElement;
+  expect(skeleton.getAttribute('aria-hidden')).toBe('true');
+  expect(skeleton.hasAttribute('inert')).toBe(true);
+  expect(skeleton.querySelector('h1')).toBeTruthy();
+  expect(skeleton.querySelector('.detail-cols')).toBeTruthy();
+  expect(screen.getByRole('link', { name: 'Volver a la bandeja' })).toBeTruthy();
+  expect(screen.getByRole('status').textContent).toBe('Cargando la factura…');
+});
+
+// AC-99, AC-91 item 4 (CLS <= 0.01): the placeholder is a full typical record, so nothing above the columns grows when it arrives.
+test('the skeleton is a typical record: 5 steps, 13 checks, filled fields, a fix and the «Necesito tu respuesta» card', () => {
+  mockApi({ [GET]: () => new Promise(() => {}) });
+  const { container } = open();
+  const skeleton = container.querySelector('.detail .skeleton') as HTMLElement;
+  expect(skeleton.querySelectorAll('.detail-trace li')).toHaveLength(trace.length);
+  expect(skeleton.querySelectorAll('.checks li')).toHaveLength(13);
+  expect(skeleton.querySelectorAll('.detail-fields dd.muted')).toHaveLength(0);
+  expect(skeleton.querySelectorAll('.detail-fixes li')).toHaveLength(1);
+  expect(skeleton.querySelector('.detail-card .detail-question')).toBeTruthy();
+});
+
+// AC-99, AC-91 item 4: a headline is 3 to 6 lines at 390 px, so no placeholder matches every record. The record replaces the
+// skeleton's nodes instead of moving them: CLS counts only nodes that were already painted and moved.
+test('the arriving record replaces the skeleton nodes, never moves them', async () => {
+  let release: (r: Response) => void = () => {};
+  const fetchMock = mockApi({ [GET]: () => new Promise<Response>((r) => (release = r)) });
+  const { container } = open();
+  await waitFor(() => expect(gets(fetchMock)).toBe(1));
+  const placeholder = container.querySelector('.detail .skeleton h1');
+  expect(placeholder).toBeTruthy();
+  release(json(escalated, 200));
+  const h1 = await screen.findByRole('heading', { level: 1, name: escalated.headline });
+  expect(h1).not.toBe(placeholder);
+  expect(placeholder!.isConnected).toBe(false);
+});
+
+test('the skeleton is gone once the invoice arrives', async () => {
+  mockApi({ [GET]: escalated });
+  const { container } = open();
+  await screen.findByRole('heading', { level: 1, name: escalated.headline });
+  expect(container.querySelector('.skeleton')).toBeNull();
 });

@@ -166,3 +166,21 @@ test('the tour keeps its place across routes: Siguiente from Bandeja reaches Pol
   expect(await screen.findByRole('heading', { name: 'Política', level: 2 }, { timeout: 8000 })).toBeTruthy();
   expect(screen.getByRole('heading', { name: 'Política', level: 1 })).toBeTruthy();
 }, 10000);
+
+test('signing out then signing in as someone else opens Bandeja, not the page the first user left (AC-40)', async () => {
+  mockApi({ 'GET /api/invoices': [], 'GET /api/agent/last-run': null, 'GET /api/policy': [], 'GET /api/company': { id: 'c', name: 'A', approver_email: 'a@a.co', lang: 'es', is_demo: false }, 'POST /api/invoices/run': { PAGAR: 0, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null } });
+  signedInAs('ana@empresa.co', SEEN);
+  renderAt(<App />, { at: '/policy' });
+  await screen.findByRole('heading', { name: 'Política', level: 1 });
+  fireEvent.click(screen.getByRole('button', { name: 'Cerrar sesión' }));
+  fireEvent.change(await screen.findByLabelText('Correo'), { target: { value: 'bea@otra.co' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Enviar código' }));
+  fakeAuth.verifyOtp.mockImplementationOnce(async ({ email }) => {
+    signedInAs(email, SEEN);
+    await fakeAuth.updateUser({ data: {} });
+    return { data: {}, error: null };
+  });
+  fireEvent.change(await screen.findByLabelText('Código de 6 dígitos'), { target: { value: '123456' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Entrar' }));
+  expect(await screen.findByRole('heading', { name: 'Bandeja', level: 1 })).toBeTruthy();
+});

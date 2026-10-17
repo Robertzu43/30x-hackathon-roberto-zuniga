@@ -11,7 +11,7 @@ type Outcome = 'PAGAR' | 'FRENAR' | 'ESCALAR';
 type Period = {
   budget_usd: number | null; balance_usd: number | null; paid_usd: number; committed_usd: number; available_usd: number | null;
   count_by_outcome: Record<Outcome, number>;
-  by_beneficiary: { beneficiary: string | null; unread?: boolean; paid_usd: number; committed_usd: number; count: number }[];
+  by_beneficiary: { beneficiary: string | null; paid_usd: number; committed_usd: number; count: number }[];
   autonomy: { n: number; m: number }; autonomy_pct: number | null; violations: number; explained_pct: number;
 };
 
@@ -98,7 +98,7 @@ export default function Period() {
                 <tbody>
                   {data.by_beneficiary.map((b, i) => (
                     <tr key={b.beneficiary ?? i}>
-                      <td>{b.unread || !b.beneficiary ? t('period.unread') : b.beneficiary}</td>
+                      <td>{!b.beneficiary ? t('period.unread') : b.beneficiary}</td>
                       <td className="num">{b.count}</td>
                       <td className="num">{usd(b.paid_usd)}</td>
                       <td className="num">{usd(b.committed_usd)}</td>

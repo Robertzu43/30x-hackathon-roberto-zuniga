@@ -10,7 +10,7 @@ import { failure, send } from '../withField';
 export const route: PageRoute = { path: '/policy', nav: { key: 'screen.policy', order: 20 } };
 
 type Version = { id: string; version: number; name: string; rules: PolicyRules; created_at: string };
-type Change = { invoice_id: string; headline: string; from: string; to: string };
+type Change = { invoice_id: string; headline: string; from: string | null; to: string | null }; // null from: pending; null to: pending and not read yet (R-68)
 type Company = { id: string; name: string; approver_email: string; lang: 'es' | 'en'; is_demo: boolean };
 type Failure = ReturnType<typeof failure>;
 
@@ -81,6 +81,7 @@ export default function Policy() {
   const [saved, setSaved] = useState<number | null>(null);
   const [would, setWould] = useState<Change[] | null>(null);
   const [willPay, setWillPay] = useState(0);
+  const [unread, setUnread] = useState(0);
   const run = useRunAgent({ first: '/api/policy/reevaluate' });
 
   const load = async (fill: boolean) => {
@@ -103,9 +104,10 @@ export default function Policy() {
       allowed_beneficiaries_only: f.allowed,
     };
     try {
-      const r = await send<{ policy: Version; would_change: Change[]; will_pay?: number }>('PUT', '/api/policy', { name: f.name.trim() || undefined, rules });
+      const r = await send<{ policy: Version; would_change: Change[]; will_pay?: number; unread_pending: number }>('PUT', '/api/policy', { name: f.name.trim() || undefined, rules });
       setSaved(r.policy.version); // the number the database assigned (R-41), not the one the button showed
       setWould(r.would_change);
+      setUnread(r.unread_pending);
       setWillPay(r.will_pay ?? r.would_change.filter((w) => w.to === 'PAGAR').length); // R-61
       await load(false);
     } catch (x) {
@@ -114,6 +116,9 @@ export default function Policy() {
     }
   };
 
+  const p = would?.filter((w) => !w.from).length ?? 0;
+  const e = would?.filter((w) => w.from === 'ESCALAR').length ?? 0;
+  const header = p && e ? t('policy.header_both', { p, e }) : p ? t('policy.header_pending', { p }) : e ? t('policy.header_escalated', { e }) : t('policy.would_change_none');
   const next = (versions?.[0]?.version ?? 0) + 1;
   const bad = (k: string) => (err?.field === k ? true : undefined);
   const date = (s: string) => new Date(s).toLocaleDateString(locale, { dateStyle: 'medium' });
@@ -172,12 +177,13 @@ export default function Policy() {
         <h2 id="reeval-h">{t('policy.reevaluate')}</h2>
         {would && (
           <div className="banner" role="status">
-            <p>{would.length === 0 ? t('policy.would_change_none') : would.length === 1 ? t('policy.would_change_one') : t('policy.would_change_other', { n: would.length })}</p>
+            <p>{header}</p>
             {willPay > 0 && <p>{t('policy.will_pay', { n: willPay })}</p>}
-            {would.length > 0 && (
+            {unread > 0 && <p>{t('policy.unread_pending', { k: unread })}</p>}
+            {(p > 0 || e > 0) && (
               <ul>
                 {would.map((w) => (
-                  <li key={w.invoice_id}>{w.headline} <span className="mono">{t(`outcome.${w.from}`)} → {t(`outcome.${w.to}`)}</span></li>
+                  <li key={w.invoice_id}>{w.headline} <span className="mono">{w.to ? `${t(w.from ? `outcome.${w.from}` : 'inbox.pending')} → ${t(`outcome.${w.to}`)}` : t('policy.row_unread')}</span></li>
                 ))}
               </ul>
             )}

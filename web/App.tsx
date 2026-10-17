@@ -1,5 +1,5 @@
 import { useEffect, useState, type ComponentType, type ReactNode } from 'react';
-import { matchPath, Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
+import { matchPath, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import type { Lang } from '../src/i18n';
 import { supabase } from './api';
 import { isDemoUser, RequireAuth, shouldStartTour, takeDemoTour, useSession } from './auth';
@@ -16,6 +16,12 @@ const nav = pages.filter((p) => p.route.nav).sort((a, b) => a.route.nav!.order -
 function TopBar({ onTour }: { onTour: () => void }) {
   const { t, lang, setLang } = useT();
   const { session } = useSession();
+  const navigate = useNavigate();
+  // Leave first, so the session ending finds us on /login: RequireAuth's own redirect would carry this page as `from` (R-62) to the next user.
+  const signOut = () => {
+    navigate('/login', { replace: true });
+    void supabase().then((sb) => sb.auth.signOut());
+  };
   const pick = (l: Lang) => {
     setLang(l);
     if (session) void supabase().then((sb) => sb.auth.updateUser({ data: { lang: l } })); // AC-41: per user
@@ -34,7 +40,7 @@ function TopBar({ onTour }: { onTour: () => void }) {
           <>
             <button type="button" onClick={onTour}>{t('topbar.tour')}</button>
             <span className="muted">{session.user.email}</span>
-            <button type="button" onClick={() => void supabase().then((sb) => sb.auth.signOut())}>{t('topbar.sign_out')}</button>
+            <button type="button" onClick={signOut}>{t('topbar.sign_out')}</button>
           </>
         )}
       </div>

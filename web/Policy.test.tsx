@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { expect, test } from 'vitest';
 import Policy, { route } from './pages/Policy';
 import { mockApi, renderAt } from './test/utils';
@@ -44,7 +44,7 @@ test('shows every rule of the latest version, the six FX rows and "Guardar como 
 
 test('saving with a 1000 payment limit puts the rules, shows the version the database returned and the would-change banner (AC-30, AC-31, R-41)', async () => {
   const f = setup({
-    'PUT /api/policy': { policy: { ...versions[0], id: 'p4', version: 4 }, would_change: [{ invoice_id: 'i1', headline: 'Pixel Lab: 4.200 USD supera el límite', from: 'PAGAR', to: 'FRENAR' }, { invoice_id: 'i2', headline: 'Nube Sur', from: 'ESCALAR', to: 'FRENAR' }] },
+    'PUT /api/policy': { policy: { ...versions[0], id: 'p4', version: 4 }, would_change: [{ invoice_id: 'i1', headline: 'Pixel Lab: 4.200 USD supera el límite', from: null, to: 'FRENAR' }, { invoice_id: 'i2', headline: 'Nube Sur', from: 'ESCALAR', to: 'FRENAR' }], will_pay: 0, unread_pending: 0 },
   });
   renderAt(<Policy />);
   fireEvent.change(await limit(), { target: { value: '1000' } });
@@ -52,8 +52,8 @@ test('saving with a 1000 payment limit puts the rules, shows the version the dat
   expect(await screen.findByText('Versión 4 guardada.')).toBeTruthy();
   const put = f.mock.calls.find(([u, i]) => u === '/api/policy' && i?.method === 'PUT')!;
   expect(body(put[1]!)).toEqual({ rules: { ...rules, per_payment_limit_usd: 1000 } });
-  expect(screen.getByText('2 facturas pendientes cambiarían de resultado')).toBeTruthy();
-  expect(screen.getByText(/Pixel Lab: 4\.200 USD supera el límite/).textContent).toContain('PAGAR → FRENAR');
+  expect(screen.getByText('Si pulsas «Reevaluar pendientes», el agente decidirá 1 factura(s) pendiente(s) y cambiará el resultado de 1 factura(s) escalada(s):')).toBeTruthy();
+  expect(screen.getByText(/Pixel Lab: 4\.200 USD supera el límite/).textContent).toContain('Pendiente → FRENAR');
 });
 
 test('in English the would-change list uses the English outcome words (R-65)', async () => {
@@ -96,7 +96,7 @@ test('no row ends in PAGAR: no payment sentence (R-61)', async () => {
   renderAt(<Policy />);
   await limit();
   save();
-  await screen.findByText('1 factura pendiente cambiaría de resultado');
+  await screen.findByText('Si pulsas «Reevaluar pendientes», el agente cambiará el resultado de 1 factura(s) escalada(s):');
   expect(screen.queryByText(/el agente pagará/)).toBeNull();
 });
 
@@ -189,4 +189,77 @@ test('a normal company saves name, approver email and language; a 400 shows its 
   expect(await screen.findByText('Empresa guardada.')).toBeTruthy();
   const puts = f.mock.calls.filter(([u, i]) => u === '/api/company' && i?.method === 'PUT');
   expect(body(puts[1]![1]!)).toEqual({ name: 'Andina Labs Inc.', approver_email: 'pagos@andina.co', lang: 'en' });
+});
+
+const pending = (n: number, to: string | null = 'PAGAR') => Array.from({ length: n }, (_, i) => ({ invoice_id: `p${i}`, headline: `Factura ${i}`, from: null, to }));
+const put = (r: Record<string, unknown>) => setup({ 'PUT /api/policy': { policy: { ...versions[0], version: 3 }, will_pay: 0, unread_pending: 0, ...r } });
+const saveEs = async () => { renderAt(<Policy />); await limit(); save(); };
+const saveEn = async () => {
+  localStorage.setItem('lang', 'en');
+  renderAt(<Policy />);
+  await screen.findByLabelText('Per-payment limit (USD)');
+  fireEvent.click(screen.getByRole('button', { name: /^Save as version/ }));
+};
+
+test('only pending rows: the header counts them, the PAGAR sentence follows, and all 29 rows read "Pendiente → result" (R-68)', async () => {
+  put({ would_change: [...pending(8, 'PAGAR'), ...pending(21, 'FRENAR')], will_pay: 8 });
+  await saveEs();
+  const header = await screen.findByText('Si pulsas «Reevaluar pendientes», el agente decidirá 29 factura(s) pendiente(s):');
+  const pay = screen.getByText(PAY_ES);
+  expect(pay.textContent).toContain('pagará 8 factura(s)');
+  expect(header.compareDocumentPosition(pay) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  const rows = screen.getAllByRole('listitem').filter((li) => /^Factura /.test(li.textContent!));
+  expect(rows).toHaveLength(29);
+  expect(rows.filter((r) => /Pendiente → PAGAR$/.test(r.textContent!))).toHaveLength(8);
+  expect(rows.filter((r) => /Pendiente → FRENAR$/.test(r.textContent!))).toHaveLength(21);
+  expect(document.body.textContent).not.toMatch(/outcome\.|null/);
+});
+
+test('pending and escalated rows: the mixed header (R-68)', async () => {
+  put({ would_change: [...pending(2, 'FRENAR'), { invoice_id: 'e', headline: 'Nube Sur', from: 'ESCALAR', to: 'FRENAR' }] });
+  await saveEs();
+  expect(await screen.findByText('Si pulsas «Reevaluar pendientes», el agente decidirá 2 factura(s) pendiente(s) y cambiará el resultado de 1 factura(s) escalada(s):')).toBeTruthy();
+});
+
+test('no pending rows and no escalated rows: the empty-list text and no list (R-68)', async () => {
+  put({ would_change: [] });
+  await saveEs();
+  expect(await screen.findByText('Ninguna factura pendiente cambiaría de resultado')).toBeTruthy();
+  expect(screen.queryByText(/Si pulsas/)).toBeNull();
+});
+
+test('a pending row with no read fields says it is decided once read, and the unread sentence follows the PAGAR sentence (R-68)', async () => {
+  put({ would_change: [...pending(1, 'PAGAR'), ...pending(2, null)], will_pay: 1, unread_pending: 2 });
+  await saveEs();
+  expect(await screen.findAllByText(/Pendiente → se decidirá al leerla$/)).toHaveLength(2);
+  const note = screen.getByText('2 factura(s) pendiente(s) aún no se han leído: el agente las leerá al reevaluar, y su resultado puede cambiar el de las facturas que llegaron después.');
+  expect(screen.getByText(PAY_ES).compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(note.compareDocumentPosition(screen.getAllByRole('listitem')[0]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+test('no unread invoices: no unread sentence (R-68)', async () => {
+  put({ would_change: pending(1, 'FRENAR') });
+  await saveEs();
+  await screen.findByText(/decidirá 1 factura/);
+  expect(screen.queryByText(/aún no se han leído/)).toBeNull();
+});
+
+test('English: pending-only header, row words, unread row and sentence (R-68)', async () => {
+  put({ would_change: [...pending(1, 'PAGAR'), ...pending(1, null)], will_pay: 1, unread_pending: 1 });
+  await saveEn();
+  expect(await screen.findByText('If you press "Re-evaluate pending", the agent will decide 2 pending invoice(s):')).toBeTruthy();
+  expect(screen.getAllByText(/Factura 0/)[0]!.textContent).toContain('Pending → PAY');
+  expect(screen.getByText(/Pending → decided once read$/)).toBeTruthy();
+  expect(screen.getByText('1 pending invoice(s) have not been read yet: the agent will read them on re-evaluation, and their result may change that of invoices that arrived later.')).toBeTruthy();
+  expect(document.body.textContent).not.toMatch(/outcome\.|null|Pendiente|PAGAR/);
+});
+
+test('English: mixed and escalated-only headers (R-68)', async () => {
+  put({ would_change: [...pending(1, 'FRENAR'), { invoice_id: 'e', headline: 'Nube Sur', from: 'ESCALAR', to: 'FRENAR' }] });
+  await saveEn();
+  expect(await screen.findByText('If you press "Re-evaluate pending", the agent will decide 1 pending invoice(s) and change the result of 1 escalated invoice(s):')).toBeTruthy();
+  cleanup();
+  put({ would_change: [{ invoice_id: 'e', headline: 'Nube Sur', from: 'ESCALAR', to: 'FRENAR' }] });
+  await saveEn();
+  expect(await screen.findByText('If you press "Re-evaluate pending", the agent will change the result of 1 escalated invoice(s):')).toBeTruthy();
 });

@@ -4,6 +4,7 @@ import { decide, directorio, findBeneficiary, periodFrom, previousFrom, tasas } 
 import { recordedFields } from '../agent/trace';
 import { headline } from '../engine/explain';
 import type { Check, Invoice, Outcome, PolicyRules } from '../engine/types';
+import * as trialText from '../i18n/features/trial-record';
 import { must } from '../lib/supabase';
 import { memberRoutes } from './agent';
 import { runFromCursor, type Current } from './invoices';
@@ -87,16 +88,17 @@ const CompanyPatch = z.object({
   approver_email: z.email({ error: 'El correo del aprobador no es válido' }).optional(),
   lang: z.enum(['es', 'en'], { error: 'El idioma debe ser es o en' }).optional(),
 }, { error: 'Datos de la empresa no válidos' });
-const COMPANY = 'id, name, approver_email, lang, is_demo';
+const COMPANY = 'id, name, approver_email, lang, is_demo, is_trial';
 
-// The demo company is read-only for every member (R-31); the database refuses it too.
+// The demo company is read-only for every member (R-31); the database refuses it too. A trial company has no approver (R-115).
 export const company = memberRoutes()
   .get('/', async (c) => c.json(must(await c.var.db.from('companies').select(COMPANY).eq('id', c.var.companyId).single())))
   .put('/', async (c) => {
     const { db, companyId } = c.var;
     const p = CompanyPatch.safeParse(await c.req.json().catch(() => null));
     if (!p.success) return c.json({ error: p.error.issues[0]!.message }, 400);
-    const current: { is_demo: boolean } = must(await db.from('companies').select('is_demo').eq('id', companyId).single());
+    const current: { is_demo: boolean; is_trial: boolean } = must(await db.from('companies').select('is_demo, is_trial').eq('id', companyId).single());
     if (current.is_demo) return c.json({ error: 'La empresa demo es de solo lectura' }, 403);
+    if (current.is_trial && p.data.approver_email !== undefined) return c.json({ error: trialText[c.var.lang]['trial_record.no_mail'] }, 403);
     return c.json(must(await db.from('companies').update(p.data).eq('id', companyId).select(COMPANY).single()));
   });

@@ -14,7 +14,9 @@ const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => 
   if (url.pathname === '/auth/v1/user') {
     return auth === 'Bearer good'
       ? Response.json({ id: 'u1', aud: 'authenticated', email: 'a@b.co', user_metadata: { lang: 'en' }, app_metadata: {}, created_at: '2026-10-01T00:00:00Z' })
-      : Response.json({ code: 401, msg: 'invalid JWT' }, { status: 401 });
+      : auth === 'Bearer anon-user' // D41: a Supabase anonymous user has no email
+        ? Response.json({ id: 'u9', aud: 'authenticated', email: '', is_anonymous: true, user_metadata: {}, app_metadata: {}, created_at: '2026-10-17T00:00:00Z' })
+        : Response.json({ code: 401, msg: 'invalid JWT' }, { status: 401 });
   }
   if (url.pathname === '/rest/v1/company_members') return Response.json(members);
   return new Response('not found', { status: 404 });
@@ -25,7 +27,7 @@ const headerOf = (path: string, name: string) => {
 };
 
 const app = new Hono<AppEnv>();
-app.get('/me', requireUser, (c) => c.json({ user: c.var.user.id, companyId: c.var.companyId, lang: c.var.lang, db: typeof c.var.db.from }));
+app.get('/me', requireUser, (c) => c.json({ user: c.var.user.id, companyId: c.var.companyId, lang: c.var.lang, db: typeof c.var.db.from, anonymous: c.var.user.is_anonymous ?? false }));
 const get = (auth?: string) => app.request('/me', { headers: auth ? { Authorization: auth } : {} }, ENV);
 
 beforeEach(() => { members = [{ company_id: 'c1' }]; fetchMock.mockClear(); vi.stubGlobal('fetch', fetchMock); });
@@ -52,8 +54,14 @@ describe('requireUser', () => {
 
   it('sets user, the first membership\'s company, the user\'s lang and a client that carries the JWT', async () => {
     const res = await get('Bearer good');
-    expect(await res.json()).toEqual({ user: 'u1', companyId: 'c1', lang: 'en', db: 'function' });
+    expect(await res.json()).toEqual({ user: 'u1', companyId: 'c1', lang: 'en', db: 'function', anonymous: false });
     expect(headerOf('/rest/v1/company_members', 'Authorization')).toBe('Bearer good');
+  });
+
+  it('an anonymous (trial) user passes with its id and is_anonymous on the request (D41, AC-92, R-116)', async () => {
+    const res = await get('Bearer anon-user');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ user: 'u9', companyId: 'c1', lang: 'es', db: 'function', anonymous: true });
   });
 
   it('R-98: the request language (X-Lang header) wins over the stored one; an unknown value falls back to it', async () => {

@@ -3,13 +3,14 @@
 import type { Context } from 'hono';
 import { z } from 'zod';
 import { decodeCursor, runAgent } from '../agent/loop';
-import type { LecturaCheck } from '../agent/record';
+import { takeQuestion, type LecturaCheck } from '../agent/record';
 import { directorio, findBeneficiary } from '../agent/tools';
 import { agentTrace, recordedFields, type StoredDecision } from '../agent/trace';
 import { explainCheck, whatWouldPay } from '../engine/explain';
 import { validFields } from '../engine/checks';
 import type { Invoice, InvoiceFields } from '../engine/types';
 import type { Lang } from '../i18n';
+import * as trialText from '../i18n/features/trial-record';
 import { documentToText, extractFields, type ReadFields } from '../lib/llm';
 import type { AppEnv } from '../lib/auth';
 import { locate } from '../lib/snippet';
@@ -71,6 +72,11 @@ export const invoices = memberRoutes()
   // then let the agent decide it. A failed read is stored as "ilegible" and escalates (AC-13).
   .post('/', async (c) => {
     const { db, companyId } = c.var;
+    // AC-96, R-117: a trial company's user ingests at most 30 invoices per UTC day, counted in the database first.
+    const { is_trial }: { is_trial: boolean } = must(await db.from('companies').select('is_trial').eq('id', companyId).single());
+    if (is_trial && 'reason' in await takeQuestion(c.env, `ingest:${c.var.user.id}`, c.var.budget)) {
+      return c.json({ error: trialText[c.var.lang]['trial_record.ingest_cap'] }, 429);
+    }
     const id = crypto.randomUUID();
     let source: Invoice['source'];
     let text: string | null; // null: the vision model gave no answer (R-75)
@@ -139,10 +145,10 @@ function readingOf(stored: ReadFields | null, first: StoredDecision | undefined,
 export async function invoiceDetail({ db, companyId }: AppEnv['Variables'], id: string, lang: Lang) {
   const row: Current | null = must(await db.from('invoice_current').select('*').eq('company_id', companyId).eq('id', id).maybeSingle());
   if (!row) return null;
-  const [decisions, directory, company, notification]: [StoredDecision[], Awaited<ReturnType<typeof directorio>>, { is_demo: boolean }, { email_sent: boolean; sent_to: string } | null] = await Promise.all([
+  const [decisions, directory, company, notification]: [StoredDecision[], Awaited<ReturnType<typeof directorio>>, { is_demo: boolean; is_trial: boolean }, { email_sent: boolean; sent_to: string } | null] = await Promise.all([
     db.from('decisions').select('*').eq('company_id', companyId).eq('invoice_id', row.id).order('seq').then(must),
     directorio(db, companyId),
-    db.from('companies').select('is_demo').eq('id', companyId).single().then(must),
+    db.from('companies').select('is_demo, is_trial').eq('id', companyId).single().then(must),
     db.from('approval_tokens').select('email_sent, sent_to').eq('invoice_id', row.id).order('created_at', { ascending: false }).limit(1).maybeSingle().then(must),
   ]);
   const latest = decisions.at(-1);
@@ -166,7 +172,7 @@ export async function invoiceDetail({ db, companyId }: AppEnv['Variables'], id: 
     explanations: (latest?.checks ?? []).map((ch) => explainCheck(ch, lang, row.received_at, latest?.policy_version)),
     fixes: whatWouldPay({ checks: latest?.checks ?? [] }, lang),
     policy,
-    trace: agentTrace({ invoice, decisions, isDemo: company.is_demo, notification }, lang),
+    trace: agentTrace({ invoice, decisions, isDemo: company.is_demo, isTrial: company.is_trial, notification }, lang),
     question: latest?.outcome === 'ESCALAR' ? latest[`question_${lang}`] : null,
     file_url: fileUrl,
     ...readingOf(row.fields, decisions.find((d) => d.actor === 'agent'), invoice.fields, row.raw_text),

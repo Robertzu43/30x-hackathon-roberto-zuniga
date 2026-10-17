@@ -61,8 +61,8 @@ export async function runAgent(deps: AgentDeps, companyId: string, invoiceIds: s
   const all: Row[] = must(await (invoiceIds !== 'pending' ? q.in('id', invoiceIds) : trigger === 'reevaluate' ? q : q.is('outcome', null))
     .order('received_at').order('id'));
   const rows = all.filter((r) => open(r) && (!from || isAfter(keyOf(r), from)));
-  const company: { approver_email: string | null; is_demo: boolean } =
-    must(await db.from('companies').select('approver_email, is_demo').eq('id', companyId).single());
+  const company: { approver_email: string | null; is_demo: boolean; is_trial: boolean } =
+    must(await db.from('companies').select('approver_email, is_demo, is_trial').eq('id', companyId).single());
   const [directory, policy] = await Promise.all([directorio(db, companyId), politica(db, companyId)]);
   const rules = policy?.rules ?? null;
   // AC-73, AC-74: a currency that is not USD and not pinned is decided on the stored market rates, read once per call.
@@ -77,8 +77,9 @@ export async function runAgent(deps: AgentDeps, companyId: string, invoiceIds: s
   let attempted = 0;
 
   invoices: for (const row of rows) {
-    // R-15, R-16: mail only a new escalation (the previous latest decision was not ESCALAR) of a non-demo company.
-    const mailable = row.outcome !== 'ESCALAR' && !company.is_demo;
+    // R-15, R-16, R-115: mail only a new escalation (the previous latest decision was not ESCALAR) of a company that is
+    // neither the demo nor a trial.
+    const mailable = row.outcome !== 'ESCALAR' && !company.is_demo && !company.is_trial;
     // R-56: write only if the attempt, its mail when due and the run row all fit; otherwise the invoice stays untouched.
     const fits = ATTEMPT + (mailable ? MAIL : 0) + RUN_ROW;
     // R-77: stored fields, else those its latest decision recorded; only a never-read, never-decided invoice calls the reader.

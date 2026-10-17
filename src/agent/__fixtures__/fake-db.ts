@@ -23,7 +23,10 @@ export function fakeDb(seed: Record<string, Row[]> = {}) {
     tables.decisions!.filter((d) => d.invoice_id === invoiceId).sort((a, b) => Number(b.seq) - Number(a.seq))[0];
   const current = (): Row[] => tables.invoices!.filter((i) => !i.archived).map((i) => {
     const d = latest(i.id);
-    return { ...i, decision_id: d?.id ?? null, seq: d?.seq ?? null, outcome: d?.outcome ?? null, amount_usd: d?.amount_usd ?? null, payment: d?.payment ?? null };
+    return { ...i, decision_id: d?.id ?? null, seq: d?.seq ?? null, outcome: d?.outcome ?? null, amount_usd: d?.amount_usd ?? null, payment: d?.payment ?? null,
+      // the view's remaining columns (migration 000200)
+      actor: d?.actor ?? null, headline_es: d?.headline_es ?? null, headline_en: d?.headline_en ?? null,
+      question_es: d?.question_es ?? null, question_en: d?.question_en ?? null, policy_version: d?.policy_version ?? null };
   });
   const sums = (companyId: unknown, m: string, exclude: unknown) => {
     const rows = current().filter((c) => c.company_id === companyId && c.id !== exclude && c.outcome && month(c.received_at) === m);
@@ -56,8 +59,8 @@ export function fakeDb(seed: Record<string, Row[]> = {}) {
     private payload: Row | Row[] | null = null;
     private eqs: Row = {};
     constructor(private table: string) {}
-    select() { return this; }
-    eq(c: string, v: unknown) { this.eqs[c] = v; this.preds.push((r) => r[c] === v); return this; }
+    select(columns?: string) { void columns; return this; } // column lists are ignored: rows come back whole
+    eq(c: string, v: unknown) { this.eqs[c] = v; this.preds.push((r) => (r[c] ?? (c === 'archived' ? false : undefined)) === v); return this; } // archived defaults to false like the column
     is(c: string, v: null) { this.preds.push((r) => (r[c] ?? null) === v); return this; }
     not(c: string, _op: 'is', v: null) { this.preds.push((r) => (r[c] ?? null) !== v); return this; }
     in(c: string, vs: unknown[]) { this.preds.push((r) => vs.includes(r[c])); return this; }

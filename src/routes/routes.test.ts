@@ -77,23 +77,9 @@ function testDb(seed: Record<string, Row[]> = {}) {
     };
     return b;
   }
-  // fake-db's invoice_current lacks these view columns (migration 000200): the latest decision's texts and policy version.
-  const VIEW = ['actor', 'headline_es', 'headline_en', 'question_es', 'question_en', 'policy_version'];
-  const withView = (r: Row) => {
-    const d = base.tables.decisions!.filter((x) => x.invoice_id === r.id).sort((a, b) => Number(b.seq) - Number(a.seq))[0];
-    return { ...r, ...Object.fromEntries(VIEW.map((k) => [k, d?.[k] ?? null])) };
-  };
   return {
     ...base, writes, uploads, conflict,
-    from: (t: string) => {
-      const b = base.from(t);
-      const then = b.then.bind(b);
-      return Object.assign(b, {
-        insert: (p: Row | Row[]) => write(t, 'insert', p), update: (p: Row) => write(t, 'update', p),
-        ...(t === 'invoice_current' && { then: <A, B>(ok?: (v: { data: unknown; error: unknown }) => A, ko?: (e: unknown) => B) =>
-          then((r) => ({ ...r, data: Array.isArray(r.data) ? r.data.map(withView) : r.data && withView(r.data as Row) })).then(ok, ko) }),
-      });
-    },
+    from: (t: string) => Object.assign(base.from(t), { insert: (p: Row | Row[]) => write(t, 'insert', p), update: (p: Row) => write(t, 'update', p) }),
     auth: { getUser: async (jwt: string) => (USERS[jwt] ? { data: { user: USERS[jwt] }, error: null } : { data: { user: null }, error: { message: 'invalid JWT' } }) },
     storage: {
       from: (bucket: string) => ({
@@ -231,6 +217,9 @@ describe('invoices (AC-11, AC-29)', () => {
     ['a .docx renamed to .pdf', () => upload(new Uint8Array([0x50, 0x4b, 3, 4, 0, 0]), 'f.pdf', 'application/pdf')],
     ['an 11 MB PDF', () => upload(new Uint8Array(11 * 1024 * 1024).fill(0x25, 0, 1).fill(0x50, 1, 2).fill(0x44, 2, 3).fill(0x46, 3, 4), 'big.pdf', 'application/pdf')],
     ['an empty file', () => upload(new Uint8Array(0), 'f.pdf', 'application/pdf')],
+    ['a 1-byte file', () => upload(new Uint8Array([0x25]), 'f.pdf', 'application/pdf')],
+    ['a 2-byte file', () => upload(new Uint8Array([0x25, 0x50]), 'f.pdf', 'application/pdf')],
+    ['a 3-byte file', () => upload(new Uint8Array([0x25, 0x50, 0x44]), 'f.pdf', 'application/pdf')],
     ['no file field', () => new FormData()],
     ['empty pasted text', () => ({ source: 'chat', text: '   ' })],
     ['pasted text over 20.000 characters', () => ({ source: 'email', text: 'x'.repeat(20001) })],
@@ -289,6 +278,28 @@ describe('GET /api/invoices/:id (AC-26, AC-08, AC-64, AC-65)', () => {
     const { invoice } = (await (await call('POST', '/api/invoices', upload(await pdfFixture(), 'f.pdf', 'application/pdf'))).json()) as { invoice: Row };
     const d = await json(await call('GET', `/api/invoices/${invoice.id}`));
     expect(d.file_url).toBe(`https://signed.test/files/A/${invoice.id}.pdf?expires=300`);
+  });
+
+  // R-31, AC-08: members can insert any file_path through REST; only the seed's static documents and the company's own Storage keys resolve.
+  it.each([
+    ['a protocol-relative URL', '//attacker.example/factura.pdf'],
+    ['an absolute URL', 'https://evil.example/x.pdf'],
+    ['a server path', '/etc/passwd'],
+    ['a traversal out of the demo folder', '/demo/invoices/../../x'],
+    ['another company Storage key', 'B/x.pdf'],
+    ['a Storage key with traversal', 'A/../B/x.pdf'],
+  ])('returns file_url null for %s', async (_, file_path) => {
+    db = testDb(workspace(['13']));
+    db.tables.invoices!.find((i) => i.id === 'A-13')!.file_path = file_path;
+    expect((await json(await call('GET', '/api/invoices/A-13'))).file_url).toBeNull();
+  });
+
+  it('returns a seeded demo document as is and a Storage key under the company folder signed', async () => {
+    db = testDb(workspace(['13', '14']));
+    db.tables.invoices!.find((i) => i.id === 'A-13')!.file_path = '/demo/invoices/01.png';
+    db.tables.invoices!.find((i) => i.id === 'A-14')!.file_path = 'A/abc.jpg';
+    expect((await json(await call('GET', '/api/invoices/A-13'))).file_url).toBe('/demo/invoices/01.png');
+    expect((await json(await call('GET', '/api/invoices/A-14'))).file_url).toBe('https://signed.test/files/A/abc.jpg?expires=300');
   });
 
   it('a pending invoice has no trace, no question and no explanations', async () => {

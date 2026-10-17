@@ -51,7 +51,7 @@ export const invoices = memberRoutes()
       const file = (await c.req.formData().catch(() => null))?.get('file');
       if (!(file instanceof File) || !file.size || file.size > MAX_BYTES) return c.json({ error: FORMAT }, 400);
       const bytes = await file.arrayBuffer();
-      const head = String.fromCharCode(...new Uint8Array(bytes, 0, 4));
+      const head = String.fromCharCode(...new Uint8Array(bytes, 0, Math.min(4, bytes.byteLength)));
       const kind = FILES.find((f) => head.startsWith(f.magic));
       if (!kind) return c.json({ error: FORMAT }, 400);
       filePath = `${companyId}/${id}.${kind.ext}`;
@@ -84,10 +84,12 @@ export const invoices = memberRoutes()
       db.from('approval_tokens').select('email_sent, sent_to').eq('invoice_id', row.id).order('created_at', { ascending: false }).limit(1).maybeSingle().then(must),
     ]);
     const latest = decisions.at(-1);
-    // Seeded documents live at a public static path (/demo/invoices/NN.pdf); only Storage keys are signed.
-    const fileUrl = row.file_path && !row.file_path.startsWith('/')
-      ? (await db.storage.from('files').createSignedUrl(row.file_path, SIGNED_URL_SECONDS)).data?.signedUrl ?? null
-      : row.file_path;
+    // file_path is member-writable (R-31): only the seed's static documents pass as is, only the company's own Storage keys are signed.
+    const path = row.file_path;
+    const fileUrl = !path || path.split('/').includes('..') ? null
+      : path.startsWith('/demo/invoices/') ? path
+      : path.startsWith(`${companyId}/`) ? (await db.storage.from('files').createSignedUrl(path, SIGNED_URL_SECONDS)).data?.signedUrl ?? null
+      : null;
     const policy = latest?.policy_version == null ? null
       : must(await db.from('policies').select('name, version, created_at').eq('company_id', companyId).eq('version', latest.policy_version).maybeSingle());
     const invoice = { ...row, fields: row.fields as InvoiceFields };

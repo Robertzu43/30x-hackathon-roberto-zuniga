@@ -14,10 +14,11 @@ export const RULE_GROUPS: Array<{ id: string; rules: RuleKey[] }> = [
   { id: 'currency', rules: [] }, // the market table (AC-76) and the pins
 ];
 
-export function RuleCard({ group, children }: { group: string; children: ReactNode }) {
+// skeleton (AC-99): the same card, hidden, while the screen loads
+export function RuleCard({ group, skeleton, children }: { group: string; skeleton?: boolean; children: ReactNode }) {
   const { t } = useT();
   return (
-    <section className="card" aria-labelledby={`${group}-h`}>
+    <section className={skeleton ? 'card skeleton' : 'card'} aria-labelledby={`${group}-h`} {...(skeleton && { 'aria-hidden': true, inert: true })}>
       <h2 id={`${group}-h`}>{t(`policy.group.${group}`)}</h2>
       {children}
     </section>
@@ -33,23 +34,23 @@ export function RuleSentence({ rule, value }: { rule: RuleKey; value: string | b
   return <span id={`${rule}-hint`} className="muted hint">{text}</span>;
 }
 
-export type DiffRow = { invoice_id: string; headline: string; from: Outcome | null; to: Outcome | null; payee?: string; amount?: number; currency?: string; reason?: string };
+export type DiffRow = { invoice_id: string; headline: string; from: Outcome | null; to: Outcome | null; payee?: string | null; amount?: number | null; currency?: string | null; reason?: string | null };
 
 // from null: the invoice is pending (R-68). to null: pending and not read yet, so there is no outcome to show.
 export function DiffList({ rows, unchanged }: { rows: DiffRow[]; unchanged?: number }) {
   const { t, locale } = useT();
   return (
     <>
-      <ul className="diff">
+      {rows.length > 0 && <ul className="diff">
         {rows.map((r) => (
           <li key={r.invoice_id}>
             <Link to={`/invoices/${r.invoice_id}`}>{r.payee ? tu('{p}', { p: r.payee }) : r.headline || t('policy.diff.unread')}</Link>
-            {r.amount !== undefined && <span className="mono">{`${r.amount.toLocaleString(locale)} ${r.currency ?? ''}`.trim()}</span>}
+            {typeof r.amount === 'number' && <span className="mono">{`${r.amount.toLocaleString(locale)} ${r.currency ?? ''}`.trim()}</span>}
             {r.to ? <span className="diff-chips"><OutcomeChip outcome={r.from} /> <span aria-hidden="true">→</span> <OutcomeChip outcome={r.to} /></span> : <span>{t('policy.row_unread')}</span>}
             {r.reason && <span className="muted">{r.reason}</span>}
           </li>
         ))}
-      </ul>
+      </ul>}
       {unchanged !== undefined && <p className="muted">{t(`policy.diff.same.${new Intl.PluralRules(locale).select(unchanged) === 'one' ? 'one' : 'other'}`, { n: unchanged })}</p>}
     </>
   );

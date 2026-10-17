@@ -24,9 +24,10 @@ create policy members_select_company_members on public.company_members for selec
 
 create policy members_select_companies on public.companies for select to authenticated
   using (id in (select company_id from public.company_members where user_id = (select auth.uid())));
+-- The shared demo company row is read-only to members; the seed upsert is its only writer (AC-32, R-31).
 create policy members_update_companies on public.companies for update to authenticated
-  using (id in (select company_id from public.company_members where user_id = (select auth.uid())))
-  with check (id in (select company_id from public.company_members where user_id = (select auth.uid())));
+  using (not is_demo and id in (select company_id from public.company_members where user_id = (select auth.uid())))
+  with check (not is_demo and id in (select company_id from public.company_members where user_id = (select auth.uid())));
 -- Members edit only what the API sends; is_demo stays out of reach (R-15).
 revoke update on public.companies from anon, authenticated;
 grant update (name, approver_email, lang) on public.companies to authenticated;

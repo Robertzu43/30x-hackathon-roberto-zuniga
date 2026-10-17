@@ -25,6 +25,7 @@ for t in policies decisions approval_tokens approval_uses agent_runs; do
   grep -q "members_update_$t" "$CORE" && fail "append-only $t has an update policy (D10)"; done
 grep -q 'grant update (archived) on public.invoices to authenticated' "$CORE" || fail "no column grant on archived (R-12)"
 grep -q 'on_auth_user_created' "$CORE" || fail "no signup trigger (AC-03)"
+grep -A1 'create policy members_update_companies' "$CORE" | grep -q 'using (not is_demo' || fail "demo company row not locked (AC-32, R-31)"
 for w in pg_advisory_xact_lock ALREADY_DECIDED STALE_PERIOD FINAL_DECISION NOT_ESCALATED 'security_invoker = true'; do
   grep -q "$w" "$RPC" || fail "RPC file lacks $w"; done
 
@@ -107,4 +108,11 @@ sql -c "insert into storage.objects (bucket_id, name) values ('files', '$CA/x.pd
 expect "$UA" "select string_agg(name, ',') from storage.objects" "^$CA/x.pdf$" "A reads B's file (AC-08)"
 expect "$UA" "insert into storage.objects (bucket_id, name) values ('files', '$CB/z.pdf')" 'row-level security' "A writes into B's folder (AC-08)"
 expect "$UA" "select public.seed_company('$CA')" 'permission denied' "members can call seed_company"
+# AC-32/R-31: the demo company row is read-only to members; a non-demo member still edits all three; nobody flips is_demo
+sql -c "update public.companies set is_demo = true where id = '$CB'" >/dev/null || fail "mark B's company demo"
+for c in "name = 'X'" "approver_email = 'x@example.com'" "lang = 'en'"; do
+  as "$UB" "update public.companies set $c where id = '$CB'" >/dev/null; done
+expect "$UB" "select name || '|' || approver_email || '|' || lang from public.companies" '^otra\|otra@b.co\|es$' "demo member changed the demo row (AC-32, R-31)"
+expect "$UA" "update public.companies set name = 'Andina', approver_email = 'a@b.co', lang = 'en' where id = '$CA' returning name || '|' || approver_email || '|' || lang" '^Andina\|a@b.co\|en$' "non-demo member cannot edit its company (AC-32)"
+expect "$UA" "update public.companies set is_demo = true where id = '$CA'" 'permission denied' "member flips is_demo (R-15, R-31)"
 echo "schema.test: greps and live Postgres checks passed"

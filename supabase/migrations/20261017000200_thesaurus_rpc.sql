@@ -54,9 +54,7 @@ begin
   end if;
   v_row := jsonb_populate_record(null::public.decisions, p_decision);
   v_row.id := gen_random_uuid();
-  v_row.company_id := v_inv.company_id;
   v_row.invoice_id := p_invoice_id;
-  v_row.seq := v_seq + 1;
   v_row.created_at := now();
   insert into public.decisions select (v_row).* returning * into v_row;  -- decisions_guard: FINAL_DECISION, NOT_ESCALATED
   return v_row;

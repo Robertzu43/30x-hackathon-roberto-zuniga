@@ -29,6 +29,8 @@ export interface StoredDecision {
 // An invoice stored without fields (a REST insert the loop read at `lee`; the loop never writes `invoices`, AC-38) is
 // shown as its decision's checks recorded the reading (R-29): validFields' output, so every recorded value is trusted.
 // Null when there is no decision yet (pending, not read).
+export function recordedFields(fields: InvoiceFields | null, checks: Check[]): InvoiceFields;
+export function recordedFields(fields: InvoiceFields | null, checks: Check[] | null | undefined): InvoiceFields | null;
 export function recordedFields(fields: InvoiceFields | null, checks: Check[] | null | undefined): InvoiceFields | null {
   if (fields || !checks) return fields;
   const c = (id: CheckId) => checks.find((x) => x.id === id);

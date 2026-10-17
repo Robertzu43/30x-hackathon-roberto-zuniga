@@ -419,8 +419,35 @@ describe('mounted on the Worker', () => {
   });
 });
 
-// R-75 (AC-13 Clarified item 9): an invoice the reader never answered for re-escalates on "Aprobar".
-describe('answers on an invoice the reader never read (R-75)', () => {
+// R-77 (AC-34 Clarified): an answer re-checks the fields the page showed (stored, or recorded in the escalation) and never
+// calls the model. R-75 (AC-13 Clarified item 9): an invoice the reader never answered for re-escalates on "Aprobar".
+describe('answers run on recorded fields, never on a re-read (R-77, R-75)', () => {
+  // A re-read would now see another amount: the approval must not use it.
+  const differentRead = () => aiRun.mockImplementation(async () => ({ response: { payee_name: 'Nube Sur LLC', amount: 100, currency: 'USD', invoice_number: '2044',
+    issue_date: null, due_date: null, concept: null, bank_account: null, subtotal: null, tax: null,
+    confidence: { payee_name: 1, amount: 1, currency: 1, invoice_number: 1 } } }));
+
+  it.each(['link', 'dashboard'] as const)('approving by %s an invoice stored without fields acts on the shown 4.200 USD, 0 model calls', async (channel) => {
+    await setup(['11']);
+    const id = uid('A-11');
+    Object.assign(db.tables.invoices!.find((i) => i.id === id)!, { fields: null, raw_text: 'Nube Sur LLC #2044' }); // a REST insert (AC-38)
+    differentRead();
+    const r = channel === 'link' ? await answer((await links(id)).approve, 1) : await dashboard(id, 'approve', 1);
+    expect(r.status).toBe(200);
+    expect(aiRun).not.toHaveBeenCalled();
+    expect(latest(id)).toMatchObject({ actor: 'human', outcome: 'PAGAR', amount_usd: 4200, payment: { amount: 4200, currency: 'USD' } });
+  });
+
+  it('rejecting it makes 0 model calls too', async () => {
+    await setup(['11']);
+    const id = uid('A-11');
+    Object.assign(db.tables.invoices!.find((i) => i.id === id)!, { fields: null, raw_text: 'Nube Sur LLC #2044' });
+    differentRead();
+    expect((await dashboard(id, 'reject', 1)).status).toBe(200);
+    expect(aiRun).not.toHaveBeenCalled();
+    expect(latest(id)).toMatchObject({ outcome: 'FRENAR', actor: 'human' });
+  });
+
   it('"Aprobar" on an invoice the reader never answered for re-escalates with its «sin leer» reason, link and dashboard; never PAGAR', async () => {
     await setup([]);
     const id = uid('A-u');

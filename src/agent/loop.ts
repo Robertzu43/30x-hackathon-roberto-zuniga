@@ -3,7 +3,7 @@
 // Every path that decides an invoice calls runAgent: ingest, "Ejecutar agente", login, "Reevaluar", "Reiniciar demo", cron.
 import { z } from 'zod';
 import { headline } from '../engine/explain';
-import type { Decision, Invoice, InvoiceFields, Outcome } from '../engine/types';
+import type { Check, Decision, Invoice, InvoiceFields, Outcome } from '../engine/types';
 import type { Env } from '../env';
 import { escalationEmail, sendEmail } from '../lib/email';
 import { documentToText, extractFields } from '../lib/llm';
@@ -11,14 +11,15 @@ import { must, type Budget, type Db } from '../lib/supabase';
 import { hashToken, signToken, TOKEN_TTL_MS } from '../lib/tokens';
 import { escalationQuestion } from './question';
 import { recorder, type Counts, type DecisionInput, type Recorder, type Trigger } from './record';
-import type { StoredDecision } from './trace';
+import { recordedFields, type StoredDecision } from './trace';
 import { decide, directorio, duplicados, findBeneficiary, periodo, politica } from './tools';
 
 // db reads under the caller's authority: the user's JWT client (RLS) in a request, the service-role client in the cron.
 // budget is the invocation's one subrequest counter (R-56): db and the recorder's client count through it.
 export interface AgentDeps { db: Db; env: Env; budget: Budget }
 export type RunResult = Counts & { errors: number; remaining: number; cursor: string | null };
-type Row = Omit<Invoice, 'fields'> & { fields: InvoiceFields | null; raw_text: string | null; seq: number | null; outcome: Outcome | null };
+type Row = Omit<Invoice, 'fields'> & { fields: InvoiceFields | null; raw_text: string | null; seq: number | null; outcome: Outcome | null;
+  decisions?: Array<{ checks: Check[] }> };
 
 const RETRIES = 3; // STALE_PERIOD = another decision changed the month's committed amount meanwhile (AC-24)
 // Counted subrequests (R-56). An attempt: period state, duplicates, the ownership re-read and insert_decision. A new
@@ -50,7 +51,9 @@ export async function runAgent(deps: AgentDeps, companyId: string, invoiceIds: s
   const record = recorder(env, companyId, budget);
   // Only "Reevaluar" re-decides an ESCALAR (R-24); PAGAR and FRENAR are final (D16).
   const open = (r: Row) => r.outcome === null || (r.outcome === 'ESCALAR' && trigger === 'reevaluate');
-  const q = db.from('invoice_current').select('*').eq('company_id', companyId);
+  // Each row with its latest decision's checks embedded (R-77), in the same request.
+  const q = db.from('invoice_current').select('*, decisions(checks)').eq('company_id', companyId)
+    .order('seq', { referencedTable: 'decisions', ascending: false }).limit(1, { referencedTable: 'decisions' });
   const all: Row[] = must(await (invoiceIds !== 'pending' ? q.in('id', invoiceIds) : trigger === 'reevaluate' ? q : q.is('outcome', null))
     .order('received_at').order('id'));
   const rows = all.filter((r) => open(r) && (!from || isAfter(keyOf(r), from)));
@@ -68,13 +71,15 @@ export async function runAgent(deps: AgentDeps, companyId: string, invoiceIds: s
     const mailable = row.outcome !== 'ESCALAR' && !company.is_demo;
     // R-56: write only if the attempt, its mail when due and the run row all fit; otherwise the invoice stays untouched.
     const fits = ATTEMPT + (mailable ? MAIL : 0) + RUN_ROW;
-    if (budget.left() < (row.fields ? 0 : READ) + fits) break;
+    // R-77: stored fields, else those its latest decision recorded; only a never-read, never-decided invoice calls the reader.
+    const known = recordedFields(row.fields, row.decisions?.[0]?.checks);
+    if (budget.left() < (known ? 0 : READ) + fits) break;
     try {
       stage('percibe', row.id);
       stage('lee', row.id);
-      if (!row.fields) budget.count(READ);
+      if (!known) budget.count(READ);
       // ponytail: reads raw_text only; a stored file without fields is decided as illegible (ingest reads files first).
-      const fields = row.fields ?? await extractFields(env, await documentToText(env, { kind: 'text', text: row.raw_text ?? '' }));
+      const fields = known ?? await extractFields(env, await documentToText(env, { kind: 'text', text: row.raw_text ?? '' }));
       const invoice: Invoice = { id: row.id, received_at: row.received_at, source: row.source, fields };
       const beneficiary = findBeneficiary(fields.payee_name, directory);
       for (let attempt = 0; ; attempt++) {

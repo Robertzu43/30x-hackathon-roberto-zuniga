@@ -46,3 +46,14 @@ Measured per screen, width and language: `1.scroll 1.offscreen 1.clip 1.overlap 
 - `5.words` flags null, undefined, NaN, [object Object], dotted keys, stack traces, and error codes only as such: after "error", "HTTP", "status" or "code", or as a standalone 400, 401, 403, 404, 405, 408, 409, 422, 429, 500, 502, 503 or 504. An amount such as "160 USD" is not flagged.
 - `5.mixed` compares visible text nodes with the other language's UI dictionary (`src/i18n/es.ts`, `en.ts`, `features/*.ts`); stored data is not in the dictionary, so it is excepted.
 - Approved palette and fonts: the colours and the three font stacks of `web/styles.css` at 6d34830 (`PALETTE` and `FONTS` in the script; the test compares them with that commit).
+
+## Vendor portal specifics (AC-91 Clarified R-103, AC-90 Clarified R-101)
+
+- Language: the portal never detects the browser language. On vendor screens the gate adds `?lang=<es|en>` to the URL and sets localStorage `portal.lang` (and `lang`), so `3.lang` and `5.mixed` measure the language the gate chose.
+- axe runs with `page.evaluate`, not `addScriptTag`, so a `script-src 'self'` CSP (the portal's) does not stop it. CSP violations still show in `6.console`.
+- `1.clip` and `1.overlap` ignore the standard sr-only pattern (absolute, 1 px box, `clip` or `clip-path`): it is hidden on purpose.
+- `4.busy` on `portal`: the gate types a short text in the composer first (the guard answers the fake `{"ok":true}`, so nothing is sent), because an empty send takes the error path and shows no busy state.
+- Designed 404 pages (`portal-error`, `status-invalid`, `notFound: true` in `SCREENS`):
+  - `6.console` excludes exactly one line: `Failed to load resource` whose URL is the page's own main document, when the main response status is 404. The row ends with «excluded: expected 404 (AC-83/AC-84)». Any other line fails, a 404 for a subresource included.
+  - `4.state` runs on the page itself and needs no control: the sentence must hold a next-step verb (`pídele/ask`, `revisa/check`, ...).
+  - `2.primary`, `3.focus`, `3.enter`, `4.busy` and the primary-action part of `7.usable` report N/A with «sin acción por diseño (R-103)», never FAIL.

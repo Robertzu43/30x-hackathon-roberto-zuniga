@@ -29,6 +29,15 @@ need SUPABASE_URL && need SUPABASE_ANON_KEY && {
   [ "$code" = "200" ] && ok "anon/publishable key accepted (auth settings)" || bad "anon/publishable key rejected ($code)"
   curl -s "$SUPABASE_URL/auth/v1/settings" -H "apikey: $SUPABASE_ANON_KEY" | grep -q '"mailer_autoconfirm":true' \
     || echo "WARN  Confirm email is on: QA cannot sign up users (INFRA.md Supabase step 4)"
+  # R-18: the shared demo user (AC-46) must sign in with its public password. WARN only: before the first deploy it does not exist yet.
+  # The email is wrangler.toml's DEMO_EMAIL only (the Worker's value); no env override, no fallback.
+  demo=$(sed -n 's/^DEMO_EMAIL *= *"\([^"]*\)".*/\1/p' wrangler.toml 2>/dev/null)
+  if [ -z "$demo" ]; then echo "WARN  DEMO_EMAIL missing in wrangler.toml [vars]: demo user not checked (AC-46)"; else
+    code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$SUPABASE_URL/auth/v1/token?grant_type=password" -H "apikey: $SUPABASE_ANON_KEY" \
+      -H "Content-Type: application/json" -d "{\"email\":\"$demo\",\"password\":\"andina-demo-2026\"}")
+    [ "$code" = "200" ] && ok "demo user signs in (AC-46)" \
+      || echo "WARN  demo user $demo cannot sign in ($code): after deploy run node scripts/seed-demo-user.mjs <APP_URL> (R-18)"
+  fi
 }
 need SUPABASE_SERVICE_ROLE_KEY && {
   code=$(curl -s -o /dev/null -w "%{http_code}" "$SUPABASE_URL/auth/v1/admin/users?per_page=1"     -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY")

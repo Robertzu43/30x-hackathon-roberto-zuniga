@@ -48,6 +48,7 @@ const sendPortal = async (page, o) => {
   await page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => {});
   await page.waitForTimeout(1500);
 };
+const clickButton = (name) => async (page) => { await page.getByRole('button', { name }).first().click(); };
 export const SCREENS = [
   { id: 'login', exp: 'finance', path: '/login', auth: false, fill: { '#login-email': 'gate@example.test' } },
   { id: 'tour', exp: 'finance', path: '/', tour: true, primary: '.tour-card button.primary' },
@@ -70,6 +71,13 @@ export const SCREENS = [
   { id: 'portal-error', exp: 'vendor', path: '/no-such-portal-gate', auth: false, notFound: true }, // designed 404 (R-103)
   { id: 'status', exp: 'vendor', path: (v) => `/estado/${v.statusToken}`, auth: false, states: STATES, needs: 'statusToken', na: { empty: SERVER_PAGE, error: SERVER_PAGE } }, // server-rendered; offline is the page's own notice
   { id: 'status-invalid', exp: 'vendor', path: '/estado/token-invalido-gate', auth: false, notFound: true },
+  // D39-D41 (AC-91 Clarified). `session: 'trial'` screens share the run's one anonymous user. The prepare selectors follow AC-94/AC-95's copy; adjust with --route if Task 40/41 names differ.
+  { id: 'trial', exp: 'finance', path: '/', session: 'trial' },
+  { id: 'login-password', exp: 'finance', path: '/login', auth: false, prepare: clickButton(/contraseña|password/i) },
+  { id: 'save-access', exp: 'finance', path: '/', session: 'trial', prepare: clickButton(/guardar mi acceso|save my access/i), primary: '[role="dialog"] button.primary' },
+  { id: 'leave-trial', exp: 'finance', path: '/', session: 'trial', prepare: clickButton(/cerrar sesión|sign out/i) },
+  { id: 'beneficiary', exp: 'finance', path: (v) => `/beneficiaries/${v.beneficiary}`, needs: 'beneficiary', na: 'the demo has no beneficiary' },
+  { id: 'beneficiary-empty', base: 'beneficiary', exp: 'finance', path: (v) => `/beneficiaries/${v.beneficiary}`, needs: 'beneficiary', na: 'the demo has no beneficiary', fake: { path: '/api/screen/beneficiary/', patch: (j) => ({ ...j, totals: { paid_month_usd: 0, paid_total_usd: 0, invoices: 0 }, history: [], last: [] }) } }, // the real profile with no payments
 ];
 
 // ---- Playwright and Chromium ----
@@ -318,7 +326,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const wanted = (only, id) => !only || only.some((p) => id.startsWith(p));
 const isLocal = (base) => /^https?:\/\/(127\.0\.0\.1|localhost)[:/]?/.test(base);
 
-function installRoutes(page, base, { state, guard, delayGets, gate }) {
+function installRoutes(page, base, { state, guard, delayGets, gate, fake }) {
   const origin = new URL(base).origin;
   return page.route('**/*', async (route) => {
     const req = route.request();
@@ -330,6 +338,7 @@ function installRoutes(page, base, { state, guard, delayGets, gate }) {
     if (data && path === '/api/fx' && req.method() === 'GET' && state === 'fx-error') return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"gate"}' });
     if (data && !config && state === 'error') return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"gate"}' });
     if (data && !config && state === 'empty' && req.method() === 'GET') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(path in EMPTY_BODY ? EMPTY_BODY[path] : []) });
+    if (fake && data && req.method() === 'GET' && path.startsWith(fake.path)) return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fake.patch(await (await route.fetch()).json())) });
     if (guard && req.method() !== 'GET' && req.method() !== 'OPTIONS') {
       const held = sleep(600).then(() => route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' })).catch(() => {}); // answered here, never sent to the origin
       gate.held.push(held);
@@ -374,9 +383,9 @@ export async function runCell(browser, job) {
     page.on('response', (r) => responses.push({ url: r.url(), status: r.status() }));
     page.on('console', (msg) => ['error', 'warning'].includes(msg.type()) && logs.push({ text: `${msg.type()}: ${msg.text().slice(0, 120)}${msg.text().startsWith('Failed to load resource') ? ` <${msg.location().url}>` : ''}`, failedLoad: msg.text().startsWith('Failed to load resource') ? msg.location().url : null }));
     page.on('pageerror', (e) => logs.push({ text: `pageerror: ${String(e.message).slice(0, 120)}` }));
-    await page.addInitScript(INIT, { lang, session: screen.auth === false ? null : opts.session, tour: !!screen.tour });
+    await page.addInitScript(INIT, { lang, session: screen.auth === false ? null : screen.session === 'trial' ? opts.trialSession : opts.session, tour: !!screen.tour });
     const guard = kind === 'dynamic' && !opts.mutate;
-    await installRoutes(page, base, { state, guard, delayGets: kind === 'loading' ? 1500 : 0, gate });
+    await installRoutes(page, base, { state, guard, delayGets: kind === 'loading' ? 1500 : 0, gate, fake: screen.fake });
 
     const path = typeof screen.path === 'function' ? screen.path(opts.vars) : screen.path;
     const primarySel = screen.notFound ? ':not(*)' : screen.primary ?? 'button.primary';
@@ -581,12 +590,20 @@ async function loadDicts() {
   }
 }
 
-async function demoSession(base) {
+export async function demoSession(base) {
   const cfg = await (await fetch(`${base}/api/config`)).json();
   const r = await fetch(`${cfg.supabaseUrl}/auth/v1/token?grant_type=password`, {
     method: 'POST', headers: { apikey: cfg.supabaseAnonKey, 'content-type': 'application/json' }, body: JSON.stringify({ email: cfg.demo_email, password: DEMO.password }),
   });
   if (!r.ok) throw new Error(`demo sign-in failed: ${r.status}`);
+  return { key: `sb-${new URL(cfg.supabaseUrl).hostname.split('.')[0]}-auth-token`, value: JSON.stringify(await r.json()) };
+}
+
+// An anonymous Supabase user (AC-92): one per run, never deleted (AC-07). Only runs that pick a `session: 'trial'` screen create it.
+export async function trialSession(base) {
+  const cfg = await (await fetch(`${base}/api/config`)).json();
+  const r = await fetch(`${cfg.supabaseUrl}/auth/v1/signup`, { method: 'POST', headers: { apikey: cfg.supabaseAnonKey, 'content-type': 'application/json' }, body: '{"data":{}}' });
+  if (!r.ok) throw new Error(`anonymous sign-in failed: ${r.status}`);
   return { key: `sb-${new URL(cfg.supabaseUrl).hostname.split('.')[0]}-auth-token`, value: JSON.stringify(await r.json()) };
 }
 
@@ -617,8 +634,13 @@ export async function main(argv) {
     vars.unread = unreadId(ov.invoices);
   }
   const session = picked.some((s) => s.auth !== false && s.exp === 'finance') ? await demoSession(base).catch((e) => { console.error(`ux-gate: ${e.message}`); return null; }) : null;
+  const trialSess = picked.some((s) => s.session === 'trial') ? await trialSession(base).catch((e) => { console.error(`ux-gate: ${e.message}`); return null; }) : null;
+  if (picked.some((s) => s.needs === 'beneficiary') && session) {
+    const list = await fetch(`${base}/api/beneficiaries`, { headers: { authorization: `Bearer ${JSON.parse(session.value).access_token}` } }).then((r) => r.json()).catch(() => []);
+    vars.beneficiary = Array.isArray(list) ? list[0]?.id : undefined;
+  }
   const dicts = await loadDicts();
-  const opts = { only, dicts, session, vars, mutate: a.bool.has('mutate'), shots: true };
+  const opts = { only, dicts, session, trialSession: trialSess, vars, mutate: a.bool.has('mutate'), shots: true };
 
   const cells = [];
   for (const s of picked.map((x) => ({ ...x, path: a.route[x.id] ?? x.path }))) {

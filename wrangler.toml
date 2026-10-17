@@ -14,6 +14,10 @@ WORKERS_AI_VISION_MODEL = "@cf/meta/llama-3.2-11b-vision-instruct"
 SES_REGION = "us-east-2"
 JEV_ENABLED = "false"
 DEMO_EMAIL = "demo@andina-labs.example"
+APP_URL = "https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev"  # approval links built outside a request (cron)
+
+[triggers]
+crons = ["*/5 * * * *"]  # the agent decides pending invoices with nobody logged in (D23, AC-62)
 
 [ai]
 binding = "AI"  # Workers AI: no key, authorised by the account

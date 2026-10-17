@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { scheduled } from './agent/scheduled';
 import type { Env } from './env';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -8,4 +9,6 @@ app.get('/api/health', (c) => c.json({ ok: true }));
 app.get('/api/config', (c) => c.json({ supabaseUrl: c.env.SUPABASE_URL, supabaseAnonKey: c.env.SUPABASE_ANON_KEY }));
 app.all('/api/*', (c) => c.json({ error: 'not_found' }, 404));
 
-export default app;
+export { app };
+// fetch serves the API and the SPA; scheduled is the 5-minute cron (wrangler.toml [triggers], AC-62).
+export default { fetch: app.fetch, scheduled } satisfies ExportedHandler<Env>;

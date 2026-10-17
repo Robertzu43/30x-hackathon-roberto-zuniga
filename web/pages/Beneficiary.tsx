@@ -1,16 +1,12 @@
 // Perfil de un beneficiario (AC-104, R-124, AC-106): who, route, agreement, totals, sparkline and the last 5 invoices.
-import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import type { PageRoute } from '../App';
 import type { Beneficiary as Dir } from '../../src/engine/types';
-import { ApiError, api } from '../api';
+import { ApiError, useScreen } from '../api';
 import { Kpi, Sparkline } from '../charts/lazy';
 import { OutcomeChip, type Outcome } from '../components/OutcomeChip';
 import { tu } from '../components/User';
 import { useT } from '../i18n';
 import './beneficiary.css';
-
-export const route: PageRoute = { path: '/beneficiaries/:id' };
 
 type Profile = {
   beneficiary: Dir & { country?: string | null };
@@ -22,21 +18,10 @@ type Profile = {
 export default function Beneficiary() {
   const { t, locale } = useT();
   const { id } = useParams();
-  const [data, setData] = useState<Profile | null>(null);
-  const [state, setState] = useState<'loading' | 'ok' | 'missing' | 'failed'>('loading');
-  const [attempt, setAttempt] = useState(0);
-
-  useEffect(() => {
-    let live = true;
-    setState('loading');
-    api.get<Profile>(`/api/screen/beneficiary/${id}`).then(
-      (d) => live && (setData(d), setState('ok')),
-      (e) => live && setState(e instanceof ApiError && e.status === 404 ? 'missing' : 'failed'), // the raw text never reaches the screen (UX-13)
-    );
-    return () => {
-      live = false;
-    };
-  }, [id, attempt]);
+  const screen = useScreen<Profile>(`/api/screen/beneficiary/${id}`); // AC-98: one request
+  const data = screen.data;
+  // The raw API text never reaches the screen (UX-13); another company's id answers 404.
+  const state = data ? 'ok' : screen.error === undefined ? 'loading' : screen.error instanceof ApiError && screen.error.status === 404 ? 'missing' : 'failed';
 
   const back = <Link to="/beneficiaries">{t('ben.p.back')}</Link>;
   if (state !== 'ok' || !data)
@@ -53,7 +38,7 @@ export default function Beneficiary() {
         {state === 'failed' && (
           <div className="beneficiary-state">
             <p role="alert" className="error">{t('ben.p.load_error')}</p>
-            <button type="button" onClick={() => setAttempt((n) => n + 1)}>{t('period.retry')}</button>
+            <button type="button" onClick={() => void screen.reload()}>{t('period.retry')}</button>
           </div>
         )}
       </section>

@@ -2,14 +2,12 @@
 // button POSTs that decision's seq. Error texts come from the API's `error` code, in the page's language.
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import type { PageRoute } from '../App';
 import { api, ApiError } from '../api';
 import { useT } from '../i18n';
 import { money, motives } from '../../src/engine/explain';
 import type { Check } from '../../src/engine/types';
 import './approve.css';
 
-export const route: PageRoute = { path: '/approve/:token', public: true };
 
 type Lines = { headline_es: string | null; headline_en: string | null };
 type Link = {
@@ -20,6 +18,13 @@ type Link = {
 };
 const CODES = ['invalid_token', 'not_found', 'token_used', 'already_decided', 'changed', 'busy'];
 const codeOf = (e: unknown) => (e instanceof ApiError && CODES.includes(e.message) ? e.message : 'generic');
+// AC-99 (R-109): while the link loads, the summary is the loaded markup with this made-up link, hidden by .skeleton.
+const SKELETON: Link = {
+  action: 'approve', expires_at: '2026-10-19T12:00:00Z',
+  invoice: { received_at: '2026-10-16T10:00:00Z', fields: { payee_name: 'Nube Sur LLC', amount: 4200, currency: 'USD', invoice_number: 'NS-118' } },
+  decision: { seq: 1, checks: [{ id: 'umbral_aprobacion', verdict: 'no_cumple', actual: '4200', threshold: '2500', values: { limit_usd: 2500 } }], headline_es: 'ESCALAR · 4.200 USD a Nube Sur LLC', headline_en: 'ESCALATE · 4,200 USD to Nube Sur LLC',
+    question_es: null, question_en: null, amount_usd: null },
+};
 
 export default function Approve() {
   const { t, lang, locale } = useT();
@@ -43,14 +48,16 @@ export default function Approve() {
 
   const canAnswer = link && !done && (!error || error === 'busy' || error === 'generic');
   const dead = !link && !!error; // UX-17: nothing to answer here, so no «Aprobar este pago» heading over a dead end
-  const f = link?.invoice.fields;
-  const d = link?.decision;
+  const loading = !link && !error;
+  const shown = link ?? (loading ? SKELETON : null);
+  const f = shown?.invoice.fields;
+  const d = shown?.decision;
   return (
     <section className="approve">
       <h1>{t(dead ? 'approve.title.dead' : `approve.title.${link?.action ?? 'approve'}`)}</h1>
-      {!link && !error && <p className="muted">{t('approve.loading')}</p>}
-      {link && f && d && (
-        <>
+      {loading && <p role="status" className="sr-only">{t('approve.loading')}</p>}
+      {shown && f && d && (
+        <div className={loading ? 'skeleton' : undefined} aria-hidden={loading || undefined} inert={loading}>
           <p className="approve-headline">{d[`headline_${lang}`]}</p>
           {d[`question_${lang}`] && <p>{d[`question_${lang}`]}</p>}
           <h2>{t('approve.read')}</h2>
@@ -65,9 +72,9 @@ export default function Approve() {
           </dl>
           <h2>{t('approve.broken')}</h2>
           <ul className="approve-broken">
-            {motives(d.checks, lang, link.invoice.received_at).map((m) => <li key={m}>{m}</li>)}
+            {motives(d.checks, lang, shown.invoice.received_at).map((m) => <li key={m}>{m}</li>)}
           </ul>
-        </>
+        </div>
       )}
       {done && (
         <div role="status" className="approve-done">

@@ -1,6 +1,6 @@
 // AC-77, R-88: where code found each read value in the stored document text. Never the model.
 import { describe, expect, it } from 'vitest';
-import { cut, locate } from './snippet';
+import { cut, docMarks, locate } from './snippet';
 
 // The text layer of web/public/demo/invoices/01.pdf (as in llm.test.ts).
 const TEXT_01 = 'Laura Méndez\nFactura N.º 1042\nFacturar a\nAndina Labs Inc.\n1209 Orange St, Wilmington, DE 19801\nFecha de emisión\n16 de octubre de 2026\nVence\n30 de noviembre de 2026\nCONCEPTO VALOR (USD)\nRetainer mensual de desarrollo 2.500,00\nTotal a pagar USD 2.500,00\nDatos de pago\nBancolombia ahorros 0012-3456-4821';
@@ -122,5 +122,28 @@ describe('cut: the glued case (AC-77, R-130)', () => {
     const r = cut(L, s, s + V.length);
     expect(r.snippet).toBe(`${EL}${V}${EL}`);
     expect(r.match).toEqual([1, 1 + V.length]);
+  });
+});
+
+// AC-102, R-88, R-124: the document panel's marks are offsets into the stored text itself, found by the same code as AC-77.
+describe('docMarks (AC-102)', () => {
+  const F = { payee_name: 'Laura Méndez', amount: 2500, currency: 'USD', invoice_number: '1042', issue_date: '2026-10-16', due_date: '2026-11-30',
+    concept: 'Retainer mensual de desarrollo', bank_account: 'Bancolombia ahorros 0012-3456-4821', confidence: {} };
+  it('raw_text.slice(start, end) is the printed value for each field kind, sorted by start', () => {
+    const marks = docMarks(TEXT_01, F)!;
+    expect(marks.map((m) => [m.field, TEXT_01.slice(m.start, m.end)])).toEqual([
+      ['payee_name', 'Laura Méndez'], ['invoice_number', '1042'], ['issue_date', '16 de octubre de 2026'], ['due_date', '30 de noviembre de 2026'],
+      ['currency', 'USD'], ['concept', 'Retainer mensual de desarrollo'], ['amount', '2.500,00'], ['bank_account', 'Bancolombia ahorros 0012-3456-4821'],
+    ]);
+  });
+  it('an unknown or unfound value has no mark; marks never overlap (the earlier one stays)', () => {
+    const t = 'Pago a Nube Sur LLC, Nube Sur LLC SAS';
+    const marks = docMarks(t, { ...F, payee_name: 'Nube Sur LLC', concept: 'Sur LLC, Nube', amount: null, currency: null })!;
+    expect(marks).toEqual([{ field: 'payee_name', start: 7, end: 19 }]);
+  });
+  it('no stored text: null; no fields: no marks', () => {
+    expect(docMarks(null, F)).toBeNull();
+    expect(docMarks('', F)).toBeNull();
+    expect(docMarks(TEXT_01, null)).toEqual([]);
   });
 });

@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, expect, test } from 'vitest';
-import App, { pages } from './App';
+import { beforeEach, expect, test, vi } from 'vitest';
+import { thisMonth } from './api';
+import App, { routes } from './App';
 import { DEMO_EMAIL, fakeAuth, mockApi, renderAt, signedInAs } from './test/utils';
 
 const SEEN = { tour_seen: true };
@@ -13,14 +14,73 @@ const signedInTopBar = async (name = 'Ver tutorial') => {
   return button;
 };
 
-// The real Bandeja mounts on /: answer what it loads so it never lands on its error state mid-test.
-beforeEach(() => mockApi({ 'GET /api/invoices': [], 'GET /api/agent/last-run': null }));
+// The real Bandeja mounts on /: answer what it loads (AC-98, one screen request) so it never lands on its error state mid-test.
+const EMPTY = { invoices: [], last_run: null, portal: null, beneficiaries: [], dashboard: null };
+const INBOX = { 'GET /api/screen/inbox?lang=es': EMPTY, 'GET /api/screen/inbox?lang=en': EMPTY };
+beforeEach(() => mockApi(INBOX));
 
-test('routes come from web/pages/*.tsx: one page per screen, each with a path and a component', () => {
-  expect(pages.map((p) => p.route.path).sort()).toEqual(
+test('one route per screen, each loading its page on navigation (AC-99), with /beneficiaries/:id for the profile (AC-104)', async () => {
+  expect(routes.map((r) => r.path).sort()).toEqual(
     ['/', '/approve/:token', '/beneficiaries', '/beneficiaries/:id', '/demo', '/invoices/:id', '/login', '/period', '/policy'].sort(),
   );
-  for (const p of pages) expect(typeof p.default).toBe('function');
+  for (const r of routes) expect(typeof (await r.load()).default).toBe('function');
+});
+
+test('every page file under web/pages has a route', async () => {
+  const shown = await Promise.all(routes.map(async (r) => (await r.load()).default));
+  for (const [file, load] of Object.entries(import.meta.glob(['./pages/*.tsx', '!./pages/*.test.tsx'])))
+    expect(shown, file).toContain(((await load()) as { default: unknown }).default);
+});
+
+// AC-100: hovering or focusing a nav link fetches that page's chunk and its screen data before the click.
+test.each([
+  ['Periodo', 'mouseEnter', () => `/api/screen/period?month=${thisMonth()}`],
+  ['Política', 'focus', () => '/api/screen/policy'],
+  ['Beneficiarios', 'mouseEnter', () => '/api/screen/beneficiaries'],
+])('hovering or focusing «%s» prefetches its chunk and its screen data', async (name, how, path) => {
+  signedInAs('ana@empresa.co', SEEN);
+  const fetchMock = mockApi(INBOX);
+  renderAt(<App />);
+  const link = within(await screen.findByRole('navigation', { name: 'Secciones' })).getByRole('link', { name });
+  const route = routes.find((r) => r.path === link.getAttribute('href'))!;
+  const load = vi.spyOn(route, 'load');
+  fireEvent[how as 'mouseEnter' | 'focus'](link);
+  expect(load).toHaveBeenCalled();
+  await waitFor(() => expect(fetchMock.mock.calls.some(([u]) => u === path())).toBe(true));
+});
+
+test('a nav hover over a screen this tab already holds sends no second request', async () => {
+  signedInAs('ana@empresa.co', SEEN);
+  const fetchMock = mockApi({ ...INBOX, 'GET /api/screen/policy': { versions: [], company: null, fx: { rates: [] } } });
+  renderAt(<App />);
+  const link = within(await screen.findByRole('navigation', { name: 'Secciones' })).getByRole('link', { name: 'Política' });
+  fireEvent.mouseEnter(link);
+  await waitFor(() => expect(fetchMock.mock.calls.filter(([u]) => u === '/api/screen/policy')).toHaveLength(1));
+  fireEvent.mouseEnter(link);
+  await new Promise((r) => setTimeout(r, 20));
+  expect(fetchMock.mock.calls.filter(([u]) => u === '/api/screen/policy')).toHaveLength(1);
+});
+
+test('/beneficiaries/:id opens the beneficiary profile (AC-104)', async () => {
+  signedInAs('ana@empresa.co', SEEN);
+  mockApi({ ...INBOX, 'GET /api/screen/beneficiary/b1': { beneficiary: { id: 'b1', name: 'Laura Méndez', country: 'CO', currency: 'USD', bank_account: null, route: null, category: null, agreement: null }, totals: { paid_month_usd: 0, paid_total_usd: 0, invoices: 0 }, history: [], last: [] } });
+  renderAt(<App />, { at: '/beneficiaries/b1' });
+  expect((await screen.findByRole('heading', { level: 1 })).textContent).toBe('Laura Méndez');
+  expect(screen.getByRole('link', { name: 'Volver a Beneficiarios' }).getAttribute('href')).toBe('/beneficiaries');
+});
+
+// AC-100: the cache never shows one user's screen to the next one signed in on this tab.
+test('another user signed in on this tab never sees the screen cached for the last one', async () => {
+  signedInAs('ana@empresa.co', SEEN);
+  mockApi({ ...INBOX, 'GET /api/screen/beneficiaries': { beneficiaries: [{ id: 'b1', name: 'Laura Méndez', country: null, currency: null, bank_account: null, route: null, category: null, agreement: null }] } });
+  const first = renderAt(<App />, { at: '/beneficiaries' });
+  await screen.findByText('Laura Méndez');
+  first.unmount();
+  signedInAs('bea@otra.co', SEEN);
+  mockApi({ ...INBOX, 'GET /api/screen/beneficiaries': () => new Promise(() => {}) });
+  renderAt(<App />, { at: '/beneficiaries' });
+  await screen.findByRole('heading', { name: 'Beneficiarios', level: 1 });
+  expect(screen.queryByText('Laura Méndez')).toBeNull();
 });
 
 test('a signed-out visitor of a private page lands on /login', async () => {
@@ -74,7 +134,7 @@ test('a seen user is not shown the tour on load', async () => {
 
 // R-62: the shared demo user gets the tour once per click on "Entrar como Andina Labs", never on reload or deep link.
 const enterAsDemo = async () => {
-  mockApi({ 'GET /api/invoices': [], 'GET /api/agent/last-run': null, 'GET /api/demo/overview': new Response('{}', { status: 503 }) });
+  mockApi({ ...INBOX, 'GET /api/demo/overview': new Response('{}', { status: 503 }) });
   fireEvent.click(await screen.findByRole('button', { name: 'Entrar como Andina Labs' }));
 };
 const reloadAt = (at: string) => {
@@ -119,7 +179,7 @@ test('after the click, a reload never restarts the tour; "Ver tutorial" and a ne
 });
 
 test('a signed-out deep link survives sign-in: the code lands on the page asked for', async () => {
-  mockApi({ 'GET /api/invoices': [], 'GET /api/agent/last-run': null, 'POST /api/invoices/run': { PAGAR: 0, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null } });
+  mockApi({ ...INBOX, 'POST /api/invoices/run': { PAGAR: 0, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null } });
   // A returning user (tour already seen): verifyOtp signs in with the stored metadata.
   fakeAuth.verifyOtp.mockImplementationOnce(async ({ email }) => {
     signedInAs(email, SEEN);
@@ -168,7 +228,7 @@ test('the tour keeps its place across routes: Siguiente from Bandeja reaches Pol
 }, 10000);
 
 test('signing out then signing in as someone else opens Bandeja, not the page the first user left (AC-40)', async () => {
-  mockApi({ 'GET /api/invoices': [], 'GET /api/agent/last-run': null, 'GET /api/policy': [], 'GET /api/company': { id: 'c', name: 'A', approver_email: 'a@a.co', lang: 'es', is_demo: false }, 'POST /api/invoices/run': { PAGAR: 0, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null } });
+  mockApi({ ...INBOX, 'GET /api/screen/policy': { versions: [], company: { id: 'c', name: 'A', approver_email: 'a@a.co', lang: 'es', is_demo: false }, fx: { rates: [] } }, 'POST /api/invoices/run': { PAGAR: 0, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null } });
   signedInAs('ana@empresa.co', SEEN);
   renderAt(<App />, { at: '/policy' });
   await screen.findByRole('heading', { name: 'Política', level: 1 });
@@ -219,7 +279,7 @@ test('/demo opens in Spanish whatever an earlier judge chose, and "Entrar" opens
 test('/demo switched to English: "Sign in as Andina Labs" opens an English dashboard and tour (R-78)', async () => {
   demoWithStoredLang('es');
   renderAt(<App />, { at: '/demo' });
-  mockApi({ 'GET /api/invoices': [], 'GET /api/agent/last-run': null, 'GET /api/demo/overview': new Response('{}', { status: 503 }) });
+  mockApi({ ...INBOX, 'GET /api/demo/overview': new Response('{}', { status: 503 }) });
   fireEvent.click(await screen.findByRole('button', { name: 'English' }));
   fireEvent.click(await screen.findByRole('button', { name: 'Sign in as Andina Labs' }));
   const dialog = await screen.findByRole('dialog');
@@ -246,11 +306,11 @@ test('during a tour step the top-bar language switch keeps the step; Escape does
 // R-98 (AC-28 Clarified): a language switch re-fetches the screen on view, so the record comes back in that language.
 test('switching the language re-fetches the screen on view with the new X-Lang', async () => {
   signedInAs('ana@empresa.co', SEEN);
-  const fetchMock = mockApi({ 'GET /api/invoices': [], 'GET /api/agent/last-run': null, 'GET /api/beneficiaries': [] });
+  const fetchMock = mockApi(INBOX);
   renderAt(<App />);
   await signedInTopBar();
-  const langsOf = () => fetchMock.mock.calls.filter(([u]) => String(u) === '/api/invoices').map(([, i]) => new Headers(i!.headers).get('X-Lang'));
-  await waitFor(() => expect(langsOf()).toEqual(['es']));
+  const langsOf = () => fetchMock.mock.calls.filter(([u]) => String(u).startsWith('/api/screen/inbox')).map(([u, i]) => `${u} ${new Headers(i!.headers).get('X-Lang')}`);
+  await waitFor(() => expect(langsOf()).toEqual(['/api/screen/inbox?lang=es es']));
   fireEvent.click(screen.getByRole('button', { name: 'en' }));
-  await waitFor(() => expect(langsOf()).toEqual(['es', 'en']));
+  await waitFor(() => expect(langsOf()).toEqual(['/api/screen/inbox?lang=es es', '/api/screen/inbox?lang=en en']));
 });

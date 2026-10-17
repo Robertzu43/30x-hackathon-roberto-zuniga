@@ -25,6 +25,13 @@ export default function Tour({ onDone }: { onDone: () => void }) {
     setI(n < 0 ? i + 1 : n);
   };
 
+  // R-78: Escape does what "Saltar" does.
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && onDone();
+    addEventListener('keydown', esc);
+    return () => removeEventListener('keydown', esc);
+  }, [onDone]);
+
   useEffect(() => {
     if (pathname !== step.route) navigate(step.route);
   }, [step, pathname, navigate]);

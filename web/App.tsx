@@ -15,7 +15,7 @@ const nav = pages.filter((p) => p.route.nav).sort((a, b) => a.route.nav!.order -
 
 function TopBar({ onTour }: { onTour: () => void }) {
   const { t, lang, setLang } = useT();
-  const { session } = useSession();
+  const { session, demoEmail } = useSession();
   const navigate = useNavigate();
   // Leave first, so the session ending finds us on /login: RequireAuth's own redirect would carry this page as `from` (R-62) to the next user.
   const signOut = () => {
@@ -23,8 +23,9 @@ function TopBar({ onTour }: { onTour: () => void }) {
     void supabase().then((sb) => sb.auth.signOut());
   };
   const pick = (l: Lang) => {
-    setLang(l);
-    if (session) void supabase().then((sb) => sb.auth.updateUser({ data: { lang: l } })); // AC-41: per user
+    const demo = isDemoUser(session?.user, demoEmail); // R-78: the shared demo user's language lives in this tab only
+    setLang(l, demo);
+    if (session && !demo) void supabase().then((sb) => sb.auth.updateUser({ data: { lang: l } })); // AC-41: per user
   };
   return (
     <header className="topbar">

@@ -36,6 +36,10 @@ export default function Demo() {
       .then(setData, () => setFailed(true));
   };
   useEffect(() => load(), []);
+  // R-78, D14: /demo opens in Spanish unless this tab chose otherwise; whatever another judge picked never carries over.
+  useEffect(() => {
+    if (sessionStorage.getItem('lang') === null) setLang('es', true);
+  }, []);
 
   const enter = async () => {
     setEntering(true);
@@ -68,8 +72,8 @@ export default function Demo() {
   return (
     <div className="demo">
       <div className="lang-switch demo-lang" role="group" aria-label={t('topbar.language')}>
-        <button type="button" className="link" aria-pressed={lang === 'es'} onClick={() => setLang('es')}>Español</button>
-        <button type="button" className="link" aria-pressed={lang === 'en'} onClick={() => setLang('en')}>English</button>
+        <button type="button" className="link" aria-pressed={lang === 'es'} onClick={() => setLang('es', true)}>Español</button>
+        <button type="button" className="link" aria-pressed={lang === 'en'} onClick={() => setLang('en', true)}>English</button>
       </div>
 
       <header className="demo-hero">

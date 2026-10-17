@@ -88,6 +88,7 @@ main { max-width: 64rem; margin: 0 auto; padding: 6rem 2rem; }
 @media (max-width: 640px) {
   .topbar, .screens { padding-left: 1rem; padding-right: 1rem; }
   .topbar-actions { margin-left: 0; }
+  .topbar button { min-height: 44px; } /* AC-72 (R-79): tap target */
   main { padding: 3rem 1rem; }
 }
 
@@ -115,13 +116,15 @@ main { max-width: 64rem; margin: 0 auto; padding: 6rem 2rem; }
 .login-form form p { margin: 0 0 0.5rem; }
 .lang-switch { display: flex; gap: 0.5rem; align-items: center; color: var(--ink-2); }
 @media (max-width: 760px) {
-  .login { grid-template-columns: 1fr; }
+  .login { grid-template-columns: 1fr; align-content: start; } /* R-79: rows fit their content, no empty grey block */
   .login-intro { justify-content: flex-start; }
 }
 
 /* Tour (AC-42). The spotlight's inline style in Tour.tsx carries the only shadow in web/ (AC-53). */
 .tour { position: fixed; inset: 0; z-index: 1000; }
 .tour-waiting { background: rgba(0, 0, 0, 0.6); }
+/* R-78: the top bar (language, Ver tutorial, Cerrar sesión) stays on screen and clickable above the dim layer. */
+body:has(.tour) .topbar { position: sticky; top: 0; z-index: 1001; }
 .tour-spotlight { position: fixed; border-radius: var(--radius); pointer-events: none; }
 .tour-card {
   position: fixed;

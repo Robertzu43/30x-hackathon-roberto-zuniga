@@ -10,6 +10,7 @@
 .detail-cols { display: grid; grid-template-columns: 1fr 1.2fr; gap: 3rem; align-items: start; }
 @media (max-width: 860px) { .detail-cols { grid-template-columns: 1fr; } }
 
+.detail-notice { background: #fbf3db; color: #956400; padding: 0.75rem 1rem; border-radius: 4px; margin: 0 0 1rem; } /* AC-13 R-75 */
 .detail-doc { display: block; width: 100%; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); margin-bottom: 0.5rem; }
 iframe.detail-doc { height: 32rem; }
 pre.detail-doc { white-space: pre-wrap; font: var(--text-sm) / 1.6 var(--font-mono); padding: 1rem; max-height: 32rem; overflow: auto; }

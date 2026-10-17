@@ -4,10 +4,10 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import { AuthProvider } from './auth';
-import { LangProvider } from './i18n';
+import { LangProvider, storedLang } from './i18n';
 import './styles.css';
 
-document.documentElement.lang = localStorage.getItem('lang') === 'en' ? 'en' : 'es';
+document.documentElement.lang = storedLang();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -108,3 +108,15 @@ test('shows loading with the anchor present, then an error', async () => {
   expect(screen.getByRole('status').textContent).toBe('Cargando…');
   expect((await screen.findByRole('alert')).textContent).toContain('Mes no válido');
 });
+
+// R-79: two amounts never touch («USD 42.000,00USD 4.497,79»). jsdom has no layout; Chromium was measured at 1280 and 390 px
+// (task 11d report). These guard the rules that keep a gap: table money cells are padded apart and never wrap inside an amount,
+// and a figure that is wider than its grid cell wraps inside the cell instead of running into the next one.
+test('money cells and figures keep a gap between amounts (AC-44, R-79)', async () => {
+  const { readFileSync } = (await import('node:fs' as string)) as { readFileSync(p: string, enc: string): string };
+  const css = readFileSync('web/pages/period.css', 'utf8');
+  const rule = (sel: string) => css.match(new RegExp(`(?:^|\\n)${sel.replace(/[.]/g, '\\.')} \\{([^}]*)\\}`))?.[1] ?? '';
+  expect(rule('.period .num')).toMatch(/padding-left: [1-9]/);
+  expect(rule('.period .num')).toMatch(/white-space: nowrap/);
+  expect(rule('.period-money dd')).toMatch(/overflow-wrap: anywhere/);
+});

@@ -53,12 +53,22 @@ test('the problem in three lines, the six-stage loop, the pitch line verbatim an
   await screen.findByText('90 %');
 });
 
-test('English shows the English headlines', async () => {
+test('/demo opens in Spanish whatever this browser showed last (R-78, D14)', async () => {
   localStorage.setItem('lang', 'en');
   mockApi({ 'GET /api/demo/overview': overview });
   app();
+  expect(await screen.findByText('950 USD a Pixel Lab: duplicado exacto de la factura #PX-77')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Entrar como Andina Labs' })).toBeTruthy();
+});
+
+test('its own switch shows English headlines, kept for this tab only (R-78)', async () => {
+  mockApi({ 'GET /api/demo/overview': overview });
+  app();
+  fireEvent.click(screen.getByRole('button', { name: 'English' }));
   expect(await screen.findByText('950 USD to Pixel Lab: exact duplicate of invoice #PX-77')).toBeTruthy();
   expect(screen.getByText('JEV, the fast intuition, is an optional layer; in this demo it is off.')).toBeTruthy();
+  expect(sessionStorage.getItem('lang')).toBe('en');
+  expect(localStorage.getItem('lang')).toBeNull();
 });
 
 test('overview 503: a message and a retry that loads the inbox', async () => {
@@ -140,7 +150,7 @@ test('"Reiniciar demo" asks in place first; "Cancelar" changes nothing (AC-71)',
 });
 
 test('the reset question in English: "Reset" resets (AC-71)', async () => {
-  localStorage.setItem('lang', 'en');
+  sessionStorage.setItem('lang', 'en'); // this tab chose English earlier (R-78)
   signedInAs(DEMO_EMAIL);
   const f = mockApi({ 'GET /api/demo/overview': overview, 'POST /api/demo/reset': { PAGAR: 1, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null } });
   app();

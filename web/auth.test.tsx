@@ -78,3 +78,14 @@ test('a second user on the same browser inherits nothing from the first (AC-41)'
   expect(await screen.findByText('lang:es')).toBeTruthy();
   expect(fakeAuth.updateUser).not.toHaveBeenCalled();
 });
+
+test('the shared demo user stored language is ignored: the tab keeps its own (R-78)', async () => {
+  signedInAs(DEMO_EMAIL, { lang: 'en' });
+  function Probe() {
+    return <p>{`lang:${useT().lang} ${useSession().session?.user.email}`}</p>;
+  }
+  renderAt(<Probe />);
+  await screen.findByText(`lang:es ${DEMO_EMAIL}`);
+  await act(async () => {});
+  expect(screen.getByText(`lang:es ${DEMO_EMAIL}`)).toBeTruthy();
+});

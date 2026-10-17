@@ -2,6 +2,8 @@
 // "Ejecutar agente" (shared run loop, Task 11b), "Nueva factura" (AC-11) and when the agent last ran.
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { findBeneficiary, nameKey } from '../../src/engine/checks';
+import type { Beneficiary } from '../../src/engine/types';
 import type { PageRoute } from '../App';
 import { api } from '../api';
 import NewInvoice from '../components/NewInvoice';
@@ -14,6 +16,8 @@ export const route: PageRoute = { path: '/', nav: { key: 'screen.inbox', order: 
 
 type Row = { id: string; outcome: Outcome | null; headline: string | null; received_at: string; fields: { payee_name: string | null } | null };
 type LastRun = { at: string; trigger: string } | null;
+const UNREAD = '#'; // nameKey never yields '#'
+const keyOf = (r: Row) => nameKey(r.fields?.payee_name ?? null) || UNREAD;
 
 export default function Inbox() {
   const { t, locale } = useT();
@@ -23,6 +27,7 @@ export default function Inbox() {
   const [outcome, setOutcome] = useState('');
   const [payee, setPayee] = useState('');
   const [adding, setAdding] = useState(false);
+  const [directory, setDirectory] = useState<Beneficiary[]>([]);
 
   const loadRows = () =>
     api.get<Row[]>('/api/invoices').then((r) => { setRows(r); setFailed(false); }, () => setFailed(true));
@@ -30,12 +35,21 @@ export default function Inbox() {
   useEffect(() => {
     void loadRows();
     void loadLastRun();
+    api.get<Beneficiary[]>('/api/beneficiaries').then(setDirectory, () => {}); // without it the filter still groups by name
   }, []);
   const run = useRunAgent({ first: '/api/invoices/run', onBatch: () => void loadRows() });
 
-  const payees = [...new Set((rows ?? []).map((r) => r.fields?.payee_name).filter((p): p is string => !!p))].sort();
+  // AC-29 (R-79), grouped like Periodo (R-63): the engine's AC-19 name rule; labelled with the directory name, else the payee as
+  // read on the group's oldest invoice; unread payees in one entry, listed last.
+  const labels = new Map<string, string>();
+  for (const r of [...(rows ?? [])].sort((a, b) => a.received_at.localeCompare(b.received_at))) {
+    const k = keyOf(r);
+    const read = r.fields?.payee_name ?? '';
+    if (!labels.has(k)) labels.set(k, k === UNREAD ? t('period.unread') : findBeneficiary(read, directory)?.name ?? read);
+  }
+  const payees = [...labels].sort(([a, x], [b, y]) => (a === UNREAD ? 1 : b === UNREAD ? -1 : x.localeCompare(y, 'es')));
   const shown = (rows ?? []).filter(
-    (r) => (!outcome || (r.outcome ?? 'pending') === outcome) && (!payee || r.fields?.payee_name === payee),
+    (r) => (!outcome || (r.outcome ?? 'pending') === outcome) && (!payee || keyOf(r) === payee),
   );
   const mins = lastRun ? Math.floor((Date.now() - Date.parse(lastRun.at)) / 60_000) : 0;
   const date = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short' });
@@ -78,7 +92,7 @@ export default function Inbox() {
           {t('inbox.filter.payee')}
           <select value={payee} onChange={(e) => setPayee(e.target.value)}>
             <option value="">{t('inbox.filter.all')}</option>
-            {payees.map((p) => <option key={p} value={p}>{p}</option>)}
+            {payees.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
           </select>
         </label>
       </div>

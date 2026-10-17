@@ -9,14 +9,15 @@
 .period-fig p:last-child { font-size: var(--text-sm); color: var(--ink-2); }
 .period-fig.bad { background: #fdebec; border-color: #9f2f2d; }
 .period-fig.bad .alert { color: #9f2f2d; font-weight: 600; }
-.period-money { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 1rem; margin: 0; }
+.period-money { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 1rem; margin: 0; }
 .period-money dt { font-size: var(--text-sm); color: var(--ink-2); }
-.period-money dd { margin: 0; font: 400 var(--text-xl) / 1.2 var(--font-mono); }
+.period-money dd { margin: 0; font: 400 1.25rem / 1.2 var(--font-mono); overflow-wrap: anywhere; } /* R-79: wraps in its cell, never into the next */
 .period-outcomes { display: flex; gap: 1.5rem; padding: 0; list-style: none; font-family: var(--font-mono); }
 .period table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
 .period th, .period td { text-align: left; padding: 0.5rem 0; border-bottom: 1px solid var(--line); }
 .period th { font-weight: 500; color: var(--ink-2); }
-.period .num { text-align: right; font-family: var(--font-mono); }
+.period .num { text-align: right; font-family: var(--font-mono); padding-left: 1.5rem; white-space: nowrap; } /* R-79: amounts never touch */
 @media (max-width: 640px) {
+  .period-money { grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); }
   .period-money dd { font-size: 1.125rem; } /* AC-72: "USD 42.000,00" fits a half-width cell at 390 px */
 }

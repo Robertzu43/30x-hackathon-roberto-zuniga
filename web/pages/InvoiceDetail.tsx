@@ -16,7 +16,8 @@ import './detail.css';
 export const route: PageRoute = { path: '/invoices/:id' };
 
 type Detail = {
-  invoice: { source: 'pdf' | 'image' | 'email' | 'chat'; raw_text: string | null; fields: InvoiceFields | null };
+  // read_error (AC-13, R-75): the reader never answered; absent until the backend sends it.
+  invoice: { source: 'pdf' | 'image' | 'email' | 'chat'; raw_text: string | null; fields: (InvoiceFields & { read_error?: string }) | null };
   headline: string | null;
   decisions: StoredDecision[];
   explanations: string[];
@@ -84,6 +85,7 @@ export default function InvoiceDetail() {
 
   const { invoice, file_url: url } = data;
   const payment = latest.outcome === 'PAGAR' ? latest.payment : null;
+  const unreached = invoice.fields?.read_error === 'lector_no_disponible';
   return (
     <section className="detail">
       {back}
@@ -92,6 +94,7 @@ export default function InvoiceDetail() {
       <div className="detail-cols">
         <div>
           <h2>{t('detail.read')}</h2>
+          {unreached && <p className="detail-notice">{t('detail.reader_unavailable')}</p>}
           {invoice.source === 'email' || invoice.source === 'chat' ? (
             invoice.raw_text ? <pre className="detail-doc">{invoice.raw_text}</pre> : <p className="muted">{t('detail.file.none')}</p>
           ) : !url ? (
@@ -111,7 +114,7 @@ export default function InvoiceDetail() {
               return (
                 <div key={k}>
                   <dt>{t(`detail.field.${k}`)}</dt>
-                  <dd className={v === null ? 'muted' : undefined}>{v === null ? t('detail.unread') : shown(k, v)}</dd>
+                  <dd className={v === null ? 'muted' : undefined}>{v === null ? t(unreached ? 'value.unknown' : 'detail.unread') : shown(k, v)}</dd>
                   {v !== null && c != null && <dd className="muted">{t('detail.confidence', { pct: pct.format(c) })}</dd>}
                 </div>
               );

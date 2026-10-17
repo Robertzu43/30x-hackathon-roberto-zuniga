@@ -1,12 +1,11 @@
 // Política and the company section (AC-30, AC-31, AC-32; R-14, R-31, R-34, R-41).
 import { z } from 'zod';
-import { runAgent } from '../agent/loop';
-import { decide, directorio, duplicados, findBeneficiary, periodo } from '../agent/tools';
+import { decide, directorio, findBeneficiary, periodFrom, previousFrom } from '../agent/tools';
 import { headline } from '../engine/explain';
 import type { Invoice, Outcome, PolicyRules } from '../engine/types';
 import { must } from '../lib/supabase';
 import { memberRoutes } from './agent';
-import type { Current } from './invoices';
+import { runFromCursor, type Current } from './invoices';
 
 const usd = z.number().nonnegative().nullish();
 const days = z.number().int().nonnegative().nullish();
@@ -52,11 +51,13 @@ export const policy = memberRoutes()
     const now = new Date().toISOString();
     // One read of earlier invoices covers both windows: the checks filter by their own policy's window.
     const window = { duplicate_window_days: Math.max(previous?.rules.duplicate_window_days ?? 0, rules.duplicate_window_days ?? 0) };
+    // R-59: period state and duplicates come from these same rows in memory, not one read per invoice, so the list stays
+    // complete inside the subrequest budget however many invoices are pending or escalated.
     const would_change: Array<{ invoice_id: string; headline: string; from: Outcome; to: Outcome }> = [];
     for (const row of rows.filter((r) => reopenable(r) && r.fields)) {
       const invoice = { ...row, fields: row.fields! } as Invoice;
       const beneficiary = findBeneficiary(invoice.fields.payee_name, directory);
-      const period = { ...await periodo(db, companyId, invoice), previous: await duplicados(db, companyId, invoice, window, directory) };
+      const period = { ...periodFrom(rows, invoice), previous: previousFrom(rows, invoice, window, directory) };
       const next = decide(invoice, beneficiary, rules, period, now);
       const from = row.outcome ?? decide(invoice, beneficiary, previous?.rules ?? null, period, now).outcome;
       if (from !== next.outcome) would_change.push({ invoice_id: row.id, headline: headline(next, invoice, beneficiary, lang), from, to: next.outcome });
@@ -64,11 +65,8 @@ export const policy = memberRoutes()
     return c.json({ policy: saved, would_change });
   })
 
-  .post('/reevaluate', async (c) => {
-    const { db, companyId } = c.var;
-    const rows: Array<Pick<Current, 'id' | 'outcome'>> = must(await db.from('invoice_current').select('id, outcome').eq('company_id', companyId));
-    return c.json(await runAgent({ db, env: c.env }, companyId, rows.filter(reopenable).map((r) => r.id), 'reevaluate'));
-  });
+  // Pending and ESCALAR invoices after the cursor (AC-31, R-60); runAgent picks them for the 'reevaluate' trigger.
+  .post('/reevaluate', (c) => runFromCursor(c, 'reevaluate'));
 
 const NAME = 'El nombre de la empresa no puede estar vacío';
 const CompanyPatch = z.object({

@@ -45,6 +45,16 @@ export const demo = new Hono<{ Bindings: Env }>()
   .route('/reset', memberRoutes().post('/', async (c) => {
     const { db, companyId } = c.var;
     if (!(await isDemo(db, companyId))) return c.json({ error: 'Solo los miembros de la empresa demo pueden reiniciarla' }, 403);
-    must(await db.rpc('reset_demo_company'));
-    return c.json(await runAgent({ db, env: c.env }, companyId, 'pending', 'reset'));
+    const { error } = await db.rpc('reset_demo_company');
+    if (error) {
+      console.error('demo: reset failed', error.message);
+      return c.json({ error: 'No pude reiniciar la demo; intenta de nuevo.' }, 503);
+    }
+    // The first chunk only (AC-70): the browser continues with POST /api/invoices/run {cursor} (R-60).
+    try {
+      return c.json(await runAgent({ db, env: c.env, budget: c.var.budget }, companyId, 'pending', 'reset'));
+    } catch (e) {
+      console.error('demo: agent not started after reset', e instanceof Error ? e.message : e);
+      return c.json({ error: 'La demo se reinició, pero el agente no pudo decidir las facturas ahora. Pulsa «Ejecutar agente» o espera la revisión automática (cada 5 minutos).' }, 503);
+    }
   }));

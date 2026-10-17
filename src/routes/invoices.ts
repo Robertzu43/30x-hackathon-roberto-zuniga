@@ -1,12 +1,14 @@
 // Bandeja, ingest and the decision detail (AC-08, AC-11, AC-12, AC-13, AC-15, AC-26, AC-29, AC-64, AC-65).
 // Every read and write uses the user's JWT client (RLS); decisions and runs are written only by runAgent's record.ts.
+import type { Context } from 'hono';
 import { z } from 'zod';
-import { runAgent } from '../agent/loop';
+import { decodeCursor, runAgent } from '../agent/loop';
 import { directorio, findBeneficiary } from '../agent/tools';
 import { agentTrace, type StoredDecision } from '../agent/trace';
 import { explainCheck, whatWouldPay } from '../engine/explain';
 import type { Invoice, InvoiceFields } from '../engine/types';
 import { documentToText, extractFields } from '../lib/llm';
+import type { AppEnv } from '../lib/auth';
 import { must } from '../lib/supabase';
 import { memberRoutes } from './agent';
 
@@ -15,6 +17,7 @@ export interface Current extends Omit<Invoice, 'fields'> {
   fields: InvoiceFields | null;
   file_path: string | null;
   outcome: StoredDecision['outcome'] | null;
+  amount_usd: number | null;
   headline_es: string | null;
   headline_en: string | null;
 }
@@ -29,6 +32,21 @@ const FILES = [
 ] as const;
 const Pasted = z.object({ source: z.enum(['email', 'chat']), text: z.string().max(20000).refine((t) => t.trim().length > 0) });
 const SIGNED_URL_SECONDS = 300; // AC-08
+const NOT_RUN = 'No pude ejecutar el agente ahora. Las facturas siguen pendientes; lo intentaré solo en la próxima revisión automática (cada 5 minutos).';
+
+// "Ejecutar agente" and "Reevaluar" (R-60): one budgeted call after the optional {cursor} (AC-70). The browser calls again
+// with the returned cursor until it is null. A non-2xx only when nothing changed (R-57).
+export async function runFromCursor(c: Context<AppEnv>, trigger: 'manual' | 'reevaluate') {
+  const cursor: unknown = ((await c.req.json().catch(() => null)) as { cursor?: unknown } | null)?.cursor ?? null;
+  const from = typeof cursor === 'string' ? decodeCursor(cursor) : null;
+  if (cursor !== null && !from) return c.json({ error: 'Cursor no válido' }, 400);
+  try {
+    return c.json(await runAgent({ db: c.var.db, env: c.env, budget: c.var.budget }, c.var.companyId, 'pending', trigger, from));
+  } catch (e) {
+    console.error('agent: run not started', c.var.companyId, e instanceof Error ? e.message : e);
+    return c.json({ error: NOT_RUN }, 503);
+  }
+}
 
 export const invoices = memberRoutes()
   .get('/', async (c) => {
@@ -37,7 +55,7 @@ export const invoices = memberRoutes()
     return c.json(rows.map((r) => ({ ...r, headline: r[`headline_${c.var.lang}`] })));
   })
 
-  .post('/run', async (c) => c.json(await runAgent({ db: c.var.db, env: c.env }, c.var.companyId, 'pending', 'manual')))
+  .post('/run', (c) => runFromCursor(c, 'manual'))
 
   // Validate, store the file, read it (the only model call, src/lib/llm.ts), insert the invoice WITH its read fields,
   // then let the agent decide it. A failed read is stored as "ilegible" and escalates (AC-13).
@@ -57,15 +75,19 @@ export const invoices = memberRoutes()
       filePath = `${companyId}/${id}.${kind.ext}`;
       must(await db.storage.from('files').upload(filePath, bytes, { contentType: kind.type }));
       source = kind.source;
+      if (kind.source === 'image') c.var.budget.count(); // the Workers AI vision call (R-56)
       text = await documentToText(c.env, { kind: kind.source, bytes });
     } else {
       const p = Pasted.safeParse(await c.req.json().catch(() => null));
       if (!p.success) return c.json({ error: FORMAT }, 400);
       ({ source, text } = p.data);
     }
+    c.var.budget.count(); // the Workers AI reader (R-56)
     const fields = await extractFields(c.env, text);
     must(await db.from('invoices').insert({ id, company_id: companyId, source, file_path: filePath, raw_text: filePath ? null : text, fields }));
-    await runAgent({ db, env: c.env }, companyId, [id], 'ingest');
+    // One invoice always fits the budget. If the agent cannot run, the invoice is stored and pending: the cron decides it (R-60).
+    await runAgent({ db, env: c.env, budget: c.var.budget }, companyId, [id], 'ingest')
+      .catch((e) => console.error('agent: ingest not decided', id, e instanceof Error ? e.message : e));
     const [invoice, decision] = await Promise.all([
       db.from('invoice_current').select('*').eq('id', id).single().then(must),
       db.from('decisions').select('*').eq('invoice_id', id).order('seq', { ascending: false }).limit(1).maybeSingle().then(must),

@@ -2,7 +2,7 @@
 // src/routes/approvals.ts (approval by token), src/agent/scheduled.ts (the cron, R-23) and src/agent/record.ts (R-32).
 import { createClient } from '@supabase/supabase-js';
 import type { Env } from '../env';
-import type { Db } from './supabase';
+import type { Budget, Db } from './supabase';
 
-export const adminClient = (env: Env): Db =>
-  createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+export const adminClient = (env: Env, budget?: Budget): Db =>
+  createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { global: { fetch: budget?.fetch }, auth: { persistSession: false, autoRefreshToken: false } });

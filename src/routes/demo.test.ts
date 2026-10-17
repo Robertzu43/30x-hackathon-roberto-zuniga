@@ -29,10 +29,11 @@ function testDb() {
   const signIns: string[] = [];
   return {
     ...base, calls, signIns,
+    resetFails: false,
     rpc: async (name: string, args: Row = {}) => {
       if (name !== 'reset_demo_company') return base.rpc(name, args);
       calls.push('reset_demo_company');
-      return { data: 'D', error: null };
+      return db.resetFails ? { data: null, error: { message: 'NOT_DEMO' } } : { data: 'D', error: null };
     },
     auth: {
       getUser: async (jwt: string) => (USERS[jwt] ? { data: { user: { id: USERS[jwt], user_metadata: {} } }, error: null } : { data: { user: null }, error: { message: 'invalid JWT' } }),
@@ -52,7 +53,7 @@ beforeEach(async () => {
   ({ app } = await import('../index'));
   db = testDb();
   runAgent.mockClear();
-  runAgent.mockImplementation(async () => { db.calls.push('runAgent'); return { PAGAR: 1, FRENAR: 0, ESCALAR: 0, errors: 0 }; });
+  runAgent.mockImplementation(async () => { db.calls.push('runAgent'); return { PAGAR: 1, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 20, cursor: 'c1' }; });
 });
 const get = (e: Env = env) => app.request('/api/demo/overview', {}, e);
 const reset = (token?: string) => app.request('/api/demo/reset', { method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {} }, env);
@@ -102,12 +103,27 @@ describe('POST /api/demo/reset (AC-47, R-15)', () => {
     expect(db.calls).toEqual([]);
   });
 
-  it('resets the demo company, then re-runs the agent on its pending invoices (trigger reset) and returns the counts', async () => {
+  it('resets the demo company, then decides the first chunk of its pending invoices (trigger reset) and returns counts and cursor (AC-70)', async () => {
     const r = await reset('tok-demo');
     expect(r.status).toBe(200);
-    expect(await r.json()).toEqual({ PAGAR: 1, FRENAR: 0, ESCALAR: 0, errors: 0 });
+    expect(await r.json()).toEqual({ PAGAR: 1, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 20, cursor: 'c1' });
     expect(db.calls).toEqual(['reset_demo_company', 'runAgent']);
-    expect(runAgent).toHaveBeenCalledWith(expect.objectContaining({ db, env }), 'D', 'pending', 'reset');
+    expect(runAgent).toHaveBeenCalledWith(expect.objectContaining({ db, env, budget: expect.objectContaining({ used: expect.any(Number) }) }), 'D', 'pending', 'reset');
+  });
+
+  it('a failed reset answers 503 "No pude reiniciar la demo; intenta de nuevo." and runs nothing (R-57)', async () => {
+    db.resetFails = true;
+    const r = await reset('tok-demo');
+    expect(r.status).toBe(503);
+    expect(await r.json()).toEqual({ error: 'No pude reiniciar la demo; intenta de nuevo.' });
+    expect(db.calls).toEqual(['reset_demo_company']);
+  });
+
+  it('a reset whose run cannot start answers 503 with the R-57 text', async () => {
+    runAgent.mockRejectedValueOnce(new Error('down'));
+    const r = await reset('tok-demo');
+    expect(r.status).toBe(503);
+    expect(await r.json()).toEqual({ error: 'La demo se reinició, pero el agente no pudo decidir las facturas ahora. Pulsa «Ejecutar agente» o espera la revisión automática (cada 5 minutos).' });
   });
 });
 
@@ -144,7 +160,7 @@ function scriptFakes(existing: Array<{ id: string; email: string }>) {
   };
   const anon = { auth: { signInWithPassword: async (a: Row) => { log.push(`signIn ${a.email} ${a.password}`); return { data: { session: { access_token: 'tok-demo' } }, error: null }; } } };
   const fetch = vi.fn(async (url: string, init: RequestInit) => {
-    log.push(`${init.method} ${url} ${(init.headers as Record<string, string>).Authorization}`);
+    log.push(`${init.method} ${url} ${(init.headers as Record<string, string>).Authorization} ${init.body ?? ''}`.trim());
     return new Response(JSON.stringify({ PAGAR: 15, FRENAR: 3, ESCALAR: 11, errors: 0 }), { status: 200 });
   });
   const deps = { admin, anon, fetch, appUrl: 'https://app.test', demoEmail: 'demo@andina-labs.example', approverEmail: 'roberto@heartbeat.example', log: () => {} };
@@ -165,7 +181,7 @@ describe('scripts/seed-demo-user.mjs (AC-46, R-18)', () => {
       'select company_members {"user_id":"u-new"}',
       'update companies {"id":"C-demo"} {"is_demo":true,"approver_email":"roberto@heartbeat.example","name":"Andina Labs Inc."}',
       `signIn demo@andina-labs.example ${PASSWORD}`,
-      'POST https://app.test/api/invoices/run Bearer tok-demo',
+      'POST https://app.test/api/invoices/run Bearer tok-demo {}',
     ]);
     expect(companies[0]).toMatchObject({ is_demo: true, approver_email: 'roberto@heartbeat.example', name: 'Andina Labs Inc.' });
   });
@@ -191,10 +207,39 @@ describe('scripts/seed-demo-user.mjs (AC-46, R-18)', () => {
     expect(() => demoEmailFrom('[vars]\nSUPABASE_URL = "https://sb.test"\n')).toThrow('DEMO_EMAIL');
   });
 
-  it('fails loudly when the app refuses the agent run', async () => {
+  it('loops on the cursor and sums the counts; the next call sends {cursor} (R-60)', async () => {
+    const { main } = await loadScript();
+    const { deps } = scriptFakes([{ id: 'u-demo', email: 'demo@andina-labs.example' }]);
+    const answer = (o: Row) => new Response(JSON.stringify({ PAGAR: 5, FRENAR: 1, ESCALAR: 2, errors: 0, ...o }), { status: 200 });
+    deps.fetch.mockResolvedValueOnce(answer({ remaining: 9, cursor: 'c1' })).mockResolvedValueOnce(answer({ errors: 1, remaining: 0, cursor: null }));
+    expect(await main(deps)).toEqual({ PAGAR: 10, FRENAR: 2, ESCALAR: 4, errors: 1 });
+    expect(deps.fetch.mock.calls.map(([url, init]) => [url, init.body])).toEqual([['https://app.test/api/invoices/run', '{}'], ['https://app.test/api/invoices/run', '{"cursor":"c1"}']]);
+  });
+
+  it('stops on a call that returns the cursor it was sent (no progress)', async () => {
+    const { main } = await loadScript();
+    const { deps } = scriptFakes([{ id: 'u-demo', email: 'demo@andina-labs.example' }]);
+    deps.fetch.mockImplementation(async () => new Response(JSON.stringify({ PAGAR: 0, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 3, cursor: 'same' }), { status: 200 }));
+    await main(deps);
+    expect(deps.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops after 20 calls', async () => {
+    const { main } = await loadScript();
+    const { deps } = scriptFakes([{ id: 'u-demo', email: 'demo@andina-labs.example' }]);
+    let n = 0;
+    deps.fetch.mockImplementation(async () => new Response(JSON.stringify({ PAGAR: 1, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 1, cursor: `c${++n}` }), { status: 200 }));
+    expect(await main(deps)).toMatchObject({ PAGAR: 20 });
+    expect(deps.fetch).toHaveBeenCalledTimes(20);
+  });
+
+  it('fails loudly when the app refuses the agent run, also on a later call of the loop', async () => {
     const { main } = await loadScript();
     const { deps } = scriptFakes([{ id: 'u-demo', email: 'demo@andina-labs.example' }]);
     deps.fetch.mockResolvedValueOnce(new Response('{}', { status: 500 }));
     await expect(main(deps)).rejects.toThrow('POST /api/invoices/run answered 500');
+    deps.fetch.mockResolvedValueOnce(new Response(JSON.stringify({ PAGAR: 1, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 2, cursor: 'c1' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response('{"error":"No pude"}', { status: 503 }));
+    await expect(main(deps)).rejects.toThrow('POST /api/invoices/run answered 503');
   });
 });

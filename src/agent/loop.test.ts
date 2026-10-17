@@ -4,20 +4,21 @@ import sql from '../../supabase/migrations/20261017000300_seed_andina.sql?raw';
 import { bogotaDay } from '../engine/checks';
 import type { Env } from '../env';
 import { sendEmail } from '../lib/email';
-import type { Db } from '../lib/supabase';
+import { Budget, type Db } from '../lib/supabase';
 import { hashToken } from '../lib/tokens';
 import { fakeDb, type FakeDb } from './__fixtures__/fake-db';
 
 let db: FakeDb;
 vi.mock('../lib/admin', () => ({ adminClient: () => db }));
 vi.mock('../lib/email', async (orig) => ({ ...(await orig<typeof import('../lib/email')>()), sendEmail: vi.fn(async () => ({ sent: true })) }));
-const { runAgent } = await import('./loop');
+const { runAgent, decodeCursor } = await import('./loop');
 
 const SEED = JSON.parse(sql.match(/\$seed\$([\s\S]*?)\$seed\$/)?.[1] ?? 'null');
 const NOW = '2026-10-17T15:00:00Z';
 const ai = { run: vi.fn(async () => { throw new Error('Workers AI unavailable'); }) };
 const env = { AI: ai, APP_URL: 'https://app.test', APPROVAL_HMAC_SECRET: 'secret' } as unknown as Env;
-const deps = () => ({ db: db as unknown as Db, env });
+// Unbounded unless a test passes a budget; the fake db counts every call on it, as the real clients do through Budget.fetch.
+const deps = (budget = new Budget(Infinity)) => { db.meter.budget = budget; return { db: db as unknown as Db, env, budget }; };
 const send = vi.mocked(sendEmail);
 
 const addDays = (day: string, n: number) => new Date(Date.parse(`${day}T00:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
@@ -91,7 +92,7 @@ describe('runAgent (D22, AC-61)', () => {
   it('three seed invoices: expected outcomes, committed amount and seq passed to insert_decision', async () => {
     db = fakeDb(workspace('A', { only: ['01', '04', '11'] }));
     const counts = await runAgent(deps(), 'A', 'pending', 'manual');
-    expect(counts).toEqual({ PAGAR: 1, FRENAR: 1, ESCALAR: 1, errors: 0 });
+    expect(counts).toEqual({ PAGAR: 1, FRENAR: 1, ESCALAR: 1, errors: 0, remaining: 0, cursor: null });
     expect(insertCalls().map((c) => [c.args.p_invoice_id, c.args.p_expected_committed_usd, c.args.p_expected_seq]))
       .toEqual([['A-01', 0, 0], ['A-04', 2500, 0], ['A-11', 2500, 0]]);
     expect(['A-01', 'A-04', 'A-11'].map((id) => decisionsOf(id).map((d) => d.outcome))).toEqual([['PAGAR'], ['FRENAR'], ['ESCALAR']]);
@@ -114,7 +115,7 @@ describe('runAgent (D22, AC-61)', () => {
   it('decides all 29 seeded invoices as expected with Workers AI down (AC-10 through the loop)', async () => {
     db = fakeDb(workspace('A', { demo: true }));
     const counts = await runAgent(deps(), 'A', 'pending', 'login');
-    expect(counts).toEqual({ PAGAR: 15, FRENAR: 3, ESCALAR: 11, errors: 0 });
+    expect(counts).toEqual({ PAGAR: 15, FRENAR: 3, ESCALAR: 11, errors: 0, remaining: 0, cursor: null });
     for (const inv of db.tables.invoices!) expect([inv.id, decisionsOf(String(inv.id)).map((d) => d.outcome)]).toEqual([inv.id, [inv.expected_outcome]]);
     expect(insertCalls()).toHaveLength(29); // every committed amount was right first time: no STALE_PERIOD
     expect(ai.run).not.toHaveBeenCalled(); // seeded fields are already read
@@ -148,7 +149,7 @@ describe('actua (AC-24, AC-25, AC-39, R-15, R-16, R-25, R-29)', () => {
     db = fakeDb(workspace('A', { only: ['01'] }));
     let first = true;
     db.fail.insert_decision = () => (first ? ((first = false), 'STALE_PERIOD') : undefined);
-    expect(await runAgent(deps(), 'A', 'pending', 'manual')).toEqual({ PAGAR: 1, FRENAR: 0, ESCALAR: 0, errors: 0 });
+    expect(await runAgent(deps(), 'A', 'pending', 'manual')).toEqual({ PAGAR: 1, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null });
     expect(insertCalls()).toHaveLength(2);
     expect(db.rpcs.filter((r) => r.name === 'period_state')).toHaveLength(2);
     expect(decisionsOf('A-01')).toHaveLength(1);
@@ -157,7 +158,7 @@ describe('actua (AC-24, AC-25, AC-39, R-15, R-16, R-25, R-29)', () => {
   it('STALE_PERIOD on every try -> 1 + 3 retries, then an error and no decision', async () => {
     db = fakeDb(workspace('A', { only: ['01'] }));
     db.fail.insert_decision = () => 'STALE_PERIOD';
-    expect(await runAgent(deps(), 'A', 'pending', 'manual')).toEqual({ PAGAR: 0, FRENAR: 0, ESCALAR: 0, errors: 1 });
+    expect(await runAgent(deps(), 'A', 'pending', 'manual')).toEqual({ PAGAR: 0, FRENAR: 0, ESCALAR: 0, errors: 1, remaining: 0, cursor: null });
     expect(insertCalls()).toHaveLength(4);
     expect(db.tables.agent_runs).toEqual([{ company_id: 'A', trigger: 'manual', decided: { PAGAR: 0, FRENAR: 0, ESCALAR: 0 }, errors: 1 }]);
   });
@@ -165,7 +166,7 @@ describe('actua (AC-24, AC-25, AC-39, R-15, R-16, R-25, R-29)', () => {
   it('ALREADY_DECIDED -> skipped silently: no tokens, no mail, not counted', async () => {
     db = fakeDb(workspace('A', { only: ['11'] }));
     db.fail.insert_decision = () => 'ALREADY_DECIDED';
-    expect(await runAgent(deps(), 'A', 'pending', 'manual')).toEqual({ PAGAR: 0, FRENAR: 0, ESCALAR: 0, errors: 0 });
+    expect(await runAgent(deps(), 'A', 'pending', 'manual')).toEqual({ PAGAR: 0, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null });
     expect(send).not.toHaveBeenCalled();
     expect(db.tables.approval_tokens).toEqual([]);
   });
@@ -219,21 +220,21 @@ describe('actua (AC-24, AC-25, AC-39, R-15, R-16, R-25, R-29)', () => {
     db = fakeDb(workspace('A', { only: ['01', '04', '11'] }));
     await runAgent(deps(), 'A', 'pending', 'manual');
     const before = insertCalls().length;
-    expect(await runAgent(deps(), 'A', ['A-01', 'A-04', 'A-11'], 'manual')).toEqual({ PAGAR: 0, FRENAR: 0, ESCALAR: 0, errors: 0 });
-    expect(await runAgent(deps(), 'A', ['A-01', 'A-04'], 'reevaluate')).toEqual({ PAGAR: 0, FRENAR: 0, ESCALAR: 0, errors: 0 });
+    expect(await runAgent(deps(), 'A', ['A-01', 'A-04', 'A-11'], 'manual')).toEqual({ PAGAR: 0, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null });
+    expect(await runAgent(deps(), 'A', ['A-01', 'A-04'], 'reevaluate')).toEqual({ PAGAR: 0, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null });
     expect(insertCalls()).toHaveLength(before);
   });
 
   it('another company\'s invoice id is never loaded or decided', async () => {
     db = fakeDb({ ...workspace('A', { only: ['01'] }), invoices: [...seedInvoices('A', ['01']), ...seedInvoices('B', ['01'])] });
-    expect(await runAgent(deps(), 'A', ['B-01'], 'manual')).toEqual({ PAGAR: 0, FRENAR: 0, ESCALAR: 0, errors: 0 });
+    expect(await runAgent(deps(), 'A', ['B-01'], 'manual')).toEqual({ PAGAR: 0, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null });
     expect(decisionsOf('B-01')).toEqual([]);
   });
 
   it('one failing invoice is counted and the others are still decided in arrival order', async () => {
     db = fakeDb(workspace('A', { only: ['01', '03', '05'] }));
     db.fail.period_state = (a) => (a.p_exclude_invoice === 'A-03' ? 'boom' : undefined);
-    expect(await runAgent(deps(), 'A', 'pending', 'manual')).toEqual({ PAGAR: 2, FRENAR: 0, ESCALAR: 0, errors: 1 });
+    expect(await runAgent(deps(), 'A', 'pending', 'manual')).toEqual({ PAGAR: 2, FRENAR: 0, ESCALAR: 0, errors: 1, remaining: 0, cursor: null });
     expect(console.error).toHaveBeenCalledWith('agent: invoice not decided', 'A-03', 'boom');
     expect(insertCalls().map((c) => c.args.p_invoice_id)).toEqual(['A-01', 'A-05']);
   });
@@ -248,5 +249,100 @@ describe('rindeCuentas (AC-63)', () => {
       { company_id: 'A', trigger: 'ingest', decided: { PAGAR: 1, FRENAR: 0, ESCALAR: 1 }, errors: 0 },
       { company_id: 'A', trigger: 'manual', decided: { PAGAR: 0, FRENAR: 0, ESCALAR: 0 }, errors: 0 },
     ]);
+  });
+});
+
+describe('budgeted, resumable runs (R-56, R-57, AC-70)', () => {
+  const run = async (budget: Budget, trigger: 'manual' | 'reevaluate' = 'manual', cursor: string | null = null) =>
+    runAgent(deps(budget), 'A', 'pending', trigger, cursor ? decodeCursor(cursor) : null);
+
+  it('counted subrequests: 5 per run (4 reads + run row), 4 per invoice, +3 per mailed escalation, +1 when Workers AI reads', async () => {
+    db = fakeDb(workspace('A', { demo: true, only: ['01'] }));
+    let b = new Budget(Infinity);
+    await run(b);
+    expect(b.used).toBe(5 + 4);
+    db = fakeDb(workspace('A', { only: ['11'] }));
+    await run(b = new Budget(Infinity));
+    expect(send).toHaveBeenCalledOnce();
+    expect(b.used).toBe(5 + 4 + 3);
+    db = fakeDb(workspace('A', { demo: true, only: ['13'] }));
+    db.tables.invoices![0]!.fields = null;
+    await run(b = new Budget(Infinity));
+    expect(b.used).toBe(5 + 1 + 4);
+  });
+
+  it('writes an invoice only if its attempt, its mail and the run row fit; the next one stays pending and is first in the next call', async () => {
+    db = fakeDb(workspace('A', { only: ['01', '11'] }));
+    const b = new Budget(15); // 4 reads, then 01 needs 4 + 3 + 1 = 8 of 11 left; then 7 left < 8 for 11
+    const first = await run(b);
+    expect(first).toMatchObject({ PAGAR: 1, ESCALAR: 0, errors: 0, remaining: 1, cursor: expect.any(String) });
+    expect(b.used).toBeLessThanOrEqual(15);
+    expect(decisionsOf('A-11')).toEqual([]);
+    const next = await run(new Budget(Infinity), 'manual', first.cursor);
+    expect(next).toEqual({ PAGAR: 0, FRENAR: 0, ESCALAR: 1, errors: 0, remaining: 0, cursor: null });
+    expect(insertCalls().map((c) => c.args.p_invoice_id)).toEqual(['A-01', 'A-11']);
+    expect(db.tables.approval_tokens).toHaveLength(2); // the ESCALAR has its pair: never half done
+    expect(db.tables.agent_runs).toHaveLength(2); // one row per call (AC-63)
+  });
+
+  it('a STALE_PERIOD retry runs only if a whole attempt still fits; otherwise the invoice is left untouched', async () => {
+    db = fakeDb(workspace('A', { demo: true, only: ['01'] }));
+    db.fail.insert_decision = () => 'STALE_PERIOD';
+    const b = new Budget(12); // 4 reads, attempt 4 (+1 run row reserved), then 4 left < 5
+    expect(await run(b)).toMatchObject({ PAGAR: 0, errors: 0, remaining: 1, cursor: expect.any(String) });
+    expect(insertCalls()).toHaveLength(1);
+    expect(decisionsOf('A-01')).toEqual([]);
+    expect(b.used).toBeLessThanOrEqual(12);
+  });
+
+  it('"Too many subrequests" despite the budget stops at once; the call reports what it did and the next call goes on (R-57)', async () => {
+    db = fakeDb(workspace('A', { demo: true, only: ['01', '03', '05'] }));
+    db.fail.period_state = (a) => (a.p_exclude_invoice === 'A-03' ? 'TypeError: Too many subrequests by single Worker invocation.' : undefined);
+    const first = await run(new Budget());
+    expect(first).toMatchObject({ PAGAR: 1, errors: 0, remaining: 2, cursor: expect.any(String) });
+    expect(insertCalls().map((c) => c.args.p_invoice_id)).toEqual(['A-01']);
+    db.fail.period_state = undefined;
+    expect(await run(new Budget(), 'manual', first.cursor)).toMatchObject({ PAGAR: 2, remaining: 0, cursor: null });
+  });
+
+  it('a run row that cannot be written is logged and the decisions are still reported (R-57)', async () => {
+    db = fakeDb(workspace('A', { demo: true, only: ['01'] }));
+    db.fail.query = (q) => (q.table === 'agent_runs' ? 'boom' : undefined);
+    expect(await run(new Budget())).toEqual({ PAGAR: 1, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null });
+    expect(console.error).toHaveBeenCalledWith('agent: run not recorded', 'A', 'boom');
+  });
+
+  it('a read before the first invoice fails: it throws and writes nothing (the route answers 503)', async () => {
+    db = fakeDb(workspace('A', { demo: true, only: ['01'] }));
+    db.fail.query = (q) => (q.table === 'policies' ? 'down' : undefined);
+    await expect(run(new Budget())).rejects.toThrow('down');
+    expect(db.tables.decisions).toEqual([]);
+    expect(db.tables.agent_runs).toEqual([]);
+  });
+
+  it('an errored invoice lies behind the cursor: counted once, never retried by the same press', async () => {
+    db = fakeDb(workspace('A', { demo: true, only: ['01', '03', '05'] }));
+    db.fail.period_state = (a) => (a.p_exclude_invoice === 'A-01' ? 'boom' : undefined);
+    const first = await run(new Budget(4 + 1 + 4 + 4)); // reads, A-01's failing read, A-03; then 4 left < 5 for A-05
+    expect(first).toMatchObject({ PAGAR: 1, errors: 1, remaining: 1 });
+    expect(await run(new Budget(), 'manual', first.cursor)).toMatchObject({ PAGAR: 1, errors: 0, remaining: 0, cursor: null });
+  });
+
+  it('re-evaluating in small calls re-decides every pending and ESCALAR invoice exactly once', async () => {
+    db = fakeDb(workspace('A', { demo: true }));
+    await run(new Budget(Infinity));
+    const open = db.tables.invoices!.filter((i) => i.expected_outcome === 'ESCALAR').map((i) => String(i.id));
+    const before = insertCalls().length;
+    let cursor: string | null = null;
+    let calls = 0;
+    do { ({ cursor } = await run(new Budget(), 'reevaluate', cursor)); calls++; } while (cursor && calls < 20);
+    expect(calls).toBeGreaterThan(1);
+    expect(insertCalls().slice(before).map((c) => c.args.p_invoice_id).sort()).toEqual(open.sort());
+  });
+
+  it('an empty run has nothing remaining and a null cursor; a garbage cursor does not decode', async () => {
+    db = fakeDb(workspace('A', { demo: true, only: [] }));
+    expect(await run(new Budget())).toEqual({ PAGAR: 0, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null });
+    for (const bad of ['', 'x', btoa('[1]'), btoa('["a","b"]'), btoa('[-1,"a"]'), btoa('{}')]) expect(decodeCursor(bad)).toBeNull();
   });
 });

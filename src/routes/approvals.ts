@@ -53,7 +53,7 @@ interface Answer {
 async function answer(a: Answer): Promise<StoredDecision | Refusal> {
   const { env, db, companyId, invoiceId } = a;
   const row: (Omit<Invoice, 'fields'> & { fields: Invoice['fields'] | null; raw_text: string | null }) | null =
-    must(await db.from('invoices').select('id, source, received_at, fields, raw_text').eq('company_id', companyId).eq('id', invoiceId).maybeSingle());
+    must(await db.from('invoices').select('id, source, received_at, fields, raw_text').eq('company_id', companyId).eq('id', invoiceId).eq('archived', false).maybeSingle());
   if (!row) return 'not_found';
   const esc = await latestOf(db, companyId, invoiceId);
   if (esc?.outcome !== 'ESCALAR') return 'already_decided';
@@ -114,7 +114,8 @@ approvals.get('/approve/:token', async (c) => {
   const l = await link(c.env, c.req.param('token'));
   if (typeof l === 'string') return refuse(c, l);
   const invoice = must(await l.db.from('invoices').select('id, source, received_at, fields')
-    .eq('company_id', l.company_id).eq('id', l.invoice_id).single());
+    .eq('company_id', l.company_id).eq('id', l.invoice_id).eq('archived', false).maybeSingle());
+  if (!invoice) return refuse(c, 'not_found'); // archived invoices are hidden, so they cannot be answered (R-21)
   return c.json({ action: l.action, expires_at: new Date(l.exp).toISOString(), invoice, decision: l.esc });
 });
 

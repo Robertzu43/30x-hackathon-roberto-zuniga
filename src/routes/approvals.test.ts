@@ -327,6 +327,45 @@ describe('dashboard answers (AC-34, AC-37, R-03)', () => {
   });
 });
 
+describe('an archived invoice cannot be answered (AC-34, R-21)', () => {
+  const archive = (id: string) => { db.tables.invoices!.find((i) => i.id === id)!.archived = true; };
+  const NOT_FOUND = { error: 'not_found', message: 'Factura no encontrada' };
+  const uses = () => db.tables.approval_uses?.length ?? 0;
+
+  it('the emailed approve link on an archived invoice -> 404, no human decision, no approval_uses', async () => {
+    await setup(['11']);
+    const { approve } = await links('A-11');
+    archive('A-11');
+    const res = await answer(approve, 1);
+    expect([res.status, await res.json()]).toEqual([404, NOT_FOUND]);
+    expect(humans('A-11')).toEqual([]);
+    expect(uses()).toBe(0);
+  });
+
+  it('the dashboard approve and reject on an archived invoice -> 404, no human decision', async () => {
+    await setup(['11']);
+    archive('A-11');
+    for (const action of ['approve', 'reject'] as const) {
+      const res = await dashboard('A-11', action, 1);
+      expect([res.status, await res.json()]).toEqual([404, NOT_FOUND]);
+    }
+    expect(humans('A-11')).toEqual([]);
+    expect(uses()).toBe(0);
+  });
+
+  it('GET on an archived invoice\'s link is not actionable and writes nothing', async () => {
+    await setup(['11']);
+    const { approve } = await links('A-11');
+    archive('A-11');
+    const writes = db.queries.filter((q) => q.op === 'insert').length;
+    const rpcs = db.rpcs.length;
+    const res = await get(approve);
+    expect([res.status, await res.json()]).toEqual([404, NOT_FOUND]);
+    expect(db.queries.filter((q) => q.op === 'insert').length).toBe(writes);
+    expect(db.rpcs.length).toBe(rpcs);
+  });
+});
+
 describe('the video sequence (R-35, AC-34)', () => {
   const period = () => db.rpc('period_state', { p_company_id: 'A', p_month: `${bogotaDay(NOW).slice(0, 7)}-01` })
     .then((r) => r.data as { committed_usd: number; paid_usd: number });

@@ -1,7 +1,7 @@
 /* global Buffer */
 // The perf harness's own checks (AC-97): median, p95, gzip sum, the critical path and the table, on fixtures. No browser, no network.
 import { describe, expect, it } from 'vitest';
-import { coloOf, criticalApis, gzSum, judge, median, p95, renderPerf, ROW0 } from './perf.mjs';
+import { coloOf, criticalApis, gzSum, judge, median, navRows, p95, portalRows, renderPerf, ROW0 } from './perf.mjs';
 import { SCREENS } from './ux-gate.mjs';
 
 describe('statistics', () => {
@@ -78,4 +78,27 @@ describe('gate screens added by D40 and D41', () => {
     expect(SCREENS.find((s) => s.id === id)?.exp).toBe('finance'));
   it('the trial screens share the one anonymous session of the run', () =>
     expect(SCREENS.filter((s) => ['trial', 'save-access', 'leave-trial'].includes(s.id)).every((s) => s.session === 'trial')).toBe(true));
+});
+
+describe('unmeasured is never green (AC-97)', () => {
+  const screen = { id: 'period' };
+  const fixture = (rows) => renderPerf({ when: '2026-10-17T20:00:00.000Z', base: 'https://x.test', colo: '?', country: '?', rows });
+  it('a navigation error becomes a FAIL row carrying the error message', () => {
+    const md = fixture(navRows(screen, [{ head: 50, data: 400 }, { error: 'Timeout 15000ms exceeded' }, { head: 60, data: 500 }]));
+    expect(md).toMatch(/\| period \| In-app navigation \| not measured \(Timeout 15000ms exceeded\) \| within 100 ms \| FAIL \|/);
+    expect(md).toContain('FAILED ROWS: 1');
+  });
+  it('a link that is truly absent stays N/A, distinct from the FAIL', () => {
+    const md = fixture(navRows(screen, [null, null, null]));
+    expect(md).toMatch(/N\/A \(link not found on the origin screen\)/);
+    expect(md).toContain('FAILED ROWS: 0');
+  });
+  it('three good runs give the heading and data rows', () =>
+    expect(navRows(screen, [{ head: 50, data: 400 }, { head: 60, data: 500 }, { head: 70, data: 600 }]).map((r) => r.value)).toEqual([60, 500]));
+  it('a missing portal base is an explicit FAIL row, not an omission', () => {
+    const md = fixture(portalRows(false));
+    expect(md).toContain('facturas Worker not measured (pass --portal)');
+    expect(md).toContain('FAILED ROWS: 1');
+  });
+  it('a known portal base adds no row', () => expect(portalRows(true)).toEqual([]));
 });

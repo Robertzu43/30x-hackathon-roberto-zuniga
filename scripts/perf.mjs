@@ -1,6 +1,6 @@
 /* global process, console, fetch, URL, Buffer, document, location, localStorage, performance, requestAnimationFrame, window */ // Node script + code that runs in the page
 // The D40 perf harness (AC-97). Usage:
-//   node scripts/perf.mjs --base <url> [--portal <url>] [--status-token t] [--trial] [--out docs/perf.md]
+//   node scripts/perf.mjs --base <url> [--portal <url>] [--status-token t] [--trial]
 // Read-only: GET requests and one demo sign-in. No AI call, no write. --trial adds one anonymous sign-in (needs the trial door, AC-92).
 // Needs Playwright and Chromium (/opt/pw-browsers/chromium, or GATE_CHROMIUM). Writes docs/perf.md; exits 1 when any row is a FAIL.
 import { writeFileSync } from 'node:fs';
@@ -53,6 +53,18 @@ ${ROW0}
 ${rows.map((r) => `| ${r.screen} | ${r.metric} | ${cell(r)} | ${r.within ? 'within' : 'under'} ${r.target} ${r.unit} | ${verdict(r)} |`).join('\n')}
 `;
 }
+
+// An error is a FAIL (value null, why = the message); N/A only when every run succeeded and the link was truly absent.
+export function navRows(s, runs) {
+  const err = runs.find((r) => r?.error);
+  if (err) return [{ screen: s.id, metric: 'In-app navigation', value: null, why: err.error, unit: 'ms', target: T.head, within: true }];
+  if (runs.includes(null)) return [{ screen: s.id, metric: 'In-app navigation', na: 'link not found on the origin screen', target: T.head, unit: 'ms' }];
+  return [
+    { screen: s.id, metric: 'Navigation to heading or skeleton, median of 3', value: Math.round(median(runs.map((n) => n.head))), unit: 'ms', target: T.head, within: true },
+    { screen: s.id, metric: 'Navigation to data rendered, median of 3', value: Math.round(median(runs.map((n) => n.data))), unit: 'ms', target: T.data },
+  ];
+}
+export const portalRows = (portalOk) => (portalOk ? [] : [{ screen: 'portal, status', metric: 'First load, median of 3', value: null, why: 'facturas Worker not measured (pass --portal)', unit: 'ms', target: T.load }]);
 
 // ---- Screens ----
 const SUBMIT = 'button[type="submit"], button.primary';
@@ -160,7 +172,7 @@ const loc = async (base) => (await fetch(`${base}/cdn-cgi/trace`).then((r) => r.
 
 export async function main(argv) {
   const a = Object.fromEntries(argv.filter((x) => x.startsWith('--')).map((x) => [x.slice(2), argv[argv.indexOf(x) + 1]?.startsWith('--') ? true : argv[argv.indexOf(x) + 1] ?? true]));
-  const base = (a.base ?? process.env.PERF_BASE ?? '').replace(/\/$/, '');
+  const base = (typeof a.base === 'string' ? a.base : '').replace(/\/$/, '');
   if (!base) throw new Error('usage: node scripts/perf.mjs --base <url> [--portal <url>] [--status-token t] [--trial]');
   const portal = (a.portal ?? base.replace('//30x-hackathon.', '//facturas.')).replace(/\/$/, '');
   const portalOk = portal !== base;
@@ -179,7 +191,7 @@ export async function main(argv) {
   vars.trial = !!trial;
 
   const browser = await launch();
-  const rows = [], apis = new Map(); // url -> { headers, screens }
+  const rows = portalRows(portalOk), apis = new Map(); // url -> { headers, screens }
   const jobs = [...MAIN.map((s) => ({ s, base, session: s.trial ? trial : session })), ...(portalOk ? PORTAL.map((s) => ({ s, base: portal, session: null, portal: true })) : [])];
   for (const { s, base: origin, session: sess, portal: isPortal } of jobs) {
     const skip = s.needs && !vars[s.needs];
@@ -193,9 +205,8 @@ export async function main(argv) {
     for (const r of crit) apis.set(r.url, { headers: r.headers, screens: [...(apis.get(r.url)?.screens ?? []), s.id] });
     if (s.from && !isPortal) {
       const ns = [];
-      for (let i = 0; i < RUNS; i++) ns.push(await navTime(browser, origin, s, sess, vars).catch(() => null));
-      if (ns.includes(null)) rows.push({ screen: s.id, metric: 'In-app navigation', na: 'link not found on the origin screen', target: T.head, unit: 'ms' });
-      else rows.push({ screen: s.id, metric: 'Navigation to heading or skeleton, median of 3', value: Math.round(median(ns.map((n) => n.head))), unit: 'ms', target: T.head, within: true }, { screen: s.id, metric: 'Navigation to data rendered, median of 3', value: Math.round(median(ns.map((n) => n.data))), unit: 'ms', target: T.data });
+      for (let i = 0; i < RUNS; i++) ns.push(await navTime(browser, origin, s, sess, vars).catch((e) => ({ error: e.message.split('\n')[0] })));
+      rows.push(...navRows(s, ns));
     }
   }
   await browser.close();
@@ -205,7 +216,7 @@ export async function main(argv) {
     rows.push({ screen: `${label} (${[...new Set(screens)].join(', ')})`, metric: 'API p95 of 20', ...(r.error ? { why: r.error, value: null } : r), unit: 'ms', target: T.api });
   }
   const md = renderPerf({ when: new Date().toISOString(), base, portal: portalOk ? portal : null, colo, country, rows });
-  writeFileSync(join(ROOT, a.out ?? 'docs/perf.md'), md);
+  writeFileSync(join(ROOT, 'docs/perf.md'), md);
   const failed = rows.filter((r) => verdict(r) === 'FAIL').length;
   console.log(md.split('## Latest run')[1]);
   console.log(failed ? `PERF FAILED: ${failed} rows` : 'PERF PASSED');

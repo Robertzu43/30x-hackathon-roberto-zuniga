@@ -1,9 +1,10 @@
-// Bandeja and Nueva factura (AC-11, AC-29, AC-63, AC-66, AC-70).
+// Bandeja and Nueva factura (AC-11, AC-29, AC-63, AC-66, AC-70, AC-101).
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { Route, Routes } from 'react-router-dom';
 import { expect, test, vi } from 'vitest';
 import OutcomeChip from './components/OutcomeChip';
 import { routes } from './App';
+import type { DashboardData } from './dashboard/Dashboard';
 import Inbox from './pages/Inbox';
 import { sentence } from './test/text';
 import { mockApi, renderAt, signedInAs } from './test/utils';
@@ -17,6 +18,17 @@ const ROWS = [
   row('b2', 'ESCALAR', 'Kodex Labs', 'ESCALAR · 4.800 USD a Kodex Labs: supera el umbral de aprobación'),
   row('c3', null, 'Nubia Diseño', null),
 ];
+// AC-101: Task 45's `dashboard`, as the screen function computes it.
+const DASH: DashboardData = {
+  kpis: { to_pay_today_usd: 1200, to_pay_today_count: 1, awaiting_count: 3, awaiting_usd: 9600, stopped_month_count: 2, autonomy_pct: 75, autonomy_n: 3, autonomy_m: 4 },
+  by_day: Array.from({ length: 30 }, (_, i) => ({ day: `2026-09-${String(i + 1).padStart(2, '0')}`, PAGAR: i === 29 ? 1 : 0, FRENAR: 0, ESCALAR: i === 29 ? 1 : 0, pending: i === 29 ? 1 : 0 })),
+  by_currency: [{ currency: 'USD', usd: 1200 }], by_country: [{ country: 'CO', usd: 1200 }],
+  due_soon: [{ invoice_id: 'a1', payee: 'Nubia Diseño', amount: 1200, currency: 'USD', amount_usd: 1200, due_date: '2026-10-20', outcome: 'PAGAR' }], due_soon_total: 1,
+  approvals: [{ invoice_id: 'b2', payee: 'Kodex Labs', amount: 4800, currency: 'USD', question_es: '¿Apruebo 4.800 USD a Kodex Labs?', question_en: 'Do I approve 4,800 USD to Kodex Labs?', decided_at: '2026-10-10T15:00:00Z' }],
+  approvals_total: 3,
+};
+const EMPTY_DASH: DashboardData = { ...DASH, kpis: { ...DASH.kpis, to_pay_today_usd: 0, to_pay_today_count: 0, awaiting_count: 0, awaiting_usd: 0, stopped_month_count: 0, autonomy_pct: null, autonomy_n: 0, autonomy_m: 0 },
+  by_day: DASH.by_day.map((d) => ({ ...d, PAGAR: 0, ESCALAR: 0, pending: 0 })), by_currency: [], by_country: [], due_soon: [], due_soon_total: 0, approvals: [], approvals_total: 0 };
 const PORTAL = 'https://facturas.30x-hackathon-roberto-zuniga.workers.dev/andina-labs';
 const minsAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
 const batch = (o = {}) => ({ PAGAR: 0, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null, ...o });
@@ -27,12 +39,12 @@ const screenCalls = (f: ReturnType<typeof mockApi>) => f.mock.calls.filter(([u])
 // AC-98: Bandeja loads one GET /api/screen/inbox. Tests still name its parts by the old endpoints; the mock composes them,
 // and any part that fails (a Response) fails the whole screen request.
 const PARTS = { 'GET /api/invoices': 'invoices', 'GET /api/agent/last-run': 'last_run', 'GET /api/portal-link': 'portal', 'GET /api/beneficiaries': 'beneficiaries' };
-function setup(routes: Record<string, unknown> = {}) {
+function setup(routes: Record<string, unknown> = {}, dashboard: DashboardData | null = DASH) {
   signedInAs('ana@empresa.co');
   const all: Record<string, unknown> = { 'GET /api/invoices': ROWS, 'GET /api/agent/last-run': { at: minsAgo(7), trigger: 'cron' },
     'GET /api/portal-link': { portal_url: PORTAL, email_address: null }, 'GET /api/beneficiaries': [], 'GET /api/agent/activity': { items: [] }, ...routes };
   const inbox = async () => {
-    const body: Record<string, unknown> = { dashboard: null };
+    const body: Record<string, unknown> = { dashboard };
     for (const [k, field] of Object.entries(PARTS)) {
       const v = typeof all[k] === 'function' ? await (all[k] as () => unknown)() : all[k];
       if (v instanceof Response) return v;
@@ -50,7 +62,9 @@ function setup(routes: Record<string, unknown> = {}) {
   );
   return { f, view };
 }
-const items = () => screen.getAllByRole('listitem');
+const tableBlock = () => screen.getByRole('region', { name: /^(Facturas|Invoices)$/ });
+const table = () => within(tableBlock()).getByRole('table'); // the charts hold their own visually hidden value tables (AC-106)
+const items = () => within(table()).getAllByRole('row').slice(1); // the invoice rows, under the header row
 const payeeSelect = () => screen.getByLabelText(/^Benefici(ario|ary)$/);
 const payeeOptions = () => within(payeeSelect()).getAllByRole('option').map((o) => o.textContent);
 const choosePayee = (label: string) => {
@@ -73,6 +87,7 @@ test('lists 3 rows with chip and headline, each a link to its detail (AC-29)', a
   expect(items()).toHaveLength(3);
   expect(within(items()[0]!).getByText('PAGAR')).toBeTruthy();
   expect(within(items()[0]!).getByRole('link').getAttribute('href')).toBe('/invoices/a1');
+  expect(screen.queryByRole('list', { name: /./ })).toBeNull();
   expect(view.container.querySelector('[data-tour="invoice-row"]')).not.toBeNull();
 });
 
@@ -102,9 +117,11 @@ test('empty state', async () => {
   expect(await screen.findByText('Todavía no hay facturas. Usa «Nueva factura» para subir un PDF o una imagen, o pegar un correo o un chat.')).toBeTruthy();
 });
 
-test('error state shows a plain message', async () => {
-  setup({ 'GET /api/invoices': new Response(JSON.stringify({ error: 'boom' }), { status: 503 }) });
+test('error state shows a plain message and no skeleton', async () => {
+  const { view } = setup({ 'GET /api/invoices': new Response(JSON.stringify({ error: 'boom' }), { status: 503 }) });
   expect((await screen.findByRole('alert')).textContent).toBe('No pude cargar las facturas. Recarga la página para intentar de nuevo.');
+  expect(view.container.querySelector('.skeleton')).toBeNull();
+  expect(screen.queryByRole('table')).toBeNull();
 });
 
 test('"Ejecutar agente" runs the loop: progress, list reloads, summed summary, last-run refreshed (AC-29, AC-70, AC-63)', async () => {
@@ -267,22 +284,99 @@ test('a payee outside the directory is one entry labelled as read on its oldest 
   expect(items()).toHaveLength(2);
 });
 
-// AC-91 item 4: the rows load under the box, never above it, so nothing pushes it down (UX pass 1, CLS 0.35).
-test('Bandeja carries «Pregúntale a Thesaurus» under the filters and above the list; it asks about the whole inbox, no invoice (AC-67)', async () => {
+const follows = (a: Node, b: Node) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+// AC-101: the dashboard first, then the ask box (AC-67), then the invoice table, last on the page.
+test('Bandeja shows the dashboard, then «Pregúntale a Thesaurus», then the table last (AC-101, AC-67)', async () => {
+  const { view } = setup();
+  await screen.findByText(/supera el umbral/);
+  const kpi = await screen.findByRole('group', { name: /^Por pagar hoy: / });
+  const ask = screen.getByRole('region', { name: 'Pregúntale a Thesaurus' });
+  expect(follows(kpi, ask)).toBe(true);
+  expect(follows(screen.getByRole('region', { name: 'Necesita tu respuesta' }), ask)).toBe(true);
+  expect(follows(ask, tableBlock())).toBe(true);
+  expect(view.container.querySelector('section.inbox')!.lastElementChild).toBe(tableBlock());
+  expect(within(tableBlock()).getByRole('table')).toBeTruthy();
+});
+
+test('each dashboard section is on Bandeja with the screen function figures (AC-101)', async () => {
+  setup();
+  expect((await screen.findByRole('group', { name: 'Esperando tu aprobación: 3' })).textContent).toMatch(/US\$\s9\.600,00/);
+  expect(await screen.findByRole('group', { name: 'Frenadas este mes: 2' })).toBeTruthy();
+  expect(await screen.findByRole('group', { name: /^Autonomía: 75\s?%$/ })).toBeTruthy();
+  const ask = screen.getByRole('region', { name: 'Necesita tu respuesta' });
+  expect(within(ask).getByText('¿Apruebo 4.800 USD a Kodex Labs?')).toBeTruthy();
+  expect(within(ask).getByRole('link', { name: 'Responder' }).getAttribute('href')).toBe('/invoices/b2');
+  expect(within(screen.getByRole('region', { name: 'Vence pronto (7 días)' })).getByText('Nubia Diseño')).toBeTruthy();
+  for (const title of ['Facturas por día y resultado (últimos 30 días)', 'Pagado este mes por moneda', 'Pagado este mes por país']) {
+    expect((await screen.findAllByText(title)).length).toBeGreaterThan(0);
+  }
+});
+
+test('«y 2 más» filters the table to ESCALAR (AC-101)', async () => {
+  setup();
+  await screen.findByText(/supera el umbral/);
+  fireEvent.click(screen.getByRole('link', { name: 'y 2 más' }));
+  expect(screen.getByLabelText('Resultado')).toHaveProperty('value', 'ESCALAR');
+  expect(items()).toHaveLength(1);
+  expect(within(items()[0]!).getByText('ESCALAR')).toBeTruthy();
+});
+
+test('empty states: every dashboard section and the table say so (AC-101, AC-106)', async () => {
+  setup({ 'GET /api/invoices': [] }, EMPTY_DASH);
+  expect(await screen.findByText('Todavía no hay facturas. Usa «Nueva factura» para subir un PDF o una imagen, o pegar un correo o un chat.')).toBeTruthy();
+  expect(screen.getByText('Nada espera tu respuesta.')).toBeTruthy();
+  expect(screen.getByText('Nada vence en los próximos 7 días.')).toBeTruthy();
+  expect(await screen.findAllByText('Todavía no hay datos para este gráfico.')).toHaveLength(3);
+});
+
+test('an answer with no dashboard yet shows the table alone (AC-98: null until Task 45)', async () => {
+  setup({}, null);
+  await screen.findByText(/supera el umbral/);
+  expect(screen.queryByRole('region', { name: 'Necesita tu respuesta' })).toBeNull();
+  expect(items()).toHaveLength(3);
+});
+
+test('search ignores case and accents over beneficiary, number and concept (AC-101)', async () => {
+  setup({ 'GET /api/invoices': [
+    { ...row('a1', 'PAGAR', 'Nubia Diseño', 'PAGAR · a1'), fields: { payee_name: 'Nubia Diseño', invoice_number: 'FE-77', concept: 'Retainer' } },
+    { ...row('b2', 'ESCALAR', 'Kodex Labs', 'ESCALAR · b2'), fields: { payee_name: 'Kodex Labs', invoice_number: '2044', concept: 'Migración de datos' } },
+  ] });
+  await screen.findByText('PAGAR · a1');
+  const search = screen.getByLabelText('Buscar por beneficiario, número o concepto');
+  fireEvent.change(search, { target: { value: 'NUBIA DISENO' } });
+  expect(items().map((r) => r.textContent)).toEqual([expect.stringContaining('a1')]);
+  fireEvent.change(search, { target: { value: 'migracion' } });
+  expect(items().map((r) => r.textContent)).toEqual([expect.stringContaining('b2')]);
+  fireEvent.change(search, { target: { value: 'fe-77' } });
+  expect(items().map((r) => r.textContent)).toEqual([expect.stringContaining('a1')]);
+});
+
+test('a header click sorts and toggles the direction, with aria-sort (AC-101)', async () => {
+  setup({ 'GET /api/invoices': [{ ...row('a1', 'PAGAR', 'Nubia Diseño', 'PAGAR · a1'), amount_usd: 1200 }, { ...row('b2', 'ESCALAR', 'Kodex Labs', 'ESCALAR · b2'), amount_usd: 4800 }] });
+  await screen.findByText('PAGAR · a1');
+  const usd = () => screen.getByRole('columnheader', { name: /Monto USD/ });
+  fireEvent.click(within(usd()).getByRole('button'));
+  expect(usd().getAttribute('aria-sort')).toBe('ascending');
+  expect(items().map((r) => r.getAttribute('data-id'))).toEqual(['a1', 'b2']);
+  fireEvent.click(within(usd()).getByRole('button'));
+  expect(usd().getAttribute('aria-sort')).toBe('descending');
+  expect(items().map((r) => r.getAttribute('data-id'))).toEqual(['b2', 'a1']);
+});
+
+// AC-67: the ask box asks about the whole inbox, no invoice.
+test('Bandeja carries «Pregúntale a Thesaurus»; it asks about the whole inbox, no invoice (AC-67)', async () => {
   const { f } = setup({ 'POST /api/ask': { answer: 'Quedan 3.200 USD del presupuesto de octubre.', provider: 'Amazon Nova Lite (AWS Bedrock)', remaining: 8 } });
   await screen.findByText(/supera el umbral/);
   const ask = screen.getByRole('region', { name: 'Pregúntale a Thesaurus' });
-  const follows = (a: Node, b: Node) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
-  expect(follows(payeeSelect(), ask)).toBe(true);
-  expect(follows(ask, screen.getAllByRole('list').at(-1)!)).toBe(true);
   fireEvent.change(within(ask).getByLabelText('Tu pregunta sobre el registro'), { target: { value: '¿cuánto queda del presupuesto?' } });
   fireEvent.click(within(ask).getByRole('button', { name: 'Preguntar' }));
   expect(await within(ask).findByText('Te quedan 8 preguntas hoy')).toBeTruthy();
   expect(calls(f, 'POST', '/api/ask').map(([, i]) => JSON.parse(String(i!.body)))).toEqual([{ question: '¿cuánto queda del presupuesto?', lang: 'es' }]);
 });
 
-// AC-91 item 4: nothing above «Pregúntale a Thesaurus» may change height once data arrives (measured in Chromium: the
-// last-run line popping in and the payee select widening with its options were the remaining shifts).
+// AC-91 item 4: nothing may change height once data arrives (measured in Chromium: the
+// last-run line popping in and the payee select widening with its options were the shifts).
 test('the last-run line holds its place before its request answers', () => {
   setup();
   expect(document.querySelector('.inbox-last-run')).not.toBeNull();
@@ -309,7 +403,7 @@ test.each([
   expect(await screen.findByText(line)).toBeTruthy();
 });
 
-// AC-86: the portal link card, after the list (it appears with the rows, so nothing above it moves).
+// AC-86: the portal link card, above the table (AC-101: the table comes last).
 const card = () => screen.findByRole('region', { name: 'Comparte este enlace con tus proveedores' });
 
 test('the card shows the company portal URL and no email line when the intake address is null (AC-86)', async () => {
@@ -317,8 +411,7 @@ test('the card shows the company portal URL and no email line when the intake ad
   const c = await card();
   expect(within(c).getByText(PORTAL)).toBeTruthy();
   expect(c.textContent).not.toMatch(/escriban|@/);
-  const list = screen.getAllByRole('list')[0]!;
-  expect(!!(list.compareDocumentPosition(c) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+  expect(follows(c, tableBlock())).toBe(true);
   expect(screen.getAllByRole('button').filter((b) => b.classList.contains('primary')).map((b) => b.textContent)).toEqual(['Ejecutar agente']);
 });
 
@@ -374,16 +467,16 @@ test('Bandeja carries the activity panel and refreshes it after each run call (A
   await waitFor(() => expect(calls(f, 'GET', '/api/agent/activity').length).toBe(before + 1));
 });
 
-// AC-91 item 1 (Task 29 review): «Correo de cuentasporcobrar@distribuidoracolombiana.com.co» or a long payee made 360 scroll sideways.
-test('a row wraps a long unbreakable sender or payee inside the screen', async () => {
+// AC-91 item 1 (Task 29 review): «Correo de cuentasporcobrar@distribuidoracolombiana.com.co» or a long payee made the page scroll sideways.
+test('a table cell wraps a long unbreakable sender or payee', async () => {
   const { readFileSync } = (await import('node:fs' as string)) as { readFileSync(p: string, enc: string): string };
-  expect(readFileSync('web/pages/inbox.css', 'utf8')).toMatch(/\n\.inbox-list a \{[^}]*overflow-wrap: anywhere/);
+  expect(readFileSync('web/dashboard/dashboard.css', 'utf8')).toMatch(/\n\.dash-table td \{[^}]*overflow-wrap: anywhere/);
 });
 
 // UX-23 (AC-91 item 6): one primary per view. With the form open «Enviar al agente» is it; «Ejecutar agente» steps back.
 test('opening «Nueva factura» demotes «Ejecutar agente» to secondary; closing it restores it', async () => {
   setup();
-  await screen.findAllByRole('listitem');
+  await screen.findByText(/supera el umbral/);
   const primaries = () => screen.getAllByRole('button').filter((b) => b.classList.contains('primary')).map((b) => b.textContent);
   open();
   expect(primaries()).toEqual(['Enviar al agente']);
@@ -399,13 +492,13 @@ test('Bandeja loads its data with one request to /api/screen/inbox in the tab la
   expect(data).toEqual(['/api/screen/inbox?lang=es']);
 });
 
-// AC-99 (R-109): while it loads, the list is drawn with placeholder rows in the loaded markup, hidden; the last-run line too.
-test('while loading, the list and the last-run line are a skeleton with the loaded markup', () => {
+// AC-99 (R-109): while it loads, the dashboard and the table are drawn in the loaded markup with placeholder data, hidden; the last-run line too.
+test('while loading, the dashboard, the table and the last-run line are a skeleton with the loaded markup', () => {
   const { view } = setup({ 'GET /api/invoices': () => new Promise(() => {}) });
-  const list = view.container.querySelector('.inbox-list.skeleton') as HTMLElement;
-  expect(list.getAttribute('aria-hidden')).toBe('true');
-  expect(list.hasAttribute('inert')).toBe(true);
-  expect(list.querySelectorAll('li a').length).toBeGreaterThan(0);
+  const skeletons = [...view.container.querySelectorAll<HTMLElement>('.skeleton:not(.inbox-last-run)')];
+  expect(skeletons.map((s) => [s.getAttribute('aria-hidden'), s.hasAttribute('inert')])).toEqual([['true', true], ['true', true]]);
+  expect(skeletons[0]!.querySelector('.dash-kpis')).not.toBeNull();
+  expect(skeletons[1]!.querySelectorAll('tbody tr a').length).toBeGreaterThan(0);
   expect(view.container.querySelector('.inbox-last-run.skeleton')).not.toBeNull();
 });
 
@@ -413,4 +506,19 @@ test('the skeleton is gone once the rows arrive', async () => {
   const { view } = setup();
   await screen.findByText(/supera el umbral/);
   expect(view.container.querySelector('.skeleton')).toBeNull();
+});
+
+// AC-91 item 5 (gate 5.mixed/5.locale): the hidden loading rows speak the tab's language.
+test('the loading table rows are in the tab language', () => {
+  localStorage.setItem('lang', 'en');
+  const { view } = setup({ 'GET /api/invoices': () => new Promise(() => {}) });
+  const body = view.container.querySelector('.skeleton .dash-table tbody')!.textContent!;
+  expect(body).toContain('the agent has not decided it yet');
+  expect(body).not.toMatch(/PAGAR|dentro de reglas/);
+});
+
+// AC-91 item 6 (AC-53 Clarified): the pending chip uses an approved palette colour.
+test('the pending chip background is in the palette', async () => {
+  const { readFileSync } = (await import('node:fs' as string)) as { readFileSync(p: string, enc: string): string };
+  expect(readFileSync('web/pages/inbox.css', 'utf8')).toMatch(/\n\.chip-pending \{ background: #f1efe9;/);
 });

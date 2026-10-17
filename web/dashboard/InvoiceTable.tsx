@@ -104,7 +104,7 @@ export default function InvoiceTable({ rows, directory, outcome, onOutcome }: {
         : shown.length === 0 ? <p className="muted">{t('inbox.no_match')}</p>
         : (
           <div className="table-wrap">
-            <table>
+            <table className="inbox-list">{/* the class is the rows hook of userMarkers.test.tsx */}
               <thead>
                 <tr>{head('date', t('dash.col.date'))}{head('payee', t('inbox.filter.payee'))}<th scope="col">{t('dash.col.invoice')}</th>
                   {head('usd', t('dash.col.usd'))}{head('outcome', t('inbox.filter.outcome'))}</tr>

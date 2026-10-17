@@ -1,75 +1,50 @@
-// Bandeja (AC-29, AC-63, AC-66, AC-70): every invoice with its outcome chip and one-line headline, filters,
-// "Ejecutar agente" (shared run loop, Task 11b), "Nueva factura" (AC-11), when the agent last ran and «Pregúntale a Thesaurus» (AC-67).
-// After the list: the portal link card (AC-86) and «Actividad del agente» (AC-78). They appear once the rows and the link
-// have loaded, below everything else, so nothing above them moves (AC-91 item 4).
+// Bandeja (AC-29, AC-63, AC-66, AC-70, AC-101): "Ejecutar agente" (shared run loop, Task 11b), "Nueva factura" (AC-11) and when the
+// agent last ran; then the finance dashboard, the portal link card (AC-86), «Actividad del agente» (AC-78), «Pregúntale a Thesaurus»
+// (AC-67) right before the invoice table, which comes last (AC-101). While loading, the dashboard and the table are their own
+// markup with made-up data, hidden, so nothing moves when the answer arrives (AC-91 item 4, AC-99).
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { findBeneficiary, nameKey } from '../../src/engine/checks';
-import type { Beneficiary } from '../../src/engine/types';
 import { screens, useScreen } from '../api';
 import AgentActivity from '../components/AgentActivity';
 import AskThesaurus from '../components/AskThesaurus';
 import NewInvoice from '../components/NewInvoice';
-import { OutcomeChip, type Outcome } from '../components/OutcomeChip';
-import PortalLinkCard, { originLabel, type PortalLink } from '../components/PortalLinkCard';
+import PortalLinkCard, { type PortalLink } from '../components/PortalLinkCard';
 import { RunProgress, useRunAgent } from '../components/RunProgress';
-import { tu } from '../components/User';
+import Dashboard, { type DashboardData } from '../dashboard/Dashboard';
+import InvoiceTable, { type Row } from '../dashboard/InvoiceTable';
 import { useT } from '../i18n';
 import './inbox.css';
 
-
-type Row = { id: string; outcome: Outcome | null; headline: string | null; received_at: string; fields: { payee_name: string | null } | null;
-  origin?: 'app' | 'portal' | 'email'; sender?: string | null };
 type LastRun = { at: string; trigger: string; via?: 'portal' | 'email' | null } | null;
-const UNREAD = '#'; // nameKey never yields '#'
-const keyOf = (r: Row) => nameKey(r.fields?.payee_name ?? null) || UNREAD;
-// AC-98: GET /api/screen/inbox. `beneficiaries` holds only id and name (R-132), all the name rule reads.
-type Screen = { invoices: Row[]; last_run: LastRun; portal: PortalLink | null; beneficiaries: Beneficiary[] };
-// AC-99 (R-109): the loading list is the loaded markup with these made-up rows, hidden by .skeleton.
-const SKELETON: Row[] = ['s1', 's2', 's3'].map((id) => ({ id, outcome: null, headline: 'PAGAR · 1.200 USD a Nubia Diseño, dentro de reglas', received_at: '2026-10-10T15:00:00Z', fields: null }));
+// AC-98: GET /api/screen/inbox. `beneficiaries` holds only id and name (R-132), all the name rule reads; `dashboard` is AC-101's.
+type Screen = { invoices: Row[]; last_run: LastRun; portal: PortalLink | null; beneficiaries: Array<{ id: string; name: string }>; dashboard: DashboardData | null };
+// AC-99 (R-109): made-up data drawn in the loaded markup, hidden by .skeleton.
+const SKELETON: Row[] = ['s1', 's2', 's3'].map((id) => ({ id, outcome: null, headline: null, // the pending line, in the tab's language (AC-91 item 5)
+  received_at: '2026-10-10T15:00:00Z', amount_usd: 1200, fields: { payee_name: 'Nubia Diseño' }, origin: 'app' }));
+const brief = { invoice_id: 's1', payee: 'Nubia Diseño', amount: 1200, currency: 'USD' };
+const SKELETON_DASH: DashboardData = {
+  // two-digit counts, so the KPI hints wrap like a real month's (a shorter line made the cards below jump, CLS 0.004 per load)
+  kpis: { to_pay_today_usd: 12000, to_pay_today_count: 10, awaiting_count: 10, awaiting_usd: 12000, stopped_month_count: 10, autonomy_pct: 50, autonomy_n: 10, autonomy_m: 20 },
+  by_day: Array.from({ length: 30 }, (_, i) => ({ day: `2026-10-${String(i + 1).padStart(2, '0')}`, PAGAR: 1, FRENAR: 0, ESCALAR: 0, pending: 0 })),
+  by_currency: [{ currency: 'USD', usd: 1200 }], by_country: [{ country: 'CO', usd: 1200 }],
+  due_soon: [{ ...brief, amount_usd: 1200, due_date: '2026-10-20', outcome: null }], due_soon_total: 1,
+  approvals: [{ ...brief, question_es: '¿Apruebo 1.200 USD a Nubia Diseño?', question_en: 'Do I approve 1,200 USD to Nubia Diseño?', decided_at: null }], approvals_total: 1,
+};
+const hidden = { className: 'skeleton', 'aria-hidden': true, inert: true } as const;
+const nothing = () => {};
 
 export default function Inbox() {
-  const { t, locale } = useT();
+  const { t } = useT();
   const [outcome, setOutcome] = useState('');
-  const [payee, setPayee] = useState('');
   const [adding, setAdding] = useState(false);
   const [batches, setBatches] = useState(0);
   const screen = useScreen<Screen>(screens.inbox());
   const d = screen.data;
-  const rows = d?.invoices ?? null;
   const failed = !d && screen.error !== undefined;
   const lastRun = d?.last_run;
-  const directory = d?.beneficiaries ?? [];
   const link = d && (typeof d.portal?.portal_url === 'string' ? d.portal : null); // null: no URL in the answer, no card
 
   const run = useRunAgent({ first: '/api/invoices/run', onBatch: () => { void screen.reload(); setBatches((n) => n + 1); } });
-
-  // AC-29 (R-79), grouped like Periodo (R-63): the engine's AC-19 name rule; labelled with the directory name, else the payee as
-  // read on the group's oldest invoice; unread payees in one entry, listed last.
-  const labels = new Map<string, string>();
-  for (const r of [...(rows ?? [])].sort((a, b) => a.received_at.localeCompare(b.received_at))) {
-    const k = keyOf(r);
-    const read = r.fields?.payee_name ?? '';
-    if (!labels.has(k)) labels.set(k, k === UNREAD ? t('period.unread') : findBeneficiary(read, directory)?.name ?? read);
-  }
-  const payees = [...labels].sort(([a, x], [b, y]) => (a === UNREAD ? 1 : b === UNREAD ? -1 : x.localeCompare(y, 'es')));
-  const shown = (rows ?? []).filter(
-    (r) => (!outcome || (r.outcome ?? 'pending') === outcome) && (!payee || keyOf(r) === payee),
-  );
   const mins = lastRun ? Math.floor((Date.now() - Date.parse(lastRun.at)) / 60_000) : 0;
-  const date = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short' });
-  const item = (r: Row) => (
-    <li key={r.id} data-tour="invoice-row">
-      <Link to={`/invoices/${r.id}`}>
-        <OutcomeChip outcome={r.outcome} />
-        <span>
-          {r.headline ?? (r.fields?.payee_name ? tu(t('inbox.pending_headline'), { payee: r.fields.payee_name }) : t('inbox.pending_headline', { payee: t('value.unknown_payee') }))}
-          {originLabel(t, r) && <small className="muted inbox-origin">{originLabel(t, r)}</small>}
-        </span>
-        <time className="muted" dateTime={r.received_at}>{date.format(new Date(r.received_at))}</time>
-      </Link>
-    </li>
-  );
 
   return (
     <section className="inbox" data-tour="inbox">
@@ -96,45 +71,24 @@ export default function Inbox() {
       <RunProgress run={run} mode="pending" />
       {adding && <NewInvoice />}
 
-      <div className="inbox-filters">
-        <label>
-          {t('inbox.filter.outcome')}
-          <select value={outcome} onChange={(e) => setOutcome(e.target.value)}>
-            <option value="">{t('inbox.filter.all')}</option>
-            {(['PAGAR', 'FRENAR', 'ESCALAR'] as const).map((o) => <option key={o} value={o}>{t(`outcome.${o}`)}</option>)}
-            <option value="pending">{t('inbox.pending')}</option>
-          </select>
-        </label>
-        <label>
-          {t('inbox.filter.payee')}
-          <select value={payee} onChange={(e) => setPayee(e.target.value)}>
-            <option value="">{t('inbox.filter.all')}</option>
-            {payees.map(([k, label]) => <option key={k} value={k} data-user={k === UNREAD ? undefined : ''}>{label}</option>)}
-          </select>
-        </label>
-      </div>
-      <AskThesaurus />
-
       {failed ? (
         <p role="alert" className="error">{t('inbox.load_error')}</p>
-      ) : rows === null ? (
+      ) : !d ? (
         <>
           <p role="status" className="sr-only">{t('inbox.loading')}</p>
-          <ul className="inbox-list skeleton" aria-hidden inert>{SKELETON.map(item)}</ul>
+          <div {...hidden}><Dashboard data={SKELETON_DASH} onMore={nothing} /></div>
         </>
-      ) : rows.length === 0 ? (
-        <p className="muted">{t('inbox.empty')}</p>
-      ) : shown.length === 0 ? (
-        <p className="muted">{t('inbox.no_match')}</p>
       ) : (
-        <ul className="inbox-list">{shown.map(item)}</ul>
-      )}
-      {d && (
         <>
+          {d.dashboard && <Dashboard data={d.dashboard} onMore={() => setOutcome('ESCALAR')} />}
           {link && <PortalLinkCard link={link} />}
           <AgentActivity refresh={batches} />
         </>
       )}
+      <AskThesaurus />
+      {!failed && (d
+        ? <InvoiceTable rows={d.invoices} directory={d.beneficiaries} outcome={outcome} onOutcome={setOutcome} />
+        : <div {...hidden}><InvoiceTable rows={SKELETON} directory={[]} outcome="" onOutcome={nothing} /></div>)}
     </section>
   );
 }

@@ -6,6 +6,7 @@ import { outcomeOf } from '../engine/decide';
 import type { Check, CheckId, Decision, Invoice, InvoiceFields, Outcome } from '../engine/types';
 import { format, t, type Lang } from '../i18n';
 import { en as portalEn, es as portalEs } from '../i18n/features/portal';
+import { en as trialEn, es as trialEs } from '../i18n/features/trial-record';
 
 // One row of `decisions` (also the decision columns of `invoice_current`).
 export interface StoredDecision {
@@ -59,12 +60,17 @@ export interface TraceArgs {
   invoice: TraceInvoice;
   decisions: StoredDecision[]; // timeline, oldest first
   isDemo: boolean;
+  isTrial: boolean; // R-115: a trial company never mails either
   notification: { email_sent: boolean; sent_to: string } | null; // the approval_tokens row of the escalation, if any
 }
 
 const READ = ['payee_name', 'amount', 'currency', 'invoice_number'] as const;
 
 const portal = { es: portalEs, en: portalEn };
+const trial = { es: trialEs, en: trialEn };
+// R-116: a guest's answer is stored as invitado:<8 hex> and named «Invitado <8 hex>».
+const actorName = (email: string | null, lang: Lang) =>
+  email?.startsWith('invitado:') ? format(trial[lang], 'trial_record.guest', { id: email.slice(9) }) : email;
 
 // "el PDF", or with its channel: "el PDF que llegó por el portal de proveedores", "el correo que envió <remitente>".
 function sourceText({ source, origin, sender }: TraceInvoice, lang: Lang): string {
@@ -118,6 +124,7 @@ function act(d: StoredDecision, a: TraceArgs, lang: Lang): string {
   }
   if (d.outcome === 'FRENAR') return t(lang, 'trace.act.FRENAR');
   if (a.isDemo) return t(lang, 'trace.act.demo'); // R-15: the demo company never sends mail
+  if (a.isTrial) return trial[lang]['trial_record.act']!;
   if (!a.notification) return t(lang, 'trace.act.unsent');
   const { email_sent, sent_to } = a.notification;
   return fill(lang, email_sent ? 'trace.act.sent' : 'trace.act.failed', { email: sent_to, question: d[`question_${lang}`] });
@@ -128,7 +135,7 @@ function act(d: StoredDecision, a: TraceArgs, lang: Lang): string {
 // still an approval). Anything but PAGAR states its reason, as the column beside it does.
 function later(d: StoredDecision, a: TraceArgs, lang: Lang): TraceStep {
   const why = list(lang, motives(d.checks, lang, a.invoice.received_at));
-  const vars = { email: d.actor_email, channel: t(lang, `channel.${d.channel}`), outcome: t(lang, `outcome.${d.outcome}`), reason: why,
+  const vars = { email: actorName(d.actor_email, lang), channel: t(lang, `channel.${d.channel}`), outcome: t(lang, `outcome.${d.outcome}`), reason: why,
     version: d.policy_version, counts: counts(d.checks, lang) };
   if (d.actor === 'agent') return { stage: 'decide', text: fill(lang, why ? 'trace.reevaluated_reason' : 'trace.reevaluated', vars) };
   const rejected = d.outcome === 'FRENAR' && outcomeOf(d.checks) !== 'FRENAR';

@@ -66,6 +66,17 @@ for t in portal_status_tokens intake_rate_limits; do
   echo "$portal" | grep -q "alter table public\.$t enable row level security" || fail "RLS not on for $t (AC-07)"; done
 echo "$portal" | grep -qi 'create policy' && fail "a member policy in the portal migration (AC-68 Clarified)"
 
+# Task 39 (AC-92, AC-93, AC-96; R-115, R-117): the trial flag, its sequence, the trigger; anonymous users are never deleted
+TRIAL=supabase/migrations/20261017000900_trial_access.sql
+[ -f "$TRIAL" ] || fail "missing $TRIAL"
+trial=$(sed 's/--.*$//' "$TRIAL")
+for w in 'add column is_trial boolean not null default false' 'create sequence public.trial_company_seq' \
+  'create or replace function public.handle_new_user()' 'Empresa de prueba '; do
+  echo "$trial" | grep -qF "$w" || fail "trial migration lacks: $w (AC-92)"; done
+echo "$trial" | grep -qiE 'grant update[^;]*is_trial' && fail "is_trial in a member update grant (AC-93)"
+U='User'   # split so this file does not match its own search
+grep -rnIE "delete$U|delete[[:space:]]+from[[:space:]]+auth\.users" supabase scripts src web e2e portal 2>/dev/null && fail "an Auth user deletion exists (AC-96, CLAUDE.md)"
+
 # ---- Part 2: execute against a real Postgres ----
 INITDB=$(command -v initdb || ls /usr/lib/postgresql/*/bin/initdb 2>/dev/null | sort -V | tail -1)
 [ -x "$INITDB" ] || { echo "schema.test: greps passed; no local Postgres, SQL not executed"; exit 0; }
@@ -81,7 +92,7 @@ expect(){ out=$(as "$1" "$2"); echo "$out" | grep -qE "$3" || fail "$4 (got: $ou
 sql <<'STUBS' >/dev/null || fail "supabase stubs"
 create role anon nologin; create role authenticated nologin; create role service_role nologin bypassrls;
 create schema auth; create schema storage;
-create table auth.users (id uuid primary key, email text);
+create table auth.users (id uuid primary key, email text, is_anonymous boolean not null default false);
 create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
 create table storage.buckets (id text primary key, name text, public boolean);
 create table storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text, name text);
@@ -268,4 +279,23 @@ expect svc "select n from public.ai_usage where key = 'global'" '^500$' "global 
 sql -c "insert into public.ai_usage values ((now() at time zone 'utc')::date - 1, 'u:d', 10)" >/dev/null
 sql -c "update public.ai_usage set n = 0 where key = 'global'" >/dev/null
 [ "$(take u:d)" = '{"remaining": 9}' ] || fail "yesterday's count carried into today (UTC day)"
+# AC-92, AC-93, R-115: an anonymous user gets its own trial company «Empresa de prueba <n>», seeded, never mailed; members
+# cannot flip is_trial. AC-96, R-117: ingest keys count 30 per UTC day apart from the question caps.
+T1=44444444-4444-4444-8444-444444444444 T2=55555555-5555-4555-8555-555555555555
+sql -c "insert into auth.users (id, is_anonymous) values ('$T1', true), ('$T2', true)" >/dev/null || fail "anonymous signup"
+expect "$T1" "select name || '|' || is_trial || '|' || coalesce(approver_email, 'null') from public.companies" '^Empresa de prueba [0-9]+\|true\|null$' "anonymous company (AC-92)"
+expect "$T1" "select count(*) from public.beneficiaries" '^8$' "trial company seeded with the 8 beneficiaries (AC-92)"
+expect "$T1" "select count(*) > 0 from public.invoices" '^t$' "trial company seeded with the invoices (AC-92)"
+n1=$(as "$T1" "select name from public.companies"); n2=$(as "$T2" "select name from public.companies")
+[ "$n1" != "$n2" ] || fail "two trials share a name: $n1"
+[ "$(sql -c "select count(distinct company_id) from public.company_members where user_id in ('$T1', '$T2')")" = 2 ] || fail "two trials share a company (AC-93)"
+expect "$UA" "select is_trial from public.companies" '^f$' "an email signup became a trial (AC-03)"
+expect "$T1" "update public.companies set is_trial = false" 'permission denied' "member flips is_trial (AC-93)"
+expect "$T1" "update public.companies set name = 'Mía' returning name" '^Mía$' "trial member cannot rename its company"
+expect "$T1" "select nextval('public.trial_company_seq')" 'permission denied' "member draws from trial_company_seq"
+got=$(for i in $(seq 1 31); do take "qa:ingest:t39"; done | tail -2 | tr '\n' ' ')
+[ "$got" = '{"remaining": 0} {"reason": "user_cap"} ' ] || fail "30 ingests then user_cap (got: $got) (AC-96)"
+[ "$(take "ingest:$T1")" = '{"remaining": 29}' ] || fail "ingest:<user id> key not counted apart (AC-96)"
+expect svc "select n from public.ai_usage where key = 'global' and day = (now() at time zone 'utc')::date" '^1$' "ingests counted on the question cap (AC-96)"
+expect svc "select public.take_question('ingest')" 'BAD_KEY' "a bare ingest key"
 echo "schema.test: greps and live Postgres checks passed"

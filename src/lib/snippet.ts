@@ -24,14 +24,38 @@ function forms(name: string, value: string | number): string[] {
     ...[dd, d].flatMap((day) => [mm, m].flatMap((mon) => ['/', '-', '.'].flatMap((s) => [`${day}${s}${mon}${s}${y}`, `${mon}${s}${day}${s}${y}`])))];
 }
 
-export function locate(text: string | null, name: string, value: string | number | null): { snippet: string | null; match: [number, number] | null } {
-  const none = { snippet: null, match: null };
-  if (!text || value === null || value === '') return none;
-  // Longest form first; no letter, digit or "digit + separator" may touch the value, so 1000 is not found inside 21.000,00.
+// The first place `text` prints the value. Longest form first; no letter, digit or "digit + separator" may touch the value,
+// so 1000 is not found inside 21.000,00.
+function find(text: string | null, name: string, value: unknown): RegExpExecArray | null {
+  if (!text || (typeof value !== 'string' && typeof value !== 'number') || value === '') return null;
   const alts = [...new Set(forms(name, value))].sort((a, b) => b.length - a.length)
     .map((f) => esc(f).replace(/ del\\\? /g, ' del? ').replace(/[ \t\u00a0]+/g, '[ \\t\\u00a0]+'));
-  const m = new RegExp(`(?<![\\p{L}\\p{N}]|\\d[.,])(?:${alts.join('|')})(?![\\p{L}\\p{N}]|[.,]\\d)`, 'iu').exec(text);
-  if (!m) return none;
+  return new RegExp(`(?<![\\p{L}\\p{N}]|\\d[.,])(?:${alts.join('|')})(?![\\p{L}\\p{N}]|[.,]\\d)`, 'iu').exec(text);
+}
+
+// "Lo que leí" fields in screen order (AC-12, AC-77).
+export const READ = ['payee_name', 'amount', 'currency', 'invoice_number', 'issue_date', 'due_date', 'concept', 'bank_account'] as const;
+
+// AC-102: where each read value is printed in the stored text, as [start, end) offsets into it, sorted, never overlapping
+// (an overlapping later mark is dropped, so the web can wrap each in <mark> as is). No stored text: null.
+export function docMarks(text: string | null, fields: Partial<Record<(typeof READ)[number], unknown>> | null) {
+  if (!text) return null;
+  const found = READ.flatMap((field) => {
+    const m = find(text, field, fields?.[field]);
+    return m ? [{ field, start: m.index, end: m.index + m[0].length }] : [];
+  }).sort((a, b) => a.start - b.start);
+  let end = 0;
+  return found.filter((m) => {
+    if (m.start < end) return false;
+    end = m.end;
+    return true;
+  });
+}
+
+export function locate(text: string | null, name: string, value: string | number | null): { snippet: string | null; match: [number, number] | null } {
+  const none = { snippet: null, match: null };
+  const m = find(text, name, value);
+  if (!text || !m) return none;
   const from = text.lastIndexOf('\n', m.index - 1) + 1;
   const to = text.indexOf('\n', m.index);
   const raw = text.slice(from, to < 0 ? text.length : to).trimEnd();

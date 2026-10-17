@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { useEffect, useRef, useState } from 'react';
 import { storedLang } from './i18n';
 
 export type Config = { supabaseUrl: string; supabaseAnonKey: string; demo_email: string };
@@ -42,7 +43,9 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     headers.set('Content-Type', 'application/json');
     payload = JSON.stringify(body);
   }
-  const res = await fetch(path, { method, headers, body: payload });
+  const write = method !== 'GET';
+  if (write) dropCache(); // AC-100: any write from this tab; again once it settles, so a GET that left during it is not kept
+  const res = await fetch(path, { method, headers, body: payload }).finally(() => write && dropCache());
   const json = (await res.json().catch(() => ({}))) as { error?: string };
   if (!res.ok) throw new ApiError(json.error ?? res.statusText, res.status);
   return json as T;
@@ -53,4 +56,91 @@ export const api = {
   get: <T = unknown>(path: string) => request<T>('GET', path),
   post: <T = unknown>(path: string, body?: unknown) => request<T>('POST', path, body),
   put: <T = unknown>(path: string, body?: unknown) => request<T>('PUT', path, body),
+};
+
+/** Bogota-day month, the one GET /api/screen/period defaults to. */
+export const thisMonth = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }).slice(0, 7);
+/** AC-98's one request per screen. The screens load these paths and App prefetches the same ones (AC-100). */
+export const screens = {
+  inbox: () => `/api/screen/inbox?lang=${storedLang()}`,
+  period: (month = thisMonth()) => `/api/screen/period?month=${month}`,
+  beneficiaries: () => '/api/screen/beneficiaries',
+  policy: () => '/api/screen/policy',
+};
+
+// AC-100: this tab's last answer per screen GET, per language. A screen shows it at once and revalidates. Any write from this
+// tab drops it all (request above, withField.send), and so does another signed-in user (App calls cacheOwner as it renders).
+const cache = new Map<string, unknown>();
+const inflight = new Map<string, Promise<unknown>>();
+let era = 0; // an answer that left before a drop is never cached after it
+let owner: string | undefined;
+export const dropCache = () => {
+  cache.clear();
+  inflight.clear();
+  era++;
+};
+export const cacheOwner = (uid: string | undefined) => {
+  if (uid !== owner) dropCache();
+  owner = uid;
+};
+const keyOf = (path: string) => `${storedLang()} ${path}`;
+export const cached = <T = unknown>(path: string) => cache.get(keyOf(path)) as T | undefined;
+
+/** GET a screen's data. One request per path at a time, so a prefetch and the screen share it; the answer is kept for this tab. */
+export function load<T>(path: string): Promise<T> {
+  const key = keyOf(path);
+  const at = era;
+  let p = inflight.get(key) as Promise<T> | undefined;
+  if (!p) {
+    p = api.get<T>(path).then((d) => {
+      if (at === era) cache.set(key, d);
+      return d;
+    }).finally(() => at === era && inflight.delete(key));
+    inflight.set(key, p);
+  }
+  return p;
+}
+
+/** Hover or focus on a nav link (AC-100): fetch the screen's data unless this tab already holds it. */
+export const prefetch = (path: string) => {
+  if (!cache.has(keyOf(path))) load(path).catch(() => {}); // the screen asks again and shows its own error
+};
+
+type Shown<T> = { key: string; data?: T; error?: unknown };
+/** A screen's one request (AC-98): the cached answer at once, then the fresh one. `reload` revalidates and resolves once shown. */
+export function useScreen<T>(path: string) {
+  const key = keyOf(path); // the tab language is part of it: a switch refetches the record in the new language (R-98)
+  const [s, setS] = useState<Shown<T>>(() => ({ key, data: cached<T>(path) }));
+  const live = useRef('');
+  const reload = () => {
+    setS((x) => (x.key === key && x.error !== undefined ? { key, data: x.data } : x));
+    return load<T>(path).then(
+      (data) => void (live.current === key && setS({ key, data })),
+      (error: unknown) => void (live.current === key && setS((x) => ({ key, data: x.key === key ? x.data : undefined, error }))),
+    );
+  };
+  useEffect(() => {
+    live.current = key;
+    setS((x) => (x.key === key ? x : { key, data: cached<T>(path) }));
+    void reload();
+    return () => {
+      live.current = '';
+    };
+  }, [key]);
+  const shown: Shown<T> = s.key === key ? s : { key, data: cached<T>(path) };
+  return { data: shown.data, error: shown.error, reload };
+}
+
+/** The tab's reload, one place so tests can watch it. */
+export const tab = { reload: () => window.location.reload() };
+/** Whether the Worker answers now. navigator.onLine alone misses a network that drops while the browser still says online. */
+export const reachable = () => fetch('/', { method: 'HEAD', cache: 'no-store' }).then((r) => r.ok, () => false);
+/**
+ * AC-99: a deploy removes the page chunks an open tab may still ask for; reload once to get the new index.html, never in a loop.
+ * With the server out of reach a reload only lands on the browser's error page, so the page's designed message stays (AC-91 item 4).
+ */
+export const reloadOnce = async (reload = () => tab.reload()) => {
+  if (Date.now() - Number(sessionStorage.getItem('chunk-reload')) < 10_000 || !(await reachable())) return;
+  sessionStorage.setItem('chunk-reload', String(Date.now()));
+  reload();
 };

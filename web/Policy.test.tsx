@@ -1,6 +1,8 @@
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { expect, test } from 'vitest';
-import Policy, { route } from './pages/Policy';
+import { dropCache } from './api';
+import { routes } from './App';
+import Policy from './pages/Policy';
 import { mockApi, renderAt } from './test/utils';
 
 const rules = {
@@ -24,14 +26,27 @@ const fx = {
   ],
 };
 
+// AC-98: Política loads one GET /api/screen/policy. Tests still name its parts by the old endpoints; the mock composes them,
+// and any part that fails (a Response) fails the whole screen request.
+const PARTS = ['GET /api/policy', 'GET /api/company', 'GET /api/fx'];
 function setup(extra: Record<string, unknown> = {}) {
-  return mockApi({ 'GET /api/company': company, 'GET /api/policy': versions, 'GET /api/fx': fx, ...extra });
+  const all: Record<string, unknown> = { 'GET /api/company': company, 'GET /api/policy': versions, 'GET /api/fx': fx, ...extra };
+  const part = async (k: string) => (typeof all[k] === 'function' ? await (all[k] as () => unknown)() : all[k]);
+  return mockApi({
+    ...Object.fromEntries(Object.entries(all).filter(([k]) => !PARTS.includes(k))),
+    'GET /api/screen/policy': async () => {
+      const [v, c, r] = await Promise.all(PARTS.map(part));
+      const failed = [v, c, r].find((x) => x instanceof Response);
+      return failed ?? { policy: (v as unknown[])[0] ?? null, versions: v, company: c, fx: r };
+    },
+  });
 }
 const limit = () => screen.findByLabelText('Límite por pago (USD)') as Promise<HTMLInputElement>;
 const save = () => fireEvent.click(screen.getByRole('button', { name: /^Guardar como versión/ }));
 
 test('/policy is in the nav after Bandeja, with its tour anchor present before data loads', () => {
-  expect(route).toEqual({ path: '/policy', nav: { key: 'screen.policy', order: 20 } });
+  expect(routes.filter((r) => r.nav).map((r) => r.path).indexOf('/policy')).toBe(1);
+  expect(routes.find((r) => r.path === '/policy')?.nav).toBe('screen.policy');
   setup();
   const { container } = renderAt(<Policy />);
   expect(container.querySelector('[data-tour="policy"]')).toBeTruthy();
@@ -400,11 +415,11 @@ test('no rates yet: a designed empty message, and no table (AC-91)', async () =>
   expect(screen.queryByRole('table')).toBeNull();
 });
 
-test('/api/fx fails: a designed message with a «Reintentar» next step that refetches, in both languages, no status code (AC-91)', async () => {
+test('the screen fails: a designed message with a «Reintentar» next step that refetches, in both languages, no status code (AC-91, AC-98)', async () => {
   let calls = 0;
   setup({ 'GET /api/fx': () => (++calls === 1 ? json({ error: 'boom' }, 500) : fx) });
   renderAt(<Policy />);
-  const msg = await screen.findByText('No pude cargar las tasas de mercado.');
+  const msg = await screen.findByText('No pude cargar la política. Recarga la página.');
   expect(msg.textContent).not.toMatch(/500|boom/);
   fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
   expect(await screen.findByRole('table', { name: 'Tasas de mercado' })).toBeTruthy();
@@ -413,27 +428,30 @@ test('/api/fx fails: a designed message with a «Reintentar» next step that ref
   localStorage.setItem('lang', 'en');
   setup({ 'GET /api/fx': json({ error: 'boom' }, 500) });
   renderAt(<Policy />);
-  expect(await screen.findByText('I could not load the market rates.')).toBeTruthy();
+  expect(await screen.findByText('I could not load the policy. Reload the page.')).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
 });
 
-test('while /api/fx loads the real table shows one placeholder row per pin currency, no fixed-height block (R-109)', async () => {
+// AC-99 (R-109): while the screen loads, every card is drawn in its loaded markup with placeholder data, hidden; the market
+// table has one placeholder row per pin currency, no fixed-height block.
+test('while the screen loads the cards are a skeleton and the real table shows one placeholder row per pin currency (R-109)', () => {
   setup({ 'GET /api/fx': () => new Promise(() => {}) });
   const { container } = renderAt(<Policy />);
-  await limit();
-  expect(screen.getAllByText('Cargando…').length).toBeGreaterThan(0);
+  expect(screen.getByRole('status').textContent).toBe('Cargando…');
+  const cards = [...container.querySelectorAll('section.card')];
+  expect(cards.length).toBeGreaterThanOrEqual(3);
+  expect(cards.every((c) => c.classList.contains('skeleton') && c.getAttribute('aria-hidden') === 'true' && c.hasAttribute('inert'))).toBe(true);
   expect(container.querySelector('.fx-skel')).toBeNull();
   const rows = container.querySelectorAll('.fx-slot table.fx-table tbody tr');
   expect([...rows].map((r) => r.firstElementChild!.textContent)).toEqual(['ARS', 'BRL', 'COP', 'EUR', 'MXN']);
   expect([...rows].every((r) => r.children.length === 6)).toBe(true);
 });
 
-test('the placeholder rows follow the pin list when the policy has another currency (R-109, R-110)', async () => {
-  const v = [{ ...versions[0], rules: { ...rules, fx_rates: { ...rules.fx_rates, CLP: 0.001 } } }];
-  setup({ 'GET /api/policy': v, 'GET /api/fx': () => new Promise(() => {}) });
+test('the skeleton is gone once the screen answers', async () => {
+  setup();
   const { container } = renderAt(<Policy />);
-  await limit();
-  expect(container.querySelectorAll('.fx-slot tbody tr')).toHaveLength(6);
+  await screen.findByRole('table', { name: 'Tasas de mercado' });
+  expect(container.querySelector('.skeleton')).toBeNull();
 });
 
 test('empty and error render no table and no placeholder rows: the slot is its own content (R-109)', async () => {
@@ -442,9 +460,10 @@ test('empty and error render no table and no placeholder rows: the slot is its o
   await screen.findByText(/Todavía no hay tasas de mercado/);
   expect(container.querySelector('.fx-slot tr')).toBeNull();
   cleanup();
+  dropCache(); // a fresh tab: no last answer to show while the failing one is asked
   setup({ 'GET /api/fx': json({ error: 'boom' }, 500) });
   const e = renderAt(<Policy />);
-  await screen.findByText('No pude cargar las tasas de mercado.');
+  await screen.findByText('No pude cargar la política. Recarga la página.');
   expect(e.container.querySelector('.fx-slot tr')).toBeNull();
 });
 
@@ -555,13 +574,6 @@ test('no card is shown until the company and the policy have both answered (UX-0
   company_(company);
   expect(await screen.findByRole('heading', { name: 'Reglas de pago' })).toBeTruthy();
   expect(screen.getByRole('heading', { name: 'Empresa' })).toBeTruthy();
-});
-
-test('a failed company answer still shows the rules, with the company error in its card (UX-09)', async () => {
-  setup({ 'GET /api/company': json({ error: 'boom' }, 500) });
-  renderAt(<Policy />);
-  expect(await limit()).toBeTruthy();
-  expect(within(screen.getByRole('region', { name: 'Empresa' })).getByRole('alert')).toBeTruthy();
 });
 
 test('CSS: at phone width the «Pagar solo a beneficiarios permitidos» checkbox is a 44 x 44 target (AC-91 item 2)', async () => {

@@ -175,3 +175,9 @@ body:has(.tour) .topbar { position: sticky; top: 0; z-index: 1001; }
 }
 @keyframes tour-in { from { opacity: 0; transform: translateY(12px); } }
 @keyframes rise { from { opacity: 0; transform: translateY(12px); } }
+
+/* AC-99 (R-109's pattern): a loading screen draws its loaded markup with made-up data; this hides that data, keeps its boxes. */
+.skeleton { pointer-events: none; user-select: none; }
+.skeleton, .skeleton * { color: transparent !important; }
+:is(.skeleton, .skeleton *):is(p, dt, dd, td, li, h2, h3) { background: #f1efe9; border-radius: 4px; }
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }

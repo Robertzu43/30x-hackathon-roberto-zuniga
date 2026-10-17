@@ -213,6 +213,42 @@ describe('Bandeja context: the Periodo figures as Periodo shows them (AC-67, AC-
   });
 });
 
+// R-138 (D41 door QA UX-05): code counts the outcomes, the model quotes the line and never counts the list.
+describe('Bandeja context: exact counts per outcome (AC-67, R-138)', () => {
+  // Beforehand: A-04 FRENAR, A-11 ESCALAR, A-02 PAGAR archived. Now 2 PAGAR, 1 FRENAR, 3 ESCALAR, 1 pending, plus 1 archived ESCALAR.
+  const seed = () => {
+    const add = (key: string, outcome: string | null, archived = false) => {
+      const id = uid(`R138-${key}`);
+      db.tables.invoices!.push({ id, company_id: 'A', source: 'upload', raw_text: null, archived, file_path: null, received_at: NOW, fields: { amount: 10 } });
+      if (outcome) db.tables.decisions!.push({ id: uid(`d-${key}`), invoice_id: id, company_id: 'A', seq: 1, outcome, headline_es: `h-${key}`, headline_en: `h-${key}`, created_at: NOW });
+    };
+    add('p1', 'PAGAR'); add('p2', 'PAGAR'); add('e1', 'ESCALAR'); add('e2', 'ESCALAR'); add('pend', null); add('arch', 'ESCALAR', true);
+  };
+  const lines = async (body: object, token?: string) => {
+    seed();
+    expect((await ask({ question: '¿cuántas facturas están escaladas?', ...body }, token)).status).toBe(200);
+    return /<registro>\n([\s\S]*)\n<\/registro>/.exec(prompt()[1]!.content)![1]!.split('\n');
+  };
+
+  it('es: one labelled line with the exact counts, the Periodo outcomes line unchanged', async () => {
+    const l = await lines({ lang: 'es' });
+    expect(l.filter((x) => x.startsWith('Facturas por resultado ahora (conteo exacto): '))).toEqual(
+      ['Facturas por resultado ahora (conteo exacto): PAGAR 2, FRENAR 1, ESCALAR 3, pendientes 1, total 7']);
+    expect(l.filter((x) => x.includes('ESCALAR') && x.includes('PAGAR') && !x.startsWith('Facturas por resultado'))).toHaveLength(1); // Periodo's own line
+  });
+
+  it('en: the English line', async () => {
+    const l = await lines({}, 'tok-en');
+    expect(l).toContain('Invoices by outcome right now (exact count): PAY 2, STOP 1, ESCALATE 3, pending 1, total 7');
+  });
+
+  it('the invoice record context carries no counts line, and the prompt says to quote it', async () => {
+    expect((await ask(ON_04)).status).toBe(200);
+    expect(prompt()[1]!.content).not.toContain('conteo exacto');
+    expect(prompt()[0]!.content).toMatch(/how many.*quote the line.*exact count.*never count the invoice list/is);
+  });
+});
+
 describe('quotas (AC-67, R-87)', () => {
   it("a user's 11th question of the day is user_cap, with 0 model calls", async () => {
     for (let i = 0; i < 10; i++) expect((await ask(ON_04)).body.remaining).toBe(9 - i);

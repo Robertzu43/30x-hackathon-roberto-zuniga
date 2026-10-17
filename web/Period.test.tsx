@@ -18,11 +18,12 @@ const empty = {
   count_by_outcome: { PAGAR: 0, FRENAR: 0, ESCALAR: 0 }, by_beneficiary: [],
   autonomy: { n: 0, m: 0 }, autonomy_pct: null, violations: 0, explained_pct: 100,
 };
+const scr = (period: unknown) => ({ period, charts: null }); // AC-98: GET /api/screen/period
 const show = () => renderAt(<Period />, { at: '/period' });
 beforeEach(() => localStorage.clear());
 
 test('renders the three figures with a plain explanation each', async () => {
-  mockApi({ [`GET /api/period?month=${month}`]: body });
+  mockApi({ [`GET /api/screen/period?month=${month}`]: scr(body) });
   show();
   expect(await screen.findByText('Autonomía 75 %')).toBeTruthy();
   expect(screen.getByText('18 de 24 facturas decididas solas y correctamente')).toBeTruthy();
@@ -32,7 +33,7 @@ test('renders the three figures with a plain explanation each', async () => {
 });
 
 test('shows money, outcome counts and the per-beneficiary table', async () => {
-  mockApi({ [`GET /api/period?month=${month}`]: body });
+  mockApi({ [`GET /api/screen/period?month=${month}`]: scr(body) });
   show();
   await screen.findByText('Autonomía 75 %');
   expect(screen.getByText(/10\.000/)).toBeTruthy(); // es-CO grouping
@@ -45,43 +46,43 @@ test('shows money, outcome counts and the per-beneficiary table', async () => {
 });
 
 test('the per-beneficiary table scrolls inside its own wrapper on a narrow screen (AC-72)', async () => {
-  mockApi({ [`GET /api/period?month=${month}`]: body });
+  mockApi({ [`GET /api/screen/period?month=${month}`]: scr(body) });
   show();
   expect((await screen.findByRole('table')).parentElement!.className).toBe('table-wrap');
 });
 
 test('an unread-payee row (beneficiary null) is labelled in the UI language (R-63)', async () => {
   localStorage.setItem('lang', 'en');
-  mockApi({ [`GET /api/period?month=${month}`]: { ...body, by_beneficiary: [{ beneficiary: null, paid_usd: 0, committed_usd: 0, count: 3 }] } });
+  mockApi({ [`GET /api/screen/period?month=${month}`]: scr({ ...body, by_beneficiary: [{ beneficiary: null, paid_usd: 0, committed_usd: 0, count: 3 }] }) });
   show();
   expect(await screen.findByText('Payee not read')).toBeTruthy();
 });
 
 test('"100 %" never breaks from its number (R-63)', async () => {
-  mockApi({ [`GET /api/period?month=${month}`]: body });
+  mockApi({ [`GET /api/screen/period?month=${month}`]: scr(body) });
   show();
   expect((await screen.findByText('Decisiones explicadas 100 %')).textContent).toBe('Decisiones explicadas 100\u00a0%');
   expect(screen.getByText('Autonomía 75 %').textContent).toBe('Autonomía 75\u00a0%');
 });
 
 test('a violation is spelled out in words, not only by color', async () => {
-  mockApi({ [`GET /api/period?month=${month}`]: { ...body, violations: 2 } });
+  mockApi({ [`GET /api/screen/period?month=${month}`]: scr({ ...body, violations: 2 }) });
   show();
   expect(await screen.findByText('Violaciones 2')).toBeTruthy();
   expect(screen.getByRole('alert').textContent).toMatch(/PAGAR fuera de las reglas en 2 /);
 });
 
 test('changing the month refetches with ?month=', async () => {
-  const fetchMock = mockApi({ [`GET /api/period?month=${month}`]: body, 'GET /api/period?month=2026-09': { ...body, paid_usd: 77 } });
+  const fetchMock = mockApi({ [`GET /api/screen/period?month=${month}`]: scr(body), 'GET /api/screen/period?month=2026-09': scr({ ...body, paid_usd: 77 }) });
   show();
   await screen.findByText('Autonomía 75 %');
   fireEvent.change(screen.getByLabelText('Mes'), { target: { value: '2026-09' } });
   expect(await screen.findByText(/77,00/)).toBeTruthy();
-  expect(fetchMock.mock.calls.some(([u]) => String(u) === '/api/period?month=2026-09')).toBe(true);
+  expect(fetchMock.mock.calls.some(([u]) => String(u) === '/api/screen/period?month=2026-09')).toBe(true);
 });
 
 test('an empty period shows zeros and never NaN', async () => {
-  mockApi({ [`GET /api/period?month=${month}`]: empty });
+  mockApi({ [`GET /api/screen/period?month=${month}`]: scr(empty) });
   const { container } = show();
   expect(await screen.findByText('Violaciones 0')).toBeTruthy();
   expect(screen.getByText('0 de 0 facturas decididas solas y correctamente')).toBeTruthy();
@@ -91,7 +92,7 @@ test('an empty period shows zeros and never NaN', async () => {
 
 test('English renders English', async () => {
   localStorage.setItem('lang', 'en');
-  mockApi({ [`GET /api/period?month=${month}`]: body });
+  mockApi({ [`GET /api/screen/period?month=${month}`]: scr(body) });
   show();
   expect(await screen.findByText('Autonomy 75 %')).toBeTruthy();
   expect(screen.getByText('18 of 24 invoices decided alone and correctly')).toBeTruthy();
@@ -103,7 +104,7 @@ test('English renders English', async () => {
 
 test('shows loading with the anchor present, then a designed error with a retry, never the raw API text (UX-13)', async () => {
   let fail = true;
-  mockApi({ [`GET /api/period?month=${month}`]: () => (fail ? new Response(JSON.stringify({ error: 'gate' }), { status: 500 }) : body) });
+  mockApi({ [`GET /api/screen/period?month=${month}`]: () => (fail ? new Response(JSON.stringify({ error: 'gate' }), { status: 500 }) : scr(body)) });
   const { container } = show();
   expect(container.querySelector('[data-tour="period"]')).toBeTruthy();
   expect(screen.getByRole('status').textContent).toBe('Cargando…');
@@ -116,7 +117,7 @@ test('shows loading with the anchor present, then a designed error with a retry,
 
 test('offline shows the designed message in the screen language, never «Failed to fetch» (UX-13)', async () => {
   localStorage.setItem('lang', 'en');
-  mockApi({ [`GET /api/period?month=${month}`]: () => Promise.reject(new TypeError('Failed to fetch')) });
+  mockApi({ [`GET /api/screen/period?month=${month}`]: () => Promise.reject(new TypeError('Failed to fetch')) });
   const { container } = show();
   expect((await screen.findByRole('alert')).textContent).toBe('I could not load the period. Check your connection and try again.');
   expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
@@ -124,7 +125,7 @@ test('offline shows the designed message in the screen language, never «Failed 
 });
 
 test('a month with no payments says what to do next: another month or the Bandeja (UX-14)', async () => {
-  mockApi({ [`GET /api/period?month=${month}`]: empty });
+  mockApi({ [`GET /api/screen/period?month=${month}`]: scr(empty) });
   show();
   expect(await screen.findByText('Elige otro mes arriba o sube una factura desde la Bandeja.')).toBeTruthy();
   expect(screen.getByRole('link', { name: 'Ir a la Bandeja' }).getAttribute('href')).toBe('/');
@@ -136,7 +137,7 @@ test('the empty-state link is a 44 px tap target (UX-05)', async () => {
 });
 
 test('the per-beneficiary table scroll region is reachable by keyboard and named (UX-22)', async () => {
-  mockApi({ [`GET /api/period?month=${month}`]: body });
+  mockApi({ [`GET /api/screen/period?month=${month}`]: scr(body) });
   show();
   const region = await screen.findByRole('region', { name: 'Por beneficiario' });
   expect(region.tabIndex).toBe(0);
@@ -144,7 +145,7 @@ test('the per-beneficiary table scroll region is reachable by keyboard and named
 });
 
 test('the month picker speaks the app language, not the browser one (UX-19)', async () => {
-  mockApi({ [`GET /api/period?month=${month}`]: body });
+  mockApi({ [`GET /api/screen/period?month=${month}`]: scr(body) });
   show();
   await screen.findByText('Autonomía 75 %');
   const picker = screen.getByLabelText('Mes');
@@ -163,4 +164,39 @@ test('money cells and figures keep a gap between amounts (AC-44, R-79)', async (
   expect(rule('.period .num')).toMatch(/padding-left: [1-9]/);
   expect(rule('.period .num')).toMatch(/white-space: nowrap/);
   expect(rule('.period-money dd')).toMatch(/overflow-wrap: anywhere/);
+});
+
+// AC-99, R-109: while the period loads, the screen draws its loaded markup with placeholder figures, hidden from people and
+// assistive tech; the real figures replace it in place.
+test('while loading, the figures and the table are a skeleton with the loaded markup', async () => {
+  mockApi({ [`GET /api/screen/period?month=${month}`]: () => new Promise(() => {}) });
+  const { container } = show();
+  const skeleton = container.querySelector('.skeleton') as HTMLElement;
+  expect(skeleton.getAttribute('aria-hidden')).toBe('true');
+  expect(skeleton.hasAttribute('inert')).toBe(true);
+  expect(skeleton.querySelector('.period-figures')).toBeTruthy();
+  expect(skeleton.querySelector('table')).toBeTruthy();
+  expect(screen.getByRole('status').textContent).toBe('Cargando…');
+});
+
+test('the skeleton is gone once the figures arrive', async () => {
+  mockApi({ [`GET /api/screen/period?month=${month}`]: scr(body) });
+  const { container } = show();
+  await screen.findByText('Autonomía 75 %');
+  expect(container.querySelector('.skeleton')).toBeNull();
+  expect(container.querySelector('[aria-hidden="true"] .period-figures')).toBeNull();
+});
+
+// AC-100: a screen visited before in this tab shows its last data at once and revalidates it.
+test('a second visit shows the last figures at once, then the fresh ones', async () => {
+  let paid = 1500.5;
+  const fetchMock = mockApi({ [`GET /api/screen/period?month=${month}`]: () => scr({ ...body, paid_usd: paid }) });
+  const first = show();
+  await screen.findByText('Autonomía 75 %');
+  first.unmount();
+  paid = 99;
+  show();
+  expect(screen.getByText('Autonomía 75 %')).toBeTruthy(); // synchronously: no skeleton on a revisit
+  expect(await screen.findByText(/99,00/)).toBeTruthy();
+  expect(fetchMock.mock.calls.filter(([u]) => String(u).startsWith('/api/screen/period')).length).toBe(2);
 });

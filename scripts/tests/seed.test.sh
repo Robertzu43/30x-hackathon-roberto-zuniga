@@ -206,4 +206,8 @@ is "select bank_account from public.beneficiaries where company_id = '$CA' and n
 is "select count(*) from public.invoices where company_id = '$CB' and archived" 0 "A's reset archived B's invoices"
 is "select count(*) || ' ' || max(version) from public.policies where company_id = '$CB'" "1 1" "A's reset touched B's policy"
 out=$(replay "$CA"); replayed "$out" || fail "replay after reset (AC-47): $out"
+# R-41: the database assigns the policy version; a member-sent 2147483647 must not poison reset
+expect "$UA" "insert into public.policies (company_id, version, name, rules) values ('$CA', 2147483647, 'Juez', '{}') returning version" '^5$' "member-sent policy version is ignored, stored as max+1 (R-41)"
+expect "$UA" "select public.reset_demo_company()" "^$CA$" "reset after a member inserted version 2147483647 (R-41, AC-47)"
+is "select (select rules from public.policies where company_id = '$CA' order by version desc limit 1) = (select rules from public.policies where company_id = '$CA' and version = 1)" t "latest policy = seed rules after the huge-version insert (R-41)"
 echo "seed.test: static checks, seed replay and reset passed"

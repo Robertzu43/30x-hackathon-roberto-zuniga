@@ -186,6 +186,18 @@ revoke execute on function public.andina_seed(uuid, boolean) from public, anon, 
 create or replace function public.seed_company(p_company uuid) returns void
 language plpgsql set search_path = '' as $$ begin perform public.andina_seed(p_company, false); end $$;
 
+-- R-41: the database assigns the policy version, whatever the caller sent (a member could send 2147483647 and break
+-- reset's max+1). security definer so the max sees every row of the company regardless of RLS (members, seed and
+-- reset alike). Two concurrent inserts: unique (company_id, version) is the backstop, one of them errors; no lock.
+create function public.policies_assign_version() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  new.version := coalesce((select max(p.version) from public.policies p where p.company_id = new.company_id), 0) + 1;
+  return new;
+end $$;
+create trigger policies_assign_version before insert on public.policies
+  for each row execute function public.policies_assign_version();
+
 -- AC-47 "Reiniciar demo". security definer so andina_seed stays out of members' reach (as invoker, any member could
 -- archive and re-seed a non-demo company through REST). Scope: the caller's own company, found by auth.uid()
 -- membership and is_demo; every write inside is keyed by that id. Never deletes: archive, append, upsert.

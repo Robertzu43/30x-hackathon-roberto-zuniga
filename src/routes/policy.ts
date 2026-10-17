@@ -2,7 +2,8 @@
 import { z } from 'zod';
 import { decide, directorio, findBeneficiary, periodFrom, previousFrom, tasas } from '../agent/tools';
 import { recordedFields } from '../agent/trace';
-import { headline } from '../engine/explain';
+import { validFields } from '../engine/checks';
+import { headline, motives } from '../engine/explain';
 import type { Check, Invoice, Outcome, PolicyRules } from '../engine/types';
 import * as trialText from '../i18n/features/trial-record';
 import { must } from '../lib/supabase';
@@ -62,21 +63,30 @@ export const policy = memberRoutes()
     // simulated decision updates committed, paid and previous invoices before the next, so budget freed by a new FRENAR
     // can turn a later ESCALAR into PAGAR. Every pending invoice is listed (`from` null: nobody saw an old outcome);
     // an ESCALAR only when its outcome changes. A pending invoice not yet read cannot be simulated without the model.
-    const would_change: Array<{ invoice_id: string; headline: string; from: Outcome | null; to: Outcome | null }> = [];
+    // AC-105: each row also carries the diff list's payee, amount, currency and reason (null while unread or not blocked).
+    type Row = { invoice_id: string; headline: string; from: Outcome | null; to: Outcome | null;
+      payee: string | null; amount: number | null; currency: string | null; reason: string | null };
+    const would_change: Row[] = [];
+    const evaluated = rows.filter(reopenable);
     let unread_pending = 0;
-    for (const row of rows.filter(reopenable)) {
-      if (!row.fields) { unread_pending++; would_change.push({ invoice_id: row.id, headline: '', from: null, to: null }); continue; }
+    for (const row of evaluated) {
+      if (!row.fields) { unread_pending++; would_change.push({ invoice_id: row.id, headline: '', from: null, to: null, payee: null, amount: null, currency: null, reason: null }); continue; }
       const invoice = { ...row, fields: row.fields } as Invoice;
       const beneficiary = findBeneficiary(invoice.fields.payee_name, directory);
       const period = { ...periodFrom(rows, invoice), previous: previousFrom(rows, invoice, window, directory) };
       const next = decide(invoice, beneficiary, rules, period, now, market);
       const from = row.outcome;
       Object.assign(row, { outcome: next.outcome, amount_usd: next.amount_usd });
-      if (from !== next.outcome) would_change.push({ invoice_id: row.id, headline: headline(next, invoice, beneficiary, lang), from, to: next.outcome });
+      if (from === next.outcome) continue;
+      const { payee_name, amount, currency } = validFields(invoice.fields); // R-71: as the headline reads it
+      would_change.push({ invoice_id: row.id, headline: headline(next, invoice, beneficiary, lang), from, to: next.outcome,
+        payee: beneficiary?.name ?? payee_name, amount, currency, reason: motives(next.checks, lang, invoice.received_at)[0] ?? null });
     }
     // The banner's "el agente pagará <n> factura(s)" counts pending rows too (AC-31, R-68).
     const will_pay = would_change.filter((w) => w.to === 'PAGAR').length;
-    return c.json({ policy: saved, would_change, will_pay, unread_pending });
+    // Evaluated invoices that keep their outcome; an unread one stays pending, so it counts here too (AC-105).
+    const unchanged = evaluated.length - would_change.filter((w) => w.to !== null).length;
+    return c.json({ policy: saved, would_change, will_pay, unread_pending, unchanged });
   })
 
   // Pending and ESCALAR invoices after the cursor (AC-31, R-60); runAgent picks them for the 'reevaluate' trigger.

@@ -21,12 +21,12 @@ const pinList = (fx: Record<string, string>) => [...FX, ...Object.keys(fx).filte
 // the loading rows are real rows with this made-up data, hidden by CSS: same markup, so same height as the loaded table (R-109)
 const placeholder = (currency: string): Rate => ({ currency, usd_per_unit: 0.000249, units_per_usd: 4020.1, source: 'Yahoo Finance', fetched_at: '2026-10-17T15:00:00Z', stale: false });
 
-function CompanySection() {
+// The company answer is loaded by Policy, so every card appears at once and none moves another (UX-09).
+function CompanySection({ initial }: { initial: Company | Failure }) {
   const { t } = useT();
-  const [c, setC] = useState<Company | null>(null);
-  const [err, setErr] = useState<Failure | null>(null);
+  const [c, setC] = useState<Company | null>('id' in initial ? initial : null);
+  const [err, setErr] = useState<Failure | null>('id' in initial ? null : initial);
   const [saved, setSaved] = useState(false);
-  useEffect(() => void api.get<Company>('/api/company').then(setC, (e) => setErr(failure(e))), []);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -43,7 +43,6 @@ function CompanySection() {
   return (
     <section className="card" aria-labelledby="company-h">
       <h2 id="company-h">{t('policy.company.title')}</h2>
-      {!c && !err && <p className="muted">{t('policy.loading')}</p>}
       {c && (
         <form onSubmit={submit} noValidate>
           {c.is_demo && <p className="muted">{t('policy.company.demo')}</p>}
@@ -140,6 +139,9 @@ export default function Policy() {
   const [would, setWould] = useState<Change[] | null>(null);
   const [willPay, setWillPay] = useState(0);
   const [unread, setUnread] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [company, setCompany] = useState<Company | Failure | null>(null);
+  const [allVersions, setAllVersions] = useState(false);
   const run = useRunAgent({ first: '/api/policy/reevaluate' });
 
   const load = async (fill: boolean) => {
@@ -147,7 +149,10 @@ export default function Policy() {
     setVersions(v);
     if (fill) setF(toForm(v[0]));
   };
-  useEffect(() => void load(true).catch((e) => setErr(failure(e))), []);
+  useEffect(() => {
+    void load(true).catch((e) => setErr(failure(e)));
+    void api.get<Company>('/api/company').then(setCompany, (e) => setCompany(failure(e)));
+  }, []);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -161,6 +166,7 @@ export default function Policy() {
       fx_rates: Object.fromEntries(Object.entries(f.fx).filter(([, r]) => r.trim() !== '').map(([k, r]) => [k, Number(r)])),
       allowed_beneficiaries_only: f.allowed,
     };
+    setSaving(true);
     try {
       const r = await send<{ policy: Version; would_change: Change[]; will_pay?: number; unread_pending: number }>('PUT', '/api/policy', { name: f.name.trim() || undefined, rules });
       setSaved(r.policy.version); // the number the database assigned (R-41), not the one the button showed
@@ -171,6 +177,8 @@ export default function Policy() {
     } catch (x) {
       setErr(failure(x));
       if (x instanceof ApiError && x.status === 409) await load(false).catch(() => {}); // another save won: refresh the list and the next number
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -186,89 +194,94 @@ export default function Policy() {
     <section data-tour="policy" className="policy">
       <h1>{t('screen.policy')}</h1>
       <p className="muted">{t('policy.intro')}</p>
-      <CompanySection />
+      {(!company || (!versions && !err)) && <p className="muted">{t('policy.loading')}</p>}
+      {company && (versions || err) && <>
+        <CompanySection initial={company} />
 
-      <section className="card" aria-labelledby="rules-h">
-        <h2 id="rules-h">{t('policy.rules.title')}</h2>
-        {!versions && !err && <p className="muted">{t('policy.loading')}</p>}
-        {!versions && err && <p role="alert" className="error">{t('policy.load_error')}</p>}
-        {versions && (
-          <form onSubmit={submit} noValidate>
-            <label className="switch">
-              <input type="checkbox" checked={f.allowed} onChange={(e) => setF({ ...f, allowed: e.target.checked })} aria-describedby="allowed-hint" />
-              {t('policy.allowed')}
-            </label>
-            <p id="allowed-hint" className="muted hint">{t('policy.allowed.hint')}</p>
-            <div className="grid">
-              {NUM.map((k) => (
-                <div key={k}>
-                  <label>{t(`policy.${k}`)}
-                    <input type="number" min="0" step="any" value={f.num[k]} aria-invalid={bad(k)} aria-describedby={`${k}-hint`}
-                      onChange={(e) => setF({ ...f, num: { ...f.num, [k]: e.target.value } })} />
-                  </label>
-                  <span id={`${k}-hint`} className="muted hint">{t(`policy.${k}.hint`)}</span>
-                </div>
-              ))}
-            </div>
-            <MarketRates pins={pins} />
-            <fieldset>
-              <legend>{t('policy.fx.title')}</legend>
-              <p className="muted hint">{t('policy.fx.hint')}</p>
-              <div className="grid fx">
-                {pins.map((c) => (
-                  <label key={c}>{t('policy.fx.row', { c })}
-                    <input type="number" min="0" step="any" value={f.fx[c] ?? ''} aria-invalid={bad('fx_rates')}
-                      onChange={(e) => setF({ ...f, fx: { ...f.fx, [c]: e.target.value } })} />
-                  </label>
+        <section className="card" aria-labelledby="rules-h">
+          <h2 id="rules-h">{t('policy.rules.title')}</h2>
+          {!versions && err && <p role="alert" className="error">{t('policy.load_error')}</p>}
+          {versions && (
+            <form onSubmit={submit} noValidate>
+              <label className="switch">
+                <input type="checkbox" checked={f.allowed} onChange={(e) => setF({ ...f, allowed: e.target.checked })} aria-describedby="allowed-hint" />
+                {t('policy.allowed')}
+              </label>
+              <p id="allowed-hint" className="muted hint">{t('policy.allowed.hint')}</p>
+              <div className="grid">
+                {NUM.map((k) => (
+                  <div key={k}>
+                    <label>{t(`policy.${k}`)}
+                      <input type="number" min="0" step="any" value={f.num[k]} aria-invalid={bad(k)} aria-describedby={`${k}-hint`}
+                        onChange={(e) => setF({ ...f, num: { ...f.num, [k]: e.target.value } })} />
+                    </label>
+                    <span id={`${k}-hint`} className="muted hint">{t(`policy.${k}.hint`)}</span>
+                  </div>
                 ))}
               </div>
-            </fieldset>
-            <p className="muted hint">{t('policy.fx.source')}</p>
-            <label>{t('policy.name')}
-              <input value={f.name} placeholder={versions[0]?.name} maxLength={100} onChange={(e) => setF({ ...f, name: e.target.value })} />
-            </label>
-            <button className="primary">{t('policy.save', { n: next })}</button>
-            {saved !== null && <p role="status">{t('policy.saved', { n: saved })}</p>}
-          </form>
-        )}
-        {versions && err && <p role="alert" className="error">{err.text}</p>}
-      </section>
-
-      <section className="card" aria-labelledby="reeval-h">
-        <h2 id="reeval-h">{t('policy.reevaluate')}</h2>
-        {would && (
-          <div className="banner" role="status">
-            <p>{header}</p>
-            {willPay > 0 && <p>{t('policy.will_pay', { n: willPay })}</p>}
-            {unread > 0 && <p>{t('policy.unread_pending', { k: unread })}</p>}
-            {(p > 0 || e > 0) && (
-              <ul>
-                {would.map((w) => (
-                  <li key={w.invoice_id}>{w.headline} <span className="mono">{w.to ? `${t(w.from ? `outcome.${w.from}` : 'inbox.pending')} → ${t(`outcome.${w.to}`)}` : t('policy.row_unread')}</span></li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-        <button className="primary" disabled={run.running} onClick={() => void run.start().then(() => setWould(null))}>{t('policy.reevaluate')}</button>
-        <p className="muted hint">{t('policy.reevaluate.note')}</p>
-        <RunProgress run={run} mode="reevaluate" />
-      </section>
-
-      {versions && (
-        <section className="card" aria-labelledby="versions-h">
-          <h2 id="versions-h">{t('policy.versions')}</h2>
-          <ol className="versions">
-            {versions.map((v) => (
-              <li key={v.id}>
-                <strong>{v.name}</strong>
-                <span className="mono">{t('policy.version', { n: v.version })}</span>
-                <span className="muted">{date(v.created_at)}</span>
-              </li>
-            ))}
-          </ol>
+              <MarketRates pins={pins} />
+              <fieldset>
+                <legend>{t('policy.fx.title')}</legend>
+                <p className="muted hint">{t('policy.fx.hint')}</p>
+                <div className="grid fx">
+                  {pins.map((c) => (
+                    <label key={c}>{t('policy.fx.row', { c })}
+                      <input type="number" min="0" step="any" value={f.fx[c] ?? ''} aria-invalid={bad('fx_rates')}
+                        onChange={(e) => setF({ ...f, fx: { ...f.fx, [c]: e.target.value } })} />
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+              <p className="muted hint">{t('policy.fx.source')}</p>
+              <label>{t('policy.name')}
+                <input value={f.name} placeholder={versions[0]?.name} maxLength={100} onChange={(e) => setF({ ...f, name: e.target.value })} />
+              </label>
+              <button className="primary" disabled={saving} aria-busy={saving || undefined}>{t('policy.save', { n: next })}</button>
+              {saved !== null && <p role="status">{t('policy.saved', { n: saved })}</p>}
+            </form>
+          )}
+          {versions && err && <p role="alert" className="error">{err.text}</p>}
         </section>
-      )}
+
+        <section className="card" aria-labelledby="reeval-h">
+          <h2 id="reeval-h">{t('policy.reevaluate')}</h2>
+          {would && (
+            <div className="banner" role="status">
+              <p>{header}</p>
+              {willPay > 0 && <p>{t('policy.will_pay', { n: willPay })}</p>}
+              {unread > 0 && <p>{t('policy.unread_pending', { k: unread })}</p>}
+              {(p > 0 || e > 0) && (
+                <ul>
+                  {would.map((w) => (
+                    <li key={w.invoice_id}>{w.headline} <span className="mono">{w.to ? `${t(w.from ? `outcome.${w.from}` : 'inbox.pending')} → ${t(`outcome.${w.to}`)}` : t('policy.row_unread')}</span></li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+          <button className="primary" disabled={run.running} aria-busy={run.running || undefined} onClick={() => void run.start().then(() => setWould(null))}>{t('policy.reevaluate')}</button>
+          <p className="muted hint">{t('policy.reevaluate.note')}</p>
+          <RunProgress run={run} mode="reevaluate" />
+        </section>
+
+        {versions && (
+          <section className="card" aria-labelledby="versions-h">
+            <h2 id="versions-h">{t('policy.versions')}</h2>
+            <ol className="versions" aria-labelledby="versions-h">
+              {(allVersions ? versions : versions.slice(0, 10)).map((v) => (
+                <li key={v.id}>
+                  <strong>{v.name}</strong>
+                  <span className="mono">{t('policy.version', { n: v.version })}</span>
+                  <span className="muted">{date(v.created_at)}</span>
+                </li>
+              ))}
+            </ol>
+            {!allVersions && versions.length > 10 && (
+              <button type="button" onClick={() => setAllVersions(true)}>{t('policy.versions.all', { n: versions.length })}</button>
+            )}
+          </section>
+        )}
+      </>}
     </section>
   );
 }

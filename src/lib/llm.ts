@@ -139,6 +139,13 @@ const Answer = z.object({
   confidence: z.record(z.string(), z.number().min(0).max(1)),
 });
 
+// R-129 (AC-12): a sentence is never an account. 6+ ASCII digits anywhere, or an email-shaped Pix key (R-73 (b)).
+// Tested on the first 200 chars: model output is untrusted, and `\S@\S+\.\S` is the same set as `\S+@\S+\.\S+` without its cubic backtracking.
+const looksLikeAccount = (v: string | null): string | null => {
+  const head = v?.slice(0, 200) ?? '';
+  return v && (/(?:\d\D*){6}/.test(head) || /\S@\S+\.\S/.test(head)) ? v : null;
+};
+
 const toNumber = (v: number | string | null): number | null => (typeof v === 'string' ? parseAmount(v) : v);
 
 export async function extractFields(env: Env, text: string | null): Promise<ReadFields> {
@@ -190,7 +197,7 @@ function toFields(raw: unknown): [InvoiceFields, number | null] {
     issue_date: keep('issue_date', a.issue_date),
     due_date: keep('due_date', a.due_date),
     concept: keep('concept', a.concept),
-    bank_account: keep('bank_account', a.bank_account),
+    bank_account: keep('bank_account', looksLikeAccount(a.bank_account)),
     confidence: Object.fromEntries(Object.entries(a.confidence).filter(([k]) => k in ILEGIBLE && k !== 'confidence')),
   }, amount ?? null];
 }

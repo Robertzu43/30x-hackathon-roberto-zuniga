@@ -120,7 +120,8 @@ describe('agentTrace "Lo que hice" (AC-64, D24, R-29)', () => {
   it('an illegible image', () => {
     const i = inv({ payee_name: null, amount: null, currency: null, invoice_number: null, bank_account: null, concept: 'ilegible' }, 'image');
     const steps = trace(i, [stored(run(i))]);
-    expect(steps.slice(0, 2).map((s) => s.text)).toEqual(['Leí la imagen y no pude leerla: ilegible.', 'No la encontré en el directorio.']);
+    expect(steps.slice(0, 2).map((s) => s.text)).toEqual(['Leí la imagen, pero no pude leer ningún dato: ilegible.', 'No la encontré en el directorio.']);
+    expect(trace(i, [stored(run(i))], {}, 'en')[0]?.text).toBe('I read the image, but could not read any data: illegible.');
     expect(steps[3]?.text).toMatch(/^Decidí ESCALAR: ilegible, /);
   });
   it('an agreement type with no dictionary entry reads "sin acuerdo registrado", never the raw key (R-52, AC-28)', () => {

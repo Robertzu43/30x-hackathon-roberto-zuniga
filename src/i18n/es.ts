@@ -168,7 +168,7 @@ const es: Record<string, string> = {
   'trace.invoice_number': 'factura #{number}',
   'trace.read': 'Leí {source} y encontré {found}.',
   'trace.read_missing': 'Leí {source} y encontré {found}; no pude leer {missing}.',
-  'trace.read_none': 'Leí {source} y no pude leerla: ilegible.',
+  'trace.read_none': 'Leí {source}, pero no pude leer ningún dato: ilegible.',
   'trace.directory': 'La encontré en el directorio: {agreement}, cuenta terminada en {account}.',
   'trace.directory_account_text': 'La encontré en el directorio, pero la cuenta de la factura («{invoice_account}») no coincide con la registrada («{directory_account}»).',
   'trace.directory_account': 'La encontré en el directorio, pero la cuenta de la factura termina en {invoice} y la registrada en {account}.',

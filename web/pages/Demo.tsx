@@ -3,17 +3,18 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { PageRoute } from '../App';
-import { config, supabase } from '../api';
-import { DEMO_TOUR, isDemoUser, useSession } from '../auth';
+import { isDemoUser, useSession } from '../auth';
+import { useLeaveGuard } from '../components/LeaveTrialWarning';
 import Logo from '../components/Logo';
+import TrialButton from '../components/TrialButton';
 import { RunProgress, useRunAgent } from '../components/RunProgress';
 import { useT } from '../i18n';
+import { enterDemo } from '../trial';
 import './demo.css';
 import '../components/ai.css';
 
 export const route: PageRoute = { path: '/demo', public: true, fullBleed: true };
 
-const DEMO_PASSWORD = 'andina-demo-2026'; // public by design (D8, AC-46), same as src/routes/demo.ts
 const PORTAL = 'https://facturas.30x-hackathon-roberto-zuniga.workers.dev/andina-labs'; // AC-83's demo portal; ponytail: per-deploy value via /api/config if another company hosts /demo
 const STAGES = ['percibe', 'lee', 'consulta', 'decide', 'actua', 'rinde'];
 // AC-79: the model reads; code consults the tools and decides.
@@ -32,6 +33,7 @@ export default function Demo() {
   const [enterFailed, setEnterFailed] = useState(false);
   const [asking, setAsking] = useState(false); // AC-71: the shared demo is reset only after an in-place "Reiniciar"
   const run = useRunAgent({ first: '/api/demo/reset', next: '/api/invoices/run' });
+  const { guard, warning } = useLeaveGuard(); // AC-94 (R-119): entering the shared demo ends an unsaved trial
 
   // Public and cached 60 s by the API; a retry or a reset skips the browser cache.
   const load = (fresh = false) => {
@@ -49,12 +51,7 @@ export default function Demo() {
   const enter = async () => {
     setEntering(true);
     setEnterFailed(false);
-    sessionStorage.setItem(DEMO_TOUR, '1'); // before signing in: the sign-in event may reach the app first (R-62)
-    const { error } = await Promise.all([supabase(), config()])
-      .then(([sb, c]) => sb.auth.signInWithPassword({ email: c.demo_email, password: DEMO_PASSWORD }))
-      .catch((e: Error) => ({ error: e }));
-    if (!error) return navigate('/');
-    sessionStorage.removeItem(DEMO_TOUR);
+    if (await enterDemo()) return navigate('/');
     setEntering(false);
     setEnterFailed(true);
   };
@@ -87,8 +84,9 @@ export default function Demo() {
         <div className="demo-problem">
           {[1, 2, 3].map((n) => <p key={n} data-testid="problem-line">{t(`demo.problem.${n}`)}</p>)}
         </div>
+        <TrialButton />
         <div className="demo-actions">
-          <button type="button" className="primary" disabled={entering} onClick={() => void enter()}>{t(entering ? 'demo.entering' : 'demo.enter')}</button>
+          <button type="button" disabled={entering} onClick={() => guard(() => void enter())}>{t(entering ? 'demo.entering' : 'demo.enter')}</button>
           <a href="/demo/happy-path.webm">{t('demo.video')} →</a>
           <a href={PORTAL}>{t('demo.portal')} →</a>
           {isDemoUser(session?.user, demoEmail) && (
@@ -102,6 +100,7 @@ export default function Demo() {
             <button type="button" onClick={() => setAsking(false)}>{t('demo.reset.no')}</button>
           </div>
         )}
+        {warning}
         {enterFailed && <p role="alert" className="error">{t('demo.enter_failed')}</p>}
         <RunProgress run={run} mode="pending" />
       </header>

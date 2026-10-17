@@ -15,28 +15,28 @@ Status of every entry: open. Source: "hands" = seen by hand in Chromium, "gate" 
 |---|---|---|---|---|---|---|---|
 | UX-01 | inbox | 1440, 390 | en | confusing copy | high | both | fixed (Task 31) |
 | UX-02 | detail-pagar / frenar / escalar | 1440, 390 | en | confusing copy | high | both | fixed (Task 31) |
-| UX-03 | tour (step 1) | 390 | es, en | broken state | medium | hands | open |
-| UX-04 | every screen | all | es, en | broken state | medium | gate | open |
-| UX-05 | every screen | 390 (and 360) | es, en | broken state | medium | both | partly fixed (Task 31): top bar, buttons, selects, section links; detail links and /demo video link left for Task 32 |
+| UX-03 | tour (step 1) | 390 | es, en | broken state | medium | hands | fixed (Task 32a) |
+| UX-04 | every screen | all | es, en | broken state | medium | gate | fixed (before Task 32a; verified Task 32a: gate 6.logo passes on every finance screen) |
+| UX-05 | every screen | 390 (and 360) | es, en | broken state | medium | both | partly fixed (Task 31, Task 32a): top bar, buttons, selects, section links (Task 31); detail links and the Política checkbox (Task 32a); the /demo video link is Task 32b's |
 | UX-06 | inbox, new-invoice, policy, beneficiaries, period, detail-escalar | 390 (and 360) | es, en | broken state | medium | gate | fixed (Task 31) |
 | UX-07 | every screen | all | es, en | broken state | medium | both | fixed (Task 31) |
-| UX-08 | inbox, new-invoice | 390, 1440 | es, en | layout jump | medium | both | open |
-| UX-09 | policy | 390, 1440 | es, en | layout jump | medium | both | open |
-| UX-10 | policy | 360 | es, en | broken state | low | both | open |
+| UX-08 | inbox, new-invoice | 390, 1440 | es, en | layout jump | medium | both | fixed (Task 29; verified Task 32a: gate 4.cls 0.0000 on inbox and new-invoice, 12 of 12 cells) |
+| UX-09 | policy | 390, 1440 | es, en | layout jump | medium | both | fixed (Task 32a) |
+| UX-10 | policy | 360 | es, en | broken state | low | both | fixed (before Task 32a; verified Task 32a: gate 1.scroll 360 vs 360 on policy) |
 | UX-11 | detail-frenar | 1440, 390 | es, en | broken state | low | both | fixed (Task 31) |
-| UX-12 | detail-frenar | 768 | es | layout jump | low | gate | open |
+| UX-12 | detail-frenar | 768 | es | layout jump | low | gate | fixed (Task 32a) |
 | UX-13 | period (error and offline) | 1440, 390 | es, en | broken state | high | both | fixed (Task 31) |
 | UX-14 | period, beneficiaries (empty) | 1440, 390 | es, en | broken state | low | both | fixed (Task 31) |
 | UX-15 | beneficiaries (Editar) | 1440, 390 | es, en | loading without feedback | medium | hands | fixed (Task 31) |
-| UX-16 | policy, beneficiaries (Save buttons) | 390 | es | loading without feedback | low | gate | partly fixed (Task 31): Beneficiarios Save; Política Save left for Task 22/32 |
-| UX-17 | approve (invalid token) | 1440, 390 | es, en | confusing copy | medium | both | partly fixed (Task 31): own heading and next step; the console 404 needs src/routes/approvals.ts |
-| UX-18 | detail (unknown invoice) | 1440, 390 | es, en | broken state | low | both | open |
+| UX-16 | policy, beneficiaries (Save buttons) | 390 | es | loading without feedback | low | gate | fixed (Task 31 Beneficiarios, Task 32a Política) |
+| UX-17 | approve (invalid token) | 1440, 390 | es, en | confusing copy | medium | both | fixed (Task 31; R-112 exclusion verified Task 32a: «excluded: expected 404 (invalid link)») |
+| UX-18 | detail (unknown invoice) | 1440, 390 | es, en | broken state | low | both | fixed (Task 32a): heading and next step in es and en; the API's 404 line stays (its contract) |
 | UX-19 | period, beneficiaries, new-invoice | 1440, 390 | es | confusing copy | low | hands | fixed (Task 31) |
 | UX-20 | new-invoice (file tab) | 1440, 390 | es, en | confusing copy | low | hands | fixed (Task 31) |
 | UX-21 | inbox, tour, demo, detail-escalar | all | es, en | broken state | low | gate | fixed (Task 31) |
 | UX-22 | period | 390 | es, en | broken state | medium | gate | fixed (Task 31) |
-| UX-23 | inbox with the new-invoice form open | 390, 1440 | es, en | confusing copy | low | hands | partly fixed (Task 31): chosen tab no longer looks primary; «Ejecutar agente» stays primary while the form is open (Inbox.tsx, Task 32) |
-| UX-24 | policy | 1440, 390 | es, en | confusing copy | low | hands | open |
+| UX-23 | inbox with the new-invoice form open | 390, 1440 | es, en | confusing copy | low | hands | fixed (Task 32a) |
+| UX-24 | policy | 1440, 390 | es, en | confusing copy | low | hands | fixed (Task 32a) |
 
 ## Entries
 
@@ -64,7 +64,7 @@ Status of every entry: open. Source: "hands" = seen by hand in Chromium, "gate" 
 - Expected: the card does not hide the highlighted area.
 - Actual: the card (es: y 407 to 812) sits on top of the highlighted block (es: y 300 to 644), so "Nueva factura" and "Ejecutar agente" are cut in half behind the card and the highlight is mostly hidden. en: card y 432 to 812, highlight y 258 to 538, the same overlap. Steps 2 to 7 do not overlap.
 - Screenshot: docs/ux/qa/tour-step1-390-es.png
-- Category: broken state. Severity: medium. Status: open.
+- Category: broken state. Severity: medium. Status: fixed (Task 32a).
 
 ### UX-04 No logo on any screen
 - Screen: login, tour, inbox, new-invoice, details, policy, beneficiaries, period, approve, demo (and their states). Width: all five. Language: es and en.
@@ -73,7 +73,7 @@ Status of every entry: open. Source: "hands" = seen by hand in Chromium, "gate" 
 - Actual: gate 6.logo fails in 10 of 10 cells on every screen: "no [data-logo], logo-labelled element or logo image". The header is the plain word "Thesaurus".
 - Note: AC-80 belongs to the D28-D35 work that is not deployed yet; listed so it is not forgotten.
 - Screenshot: docs/ux/qa/inbox-390-es.png
-- Category: broken state. Severity: medium. Status: open.
+- Category: broken state. Severity: medium. Status: fixed (before Task 32a; verified Task 32a: gate 6.logo passes on every finance screen).
 
 ### UX-05 Touch targets under 44 px on a phone
 - Screen: every screen with the top bar, the login and the demo. Width: 390 (gate also 360). Language: es and en.
@@ -81,7 +81,7 @@ Status of every entry: open. Source: "hands" = seen by hand in Chromium, "gate" 
 - Expected: every interactive element at least 44 x 44 (AC-91 item 2).
 - Actual (hands, 390): the section links "Bandeja / Política / Beneficiarios / Periodo" are 22 px tall; the "es" and "en" buttons are 42 x 44; "Nueva factura" 32 px tall; the filter selects 37 px; "Editar" 32 px; "Volver a la bandeja" 22 px; "Abrir el documento" 20 px. On login and /demo the "Español" / "English" links are 22 px tall and "Ver el recorrido en video" 26 px. Gate: 7 to 16 failing targets per logged-in screen, 2 to 3 on login and demo, 4 of 4 cells each.
 - Screenshot: docs/ux/qa/login-390-en.png, docs/ux/qa/inbox-390-es.png
-- Category: broken state. Severity: medium. Status: partly fixed (Task 31): top bar, buttons, selects, section links; detail links and /demo video link left for Task 32.
+- Category: broken state. Severity: medium. Status: partly fixed (Task 31, Task 32a): top bar, buttons, selects, section links (Task 31); detail links and the Política checkbox (Task 32a); the /demo video link is Task 32b's.
 
 ### UX-06 Form fields use 14 px text on a phone
 - Screen: inbox filters, new-invoice (email and chat textarea), policy (17 fields), beneficiaries form (7), period month field, detail-escalar field. Width: 390 (gate also 360). Language: es and en.
@@ -105,7 +105,7 @@ Status of every entry: open. Source: "hands" = seen by hand in Chromium, "gate" 
 - Expected: shift 0.01 or less, space reserved (AC-91 item 4).
 - Actual: 390 es 0.0337, 390 en 0.0397 (gate: 0.0397, 9 of 12 cells), 1440 0.0070. While loading, only "Loading invoices..." is shown and the "Beneficiario" filter is narrower than after load, then the list pushes the page.
 - Screenshot: docs/ux/qa/inbox-390-es.png (loaded state)
-- Category: layout jump. Severity: medium. Status: open.
+- Category: layout jump. Severity: medium. Status: fixed (Task 29; verified Task 32a: gate 4.cls 0.0000 on inbox and new-invoice, 12 of 12 cells).
 
 ### UX-09 Policy page jumps when it loads
 - Screen: policy. Width: 390 and 1440. Language: es and en.
@@ -113,7 +113,7 @@ Status of every entry: open. Source: "hands" = seen by hand in Chromium, "gate" 
 - Expected: shift 0.01 or less.
 - Actual: gate 0.0891 at 390/es (6 of 12 cells fail); by hand 0.0348 at 1440/en.
 - Screenshot: none (a shift is not visible in a still); numbers above.
-- Category: layout jump. Severity: medium. Status: open.
+- Category: layout jump. Severity: medium. Status: fixed (Task 32a).
 
 ### UX-10 Policy scrolls sideways at 360
 - Screen: policy. Width: 360 (AC-91 width; 390 is fine). Language: es and en.
@@ -121,7 +121,7 @@ Status of every entry: open. Source: "hands" = seen by hand in Chromium, "gate" 
 - Expected: `scrollWidth <= innerWidth`.
 - Actual: scrollWidth 364 vs 360; the title, intro and three cards end at x = 364. Gate 1.scroll and 1.offscreen fail in 2 of 10 cells.
 - Screenshot: docs/ux/qa/policy-360-es.png
-- Category: broken state. Severity: low. Status: open.
+- Category: broken state. Severity: low. Status: fixed (before Task 32a; verified Task 32a: gate 1.scroll 360 vs 360 on policy).
 
 ### UX-11 "Abrir el documento" is a default blue link
 - Screen: detail-frenar (and any detail with a document). Width: 1440, 390. Language: es and en.
@@ -137,7 +137,7 @@ Status of every entry: open. Source: "hands" = seen by hand in Chromium, "gate" 
 - Expected: reserved space; image sharp.
 - Actual: gate 4.cls 0.0367 at 768/es (2 of 12 cells); gate 6.images: the preview is 860 px wide shown at 704 px (not 2x).
 - Screenshot: none.
-- Category: layout jump. Severity: low. Status: open.
+- Category: layout jump. Severity: low. Status: fixed (Task 32a).
 
 ### UX-13 Period error and offline show raw technical text and no next step
 - Screen: period, forced error and offline. Width: 1440 and 390. Language: es and en.
@@ -169,7 +169,7 @@ Status of every entry: open. Source: "hands" = seen by hand in Chromium, "gate" 
 - Expected: disabled, aria-busy or a progress element within 100 ms.
 - Actual: "no disabled, aria-busy or progress state within 150 ms" on both screens. Not repeated by hand because it would write to the demo data.
 - Screenshot: none.
-- Category: loading without feedback. Severity: low. Status: partly fixed (Task 31): Beneficiarios Save; Política Save left for Task 22/32.
+- Category: loading without feedback. Severity: low. Status: fixed (Task 31 Beneficiarios, Task 32a Política).
 
 ### UX-17 Invalid approval link: no next step and a console error
 - Screen: approve with a bad token (/approve/invalid-token-qa). Width: 1440 and 390. Language: es and en.
@@ -177,7 +177,7 @@ Status of every entry: open. Source: "hands" = seen by hand in Chromium, "gate" 
 - Expected: a friendly message that says what to do (for example ask for a new link), and no console error.
 - Actual: the heading "Aprobar este pago / Approve this payment" is followed by "Este enlace no es válido o venció" and nothing else, on a nearly empty page: no link, no contact, no way back. The browser console logs `error: Failed to load resource: the server responded with a status of 404`; gate 6.console fails (10 of 10 cells). The heading promises an action that is not there.
 - Screenshot: docs/ux/qa/approve-invalid-390-es.png
-- Category: confusing copy. Severity: medium. Status: partly fixed (Task 31): own heading and next step; the console 404 needs src/routes/approvals.ts.
+- Category: confusing copy. Severity: medium. Status: fixed (Task 31; R-112 exclusion verified Task 32a: «excluded: expected 404 (invalid link)»).
 
 ### UX-18 Unknown invoice page logs a console error
 - Screen: detail with an id that does not exist. Width: 1440 and 390. Language: es and en.
@@ -185,7 +185,7 @@ Status of every entry: open. Source: "hands" = seen by hand in Chromium, "gate" 
 - Expected: the friendly message ("No encontré esta factura." / "I could not find this invoice.") with the back link, and a clean console.
 - Actual: message and back link are right, but the console shows a 404 error (gate 6.console, 10 of 10 cells, seen on the gate's `detail-unread`).
 - Screenshot: docs/ux/qa/detail-unread-1440-es.png
-- Category: broken state. Severity: low. Status: open.
+- Category: broken state. Severity: low. Status: fixed (Task 32a): heading and next step in es and en; the API's 404 line stays (its contract).
 
 ### UX-19 Browser-made widgets ignore the app language
 - Screen: period (month field), beneficiaries edit form (date field), new-invoice file tab (file chooser). Width: 1440 and 390. Language: es.
@@ -225,7 +225,7 @@ Status of every entry: open. Source: "hands" = seen by hand in Chromium, "gate" 
 - Expected: one primary button per view (AC-91 item 6; judged by eye).
 - Actual: three solid dark controls at once: "Ejecutar agente", the selected tab ("Subir PDF o imagen") and "Enviar al agente". The selected tab looks like an action button.
 - Screenshot: docs/ux/qa/new-invoice-file-390-en.png
-- Category: confusing copy. Severity: low. Status: partly fixed (Task 31): chosen tab no longer looks primary; «Ejecutar agente» stays primary while the form is open (Inbox.tsx, Task 32).
+- Category: confusing copy. Severity: low. Status: fixed (Task 32a).
 
 ### UX-24 Policy version list has no limit
 - Screen: policy. Width: 1440 and 390. Language: es and en.
@@ -233,7 +233,7 @@ Status of every entry: open. Source: "hands" = seen by hand in Chromium, "gate" 
 - Expected: a readable history.
 - Actual: 34 rows "Política general, versión N, 17/10/2026", all the same name and date, so the page is very long and the list says nothing. (Earlier test runs created these; a fresh demo company would show fewer.)
 - Screenshot: none.
-- Category: confusing copy. Severity: low. Status: open.
+- Category: confusing copy. Severity: low. Status: fixed (Task 32a).
 
 ## Checked and fine (evidence, not defects)
 

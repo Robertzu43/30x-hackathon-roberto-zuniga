@@ -3,7 +3,7 @@
 .login .login-intro h1 { font-size: inherit; line-height: 0; margin: 0; }
 .login .login-intro .logo { width: min(100%, 36rem); height: auto; }
 .login .login-form { position: relative; }
-.login .login-form > .lang-switch { position: absolute; top: 1.5rem; right: 1.5rem; }
+.login .login-form > .lang-switch { position: absolute; top: 1.5rem; right: clamp(2rem, 6vw, 6rem); } /* the form's own right edge */
 @media (max-width: 760px) {
   .login .login-intro { padding-top: 5rem; }
   .login .login-intro .logo { width: min(100%, 18rem); }

@@ -168,7 +168,7 @@ const en: Record<string, string> = {
   'trace.invoice_number': 'invoice #{number}',
   'trace.read': 'I read {source} and found {found}.',
   'trace.read_missing': 'I read {source} and found {found}; I could not read {missing}.',
-  'trace.read_none': 'I read {source} and could not read it: illegible.',
+  'trace.read_none': 'I read {source}, but could not read any data: illegible.',
   'trace.directory': 'I found the payee in the directory: {agreement}, account ending in {account}.',
   'trace.directory_account_text': 'I found the payee in the directory, but the invoice\'s account ("{invoice_account}") does not match the one on file ("{directory_account}").',
   'trace.directory_account': 'I found the payee in the directory, but the invoice\'s account ends in {invoice} and the one on file in {account}.',

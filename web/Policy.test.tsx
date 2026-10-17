@@ -474,3 +474,80 @@ test('CSS: the rate header hidden on phones uses the standard sr-only pattern (A
   const head = m.match(/\.fx-table thead \{([^}]*)\}/)?.[1] ?? '';
   for (const d of ['position: absolute', 'width: 1px', 'height: 1px', 'margin: -1px', 'padding: 0', 'overflow: hidden', 'clip: rect(0 0 0 0)', 'white-space: nowrap', 'border: 0', 'font-size: 0']) expect(head).toContain(d);
 });
+
+// UX-16 (AC-91 item 4): the save shows it is working within 100 ms, before the answer.
+test('«Guardar como versión» is disabled and aria-busy while the save is in flight', async () => {
+  let answer: (v: unknown) => void = () => {};
+  setup({ 'PUT /api/policy': () => new Promise((r) => { answer = r; }) });
+  renderAt(<Policy />);
+  await limit();
+  save();
+  const button = screen.getByRole('button', { name: /^Guardar como versión/ }) as HTMLButtonElement;
+  await waitFor(() => expect(button.disabled).toBe(true));
+  expect(button.getAttribute('aria-busy')).toBe('true');
+  answer({ policy: { ...versions[0], id: 'p3', version: 3 }, would_change: [], will_pay: 0, unread_pending: 0 });
+  await waitFor(() => expect(button.disabled).toBe(false));
+  expect(button.getAttribute('aria-busy')).toBeNull();
+});
+
+test('«Reevaluar pendientes» is disabled and aria-busy while the loop runs (UX-16)', async () => {
+  setup({ 'POST /api/policy/reevaluate': () => new Promise(() => {}) });
+  renderAt(<Policy />);
+  await limit();
+  fireEvent.click(screen.getByRole('button', { name: 'Reevaluar pendientes' }));
+  const button = screen.getByRole('button', { name: 'Reevaluar pendientes' }) as HTMLButtonElement;
+  await waitFor(() => expect(button.disabled).toBe(true));
+  expect(button.getAttribute('aria-busy')).toBe('true');
+});
+
+// UX-24: the newest 10 versions, the rest one click away.
+const many = Array.from({ length: 12 }, (_, i) => ({ ...versions[0], id: `p${12 - i}`, version: 12 - i }));
+test.each([
+  ['es', 'Mostrar todas (12)'],
+  ['en', 'Show all (12)'],
+])('more than 10 versions: the newest 10 and «%s»', async (lang, label) => {
+  localStorage.setItem('lang', lang);
+  setup({ 'GET /api/policy': many });
+  renderAt(<Policy />);
+  const list = (await screen.findByRole('list', { name: lang === 'es' ? 'Versiones' : 'Versions' }));
+  expect(within(list).getAllByRole('listitem').map((li) => li.textContent)).toEqual(many.slice(0, 10).map((v) => expect.stringContaining(`${v.version}`)));
+  fireEvent.click(screen.getByRole('button', { name: label }));
+  expect(within(list).getAllByRole('listitem')).toHaveLength(12);
+  expect(screen.queryByRole('button', { name: label })).toBeNull();
+  localStorage.removeItem('lang');
+});
+
+test('10 versions or fewer: no «Mostrar todas» button (UX-24)', async () => {
+  setup();
+  renderAt(<Policy />);
+  await limit();
+  expect(screen.queryByRole('button', { name: /Mostrar todas/ })).toBeNull();
+});
+
+// UX-09 (AC-91 item 4): the company card grew when /api/company answered and pushed «Reglas de pago» down. The cards
+// appear together once the company and the policy have both answered, so nothing that is shown moves.
+test('no card is shown until the company and the policy have both answered (UX-09)', async () => {
+  let company_: (v: unknown) => void = () => {};
+  setup({ 'GET /api/company': () => new Promise((r) => { company_ = r; }) });
+  renderAt(<Policy />);
+  await waitFor(() => expect(screen.getByText('Cargando…')).toBeTruthy());
+  await new Promise((r) => setTimeout(r, 20)); // the policy has answered by now
+  expect(screen.queryByRole('heading', { name: 'Reglas de pago' })).toBeNull();
+  expect(screen.queryByRole('heading', { name: 'Empresa' })).toBeNull();
+  company_(company);
+  expect(await screen.findByRole('heading', { name: 'Reglas de pago' })).toBeTruthy();
+  expect(screen.getByRole('heading', { name: 'Empresa' })).toBeTruthy();
+});
+
+test('a failed company answer still shows the rules, with the company error in its card (UX-09)', async () => {
+  setup({ 'GET /api/company': json({ error: 'boom' }, 500) });
+  renderAt(<Policy />);
+  expect(await limit()).toBeTruthy();
+  expect(within(screen.getByRole('region', { name: 'Empresa' })).getByRole('alert')).toBeTruthy();
+});
+
+test('CSS: at phone width the «Pagar solo a beneficiarios permitidos» checkbox is a 44 x 44 target (AC-91 item 2)', async () => {
+  const { readFileSync } = (await import('node:fs' as string)) as { readFileSync(p: string, enc: string): string };
+  const phone = readFileSync('web/policy.css', 'utf8').split('@media (max-width: 640px) {')[1] ?? '';
+  expect(phone).toMatch(/\.switch input \{[^}]*width: 44px; height: 44px/);
+});

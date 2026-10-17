@@ -222,3 +222,71 @@ test('the card is capped below the top bar; at <= 480 px it is a bottom sheet, b
   expect(phone).toMatch(/max-height: calc\(100dvh - var\(--tour-top, 0px\) - 1\.5rem\)/);
   expect(css).not.toMatch(/\.tour-body[^{]*\{[^}]*font-size/);
 });
+
+// UX-03: at 390 the bottom-sheet card covered step 1's highlighted block. jsdom has no layout: the target, the top bar
+// (bottom 60) and the card (top 420, full width) are stubbed; scrollBy is spied.
+function stubLayout(target: { top: number; height: number; left?: number; width?: number }, cardLeft = 12) {
+  const bar = document.body.appendChild(Object.assign(document.createElement('header'), { className: 'topbar' }));
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    const box = (top: number, left: number, width: number, height: number) => ({ top, left, width, height, bottom: top + height, right: left + width }) as DOMRect;
+    if (this === bar) return box(0, 0, 390, 60);
+    if (this.dataset.tour === 'inbox') return box(target.top, target.left ?? 16, target.width ?? 358, target.height);
+    if (this.classList.contains('tour-card')) return box(420, cardLeft, 366, 400);
+    return box(0, 0, 0, 0);
+  });
+  vi.spyOn(HTMLElement.prototype, 'offsetTop', 'get').mockImplementation(function (this: HTMLElement) { return this.classList.contains('tour-card') ? 420 : 0; });
+  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) { return this.classList.contains('tour-card') ? 400 : 0; });
+  const scroll = vi.fn();
+  vi.stubGlobal('scrollBy', scroll);
+  return { scroll, done: () => bar.remove() };
+}
+
+test('a block taller than the room above the card scrolls its start under the top bar, and the spotlight stops above the card (UX-03)', async () => {
+  const { scroll, done } = stubLayout({ top: 300, height: 600 });
+  setup();
+  await screen.findByRole('heading', { name: 'Bandeja' });
+  await waitFor(() => expect(scroll).toHaveBeenCalledWith(0, 300 - 68)); // room: 60 + 8 to 420 - 8
+  const spot = document.querySelector<HTMLElement>('.tour-spotlight')!;
+  expect(spot.style.top).toBe('292px');
+  expect(spot.style.height).toBe(`${412 - 292}px`); // never under the card
+  done();
+});
+
+test('a block that fits is centred in the room between the top bar and the card, unclipped (UX-03)', async () => {
+  const { scroll, done } = stubLayout({ top: 500, height: 100 });
+  setup();
+  await screen.findByRole('heading', { name: 'Bandeja' });
+  await waitFor(() => expect(scroll).toHaveBeenCalledWith(0, 500 - (68 + (344 - 100) / 2)));
+  expect(document.querySelector<HTMLElement>('.tour-spotlight')!.style.height).toBe('116px');
+  done();
+});
+
+test('a block beside the card (wide screens) is left where it is (UX-03)', async () => {
+  const { scroll, done } = stubLayout({ top: 500, height: 100, left: 16, width: 300 }, 400);
+  setup();
+  await screen.findByRole('heading', { name: 'Bandeja' });
+  await new Promise((r) => setTimeout(r, 50));
+  expect(scroll).not.toHaveBeenCalled();
+  expect(document.querySelector<HTMLElement>('.tour-spotlight')!.style.height).toBe('116px');
+  done();
+});
+
+// UX-03 (AC-91 item 4): the spotlight is re-measured in the same frame as the scroll, so it never paints at the old
+// place and then jumps (the gate measured CLS 0.27 at 360 when it waited for the scroll event).
+test('after scrolling the block into the room, the spotlight already sits on its new place, without a scroll event', async () => {
+  let offset = 0;
+  const { done } = stubLayout({ top: 300, height: 600 });
+  const box = HTMLElement.prototype.getBoundingClientRect as unknown as { getMockImplementation(): (this: HTMLElement) => DOMRect };
+  const base = box.getMockImplementation();
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    const r = base.call(this);
+    return this.dataset.tour === 'inbox' ? ({ ...r, top: r.top - offset, bottom: r.bottom - offset }) as DOMRect : r;
+  });
+  vi.stubGlobal('scrollY', 0);
+  vi.stubGlobal('scrollBy', (_x: number, y: number) => { offset += y; vi.stubGlobal('scrollY', offset); });
+  setup();
+  await screen.findByRole('heading', { name: 'Bandeja' });
+  await waitFor(() => expect(document.querySelector<HTMLElement>('.tour-spotlight')!.style.top).toBe('60px')); // 68 - PAD
+  expect(offset).toBe(232); // one scroll, then it stops
+  done();
+});

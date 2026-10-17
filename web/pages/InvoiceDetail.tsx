@@ -60,9 +60,11 @@ export default function InvoiceDetail() {
     };
   }, [id, metaLang, reloads]);
 
-  const back = <Link to="/" className="detail-back">{t('detail.back')}</Link>;
+  const back = <Link to="/" className="detail-back detail-link">{t('detail.back')}</Link>;
   if (data === null) return <section>{back}<p className="muted">{t('detail.loading')}</p></section>;
-  if (typeof data === 'string') return <section>{back}<p className="error">{t(data === 'missing' ? 'detail.not_found' : 'detail.load_error')}</p></section>;
+  // UX-18: the API answers an unknown id with 404 (its contract); the page names it and says what to do next.
+  if (data === 'missing') return <section>{back}<h1>{t('detail.not_found')}</h1><p>{t('detail.not_found.next')}</p></section>;
+  if (data === 'error') return <section>{back}<p className="error">{t('detail.load_error')}</p></section>;
   const latest = data.decisions.at(-1);
   if (!latest) return <section>{back}<h1>{t('detail.pending')}</h1></section>;
 
@@ -101,7 +103,7 @@ export default function InvoiceDetail() {
     <section className="detail">
       {back}
       <h1>{data.headline}</h1>
-      {originLabel(t, invoice) && <p className="muted">{originLabel(t, invoice)}</p>}
+      {originLabel(t, invoice) && <p className="muted detail-origin">{originLabel(t, invoice)}</p>}
       {invoice.sender_note && (
         <section aria-labelledby="sender-note">
           <h2 id="sender-note">{t('inbox.sender_note')}</h2>
@@ -124,7 +126,7 @@ export default function InvoiceDetail() {
               {invoice.source === 'pdf'
                 ? <iframe className="detail-doc" src={url} title={t('detail.file.title')} />
                 : <img className="detail-doc" src={url} alt={t('detail.file.title')} />}
-              <a href={url} target="_blank" rel="noreferrer">{t('detail.file.open')}</a>
+              <a className="detail-link" href={url} target="_blank" rel="noreferrer">{t('detail.file.open')}</a>
             </>
           )}
           {reading ? <ReadingPanel fields={reading.fields} show={shown} /> : <dl className="detail-fields">

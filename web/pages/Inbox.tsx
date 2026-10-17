@@ -69,7 +69,7 @@ export default function Inbox() {
         <h1>{t('screen.inbox')}</h1>
         <div className="inbox-actions">
           <button type="button" data-tour="new-invoice" aria-expanded={adding} onClick={() => setAdding(!adding)}>{t('inbox.new')}</button>
-          <button type="button" className="primary" data-tour="run-agent" disabled={run.running} onClick={() => void run.start().then(loadLastRun)}>
+          <button type="button" className={adding ? undefined : 'primary'} data-tour="run-agent" disabled={run.running} onClick={() => void run.start().then(loadLastRun)}>
             {t('inbox.run')}
           </button>
         </div>

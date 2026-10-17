@@ -5,11 +5,12 @@
 .demo h2 { font: 400 1.75rem / 1.15 var(--font-serif); letter-spacing: -0.02em; margin: 0 0 1rem; }
 .demo-lang { position: absolute; top: 1.5rem; right: 1.5rem; }
 
-.demo-hero { padding-top: 26svh; max-width: 38rem; display: grid; gap: 1.5rem; justify-items: start; }
-.demo-mark { font-weight: 600; }
-.demo-hero h1 { font-size: clamp(2.25rem, 3.6vw, 3.25rem); line-height: 1.05; max-width: 22ch; margin: 0; }
+.demo-hero { padding-top: 22svh; max-width: 38rem; display: grid; gap: 1.5rem; justify-items: start; }
+.demo-hero h1 { font-size: clamp(2.25rem, 4.6vw, 4.25rem); line-height: 1.02; letter-spacing: -0.035em; max-width: 18ch; margin: 0; }
+.demo-problem { max-width: 38rem; }
 .demo-problem { display: grid; gap: 0.375rem; font-size: 1.125rem; line-height: 1.5; }
-.demo-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem 1.75rem; margin-top: 0.5rem; }
+.demo-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1.75rem; margin-top: 0.5rem; }
+.demo-actions a { display: inline-flex; align-items: center; min-height: 44px; } /* AC-91 item 2: 44 px targets */
 .demo-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 1rem 1.25rem; }
 .demo-confirm p { flex-basis: 100%; }
 .demo a { color: var(--ink); text-underline-offset: 4px; }
@@ -18,8 +19,13 @@
 .demo section { margin-top: clamp(7rem, 16vh, 10rem); max-width: 38rem; }
 .demo section > p { font-size: 1.0625rem; }
 
+.demo section.demo-loop { max-width: 48rem; }
+.demo .demo-loop > p:not(.demo-ask) { max-width: 38rem; } /* 45-75 characters a line; the stage grid keeps 48rem */
 .demo-loop ol { list-style: none; margin: 2.5rem 0 0; padding: 0; display: grid; gap: 1.25rem; }
-.demo-loop li { display: grid; grid-template-columns: 13rem 1fr; gap: 1.5rem; align-items: baseline; }
+.demo-loop li, .demo .demo-loop .demo-ask { display: grid; grid-template-columns: 18rem 1fr; gap: 1.5rem; align-items: baseline; }
+.demo .demo-loop .demo-ask { font-size: 1rem; } /* same size as the stage lines above it */
+/* AC-79's sentence on its own tone field, right under the stages it explains. */
+.demo .demo-loop .demo-where { margin-top: 2.5rem; padding: 1.5rem 1.75rem; background: #f1efe9; border-radius: var(--radius); }
 .demo-loop strong { font: 400 1.375rem / 1.2 var(--font-serif); letter-spacing: -0.01em; }
 .demo-loop blockquote { margin: 4rem 0 0.75rem; font: 400 clamp(1.5rem, 2.4vw, 2.25rem) / 1.2 var(--font-serif); letter-spacing: -0.02em; }
 
@@ -41,7 +47,7 @@
 .demo-chip-PAGAR { background: #edf3ec; color: #346538; }
 .demo-chip-FRENAR { background: #fdebec; color: #9f2f2d; }
 .demo-chip-ESCALAR { background: #fbf3db; color: #956400; }
-.demo-chip-pending { background: #e1f3fe; color: #1f6c9f; }
+.demo-chip-pending { background: #f1efe9; color: var(--ink-2); } /* neutral: pending is not an outcome; approved palette only (AC-81) */
 
 .demo-period dl { display: grid; grid-template-columns: 8rem 1fr; gap: 1.75rem 1.5rem; align-items: baseline; margin: 2.5rem 0 0; }
 .demo-period dt { font: 400 2rem / 1 var(--font-serif); text-align: right; font-variant-numeric: tabular-nums; }
@@ -50,8 +56,11 @@
 .demo-footer { margin-top: clamp(8rem, 22vh, 12rem); padding: 2rem 0 3rem; color: var(--ink-2); }
 
 @media (max-width: 640px) {
-  .demo-hero { padding-top: 18svh; }
-  .demo-loop li { grid-template-columns: 1fr; gap: 0.25rem; }
+  .demo { --edge: 1.5rem; }
+  .demo-hero { padding-top: 6rem; }
+  .demo-hero h1 { font-size: 2rem; }
+  .demo-loop li, .demo .demo-loop .demo-ask { grid-template-columns: 1fr; gap: 0.25rem; }
+  .demo .demo-loop .demo-where { padding: 1.25rem; }
   .demo-rows { padding: 0.25rem 1rem; }
   .demo-rows li { flex-direction: column; gap: 0.375rem; }
   .demo-period dl { grid-template-columns: 5.5rem 1fr; }

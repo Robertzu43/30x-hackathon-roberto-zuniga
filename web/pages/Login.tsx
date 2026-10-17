@@ -2,14 +2,20 @@ import { useState, type FormEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type { PageRoute } from '../App';
 import { supabase } from '../api';
+import { useLeaveGuard } from '../components/LeaveTrialWarning';
 import Logo from '../components/Logo';
+import TrialButton from '../components/TrialButton';
 import { useT } from '../i18n';
 import { runUntilDone, type Progress } from '../runAgent';
 import type { Lang } from '../../src/i18n';
+import './login.css';
 
 export const route: PageRoute = { path: '/login', public: true, fullBleed: true };
 
-/** AC-40: email -> one-time code -> Bandeja. A language picked here is stored on the user once the code is accepted (AC-41). */
+/**
+ * AC-40: email -> one-time code -> Bandeja. A language picked here is stored on the user once the code is accepted (AC-41).
+ * The trial door is the primary (AC-92, R-120); «Enviar código» is secondary and warns an unsaved trial first (AC-94, R-119).
+ */
 export default function Login() {
   const { t, lang, setLang } = useT();
   const navigate = useNavigate();
@@ -22,9 +28,13 @@ export default function Login() {
   const [deciding, setDeciding] = useState<Progress | null | false>(false);
   const [picked, setPicked] = useState<Lang | null>(null); // only a click on this screen counts as a choice
   const pick = (l: Lang) => { setPicked(l); setLang(l); };
+  const { guard, warning } = useLeaveGuard();
 
-  const send = async (e: FormEvent) => {
+  const send = (e: FormEvent) => {
     e.preventDefault();
+    guard(() => void sendCode());
+  };
+  const sendCode = async () => {
     setBusy(true);
     setError('');
     const { error } = await (await supabase()).auth
@@ -59,8 +69,7 @@ export default function Login() {
   return (
     <div className="login">
       <section className="login-intro">
-        <Logo />
-        <h1>{t('login.title')}</h1>
+        <h1><Logo /></h1>{/* the logo is the wordmark: the name is shown once (AC-80) */}
         <p className="login-lead">{t('login.lead')}</p>
       </section>
       <section className="login-form">
@@ -70,11 +79,15 @@ export default function Login() {
           <button type="button" className="link" aria-pressed={lang === 'en'} onClick={() => pick('en')}>English</button>
         </div>
         {!sent ? (
-          <form onSubmit={send}>
-            <label htmlFor="login-email">{t('login.email')}</label>
-            <input id="login-email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-            <button type="submit" className="primary" disabled={busy}>{t(busy ? 'login.sending' : 'login.send')}</button>
-          </form>
+          <>
+            <TrialButton />
+            <form onSubmit={send}>
+              <label htmlFor="login-email">{t('login.email')}</label>
+              <input id="login-email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+              <button type="submit" disabled={busy}>{t(busy ? 'login.sending' : 'login.send')}</button>
+            </form>
+            {warning}
+          </>
         ) : (
           <form onSubmit={verify}>
             <p>{t('login.sent', { email: email.trim() })}</p>

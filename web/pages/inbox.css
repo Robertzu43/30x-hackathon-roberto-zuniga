@@ -27,6 +27,7 @@
   border-bottom: 1px solid var(--line);
   color: var(--ink);
   text-decoration: none;
+  overflow-wrap: anywhere; /* AC-91 item 1: a long sender («Correo de …») or payee wraps at 360 */
 }
 .inbox-list a:hover { background: var(--surface); }
 .inbox-list time { font-size: var(--text-sm); font-family: var(--font-mono); }

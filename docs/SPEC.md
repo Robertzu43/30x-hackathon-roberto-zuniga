@@ -561,6 +561,47 @@ Clarified (R-103, QA run 1 Q-H), for the two designed 404 pages: the unknown-slu
 Clarified (R-112, Q-I), the `approve` screen opened with an invalid or expired token (AC-36). `GET /api/approve/<token>` keeps answering 404, and approvals.ts does not change. Item 6 may exclude exactly one console line, and only in this state. It must be a `Failed to load resource` error whose URL path equals `/api/approve/<token>`, where `<token>` is the token in the page's own URL. The gate must observe that request's response as 404. The page must show its designed message, the heading «No puedo mostrar este pago» with a next step. The gate table prints the line as «excluded: expected 404 (invalid link)». Every other line still fails: a second line, any other status (a 409 or 500 included), any other URL, and the same line on the valid-token `approve` screen or on any other screen. If this state has no control by design, R-103's N/A rule for items 2, 3, 4 and 7 applies to it with the same reason.
 Clarified (R-113, Q-J), item 5, `5.mixed`. Text is compared after trimming and collapsing whitespace, ignoring case. A text node is flagged on a screen in language L only if it equals a value in the other language's UI dictionary and does not equal any value in L's own dictionary. A string that both dictionaries contain, such as «decide», is never flagged. There is no minimum word count, because a one-word leak such as «Aprobar» on an English button is a real defect. There is also no hand-kept allowlist. The gate's fixture test adds both cases: a word found in both dictionaries passes, and a word found only in the es dictionary, shown on an en screen, fails.
 Clarified (R-114, Q-K), item 1, text overlap, on every screen. A text pair is not counted as an overlap when one text is occluded by a layer that covers it. All four conditions must hold: (1) one text, A, sits inside an element whose computed `position` is `sticky` or `fixed` and whose background, its own or an ancestor's up to that element, is opaque (alpha 1); (2) the other text, B, is not inside that same element; (3) the whole rectangle where the two text boxes intersect lies inside that element's box; (4) `document.elementFromPoint` at that rectangle's centre returns A's layer or one of its descendants, which proves that B is hidden in the actual render. The gate table prints each such pair as «excluded: occluded by sticky/fixed layer». The pair still counts when both texts are in the same layer (two header texts, or two content texts, dimmed or not), and when the layer is translucent. Whether each tour step's highlighted element is fully visible below the top bar is checked by the UX reviewer from the screenshots, not by this exclusion.
+Clarified (R-131, Task 32a gate run), item 5, `5.mixed` and `5.locale`, user data. This is how item 5's "user data excepted" works. It is the only exemption, and it is visible.
+- Marker. The web marks user data with the attribute `data-user`, which takes no value. Do not use `lang="und"` or `translate="no"`, because those change how screen readers and browser translation behave.
+- Where the marker goes. Put it on the innermost element whose whole text is user data. A snippet with its `<mark>` highlight counts as one such element. Never put it on a container that also renders product copy. In a line like «Pago a {payee}», only the `<span>` around the name is marked.
+- What must carry it, on every screen where it is shown (finance and vendor screens alike):
+  - payee and beneficiary names;
+  - sender names and sender email addresses;
+  - the stored document text, and every snippet under «Lo que leí»;
+  - each value in «Leído por IA», as read (its field labels are not marked);
+  - vendor and sender notes, and portal messages;
+  - agreement concepts;
+  - policy names and version names typed by a person;
+  - invoice numbers, and lines such as «Factura N.º …» read from a document;
+  - bank accounts as read;
+  - amounts and dates printed as typed or as read, such as «USD 1.800,00» from the invoice;
+  - upload file names;
+  - the user's own questions in the ask box.
+- What must never carry it:
+  - any string from the UI dictionaries: headings, labels, buttons, chips, field names, state messages and tour copy;
+  - the record sentences, check lines, fixes and «Lo que hice», which follow the tab's language (R-98);
+  - the AI's answers in the ask box;
+  - every amount, date, rate and percentage the app formats itself, such as the decision amount, totals, chart axes and FX rates. Those are exactly what `5.locale` checks.
+- What the gate skips. Text nodes inside a `[data-user]` element are skipped by `5.mixed` and `5.locale` only. Every other check still measures them, including the rest of item 5 (`null`, `undefined`, `NaN`, `[object Object]`, i18n keys, status numbers and error codes) and items 1, 3 and 6.
+- What the gate prints.
+  - The `5.mixed` and `5.locale` rows show «excluded: n user-data nodes» for each screen and language.
+  - The gate file lists each excluded text, cut to its first 60 characters, under its screen.
+  - The UX reviewer reads that list. Any listed text that is product copy is a blocking finding.
+- New check `5.marker`, on every screen in es and en. It fails when a `[data-user]` element:
+  - (a) contains a `button`, `a`, `input`, `select`, `textarea`, `label` or heading element; or
+  - (b) has whole text equal to a value in either UI dictionary that has no placeholder. The texts are compared after trimming, collapsing whitespace and ignoring case. The comparison is literal, never by pattern, because matching a pattern by chance is exactly what user data does.
+  - If a real or seeded value happens to equal a dictionary string, the node comes to product. The check is never weakened, and the dictionary is never edited to get around it.
+- Fixture tests added to `npx vitest run scripts`:
+  1. On an en page, «USD 1.800,00» and «Campaña de lanzamiento» inside `[data-user]` pass `5.locale` and `5.mixed`, and are counted as 2 excluded.
+  2. The same «USD 1.800,00» without the marker fails `5.locale`.
+  3. `<span data-user>Aprobar</span>` on an en page fails `5.marker`.
+  4. A `[data-user]` element that contains a `<button>` fails `5.marker`.
+- Who implements it.
+  - The harness changes (the skip, the count and list, `5.marker` and the fixtures) go to the Task 27 harness follow-up.
+  - The finance markers (`inbox`, `detail-*`, `ask`, `policy`, `beneficiaries`, `period`, `approve`) go to Task 32a's follow-up.
+  - The vendor screens get theirs from the task that owns the portal files when their gate run reaches item 5.
+  - Tasks 47 to 51 keep every marker when they rewrite those screens.
+  - The attribute has no effect on the page, so the web markers can land before the harness change.
 
 Clarified (D39-D41, R-121, R-125): the finance screen list adds:
 - `trial`: the first-run progress and the Bandeja of a fresh trial user;
@@ -1455,6 +1496,21 @@ Rulings on the finance-web QA questions Q-L..Q-O (product, 17 Oct; product quest
 - **R-128 What counts against the question quota (AC-67, Q-M).** Every accepted question counts, «No tengo ese dato en el registro.» included, because R-87 takes the quota before the model call and the model's cost is the same whatever it answers. The 9, 8, 8, 7 that QA saw fits the shared demo user's per-IP key with a changing egress IP, which R-87 accepts. But it is not proven, so a code check is needed: a unit test with the no-data answer in the middle (9, 8, 7), and a live check on a trial user, who has one key. If either shows a repeat, it is a defect in Task 23's route and goes back to that task. Principle: evidence. Loser's best argument: "a «no data» answer gave the user nothing, so it should not spend one of their 10".
 - **R-129 The reader's bank account must look like an account (AC-12, Q-N).** Yes, code validates it: at least 6 digits, or an email-shaped Pix key, otherwise unknown. AC-12 already says a field is never guessed, and a sentence is a guess. The seed's shortest account (Banco de Occidente 0231-77) has 6 digits. The email exception keeps R-73 (b)'s text path for email Pix keys working. The outcome stays ESCALAR, now with the true reason «no se pudo verificar la cuenta» instead of quoting a phrase as an account. It belongs to AC-12, not AC-14 (amounts). The rule only ever turns an account into unknown, and unknown is never `cumple`, so it cannot create a PAGAR. Principle: evidence and Explicabilidad (the record states only what was read). Loser's best argument: "the engine already escalates it, which is the safe outcome; a shape rule will someday reject a real account and escalate a good invoice".
 - **R-130 Snippet windows end on whole words, with «…» where cut (AC-77, Q-O).** Yes. A snippet starting «NCEPTO» or «ola,» looks broken to a finance user and to D38's copy and visual items, even with a correct mark. The rule in AC-77 Clarified is deterministic and testable: centre, snap inward to word edges, never cross the span, add U+2026 inside the 120 cap, shift `match` by the leading mark. Lines of 120 characters or fewer are unchanged, so existing snapshots of short lines hold. Principle: completeness (the AC's snippet should read as text) and the company's actual user. Loser's best argument: "the mark is correct and the AC only caps the length; word snapping is polish that can shift every `match` index the web already tests".
+
+Gate-semantics ruling (product, 17 Oct; product question, not a dispute; MUST; AC-91 Clarified; Task 27 harness follow-up and Task 32a follow-up):
+- **R-131 User data is marked `data-user` in the web; `5.mixed` and `5.locale` skip it, count it and list it, and `5.marker` stops misuse (AC-91 item 5 Clarified, R-98, R-113).**
+  - Item 5 asks whether the product's own copy is in the reader's language. A vendor's invoice shown in an English tab must stay as the vendor wrote it. Translating or reformatting it would falsify the record that AC-77 and «Lo que leí» exist to show.
+  - The gate cannot tell data from copy, but the web knows: each value comes from an API field, not from `t()`. So the web declares which is which, at the innermost element.
+  - The exemption cannot hide a real defect, for three reasons:
+    - it is skipped by two checks only, and every other check still runs;
+    - every excluded text is printed for the UX reviewer;
+    - `5.marker` fails the run when the marker sits on a dictionary string or around a control.
+  - Rejected:
+    - `lang="und"` or `translate="no"`, which have side effects for assistive technology and translation;
+    - a minimum word count, which R-113 already rejected;
+    - a selector list kept in the harness.
+  - Principle: evidence (measure what the item means, and show every exclusion), with the company's actual user (data is shown as it was typed).
+  - Loser's best argument (the harness-side selector list): "keep the exemption in the harness as a list of CSS selectors per screen, so no web file changes the night before the deadline". It is rejected because Tasks 47 to 51 rewrite those screens. The selectors would break, or would silently exempt whatever moves into them.
 
 ---
 

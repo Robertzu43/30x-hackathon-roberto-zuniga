@@ -23,6 +23,27 @@ export default function Tour({ onDone }: { onDone: () => void }) {
     setMore(!!b && b.scrollHeight > b.clientHeight && b.scrollTop + b.clientHeight < b.scrollHeight - 1);
   };
   useLayoutEffect(cue, [rect, i, lang]);
+  // UX-03: the card (a bottom sheet on a phone) never covers the highlighted block. When they share columns, the block is
+  // scrolled into the room between the top bar and the card (centred if it fits, else its start), and the spotlight stops
+  // above the card. offsetTop ignores tour-in's slide; a card with no layout (jsdom) is skipped. The block is re-measured in
+  // the same frame as the scroll, so the spotlight never paints at its old place (a layout shift); only when the page moved.
+  const card = useRef<HTMLElement>(null);
+  const target = useRef<Element | null>(null);
+  const [floor, setFloor] = useState(Infinity);
+  useLayoutEffect(() => {
+    const c = card.current;
+    if (!rect || !c?.offsetHeight) return;
+    const box = c.getBoundingClientRect();
+    if (rect.left + rect.width <= box.left || rect.left >= box.left + box.width) return setFloor(Infinity);
+    const top = (document.querySelector('.topbar')?.getBoundingClientRect().bottom ?? 0) + PAD;
+    const bottom = c.offsetTop - PAD;
+    setFloor(bottom);
+    const want = rect.height <= bottom - top ? top + (bottom - top - rect.height) / 2 : top;
+    if (Math.abs(rect.top - want) <= 1) return;
+    const y = scrollY;
+    scrollBy(0, rect.top - want);
+    if (scrollY !== y && target.current) setRect(target.current.getBoundingClientRect());
+  }, [rect]);
   const step = tourSteps[i]!;
   const last = i === tourSteps.length - 1;
 
@@ -50,7 +71,7 @@ export default function Tour({ onDone }: { onDone: () => void }) {
     const measure = () => el && setRect(el.getBoundingClientRect());
     const since = Date.now();
     const find = () => {
-      el = document.querySelector(step.selector);
+      el = target.current = document.querySelector(step.selector);
       if (el) {
         clearInterval(timer);
         el.scrollIntoView({ block: 'center' });
@@ -81,12 +102,13 @@ export default function Tour({ onDone }: { onDone: () => void }) {
               top: `${rect.top - PAD}px`,
               left: `${rect.left - PAD}px`,
               width: `${rect.width + 2 * PAD}px`,
-              height: `${rect.height + 2 * PAD}px`,
+              height: `${Math.min(rect.top + rect.height + PAD, floor) - (rect.top - PAD)}px`,
               boxShadow: '0 0 0 9999px rgba(0,0,0,.6)',
             }}
           />
           <section
             key={i}
+            ref={card}
             className="tour-card"
             style={{ '--tour-top': `${document.querySelector('.topbar')?.getBoundingClientRect().bottom ?? 0}px` } as CSSProperties}
             role="dialog" aria-modal="true" aria-labelledby="tour-title" aria-label={t('tour.label')}>

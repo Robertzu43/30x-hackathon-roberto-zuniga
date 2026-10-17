@@ -2,7 +2,8 @@
 export const es: Record<string, string> = {
   'detail.back': 'Volver a la bandeja',
   'detail.loading': 'Cargando la factura…',
-  'detail.not_found': 'No encontré esta factura.',
+  'detail.not_found': 'No encontré esta factura',
+  'detail.not_found.next': 'Revisa el enlace, o vuelve a la bandeja y ábrela desde la lista.',
   'detail.load_error': 'No pude cargar la factura. Recarga la página.',
   'detail.pending': 'Pendiente: el agente aún no la decidió',
   'detail.did': 'Lo que hice',
@@ -53,7 +54,8 @@ export const es: Record<string, string> = {
 export const en: Record<string, string> = {
   'detail.back': 'Back to the inbox',
   'detail.loading': 'Loading the invoice…',
-  'detail.not_found': 'I could not find this invoice.',
+  'detail.not_found': 'I could not find this invoice',
+  'detail.not_found.next': 'Check the link, or go back to the inbox and open it from the list.',
   'detail.load_error': 'I could not load the invoice. Reload the page.',
   'detail.pending': 'Pending: the agent has not decided it yet',
   'detail.did': 'What I did',

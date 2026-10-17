@@ -3,6 +3,8 @@
   --canvas: #fbfbfa;
   --surface: #ffffff;
   --ink: #111111;
+  --ink-2: #6d6c69;
+  --tone: #f1efe9;
   --line: #eaeaea;
   --accent: #346538;
   --accent-bg: #edf3ec;
@@ -10,7 +12,6 @@
   --error-bg: #fdebec;
   --font-sans: 'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif;
   --font-serif: 'Newsreader', 'Instrument Serif', 'Playfair Display', Georgia, serif;
-  --font-mono: 'Geist Mono', 'SF Mono', 'JetBrains Mono', ui-monospace, monospace;
 }
 
 * { box-sizing: border-box; }
@@ -36,12 +37,13 @@ body {
   justify-content: space-between;
   gap: 1rem;
   padding: 0.5rem 1rem;
-  background: var(--surface);
-  border-bottom: 1px solid var(--line);
 }
 .brand { display: flex; align-items: center; gap: 0.5rem; font: 400 1.375rem / 1 var(--font-serif); letter-spacing: -0.02em; }
 .brand img { display: block; width: 28px; height: 28px; }
 .lang { display: flex; gap: 0.25rem; }
+/* A quiet switch: the one filled black control on the page is «Enviar» (AC-91 item 6). */
+.lang button { border-color: transparent; background: none; color: var(--ink-2); }
+.lang button[aria-pressed='true'] { background: var(--tone); border-color: var(--tone); color: var(--ink); font-weight: 600; }
 
 button {
   font: inherit;
@@ -84,13 +86,14 @@ h2 { font-size: 1rem; font-weight: 600; margin: 1.5rem 0 0.5rem; }
   background: var(--surface);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+  scroll-margin-bottom: 7rem; /* scrolled into view above the pinned composer, «Copiar enlace» included */
 }
 .bubble p { margin: 0; }
 .bubble p + p { margin-top: 0.25rem; }
 .bubble.me { align-self: flex-end; background: var(--accent-bg); border-color: var(--accent-bg); }
 .bubble.error { background: var(--error-bg); border-color: var(--error-bg); color: var(--error); }
 .bubble a { display: block; min-height: 44px; padding: 0.5rem 0; color: var(--accent); text-underline-offset: 3px; }
-.bubble .file { font: 0.875rem / 1.5 var(--font-mono); }
+.bubble .file { font-size: 0.875rem; }
 .bubble strong { font-weight: 600; }
 .bubble .copy { margin-top: 0.25rem; padding: 0.5rem 0.75rem; white-space: normal; text-align: left; }
 
@@ -99,8 +102,7 @@ h2 { font-size: 1rem; font-weight: 600; margin: 1.5rem 0 0.5rem; }
   bottom: 0;
   margin: 0 -1rem;
   padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom));
-  background: var(--surface);
-  border-top: 1px solid var(--line);
+  background: var(--tone); /* a tone step, not a rule, sets the pinned composer off the chat */
 }
 .composer .row { display: flex; align-items: flex-end; gap: 0.5rem; }
 .attach svg { display: block; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
@@ -118,6 +120,7 @@ textarea {
   border: 1px solid var(--line);
   border-radius: 6px;
 }
+textarea::placeholder { color: var(--ink-2); opacity: 1; }
 .chip {
   display: flex;
   align-items: center;
@@ -125,9 +128,8 @@ textarea {
   gap: 0.5rem;
   margin: 0 0 0.5rem;
   padding-left: 0.75rem;
-  font: 0.875rem / 1.5 var(--font-mono);
-  background: var(--canvas);
-  border: 1px solid var(--line);
+  font-size: 0.875rem;
+  background: var(--surface);
   border-radius: 6px;
   overflow-wrap: anywhere;
 }
@@ -139,12 +141,28 @@ textarea {
 .card h1::first-letter { text-transform: uppercase; } /* «En revisión», the status words start the page */
 .card ul { margin: 0; padding-left: 1.25rem; }
 .card .company { margin: 0; }
-.card .meta { margin: 1.5rem 0 0; color: var(--accent); font-size: 0.875rem; }
+.card .meta { margin: 1.5rem 0 0; color: var(--ink-2); font-size: 0.875rem; }
+/* The status words sit on their outcome's field: the same pairs as PAGAR, ESCALAR and FRENAR in the app (R-100). */
+.status-head { margin: -1.5rem -1.5rem 0; padding: 1.5rem; border-radius: 11px 11px 0 0; }
+.status-head[data-tone] { margin-bottom: 0.5rem; }
+.status-head[data-tone='pay'] { background: var(--accent-bg); }
+.status-head[data-tone='pay'] h1 { color: var(--accent); }
+.status-head[data-tone='escalate'] { background: #fbf3db; }
+.status-head[data-tone='escalate'] h1 { color: #956400; }
+.status-head[data-tone='stop'] { background: var(--error-bg); }
+.status-head[data-tone='stop'] h1 { color: var(--error); }
+
+/* The designed 404 and unavailable pages: the sentence is the page, no box around it. */
+.message { padding: 1rem 0 3rem; }
+.message h1 { font-size: 2.25rem; line-height: 1.1; margin-bottom: 0.75rem; }
+.message p { margin: 0; font-size: 1.125rem; max-width: 34ch; }
 
 @media (min-width: 768px) {
   main { padding-top: 3rem; }
   h1 { font-size: 2.5rem; }
   .card { padding: 2.5rem; }
+  .status-head { margin: -2.5rem -2.5rem 0; padding: 2.5rem; }
+  .message h1 { font-size: 3.5rem; }
 }
 
 @media (prefers-reduced-motion: no-preference) {

@@ -1,6 +1,7 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
-import Beneficiaries, { route } from './pages/Beneficiaries';
+import { routes } from './App';
+import Beneficiaries from './pages/Beneficiaries';
 import { mockApi, renderAt } from './test/utils';
 
 const laura = {
@@ -20,7 +21,8 @@ function setup(extra: Record<string, unknown> = {}) {
 }
 
 test('/beneficiaries is in the nav after Política, with its tour anchor present before data loads', () => {
-  expect(route).toEqual({ path: '/beneficiaries', nav: { key: 'screen.beneficiaries', order: 30 } });
+  expect(routes.filter((r) => r.nav).map((r) => r.path)).toEqual(['/', '/policy', '/beneficiaries', '/period']);
+  expect(routes.find((r) => r.path === '/beneficiaries')?.nav).toBe('screen.beneficiaries');
   const { view } = setup();
   expect(view.container.querySelector('[data-tour="beneficiaries"]')).toBeTruthy();
 });

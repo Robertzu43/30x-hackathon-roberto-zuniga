@@ -3,7 +3,8 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { Route, Routes } from 'react-router-dom';
 import { expect, test, vi } from 'vitest';
 import OutcomeChip from './components/OutcomeChip';
-import Inbox, { route } from './pages/Inbox';
+import { routes } from './App';
+import Inbox from './pages/Inbox';
 import { sentence } from './test/text';
 import { mockApi, renderAt, signedInAs } from './test/utils';
 
@@ -58,7 +59,7 @@ const choosePayee = (label: string) => {
   fireEvent.change(select, { target: { value: (option as HTMLOptionElement).value } });
 };
 
-test('Bandeja is the nav page at / (order 10)', () => expect(route).toEqual({ path: '/', nav: { key: 'screen.inbox', order: 10 } }));
+test('Bandeja is the first nav page, at /', () => expect(routes.filter((r) => r.nav)[0]).toMatchObject({ path: '/', nav: 'screen.inbox' }));
 
 test('tour anchors exist before data loads', () => {
   const { view } = setup({ 'GET /api/invoices': () => new Promise(() => {}) });

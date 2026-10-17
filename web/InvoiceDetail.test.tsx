@@ -1,6 +1,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { expect, test } from 'vitest';
-import InvoiceDetail, { route } from './pages/InvoiceDetail';
+import { routes } from './App';
+import InvoiceDetail from './pages/InvoiceDetail';
 import { sentence } from './test/text';
 import { mockApi, renderAt, signedInAs } from './test/utils';
 
@@ -65,11 +66,11 @@ const stopped = {
 };
 
 const GET = 'GET /api/invoices/inv-1';
-const open = () => renderAt(<InvoiceDetail />, { at: '/invoices/inv-1', route: route.path });
+const open = () => renderAt(<InvoiceDetail />, { at: '/invoices/inv-1', route: '/invoices/:id' });
 const json = (body: unknown, status: number) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const gets = (f: ReturnType<typeof mockApi>) => f.mock.calls.filter(([u, i]) => u === '/api/invoices/inv-1' && i?.method === 'GET').length;
 
-test('keeps the /invoices/:id route', () => expect(route.path).toBe('/invoices/:id'));
+test('keeps the /invoices/:id route', () => expect(routes.find((r) => r.path === '/invoices/:id')).toBeTruthy());
 
 test('renders the headline and one row per check (13), never a check id or raw key (AC-26)', async () => {
   mockApi({ [GET]: escalated });

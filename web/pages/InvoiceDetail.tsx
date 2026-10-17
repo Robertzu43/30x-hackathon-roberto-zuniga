@@ -4,7 +4,6 @@ import { Link, useParams } from 'react-router-dom';
 import type { StoredDecision, TraceStep } from '../../src/agent/trace';
 import { money } from '../../src/engine/explain';
 import type { InvoiceFields } from '../../src/engine/types';
-import type { PageRoute } from '../App';
 import { api, ApiError, useScreen } from '../api';
 import AgentTrace from '../components/AgentTrace';
 import AskThesaurus from '../components/AskThesaurus';
@@ -16,7 +15,6 @@ import { printedAsRead, tu } from '../components/User';
 import { useT } from '../i18n';
 import './detail.css';
 
-export const route: PageRoute = { path: '/invoices/:id' };
 
 type Detail = {
   // read_error (AC-13, R-75): the reader never answered; absent until the backend sends it.

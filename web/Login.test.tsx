@@ -1,7 +1,8 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { expect, test } from 'vitest';
 import { Route, Routes } from 'react-router-dom';
-import Login, { route } from './pages/Login';
+import { routes } from './App';
+import Login from './pages/Login';
 import { fakeAuth, mockApi, renderAt } from './test/utils';
 
 function setup() {
@@ -27,7 +28,7 @@ const enterCode = (code: string) => {
   fireEvent.click(screen.getByRole('button', { name: 'Entrar' }));
 };
 
-test('/login is public and full-bleed', () => expect(route).toEqual({ path: '/login', public: true, fullBleed: true }));
+test('/login is public and full-bleed', () => expect(routes.find((r) => r.path === '/login')).toMatchObject({ public: true, fullBleed: true }));
 
 test('offers "Español | English", an email field and "Enviar código" (AC-40)', () => {
   setup();

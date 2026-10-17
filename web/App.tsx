@@ -1,18 +1,40 @@
-import { useEffect, useState, type ComponentType, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useState, type ComponentType, type ReactNode } from 'react';
 import { matchPath, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import type { Lang } from '../src/i18n';
-import { supabase } from './api';
+import { cacheOwner, prefetch, screens, supabase } from './api';
 import { isDemoUser, RequireAuth, shouldStartTour, takeDemoTour, useSession } from './auth';
 import Logo from './components/Logo';
 import Tour from './components/Tour';
 import { useT } from './i18n';
 
-/** Every web/pages/*.tsx exports `route` and a default component; nothing else registers a screen. */
-export type PageRoute = { path: string; nav?: { key: string; order: number }; public?: boolean; fullBleed?: boolean };
-type PageModule = { route: PageRoute; default: ComponentType };
+/**
+ * The screens, in nav order. Each page is its own chunk, fetched on navigation (AC-99); `data` is its one screen request
+ * (AC-98), which a hover or focus on its nav link prefetches with the chunk (AC-100). Nothing else registers a screen.
+ */
+export type PageRoute = { path: string; load: () => Promise<{ default: ComponentType }>; nav?: string; data?: () => string; public?: boolean; fullBleed?: boolean };
+export const routes: PageRoute[] = [
+  { path: '/', nav: 'screen.inbox', load: () => import('./pages/Inbox'), data: screens.inbox },
+  { path: '/policy', nav: 'screen.policy', load: () => import('./pages/Policy'), data: screens.policy },
+  { path: '/beneficiaries', nav: 'screen.beneficiaries', load: () => import('./pages/Beneficiaries'), data: screens.beneficiaries },
+  { path: '/period', nav: 'screen.period', load: () => import('./pages/Period'), data: () => screens.period() },
+  { path: '/invoices/:id', load: () => import('./pages/InvoiceDetail') },
+  // Task 50 mounts the beneficiary profile here; until then the directory.
+  { path: '/beneficiaries/:id', load: async () => ({ default: () => <Navigate to="/beneficiaries" replace /> }) },
+  { path: '/login', public: true, fullBleed: true, load: () => import('./pages/Login') },
+  { path: '/demo', public: true, fullBleed: true, load: () => import('./pages/Demo') },
+  { path: '/approve/:token', public: true, load: () => import('./pages/Approve') },
+];
+const pages = routes.map((r) => ({ route: r, Page: lazy(r.load) }));
+const nav = routes.filter((r) => r.nav);
+const warm = (r: PageRoute) => {
+  r.load().catch(() => {}); // offline: the click shows the error
+  if (r.data) prefetch(r.data());
+};
 
-export const pages = Object.values(import.meta.glob(['./pages/*.tsx', '!./pages/*.test.tsx'], { eager: true }) as Record<string, PageModule>);
-const nav = pages.filter((p) => p.route.nav).sort((a, b) => a.route.nav!.order - b.route.nav!.order);
+function Loading() {
+  const { t } = useT();
+  return <p role="status" className="muted">{t('app.loading')}</p>;
+}
 
 function TopBar({ onTour }: { onTour: () => void }) {
   const { t, lang, setLang } = useT();
@@ -58,7 +80,7 @@ function Shell({ onTour, children }: { onTour: () => void; children: ReactNode }
       <TopBar onTour={onTour} />
       {session && (
         <nav className="screens" aria-label={t('nav.label')}>
-          {nav.map(({ route }) => <NavLink key={route.path} to={route.path} end>{t(route.nav!.key)}</NavLink>)}
+          {nav.map((r) => <NavLink key={r.path} to={r.path} end onMouseEnter={() => warm(r)} onFocus={() => warm(r)}>{t(r.nav!)}</NavLink>)}
         </nav>
       )}
       <main key={lang}>{children}</main>{/* R-98: a language switch remounts the screen, which re-fetches its record in that language */}
@@ -69,6 +91,7 @@ function Shell({ onTour, children }: { onTour: () => void; children: ReactNode }
 export default function App() {
   const { session, demoEmail } = useSession();
   const user = session?.user;
+  cacheOwner(user?.id); // AC-100: before any screen reads the per-tab cache, a different user drops it
   const [touring, setTouring] = useState(false);
 
   const { pathname } = useLocation();
@@ -89,8 +112,9 @@ export default function App() {
   return (
     <>
       <Routes>
-        {pages.map(({ route, default: Page }) => {
-          const page = route.fullBleed ? <Page /> : <Shell onTour={startTour}><Page /></Shell>;
+        {pages.map(({ route, Page }) => {
+          const loaded = <Suspense fallback={<Loading />}><Page /></Suspense>;
+          const page = route.fullBleed ? loaded : <Shell onTour={startTour}>{loaded}</Shell>;
           return <Route key={route.path} path={route.path} element={route.public ? page : <RequireAuth>{page}</RequireAuth>} />;
         })}
         <Route path="*" element={<Navigate to="/" replace />} />

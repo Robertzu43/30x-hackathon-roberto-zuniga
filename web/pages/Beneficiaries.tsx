@@ -1,6 +1,5 @@
 import { useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import type { PageRoute } from '../App';
 import type { Beneficiary } from '../../src/engine/types';
 import { screens, useScreen } from '../api';
 import { tu } from '../components/User';
@@ -8,7 +7,6 @@ import { useT } from '../i18n';
 import '../policy.css';
 import { failure, send } from '../withField';
 
-export const route: PageRoute = { path: '/beneficiaries', nav: { key: 'screen.beneficiaries', order: 30 } };
 
 type Row = Beneficiary & { country: string | null };
 // The seven Blinka payment routes (AC-33). A directory row may hold another value (the seed does); editing keeps it.
@@ -16,7 +14,7 @@ const ROUTES = ['ACH', 'Wire', 'SWIFT', 'Pix', 'CBU', 'Transferencia COP', 'USDC
 const TYPES = ['retainer', 'hourly', 'subscription', 'one_off'] as const;
 const TEXT = ['name', 'country', 'currency', 'bank_account', 'category'] as const;
 // AC-99 (R-109): the loading table is the loaded markup with these made-up rows, hidden by .skeleton.
-const SKELETON: Row[] = ['s1', 's2', 's3'].map((id) => ({ id, name: 'Laura Méndez', country: 'CO', currency: 'USD', bank_account: null, route: 'ACH',
+const SKELETON: Row[] = ['s1', 's2', 's3'].map((id) => ({ id, name: 'Andina Labs', country: 'CO', currency: 'USD', bank_account: null, route: 'ACH',
   category: 'Desarrollo', agreement: { type: 'retainer', amount_usd: 2500, period: 'monthly' } }));
 
 const toForm = (b?: Row) => ({

@@ -1,5 +1,5 @@
-import { expect, test } from 'vitest';
-import { api, ApiError, cacheOwner, cached, config, load, prefetch } from './api';
+import { expect, test, vi } from 'vitest';
+import { api, ApiError, cacheOwner, cached, config, load, prefetch, reloadOnce } from './api';
 import { mockApi, signedInAs } from './test/utils';
 import { send } from './withField';
 
@@ -119,4 +119,16 @@ test('the cache is per language: an answer in es is not shown to an en tab', asy
   await load('/api/invoices/inv-1');
   sessionStorage.setItem('lang', 'en');
   expect(cached('/api/invoices/inv-1')).toBeUndefined();
+});
+
+// AC-99: a deploy removes the page chunks an open tab may still ask for; the tab reloads once to get the new ones, never in a loop.
+test('a missing chunk reloads the tab once; a second miss within 10 s does not reload again', () => {
+  const reload = vi.fn();
+  reloadOnce(reload);
+  expect(reload).toHaveBeenCalledTimes(1);
+  reloadOnce(reload);
+  expect(reload).toHaveBeenCalledTimes(1);
+  sessionStorage.setItem('chunk-reload', String(Date.now() - 11_000));
+  reloadOnce(reload);
+  expect(reload).toHaveBeenCalledTimes(2);
 });

@@ -2,14 +2,12 @@
 // button POSTs that decision's seq. Error texts come from the API's `error` code, in the page's language.
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import type { PageRoute } from '../App';
 import { api, ApiError } from '../api';
 import { useT } from '../i18n';
 import { money, motives } from '../../src/engine/explain';
 import type { Check } from '../../src/engine/types';
 import './approve.css';
 
-export const route: PageRoute = { path: '/approve/:token', public: true };
 
 type Lines = { headline_es: string | null; headline_en: string | null };
 type Link = {

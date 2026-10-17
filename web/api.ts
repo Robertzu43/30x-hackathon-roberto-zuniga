@@ -129,3 +129,10 @@ export function useScreen<T>(path: string) {
   const shown: Shown<T> = s.key === key ? s : { key, data: cached<T>(path) };
   return { data: shown.data, error: shown.error, reload };
 }
+
+/** AC-99: a deploy removes the page chunks an open tab may still ask for; reload once to get the new index.html, never in a loop. */
+export const reloadOnce = (reload = () => window.location.reload()) => {
+  if (Date.now() - Number(sessionStorage.getItem('chunk-reload')) < 10_000) return;
+  sessionStorage.setItem('chunk-reload', String(Date.now()));
+  reload();
+};

@@ -1,12 +1,10 @@
 // Periodo (AC-44, D17, R-01, AC-53): the month's money and the three honesty figures from GET /api/period.
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { PageRoute } from '../App';
 import { screens, thisMonth, useScreen } from '../api';
 import { useT } from '../i18n';
 import './period.css';
 
-export const route: PageRoute = { path: '/period', nav: { key: 'screen.period', order: 40 } };
 
 type Outcome = 'PAGAR' | 'FRENAR' | 'ESCALAR';
 type Period = {

@@ -1,7 +1,8 @@
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { expect, test } from 'vitest';
 import { dropCache } from './api';
-import Policy, { route } from './pages/Policy';
+import { routes } from './App';
+import Policy from './pages/Policy';
 import { mockApi, renderAt } from './test/utils';
 
 const rules = {
@@ -44,7 +45,8 @@ const limit = () => screen.findByLabelText('Límite por pago (USD)') as Promise<
 const save = () => fireEvent.click(screen.getByRole('button', { name: /^Guardar como versión/ }));
 
 test('/policy is in the nav after Bandeja, with its tour anchor present before data loads', () => {
-  expect(route).toEqual({ path: '/policy', nav: { key: 'screen.policy', order: 20 } });
+  expect(routes.filter((r) => r.nav).map((r) => r.path).indexOf('/policy')).toBe(1);
+  expect(routes.find((r) => r.path === '/policy')?.nav).toBe('screen.policy');
   setup();
   const { container } = renderAt(<Policy />);
   expect(container.querySelector('[data-tour="policy"]')).toBeTruthy();

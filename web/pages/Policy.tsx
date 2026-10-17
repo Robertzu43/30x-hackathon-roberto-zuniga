@@ -1,5 +1,4 @@
 import { useState, type FormEvent } from 'react';
-import type { PageRoute } from '../App';
 import type { PolicyRules } from '../../src/engine/types';
 import { api, ApiError, screens, useScreen } from '../api';
 import { RunProgress, useRunAgent } from '../components/RunProgress';
@@ -7,7 +6,6 @@ import { useT } from '../i18n';
 import '../policy.css';
 import { failure, send } from '../withField';
 
-export const route: PageRoute = { path: '/policy', nav: { key: 'screen.policy', order: 20 } };
 
 type Version = { id: string; version: number; name: string; rules: PolicyRules; created_at: string };
 type Change = { invoice_id: string; headline: string; from: string | null; to: string | null }; // null from: pending; null to: pending and not read yet (R-68)

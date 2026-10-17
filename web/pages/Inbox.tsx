@@ -6,7 +6,6 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { findBeneficiary, nameKey } from '../../src/engine/checks';
 import type { Beneficiary } from '../../src/engine/types';
-import type { PageRoute } from '../App';
 import { screens, useScreen } from '../api';
 import AgentActivity from '../components/AgentActivity';
 import AskThesaurus from '../components/AskThesaurus';
@@ -18,7 +17,6 @@ import { tu } from '../components/User';
 import { useT } from '../i18n';
 import './inbox.css';
 
-export const route: PageRoute = { path: '/', nav: { key: 'screen.inbox', order: 10 } };
 
 type Row = { id: string; outcome: Outcome | null; headline: string | null; received_at: string; fields: { payee_name: string | null } | null;
   origin?: 'app' | 'portal' | 'email'; sender?: string | null };

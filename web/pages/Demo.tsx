@@ -2,7 +2,6 @@
 // the problem in Blinka's words, the agent loop and the pitch line, Andina Labs' read-only inbox and Periodo figures.
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { PageRoute } from '../App';
 import { isDemoUser, useSession } from '../auth';
 import { useLeaveGuard } from '../components/LeaveTrialWarning';
 import Logo from '../components/Logo';
@@ -13,7 +12,6 @@ import { enterDemo } from '../trial';
 import './demo.css';
 import '../components/ai.css';
 
-export const route: PageRoute = { path: '/demo', public: true, fullBleed: true };
 
 const PORTAL = 'https://facturas.30x-hackathon-roberto-zuniga.workers.dev/andina-labs'; // AC-83's demo portal; ponytail: per-deploy value via /api/config if another company hosts /demo
 const STAGES = ['percibe', 'lee', 'consulta', 'decide', 'actua', 'rinde'];

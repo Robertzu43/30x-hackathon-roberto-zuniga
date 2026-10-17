@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, expect, test } from 'vitest';
-import App, { pages } from './App';
+import { beforeEach, expect, test, vi } from 'vitest';
+import { thisMonth } from './api';
+import App, { routes } from './App';
 import { DEMO_EMAIL, fakeAuth, mockApi, renderAt, signedInAs } from './test/utils';
 
 const SEEN = { tour_seen: true };
@@ -18,11 +19,67 @@ const EMPTY = { invoices: [], last_run: null, portal: null, beneficiaries: [], d
 const INBOX = { 'GET /api/screen/inbox?lang=es': EMPTY, 'GET /api/screen/inbox?lang=en': EMPTY };
 beforeEach(() => mockApi(INBOX));
 
-test('routes come from web/pages/*.tsx: one page per screen, each with a path and a component', () => {
-  expect(pages.map((p) => p.route.path).sort()).toEqual(
-    ['/', '/approve/:token', '/beneficiaries', '/demo', '/invoices/:id', '/login', '/period', '/policy'].sort(),
+test('one route per screen, each loading its page on navigation (AC-99), plus the /beneficiaries/:id placeholder for Task 50', async () => {
+  expect(routes.map((r) => r.path).sort()).toEqual(
+    ['/', '/approve/:token', '/beneficiaries', '/beneficiaries/:id', '/demo', '/invoices/:id', '/login', '/period', '/policy'].sort(),
   );
-  for (const p of pages) expect(typeof p.default).toBe('function');
+  for (const r of routes) expect(typeof (await r.load()).default).toBe('function');
+});
+
+test('every page file under web/pages has a route', async () => {
+  const shown = await Promise.all(routes.map(async (r) => (await r.load()).default));
+  for (const [file, load] of Object.entries(import.meta.glob(['./pages/*.tsx', '!./pages/*.test.tsx'])))
+    expect(shown, file).toContain(((await load()) as { default: unknown }).default);
+});
+
+// AC-100: hovering or focusing a nav link fetches that page's chunk and its screen data before the click.
+test.each([
+  ['Periodo', 'mouseEnter', () => `/api/screen/period?month=${thisMonth()}`],
+  ['Política', 'focus', () => '/api/screen/policy'],
+  ['Beneficiarios', 'mouseEnter', () => '/api/screen/beneficiaries'],
+])('hovering or focusing «%s» prefetches its chunk and its screen data', async (name, how, path) => {
+  signedInAs('ana@empresa.co', SEEN);
+  const fetchMock = mockApi(INBOX);
+  renderAt(<App />);
+  const link = within(await screen.findByRole('navigation', { name: 'Secciones' })).getByRole('link', { name });
+  const route = routes.find((r) => r.path === link.getAttribute('href'))!;
+  const load = vi.spyOn(route, 'load');
+  fireEvent[how as 'mouseEnter' | 'focus'](link);
+  expect(load).toHaveBeenCalled();
+  await waitFor(() => expect(fetchMock.mock.calls.some(([u]) => u === path())).toBe(true));
+});
+
+test('a nav hover over a screen this tab already holds sends no second request', async () => {
+  signedInAs('ana@empresa.co', SEEN);
+  const fetchMock = mockApi({ ...INBOX, 'GET /api/screen/policy': { versions: [], company: null, fx: { rates: [] } } });
+  renderAt(<App />);
+  const link = within(await screen.findByRole('navigation', { name: 'Secciones' })).getByRole('link', { name: 'Política' });
+  fireEvent.mouseEnter(link);
+  await waitFor(() => expect(fetchMock.mock.calls.filter(([u]) => u === '/api/screen/policy')).toHaveLength(1));
+  fireEvent.mouseEnter(link);
+  await new Promise((r) => setTimeout(r, 20));
+  expect(fetchMock.mock.calls.filter(([u]) => u === '/api/screen/policy')).toHaveLength(1);
+});
+
+test('/beneficiaries/:id waits for Task 50: it opens Beneficiarios', async () => {
+  signedInAs('ana@empresa.co', SEEN);
+  mockApi({ ...INBOX, 'GET /api/screen/beneficiaries': { beneficiaries: [] } });
+  renderAt(<App />, { at: '/beneficiaries/b1' });
+  expect(await screen.findByRole('heading', { name: 'Beneficiarios', level: 1 })).toBeTruthy();
+});
+
+// AC-100: the cache never shows one user's screen to the next one signed in on this tab.
+test('another user signed in on this tab never sees the screen cached for the last one', async () => {
+  signedInAs('ana@empresa.co', SEEN);
+  mockApi({ ...INBOX, 'GET /api/screen/beneficiaries': { beneficiaries: [{ id: 'b1', name: 'Laura Méndez', country: null, currency: null, bank_account: null, route: null, category: null, agreement: null }] } });
+  const first = renderAt(<App />, { at: '/beneficiaries' });
+  await screen.findByText('Laura Méndez');
+  first.unmount();
+  signedInAs('bea@otra.co', SEEN);
+  mockApi({ ...INBOX, 'GET /api/screen/beneficiaries': () => new Promise(() => {}) });
+  renderAt(<App />, { at: '/beneficiaries' });
+  await screen.findByRole('heading', { name: 'Beneficiarios', level: 1 });
+  expect(screen.queryByText('Laura Méndez')).toBeNull();
 });
 
 test('a signed-out visitor of a private page lands on /login', async () => {

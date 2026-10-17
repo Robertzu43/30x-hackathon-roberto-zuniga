@@ -23,6 +23,11 @@ describe('GET /api/portal-link (AC-86)', () => {
     expect(db.queries.at(-1)).toEqual({ table: 'companies', op: 'select', eq: { id: 'A' } });
   });
 
+  it('with INBOUND_EMAIL_DOMAIN set, also answers facturas+<slug>@<domain> (AC-86, AC-87)', async () => {
+    const res = await app.request('/api/portal-link', { headers: { Authorization: 'Bearer tok-a' } }, { ...env, INBOUND_EMAIL_DOMAIN: 'correo.example' });
+    expect(await res.json()).toEqual({ portal_url: 'https://facturas.test/andina-labs', email_address: 'facturas+andina-labs@correo.example' });
+  });
+
   it('refuses without a valid JWT', async () => {
     expect((await get()).status).toBe(401);
     expect((await get('tok-x')).status).toBe(401);

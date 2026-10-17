@@ -13,9 +13,13 @@ type Version = { id: string; version: number; name: string; rules: PolicyRules; 
 type Change = { invoice_id: string; headline: string; from: string | null; to: string | null }; // null from: pending; null to: pending and not read yet (R-68)
 type Company = { id: string; name: string; approver_email: string; lang: 'es' | 'en'; is_demo: boolean };
 type Failure = ReturnType<typeof failure>;
+type Rate = { currency: string; usd_per_unit: number; units_per_usd: number; source: string; fetched_at: string; stale: boolean };
 
 const NUM = ['per_payment_limit_usd', 'approval_threshold_usd', 'period_budget_usd', 'account_balance_usd', 'duplicate_window_days', 'agreement_tolerance_pct', 'due_grace_days'] as const;
-const FX = ['COP', 'MXN', 'BRL', 'ARS', 'EUR', 'USD'];
+const FX = ['ARS', 'BRL', 'COP', 'EUR', 'MXN']; // code order, like the market table (R-110); USD is always 1: nothing to pin
+const pinList = (fx: Record<string, string>) => [...FX, ...Object.keys(fx).filter((c) => c !== 'USD' && !FX.includes(c)).sort()];
+// the loading rows are real rows with this made-up data, hidden by CSS: same markup, so same height as the loaded table (R-109)
+const placeholder = (currency: string): Rate => ({ currency, usd_per_unit: 0.000249, units_per_usd: 4020.1, source: 'Yahoo Finance', fetched_at: '2026-10-17T15:00:00Z', stale: false });
 
 function CompanySection() {
   const { t } = useT();
@@ -63,6 +67,60 @@ function CompanySection() {
       )}
       {err && <p role="alert" className="error">{err.text}</p>}
     </section>
+  );
+}
+
+// AC-76: the market rates the agent uses, read-only. Staleness comes from the API (R-85.3), never computed here.
+function MarketRates({ pins }: { pins: string[] }) {
+  const { t, locale } = useT();
+  const [rates, setRates] = useState<Rate[] | 'error' | null>(null);
+  const [tries, setTries] = useState(0);
+  useEffect(() => void api.get<{ rates: Rate[] }>('/api/fx').then((r) => setRates(r.rates), () => setRates('error')), [tries]);
+  // es-CO prints «17 de oct de 2026»; AC-76 shows «17 oct 2026» (the replace below)
+  const day = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Bogota' });
+  const hour = new Intl.DateTimeFormat(locale, { timeStyle: 'short', hour12: false, timeZone: 'America/Bogota' });
+  const num = (n: number, o: Intl.NumberFormatOptions) => n.toLocaleString(locale, o);
+  const shown = Array.isArray(rates) ? rates : rates ? [] : pins.map(placeholder);
+  return (
+    <div className="fx-market">
+      <h3 id="fx-market-h">{t('policy.fx.market')}</h3>
+      <div className="fx-slot">
+        {!rates && <p role="status" className="sr-only">{t('policy.loading')}</p>}
+        {rates === 'error' && (
+          <>
+            <p role="alert" className="error">{t('policy.fx.load_error')}</p>
+            <button type="button" onClick={() => { setRates(null); setTries((n) => n + 1); }}>{t('policy.fx.retry')}</button>
+          </>
+        )}
+        {Array.isArray(rates) && !rates.length && <p className="muted">{t('policy.fx.empty')}</p>}
+        {shown.length > 0 && (
+          // scrolls inside its own container (AC-91 item 1); cards at phone width (policy.css)
+          <div className="fx-scroll" role={rates ? 'region' : undefined} aria-labelledby={rates ? 'fx-market-h' : undefined} tabIndex={rates ? 0 : undefined} aria-hidden={rates ? undefined : true}>
+            <table className={rates ? 'fx-table' : 'fx-table loading'} aria-labelledby="fx-market-h">
+              <thead>
+                <tr>{['currency', 'rate', 'usd', 'source', 'fetched', 'status'].map((c) => <th key={c} scope="col">{t(`policy.fx.col.${c}`)}</th>)}</tr>
+              </thead>
+              <tbody>
+                {shown.map((r) => {
+                  const at = new Date(r.fetched_at);
+                  return (
+                    <tr key={r.currency} className={r.stale ? 'stale' : undefined}>
+                      <td>{r.currency}</td>
+                      {/* one fixed fraction length on every row: in es-CO "18,479" would read as eighteen thousand */}
+                      <td>{t('policy.fx.units', { n: num(r.units_per_usd, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), c: r.currency })}</td>
+                      <td className="mono" data-label={t('policy.fx.col.usd')}>{num(r.usd_per_unit, { maximumSignificantDigits: 6 })}</td>
+                      <td>{r.source}</td>
+                      <td>{t('policy.fx.fetched', { when: `${day.format(at).replace(/ de /g, ' ')} ${hour.format(at)}` })}</td>
+                      <td>{r.stale ? t('policy.fx.stale') : t('policy.fx.fresh')}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -119,6 +177,7 @@ export default function Policy() {
   const p = would?.filter((w) => !w.from).length ?? 0;
   const e = would?.filter((w) => w.from === 'ESCALAR').length ?? 0;
   const header = p && e ? t('policy.header_both', { p, e }) : p ? t('policy.header_pending', { p }) : e ? t('policy.header_escalated', { e }) : t('policy.would_change_none');
+  const pins = pinList(f.fx);
   const next = (versions?.[0]?.version ?? 0) + 1;
   const bad = (k: string) => (err?.field === k ? true : undefined);
   const date = (s: string) => new Date(s).toLocaleDateString(locale, { dateStyle: 'medium' });
@@ -151,11 +210,12 @@ export default function Policy() {
                 </div>
               ))}
             </div>
+            <MarketRates pins={pins} />
             <fieldset>
               <legend>{t('policy.fx.title')}</legend>
               <p className="muted hint">{t('policy.fx.hint')}</p>
               <div className="grid fx">
-                {FX.map((c) => (
+                {pins.map((c) => (
                   <label key={c}>{t('policy.fx.row', { c })}
                     <input type="number" min="0" step="any" value={f.fx[c] ?? ''} aria-invalid={bad('fx_rates')}
                       onChange={(e) => setF({ ...f, fx: { ...f.fx, [c]: e.target.value } })} />
@@ -163,6 +223,7 @@ export default function Policy() {
                 ))}
               </div>
             </fieldset>
+            <p className="muted hint">{t('policy.fx.source')}</p>
             <label>{t('policy.name')}
               <input value={f.name} placeholder={versions[0]?.name} maxLength={100} onChange={(e) => setF({ ...f, name: e.target.value })} />
             </label>

@@ -18,7 +18,11 @@ pre.detail-doc { white-space: pre-wrap; font: var(--text-sm) / 1.6 var(--font-mo
 .detail-fields { margin: 1.5rem 0 0; }
 .detail-fields > div { display: grid; grid-template-columns: 9rem 1fr auto; gap: 0.75rem; padding: 0.5rem 0; border-bottom: 1px solid var(--line); }
 .detail-fields dt { font-size: var(--text-sm); color: var(--ink-2); }
-.detail-fields dd { margin: 0; }
+.detail-fields dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 480px) {
+  .detail-fields > div { grid-template-columns: 7rem minmax(0, 1fr); }
+  .detail-fields dd + dd { grid-column: 2; } /* the confidence under the value; the snippet keeps its full row */
+}
 .detail-fields dd.muted { font-size: var(--text-sm); }
 
 .checks li { display: grid; grid-template-columns: 1.5rem 1fr; gap: 0.5rem; padding: 0.5rem 0; border-bottom: 1px solid var(--line); font-size: var(--text-sm); }
@@ -30,7 +34,9 @@ pre.detail-doc { white-space: pre-wrap; font: var(--text-sm) / 1.6 var(--font-mo
 
 .detail-fixes li { padding: 0.5rem 0; border-bottom: 1px solid var(--line); }
 
-.detail-card { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 1.5rem; margin-top: 2rem; }
+.detail-card { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 1.5rem; margin-top: 2.5rem; }
+/* R-106: the section gap (2.5 rem, an h2's top margin) above the ask card; «Historial»'s h2 gives the same below it. */
+.detail .ask { margin: 2.5rem 0 0; }
 .detail-card h2 { margin-top: 0; }
 .detail-question { font: 400 1.25rem / 1.4 var(--font-serif); margin: 0 0 1.25rem; }
 .detail-card label { display: grid; gap: 0.25rem; }

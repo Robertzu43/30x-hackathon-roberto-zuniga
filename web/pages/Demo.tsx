@@ -1,4 +1,4 @@
-// Public /demo pitch page (AC-45, AC-46, AC-47, AC-66, R-30; design-taste-frontend, "quiet instrument" direction):
+// Public /demo pitch page (AC-45, AC-46, AC-47, AC-66, AC-79, R-30; design-taste-frontend, "quiet instrument" direction):
 // the problem in Blinka's words, the agent loop and the pitch line, Andina Labs' read-only inbox and Periodo figures.
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -9,11 +9,14 @@ import Logo from '../components/Logo';
 import { RunProgress, useRunAgent } from '../components/RunProgress';
 import { useT } from '../i18n';
 import './demo.css';
+import '../components/ai.css';
 
 export const route: PageRoute = { path: '/demo', public: true, fullBleed: true };
 
 const DEMO_PASSWORD = 'andina-demo-2026'; // public by design (D8, AC-46), same as src/routes/demo.ts
 const STAGES = ['percibe', 'lee', 'consulta', 'decide', 'actua', 'rinde'];
+// AC-79: the model reads; code consults the tools and decides.
+const TAG: Record<string, 'ai' | 'code'> = { lee: 'ai', consulta: 'code', decide: 'code' };
 type Outcome = 'PAGAR' | 'FRENAR' | 'ESCALAR';
 type Row = { id: string; outcome: Outcome | null; headline_es: string | null; headline_en: string | null };
 type Overview = { invoices: Row[]; period: { autonomy: { n: number; m: number }; autonomy_pct: number | null; violations: number; explained_pct: number } };
@@ -106,9 +109,17 @@ export default function Demo() {
         <p>{t('demo.loop.lead')}</p>
         <ol aria-label={t('demo.loop.label')}>
           {STAGES.map((s) => (
-            <li key={s}><strong>{t(`demo.stage.${s}`)}</strong><span>{t(`demo.stage.${s}.text`)}</span></li>
+            <li key={s}>
+              <span><strong>{t(`demo.stage.${s}`)}</strong>{TAG[s] && <span className={`ai-tag ai-tag-${TAG[s]}`}>{t(`demo.tag.${TAG[s]}`)}</span>}</span>
+              <span>{t(`demo.stage.${s}.text`)}</span>
+            </li>
           ))}
         </ol>
+        <p className="demo-ask">
+          <span><strong>{t('ask.title')}</strong><span className="ai-tag ai-tag-ai">{t('demo.tag.ai')}</span></span>
+          <span>{t('demo.ask.text')}</span>
+        </p>
+        <p className="demo-where">{t('demo.where')}</p>
         <blockquote>{t('demo.pitch')}</blockquote>
         <p className="demo-jev">{t('demo.jev')}</p>
       </section>

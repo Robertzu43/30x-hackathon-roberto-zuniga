@@ -26,14 +26,16 @@ export const es: Record<string, string> = {
   'tour.done': 'Terminar',
   'tour.inbox.title': 'Bandeja',
   'tour.inbox.body':
-    'Thesaurus es un agente: con cada factura percibe → lee → consulta sus herramientas → decide → actúa → rinde cuentas. Aquí ves el resultado de cada una, PAGAR, FRENAR o ESCALAR, con su razón en una línea. Trabaja solo: revisa las facturas pendientes cada 5 minutos, aunque nadie haya iniciado sesión.',
+    'Dónde actúa la IA: lee cada factura (Amazon Nova Lite en AWS Bedrock) y responde tus preguntas sobre el registro («Pregúntale a Thesaurus»). Dónde decide el código: las 13 reglas, la tabla de consecuencias y la tasa de cambio del día; solo el código puede escribir PAGAR.',
+  'tour.inbox.loop': 'Con cada factura, Thesaurus percibe → lee → consulta sus herramientas → decide → actúa → rinde cuentas.',
+  'tour.more': 'Desliza para ver más',
   'tour.new-invoice.title': 'Nueva factura',
   'tour.new-invoice.body': 'Sube un PDF o una imagen, o pega un correo o un chat. El agente la lee y la decide en el momento.',
   'tour.run-agent.title': 'Ejecutar agente',
   'tour.run-agent.body': 'Pide al agente que decida ahora las facturas pendientes. Al terminar ves cuántas quedaron en PAGAR, FRENAR y ESCALAR.',
   'tour.invoice-row.title': 'Detalle de decisión',
   'tour.invoice-row.body':
-    'Abre una factura para ver lo que hizo el agente paso a paso, cada regla que verificó y qué tendría que pasar para pagarla.',
+    'Abre una factura para ver lo que hizo el agente paso a paso, cada regla que verificó y qué tendría que pasar para pagarla. «Leído por IA» dice qué modelo la leyó y en qué línea del documento encontré cada dato. En «Pregúntale a Thesaurus» le preguntas al registro; la respuesta nunca aprueba ni paga nada.',
   'tour.policy.title': 'Política',
   'tour.policy.body':
     'Tus reglas: límite por pago, umbral de aprobación, presupuesto. Cada cambio guarda una versión nueva y puedes reevaluar las facturas pendientes.',
@@ -72,13 +74,15 @@ export const en: Record<string, string> = {
   'tour.done': 'Finish',
   'tour.inbox.title': 'Inbox',
   'tour.inbox.body':
-    'Thesaurus is an agent: with every invoice it perceives → reads → consults its tools → decides → acts → accounts for it. Here you see each result, PAY, STOP or ESCALATE, with its reason in one line. It works on its own: it checks pending invoices every 5 minutes, even when nobody is signed in.',
+    'Where the AI acts: it reads each invoice (Amazon Nova Lite on AWS Bedrock) and answers your questions about the record ("Ask Thesaurus"). Where code decides: the 13 rules, the consequence table and the day\'s exchange rate; only code can write PAY.',
+  'tour.inbox.loop': 'With every invoice, Thesaurus perceives → reads → consults its tools → decides → acts → accounts for it.',
+  'tour.more': 'Scroll for more',
   'tour.new-invoice.title': 'New invoice',
   'tour.new-invoice.body': 'Upload a PDF or an image, or paste an email or a chat. The agent reads it and decides it right away.',
   'tour.run-agent.title': 'Run agent',
   'tour.run-agent.body': 'Ask the agent to decide pending invoices now. When it finishes you see how many ended in PAY, STOP and ESCALATE.',
   'tour.invoice-row.title': 'Decision detail',
-  'tour.invoice-row.body': 'Open an invoice to see what the agent did step by step, every rule it checked and what would have to change to pay it.',
+  'tour.invoice-row.body': 'Open an invoice to see what the agent did step by step, every rule it checked and what would have to change to pay it. "Read by AI" says which model read it and on which line of the document I found each value. In "Ask Thesaurus" you ask the record; the answer never approves or pays anything.',
   'tour.policy.title': 'Policy',
   'tour.policy.body':
     'Your rules: per-payment limit, approval threshold, budget. Every change saves a new version and you can re-evaluate pending invoices.',

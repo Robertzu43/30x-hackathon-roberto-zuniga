@@ -161,3 +161,34 @@ test('the reset question in English: "Reset" resets (AC-71)', async () => {
   expect(await screen.findByText('1 PAY · 0 STOP · 0 ESCALATE')).toBeTruthy();
   expect(resets(f)).toBe(1);
 });
+
+// AC-79: where the AI acts and where code decides, next to the six stages.
+const WHERE_ES =
+  'Dónde actúa la IA: lee cada factura (Amazon Nova Lite en AWS Bedrock) y responde tus preguntas sobre el registro («Pregúntale a Thesaurus»). Dónde decide el código: las 13 reglas, la tabla de consecuencias y la tasa de cambio del día; solo el código puede escribir PAGAR.';
+const WHERE_EN =
+  'Where the AI acts: it reads each invoice (Amazon Nova Lite on AWS Bedrock) and answers your questions about the record ("Ask Thesaurus"). Where code decides: the 13 rules, the consequence table and the day\'s exchange rate; only code can write PAY.';
+const tags = () =>
+  Object.fromEntries(
+    within(screen.getByRole('list', { name: /El ciclo del agente|The agent's loop/ })).getAllByRole('listitem')
+      .map((li) => [li.querySelector('strong')!.textContent, li.querySelector('.ai-tag')?.textContent ?? null]),
+  );
+
+test('says where the AI acts and where code decides; "lee" and «Pregúntale a Thesaurus» are IA, the tools and the decision are código (AC-79)', async () => {
+  mockApi({ 'GET /api/demo/overview': overview });
+  app();
+  expect(screen.getByText(WHERE_ES)).toBeTruthy();
+  expect(tags()).toEqual({ percibe: null, lee: 'IA', 'consulta sus herramientas': 'código', decide: 'código', actúa: null, 'rinde cuentas': null });
+  const ask = screen.getByText('Pregúntale a Thesaurus', { selector: 'strong' }).closest('p')!;
+  expect(ask.querySelector('.ai-tag')?.textContent).toBe('IA');
+  expect(screen.getByText('El LLM lee, JEV duda, el código decide, el agente actúa.')).toBeTruthy(); // AC-66 stays
+  await screen.findByText('90 %');
+});
+
+test('the AI/code sentence and tags in English (AC-79)', async () => {
+  mockApi({ 'GET /api/demo/overview': overview });
+  app();
+  fireEvent.click(screen.getByRole('button', { name: 'English' }));
+  expect(await screen.findByText(WHERE_EN)).toBeTruthy();
+  expect(tags()).toMatchObject({ reads: 'AI', 'consults its tools': 'code', decides: 'code' });
+  expect(screen.getByText('Ask Thesaurus', { selector: 'strong' }).closest('p')!.querySelector('.ai-tag')?.textContent).toBe('AI');
+});

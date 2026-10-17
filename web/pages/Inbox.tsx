@@ -1,11 +1,12 @@
 // Bandeja (AC-29, AC-63, AC-66, AC-70): every invoice with its outcome chip and one-line headline, filters,
-// "Ejecutar agente" (shared run loop, Task 11b), "Nueva factura" (AC-11) and when the agent last ran.
+// "Ejecutar agente" (shared run loop, Task 11b), "Nueva factura" (AC-11), when the agent last ran and «Pregúntale a Thesaurus» (AC-67).
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { findBeneficiary, nameKey } from '../../src/engine/checks';
 import type { Beneficiary } from '../../src/engine/types';
 import type { PageRoute } from '../App';
 import { api } from '../api';
+import AskThesaurus from '../components/AskThesaurus';
 import NewInvoice from '../components/NewInvoice';
 import { OutcomeChip, type Outcome } from '../components/OutcomeChip';
 import { RunProgress, useRunAgent } from '../components/RunProgress';
@@ -65,16 +66,16 @@ export default function Inbox() {
           </button>
         </div>
       </header>
-      {lastRun !== undefined && (
-        <p className="muted inbox-last-run">
-          {lastRun === null
+      <p className="muted inbox-last-run">
+        {lastRun === undefined
+          ? null
+          : lastRun === null
             ? t('inbox.last_run.never')
             : t('inbox.last_run', {
                 ago: mins < 1 ? t('inbox.last_run.under_min') : t('inbox.last_run.min', { n: mins }),
                 how: t(lastRun.trigger === 'cron' ? 'inbox.last_run.cron' : 'inbox.last_run.manual'),
               })}
-        </p>
-      )}
+      </p>
       <p className="muted">{t('inbox.reevaluate_note')}</p>
       <RunProgress run={run} mode="pending" />
       {adding && <NewInvoice />}
@@ -96,6 +97,7 @@ export default function Inbox() {
           </select>
         </label>
       </div>
+      <AskThesaurus />
 
       {failed ? (
         <p role="alert" className="error">{t('inbox.load_error')}</p>

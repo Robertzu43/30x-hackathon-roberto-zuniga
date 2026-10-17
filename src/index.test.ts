@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
 import { scheduled } from './agent/scheduled';
+import { inbound } from './email/inbound';
 import worker, { app } from './index';
 
 test('health', async () => {
@@ -24,3 +25,5 @@ test('the Worker serves the app and runs the cron (AC-62)', () => {
   expect(worker.fetch).toBe(app.fetch);
   expect(worker.scheduled).toBe(scheduled);
 });
+
+test('the Worker receives email (AC-87)', () => expect(worker.email).toBe(inbound));

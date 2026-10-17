@@ -38,3 +38,12 @@ test('links use the palette ink with an underline, never the browser blue (UX-11
 test('the stacked login sizes its rows to their content: no empty block between the headline and the form', () => {
   expect(media('max-width: 760px')).toMatch(/\.login \{[^}]*align-content: start/);
 });
+
+// AC-91 item 1 (UX pass 1): detail-frenar at 360/en was 365 px wide; the read-field row (label, value, confidence) pushed past the gutter.
+test('at 480 px or less a read field stacks its confidence under the value, and a long value wraps inside its cell', () => {
+  const detail = readFileSync('web/pages/detail.css', 'utf8');
+  const small = detail.split('@media (max-width: 480px) {')[1]?.split('\n}')[0] ?? '';
+  expect(small).toMatch(/\.detail-fields > div \{[^}]*grid-template-columns: 7rem minmax\(0, 1fr\)/);
+  expect(small).toMatch(/\.detail-fields dd \+ dd \{[^}]*grid-column: 2/);
+  expect(detail).toMatch(/\n\.detail-fields dd \{[^}]*min-width: 0;[^}]*overflow-wrap: anywhere/);
+});

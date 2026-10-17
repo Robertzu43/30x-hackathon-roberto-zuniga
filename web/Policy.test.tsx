@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { expect, test } from 'vitest';
 import Policy, { route } from './pages/Policy';
 import { mockApi, renderAt } from './test/utils';
@@ -16,8 +16,16 @@ const company = { id: 'c1', name: 'Andina Labs Inc.', approver_email: 'ana@andin
 const json = (body: unknown, status: number) => new Response(JSON.stringify(body), { status });
 const body = (init: RequestInit) => JSON.parse(String(init.body));
 
+const fx = {
+  provider: 'yahoo',
+  rates: [
+    { currency: 'COP', usd_per_unit: 0.00024876, units_per_usd: 4020.1, source: 'Yahoo Finance', fetched_at: '2026-10-17T15:00:00Z', stale: false },
+    { currency: 'MXN', usd_per_unit: 0.054, units_per_usd: 18.5185, source: 'open.er-api.com', fetched_at: '2026-10-14T15:00:00Z', stale: true },
+  ],
+};
+
 function setup(extra: Record<string, unknown> = {}) {
-  return mockApi({ 'GET /api/company': company, 'GET /api/policy': versions, ...extra });
+  return mockApi({ 'GET /api/company': company, 'GET /api/policy': versions, 'GET /api/fx': fx, ...extra });
 }
 const limit = () => screen.findByLabelText('Límite por pago (USD)') as Promise<HTMLInputElement>;
 const save = () => fireEvent.click(screen.getByRole('button', { name: /^Guardar como versión/ }));
@@ -29,14 +37,14 @@ test('/policy is in the nav after Bandeja, with its tour anchor present before d
   expect(container.querySelector('[data-tour="policy"]')).toBeTruthy();
 });
 
-test('shows every rule of the latest version, the six FX rows and "Guardar como versión 3" (AC-30)', async () => {
+test('shows every rule of the latest version, the five pin rows and "Guardar como versión 3" (AC-30)', async () => {
   setup();
   renderAt(<Policy />);
   expect((await limit()).value).toBe('5000');
   for (const l of ['Umbral de aprobación (USD)', 'Presupuesto del periodo (USD)', 'Saldo de la cuenta (USD)', 'Ventana de duplicados (días)', 'Tolerancia del acuerdo (%)', 'Días de gracia de vencimiento'])
     expect(screen.getByLabelText(l)).toBeTruthy();
   expect((screen.getByLabelText('Pagar solo a beneficiarios permitidos') as HTMLInputElement).checked).toBe(true);
-  for (const c of ['COP', 'MXN', 'BRL', 'ARS', 'EUR', 'USD']) expect(screen.getByLabelText(`1 ${c} en USD`)).toBeTruthy();
+  for (const c of ['COP', 'MXN', 'BRL', 'ARS', 'EUR']) expect(screen.getByLabelText(`1 ${c} en USD`)).toBeTruthy();
   expect((screen.getByLabelText('1 COP en USD') as HTMLInputElement).value).toBe('0.000245');
   expect(screen.getByRole('button', { name: 'Guardar como versión 3' })).toBeTruthy();
   expect(screen.getAllByRole('listitem').map((li) => li.textContent)).toEqual([expect.stringContaining('Política general'), expect.stringContaining('Inicial')]);
@@ -262,4 +270,207 @@ test('English: mixed and escalated-only headers (R-68)', async () => {
   put({ would_change: [{ invoice_id: 'e', headline: 'Nube Sur', from: 'ESCALAR', to: 'FRENAR' }] });
   await saveEn();
   expect(await screen.findByText('If you press "Re-evaluate pending", the agent will change the result of 1 escalated invoice(s):')).toBeTruthy();
+});
+
+const sentenceEs = 'Fuente de tasas: Yahoo Finance (respaldo: open.er-api.com). Tu empresa puede conectar otra fuente —su banco, su proveedor de tesorería o la tasa de Blinka— agregando un proveedor; ver README, sección «Tasas de cambio».';
+const sentenceEn = 'Rate source: Yahoo Finance (fallback: open.er-api.com). Your company can connect another source (its bank, its treasury provider or Blinka\'s rate) by adding a provider; see README, section "Tasas de cambio".';
+
+test('«Tasas de mercado» lists each rate read-only: 1 USD in units, USD per unit, source, fetched time in Bogotá and status (AC-76)', async () => {
+  setup();
+  renderAt(<Policy />);
+  const table = await screen.findByRole('table', { name: 'Tasas de mercado' });
+  const cop = within(table).getByRole('row', { name: /COP/ });
+  const cells = within(cop).getAllByRole('cell').map((c) => c.textContent);
+  expect(cells).toEqual(['COP', '1 USD = 4.020,10 COP', '0,00024876', 'Yahoo Finance', 'consultada 17 oct 2026 10:00', 'vigente']);
+  expect(within(table).getAllByRole('row').map((r) => r.textContent).join('|')).toContain('MXN');
+  expect(table.querySelector('input')).toBeNull();
+});
+
+test('every «1 USD =» figure has the same two decimals, so a comma never reads as a thousands mark; USD per unit keeps 6 significant digits (AC-76, AC-91 item 5)', async () => {
+  setup({ 'GET /api/fx': { provider: 'yahoo', rates: [
+    { currency: 'COP', usd_per_unit: 0.000248761234, units_per_usd: 4020.1, source: 'Yahoo Finance', fetched_at: '2026-10-17T15:00:00Z', stale: false },
+    { currency: 'MXN', usd_per_unit: 0.0541, units_per_usd: 18.479, source: 'Yahoo Finance', fetched_at: '2026-10-17T15:00:00Z', stale: false },
+    { currency: 'EUR', usd_per_unit: 1.08, units_per_usd: 0.9259, source: 'Yahoo Finance', fetched_at: '2026-10-17T15:00:00Z', stale: false },
+  ] } });
+  renderAt(<Policy />);
+  const table = await screen.findByRole('table', { name: 'Tasas de mercado' });
+  const cells = within(table).getAllByRole('row').slice(1).map((r) => within(r).getAllByRole('cell').map((c) => c.textContent));
+  expect(cells.map((c) => c[1])).toEqual(['1 USD = 4.020,10 COP', '1 USD = 18,48 MXN', '1 USD = 0,93 EUR']);
+  expect(cells.map((c) => c[2])).toEqual(['0,000248761', '0,0541', '1,08']);
+});
+
+test('the date column header does not repeat the word in its cells (AC-76)', async () => {
+  setup();
+  renderAt(<Policy />);
+  const table = await screen.findByRole('table', { name: 'Tasas de mercado' });
+  expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Moneda', 'Tasa', 'USD por unidad', 'Fuente', 'Fecha', 'Estado']);
+});
+
+const pinLabels = () => screen.getAllByLabelText(/^1 \w{3} en USD$/).map((l) => l.closest('label')!.textContent);
+
+test('the pin list is ARS, BRL, COP, EUR, MXN in code order, never «1 USD en USD» (AC-30 Clarified, R-110)', async () => {
+  setup();
+  renderAt(<Policy />);
+  await limit();
+  expect(pinLabels()).toEqual(['1 ARS en USD', '1 BRL en USD', '1 COP en USD', '1 EUR en USD', '1 MXN en USD']);
+});
+
+test('another policy currency follows the five, in code order (R-110)', async () => {
+  const v = [{ ...versions[0], rules: { ...rules, fx_rates: { ...rules.fx_rates, PEN: 0.27, CLP: 0.001 } } }];
+  setup({ 'GET /api/policy': v });
+  renderAt(<Policy />);
+  await limit();
+  expect(pinLabels()).toEqual(['1 ARS en USD', '1 BRL en USD', '1 COP en USD', '1 EUR en USD', '1 MXN en USD', '1 CLP en USD', '1 PEN en USD']);
+});
+
+test('a stale row says «vencida: el agente escalará las facturas en esta moneda», a fresh one «vigente» (AC-76)', async () => {
+  setup();
+  renderAt(<Policy />);
+  const table = await screen.findByRole('table', { name: 'Tasas de mercado' });
+  expect(within(within(table).getByRole('row', { name: /MXN/ })).getByText('vencida: el agente escalará las facturas en esta moneda')).toBeTruthy();
+  expect(within(table).getAllByText('vigente')).toHaveLength(1);
+});
+
+test('the market table sits above the optional pin section, and the source sentence closes the rates (AC-76, AC-30)', async () => {
+  setup();
+  renderAt(<Policy />);
+  const table = await screen.findByRole('table', { name: 'Tasas de mercado' });
+  const pins = screen.getByText('Tasas fijadas por la política');
+  const sentence = screen.getByText(sentenceEs);
+  expect(table.compareDocumentPosition(pins) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(pins.compareDocumentPosition(sentence) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+test('English: table, status, date and sentence (AC-76)', async () => {
+  localStorage.setItem('lang', 'en');
+  setup();
+  renderAt(<Policy />);
+  const table = await screen.findByRole('table', { name: 'Market rates' });
+  expect(within(within(table).getByRole('row', { name: /COP/ })).getAllByRole('cell').map((c) => c.textContent)).toEqual(['COP', '1 USD = 4,020.10 COP', '0.00024876', 'Yahoo Finance', 'fetched Oct 17, 2026 10:00', 'current']);
+  expect(within(table).getByText('expired: the agent will escalate invoices in this currency')).toBeTruthy();
+  expect(screen.getByText('Rates pinned by the policy')).toBeTruthy();
+  expect(screen.getByText(sentenceEn)).toBeTruthy();
+});
+
+test('with an empty pin table, saving posts fx_rates: {} (AC-30 Clarified, R-85)', async () => {
+  const f = setup({
+    'GET /api/policy': [{ ...versions[0], rules: { ...rules, fx_rates: {} } }],
+    'PUT /api/policy': { policy: { ...versions[0], version: 3 }, would_change: [] },
+  });
+  renderAt(<Policy />);
+  await limit();
+  save();
+  await screen.findByText('Versión 3 guardada.');
+  const sent = f.mock.calls.find(([, i]) => i?.method === 'PUT' && String(i.body).includes('fx_rates'))!;
+  expect(body(sent[1]!).rules.fx_rates).toEqual({});
+});
+
+test('a rate ≤ 0 pin is refused with the API text and marks the pin inputs (AC-30)', async () => {
+  setup({ 'PUT /api/policy': json({ error: 'Valor no válido: las tasas deben ser mayores que 0', field: 'fx_rates' }, 400) });
+  renderAt(<Policy />);
+  await limit();
+  fireEvent.change(screen.getByLabelText('1 COP en USD'), { target: { value: '0' } });
+  save();
+  expect((await screen.findByRole('alert')).textContent).toContain('tasas');
+  expect(screen.getByLabelText('1 COP en USD').getAttribute('aria-invalid')).toBe('true');
+});
+
+test('no rates yet: a designed empty message, and no table (AC-91)', async () => {
+  setup({ 'GET /api/fx': { provider: 'yahoo', rates: [] } });
+  renderAt(<Policy />);
+  expect(await screen.findByText(/Todavía no hay tasas de mercado/)).toBeTruthy();
+  expect(screen.queryByRole('table')).toBeNull();
+});
+
+test('/api/fx fails: a designed message with a «Reintentar» next step that refetches, in both languages, no status code (AC-91)', async () => {
+  let calls = 0;
+  setup({ 'GET /api/fx': () => (++calls === 1 ? json({ error: 'boom' }, 500) : fx) });
+  renderAt(<Policy />);
+  const msg = await screen.findByText('No pude cargar las tasas de mercado.');
+  expect(msg.textContent).not.toMatch(/500|boom/);
+  fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
+  expect(await screen.findByRole('table', { name: 'Tasas de mercado' })).toBeTruthy();
+  expect(calls).toBe(2);
+  cleanup();
+  localStorage.setItem('lang', 'en');
+  setup({ 'GET /api/fx': json({ error: 'boom' }, 500) });
+  renderAt(<Policy />);
+  expect(await screen.findByText('I could not load the market rates.')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+});
+
+test('while /api/fx loads the real table shows one placeholder row per pin currency, no fixed-height block (R-109)', async () => {
+  setup({ 'GET /api/fx': () => new Promise(() => {}) });
+  const { container } = renderAt(<Policy />);
+  await limit();
+  expect(screen.getAllByText('Cargando…').length).toBeGreaterThan(0);
+  expect(container.querySelector('.fx-skel')).toBeNull();
+  const rows = container.querySelectorAll('.fx-slot table.fx-table tbody tr');
+  expect([...rows].map((r) => r.firstElementChild!.textContent)).toEqual(['ARS', 'BRL', 'COP', 'EUR', 'MXN']);
+  expect([...rows].every((r) => r.children.length === 6)).toBe(true);
+});
+
+test('the placeholder rows follow the pin list when the policy has another currency (R-109, R-110)', async () => {
+  const v = [{ ...versions[0], rules: { ...rules, fx_rates: { ...rules.fx_rates, CLP: 0.001 } } }];
+  setup({ 'GET /api/policy': v, 'GET /api/fx': () => new Promise(() => {}) });
+  const { container } = renderAt(<Policy />);
+  await limit();
+  expect(container.querySelectorAll('.fx-slot tbody tr')).toHaveLength(6);
+});
+
+test('empty and error render no table and no placeholder rows: the slot is its own content (R-109)', async () => {
+  setup({ 'GET /api/fx': { provider: 'yahoo', rates: [] } });
+  const { container } = renderAt(<Policy />);
+  await screen.findByText(/Todavía no hay tasas de mercado/);
+  expect(container.querySelector('.fx-slot tr')).toBeNull();
+  cleanup();
+  setup({ 'GET /api/fx': json({ error: 'boom' }, 500) });
+  const e = renderAt(<Policy />);
+  await screen.findByText('No pude cargar las tasas de mercado.');
+  expect(e.container.querySelector('.fx-slot tr')).toBeNull();
+});
+
+test('the market table scrolls inside its own container (AC-91 item 1)', async () => {
+  setup();
+  renderAt(<Policy />);
+  expect((await screen.findByRole('table', { name: 'Tasas de mercado' })).parentElement!.className).toBe('fx-scroll');
+});
+
+// jsdom cannot measure layout (see mobile.test.ts): these guard the rules measured in Chromium at 360, 390 and 1440 px.
+const { readFileSync } = (await import('node:fs' as string)) as { readFileSync(p: string, enc: string): string };
+const css = readFileSync('web/policy.css', 'utf8');
+const rule = (selector: string) => css.match(new RegExp(`(?:^|\\n)${selector.replace(/[.*>]/g, '\\$&')} \\{([^}]*)\\}`))?.[1] ?? '';
+
+test('CSS: the rate table scrolls in its own box, the page grid may shrink, and the help line has a gap (AC-91 items 1 and 6)', () => {
+  expect(rule('.fx-scroll')).toMatch(/overflow-x: auto/);
+  expect(rule('.fx-scroll')).toMatch(/max-width: 100%/);
+  expect(rule('.policy > *')).toMatch(/min-width: 0/);
+  expect(rule('.card form > *')).toMatch(/min-width: 0/);
+  expect(rule('fieldset > .hint')).toMatch(/margin-bottom: 1\.25rem/);
+});
+
+test('CSS: at 768 px and below the pin inputs are 16 px and the rate rows become cards (AC-91 items 1 and 2)', () => {
+  const m = css.split('@media (max-width: 768px) {')[1]?.split('\n}\n')[0] ?? '';
+  expect(m).toMatch(/fieldset input \{[^}]*font-size: 1rem/);
+  expect(m).toMatch(/\.fx-table tr \{[^}]*display: flex/);
+});
+
+test('CSS: the market slot has no height of its own, at any width, and no pixel constants (R-109)', () => {
+  expect(css).not.toMatch(/\.fx-slot \{[^}]*height/);
+  expect(css).not.toMatch(/\.fx-skel/);
+  expect(rule('.fx-slot p')).toMatch(/margin: 0/); // empty: the message is the last element, the 2.5rem gap to the pins is the section gap alone
+  expect(rule('.fx-market')).toMatch(/margin-bottom: 1\.25rem/);
+});
+
+test('CSS: the pin grid column may shrink, the fieldset has min-width 0 and the inputs fill it, so both side gaps match (R-108)', () => {
+  expect(rule('fieldset')).toMatch(/min-width: 0/);
+  expect(rule('fieldset input')).toMatch(/width: 100%/);
+  expect(rule('fieldset input')).toMatch(/box-sizing: border-box/);
+  expect(rule('.grid.fx')).toMatch(/grid-template-columns: minmax\(0, 1fr\)/);
+});
+
+test('CSS: the rate header hidden on phones uses the standard sr-only pattern (AC-91 item 1)', () => {
+  const m = css.split('@media (max-width: 768px) {')[1]?.split('\n}\n')[0] ?? '';
+  const head = m.match(/\.fx-table thead \{([^}]*)\}/)?.[1] ?? '';
+  for (const d of ['position: absolute', 'width: 1px', 'height: 1px', 'margin: -1px', 'padding: 0', 'overflow: hidden', 'clip: rect(0 0 0 0)', 'white-space: nowrap', 'border: 0', 'font-size: 0']) expect(head).toContain(d);
 });

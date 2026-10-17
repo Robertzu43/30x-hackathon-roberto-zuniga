@@ -37,6 +37,16 @@ for w in 'revoke insert on public.decisions, public.approval_tokens, public.appr
   'create or replace function public.decisions_guard()' PAGAR_OUTSIDE_RULES \
   umbral_aprobacion beneficiario_permitido beneficiario_cuenta acuerdo duplicado_probable vencimiento periodo lectura; do
   echo "$lock" | grep -qF "$w" || fail "lockdown migration lacks: $w (AC-68, AC-69)"; done
+# AC-67/AC-68 Clarified (R-87): the question quota, one table with RLS on and no member policy, one service-role function
+AI=supabase/migrations/20261017000700_ai_usage.sql
+[ -f "$AI" ] || fail "missing $AI"
+ai=$(sed 's/--.*$//' "$AI")
+for w in 'create table public.ai_usage (' 'primary key (day, key)' 'alter table public.ai_usage enable row level security;' \
+  'revoke all on public.ai_usage from public, anon, authenticated;' 'security definer' \
+  'revoke execute on function public.take_question(text) from public, anon, authenticated;' \
+  'grant execute on function public.take_question(text) to service_role;'; do
+  echo "$ai" | grep -qF "$w" || fail "ai_usage migration lacks: $w (AC-67, AC-68)"; done
+echo "$ai" | grep -qi 'create policy' && fail "a member policy on ai_usage (AC-68)"
 
 # ---- Part 2: execute against a real Postgres ----
 INITDB=$(command -v initdb || ls /usr/lib/postgresql/*/bin/initdb 2>/dev/null | sort -V | tail -1)
@@ -187,4 +197,22 @@ R=$(inv '{}')
 as "$UA" "begin; update public.invoices set archived = true where id = '$R'; select pg_sleep(1.5); commit;" >"$D/s3" &
 sleep 0.5; expect svc "$(dec "$R" "$(cur)" "$FRE" 0)" 'ARCHIVED' "insert_decision ignored an archive in flight (R-69)"
 wait; expect "$UA" "select archived from public.invoices where id = '$R'" '^t$' "archive session did not commit: $(cat "$D/s3")"
+# AC-67 (R-87): 10 questions per key and UTC day, 500 for the deployment, counted before the model call; members cannot count
+take(){ as svc "select public.take_question('$1')"; }
+expect "$UA" "select public.take_question('u:x')" 'permission denied' "member executes take_question (AC-68)"
+expect "$UA" "insert into public.ai_usage values (current_date, 'global', 0)" 'permission denied' "member writes ai_usage (AC-68)"
+expect "$UA" "select count(*) from public.ai_usage" 'permission denied' "member reads ai_usage (AC-68)"
+printf "set role anon;\nselect public.take_question('u:x');\n" | sql -f - | grep -q 'permission denied' || fail "anon executes take_question (AC-68)"
+got=$(for i in $(seq 1 11); do take u:a; done | tr '\n' ' ')
+[ "$got" = '{"remaining": 9} {"remaining": 8} {"remaining": 7} {"remaining": 6} {"remaining": 5} {"remaining": 4} {"remaining": 3} {"remaining": 2} {"remaining": 1} {"remaining": 0} {"reason": "user_cap"} ' ] || fail "10 per user then user_cap (got: $got)"
+[ "$(take u:b)" = '{"remaining": 9}' ] || fail "a second key is counted apart"
+expect svc "select n from public.ai_usage where key = 'global' and day = (now() at time zone 'utc')::date" '^11$' "global counts every taken question, not user_cap ones"
+expect svc "select public.take_question('global')" 'BAD_KEY' "a caller key may not be the global row"
+sql -c "update public.ai_usage set n = 500 where key = 'global'" >/dev/null || fail "fill the global cap"
+[ "$(take u:c)" = '{"reason": "ai_quota"}' ] || fail "the 501st question of the day is ai_quota"
+expect svc "select count(*) from public.ai_usage where key = 'u:c'" '^0$' "an ai_quota question still counted for its user"
+expect svc "select n from public.ai_usage where key = 'global'" '^500$' "global went past 500"
+sql -c "insert into public.ai_usage values ((now() at time zone 'utc')::date - 1, 'u:d', 10)" >/dev/null
+sql -c "update public.ai_usage set n = 0 where key = 'global'" >/dev/null
+[ "$(take u:d)" = '{"remaining": 9}' ] || fail "yesterday's count carried into today (UTC day)"
 echo "schema.test: greps and live Postgres checks passed"

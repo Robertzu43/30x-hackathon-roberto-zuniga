@@ -48,3 +48,9 @@ export function recorder(env: Env, companyId: string | null, budget?: Budget) {
   };
 }
 export type Recorder = ReturnType<typeof recorder>;
+
+// AC-67, R-87: the «Pregúntale a Thesaurus» quota, its only write (AC-38). take_question (security definer, service role
+// only) counts the key and the deployment for the UTC day before the model call.
+export type Quota = { remaining: number } | { reason: 'user_cap' | 'ai_quota' };
+export const takeQuestion = async (env: Env, key: string, budget?: Budget): Promise<Quota> =>
+  must(await adminClient(env, budget).rpc('take_question', { p_key: key }));

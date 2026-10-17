@@ -10,7 +10,7 @@ export { findBeneficiary }; // directory lookup by name: case, accents, punctuat
 const monthOf = (inv: Invoice) => bogotaDay(inv.received_at).slice(0, 7);
 
 export const directorio = async (db: Db, companyId: string): Promise<Beneficiary[]> =>
-  must(await db.from('beneficiaries').select('*').eq('company_id', companyId));
+  must(await db.from('beneficiaries').select('*').eq('company_id', companyId).eq('archived', false)); // a reset archives, never deletes (AC-47)
 
 export const politica = async (db: Db, companyId: string): Promise<{ version: number; rules: PolicyRules } | null> =>
   must(await db.from('policies').select('version, rules').eq('company_id', companyId)

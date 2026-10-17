@@ -58,6 +58,29 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe('runAgent (D22, AC-61)', () => {
+  it('an archived beneficiary is not in the directory: its payee escalates with beneficiario_permitido no_cumple (AC-47)', async () => {
+    const w = workspace('A', { only: ['01'] });
+    db = fakeDb(w);
+    await runAgent(deps(), 'A', 'pending', 'manual');
+    expect(decisionsOf('A-01')[0]).toMatchObject({ outcome: 'PAGAR' }); // live directory: allowed
+
+    db = fakeDb(workspace('A', { only: ['01'] }));
+    const payee = (db.tables.invoices![0]!.fields as { payee_name: string }).payee_name;
+    for (const b of db.tables.beneficiaries!) if (b.name === payee) b.archived = true;
+    await runAgent(deps(), 'A', 'pending', 'manual');
+    const d = decisionsOf('A-01')[0]!;
+    expect(d.outcome).toBe('ESCALAR');
+    expect(d.checks).toContainEqual(expect.objectContaining({ id: 'beneficiario_permitido', verdict: 'no_cumple' }));
+  });
+
+  it('the fake invoice_current exposes the latest decision view columns', async () => {
+    db = fakeDb(workspace('A', { only: ['01'] }));
+    await runAgent(deps(), 'A', 'pending', 'manual');
+    const row = (await db.from('invoice_current').select('headline_es, question_en, policy_version').eq('id', 'A-01').single()).data as Record<string, unknown>;
+    expect(row.headline_es).toEqual(expect.any(String));
+    expect(row.policy_version).toBe(1);
+  });
+
   it('runs the stages percibe, lee, consulta, decide, actua, rindeCuentas in that order for one invoice', async () => {
     db = fakeDb(workspace('A', { only: ['01'] }));
     await runAgent(deps(), 'A', 'pending', 'manual');

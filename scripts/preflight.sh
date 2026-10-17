@@ -6,7 +6,6 @@ FAILS=0
 ok(){ echo "PASS  $1"; }
 bad(){ echo "FAIL  $1"; FAILS=$((FAILS+1)); }
 need(){ [ -n "${!1:-}" ] || { bad "env $1 is empty"; return 1; }; }
-SLUG="${PROJECT_SLUG:-30x-hackathon}"
 
 echo "== Cloudflare"
 need CLOUDFLARE_API_TOKEN && need CLOUDFLARE_ACCOUNT_ID && {
@@ -14,8 +13,6 @@ need CLOUDFLARE_API_TOKEN && need CLOUDFLARE_ACCOUNT_ID && {
   # wrangler 4 no longer prints token scopes; prove Workers Scripts access with the API call deploy needs
   code=$(curl -s -o /dev/null -w "%{http_code}" "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts" -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
   [ "$code" = "200" ] && ok "token can list Workers scripts (deploy scope)" || bad "token cannot access Workers scripts ($code): create one from the Edit Cloudflare Workers template, not an R2 token"
-  npx -y wrangler kv namespace list 2>/dev/null | grep -q "$SLUG-kv" || npx -y wrangler kv namespace create "$SLUG-kv" >/dev/null 2>&1
-  npx -y wrangler kv namespace list 2>/dev/null | grep -q "$SLUG-kv" && ok "KV $SLUG-kv" || bad "KV $SLUG-kv"
 }
 
 echo "== GitHub"

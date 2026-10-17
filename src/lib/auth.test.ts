@@ -115,12 +115,24 @@ describe('local JWT verification (AC-98, R-122)', () => {
     ['bad signature', () => jwt({}, { key: theirs.privateKey })],
     ['another project\'s key', () => jwt({}, { kid: 'k-other', key: theirs.privateKey })],
     ['altered payload', async () => { const [h, , s] = (await jwt()).split('.'); return `${h}.${b64(JSON.stringify({ sub: 'u1', aud: 'authenticated', iss: ISS, exp: 4e9 }))}.${s}`; }],
+    // malformed shapes with a known kid: each one is a 401, never a 500 from a decode outside the guard
+    ['with a non-base64url character in the signature', async () => `${(await jwt()).slice(0, -1)}!`],
+    ['whose signature length is 1 mod 4', async () => { const [h, p, s] = (await jwt()).split('.'); return `${h}.${p}.${s!.slice(0, 85)}`; }],
+    ['with a non-JSON payload', async () => { const [h] = (await jwt()).split('.'); const p = b64('not json');
+      return `${h}.${p}.${b64(new Uint8Array(await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, ours.privateKey, new TextEncoder().encode(`${h}.${p}`))))}`; }],
+    ['of two segments', async () => (await jwt()).split('.').slice(0, 2).join('.')],
+    ['with an empty signature', async () => (await jwt()).replace(/[^.]+$/, '')],
+    ['with empty payload and signature', async () => `${(await jwt()).split('.')[0]}..`],
   ])('401 for a token %s, without asking Supabase Auth', async (_name, make) => {
     const res = await get(`Bearer ${await make()}`);
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual({ error: 'No autorizado' });
     expect(paths()).not.toContain('/auth/v1/user');
     expect(paths()).not.toContain('/rest/v1/company_members');
+  });
+
+  it('a token whose header is not JSON (empty segments included) is left to Supabase Auth, which answers 401', async () => {
+    for (const t of ['..', '!.!.!', 'a.b']) expect((await get(`Bearer ${t}`)).status).toBe(401);
   });
 
   it('requireAuth (the screen routes) verifies the token and reads no membership: the screen function finds the company', async () => {

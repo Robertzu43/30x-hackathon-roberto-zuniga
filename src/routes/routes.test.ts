@@ -842,14 +842,20 @@ describe('GET /api/screen/* and Detalle: one RPC per screen, the same data as th
   };
   const old = async (path: string, token = 'tok-a') => json(await call('GET', path, undefined, token));
 
-  it('inbox: { invoices, last_run, portal, dashboard } equal to /api/invoices, /api/agent/last-run and /api/portal-link', async () => {
+  it('inbox: { invoices, last_run, portal, beneficiaries, dashboard } equal to /api/invoices, /api/agent/last-run, /api/portal-link and /api/beneficiaries (R-132)', async () => {
     db = testDb({ ...workspace(['01', '04', '11']), agent_runs: [{ company_id: null, trigger: 'cron', created_at: '2026-10-17T14:58:00Z' },
       { company_id: 'B', trigger: 'manual', created_at: '2026-10-17T14:59:00Z' }] });
     db.tables.companies!.find((c) => c.id === 'A')!.portal_slug = 'andina-labs';
+    db.tables.beneficiaries!.push({ id: 'old', company_id: 'A', name: 'Antiguo', archived: true }, { id: 'b', company_id: 'B', name: 'De otra' },
+      { id: 'a0', company_id: 'A', name: 'Aaa Primero', archived: false });
     await call('POST', '/api/invoices/run');
     const m = await measure('/api/screen/inbox?lang=es');
     expect(m).toMatchObject({ calls: 2, rpcs: ['screen_inbox'], queries: 0 });
-    expect(m.body).toEqual({ invoices: await old('/api/invoices'), last_run: await old('/api/agent/last-run'), portal: await old('/api/portal-link'), dashboard: null });
+    const beneficiaries = (await old('/api/beneficiaries') as Row[]).map(({ id, name }) => ({ id, name }));
+    expect(beneficiaries.length).toBeGreaterThan(1);
+    expect(m.body).toEqual({ invoices: await old('/api/invoices'), last_run: await old('/api/agent/last-run'), portal: await old('/api/portal-link'),
+      beneficiaries, dashboard: null });
+    expect((m.body.beneficiaries as Row[])[0]).toEqual({ id: 'a0', name: 'Aaa Primero' });
     expect((m.body.invoices as Row[]).map((r) => r.company_id)).toEqual(['A', 'A', 'A']);
     expect(db.rpcs.filter((r) => r.name === 'screen_inbox').at(-1)!.args).toEqual({ p_lang: 'es' });
   });

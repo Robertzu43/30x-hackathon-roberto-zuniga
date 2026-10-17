@@ -50,6 +50,7 @@ export function fakeDb(seed: Record<string, Row[]> = {}) {
     last_run: ((r) => (r ? { at: r.created_at, trigger: r.trigger, via: r.via ?? null } : null))(
       sorted(tables.agent_runs!.filter((r) => r.company_id === c || (r.company_id ?? null) === null), '-created_at')[0]),
     portal_slug: tables.companies!.find((x) => x.id === c)?.portal_slug ?? null,
+    beneficiaries: sorted(directory(c), 'name').map((b) => ({ id: b.id, name: b.name })),
   });
   const period = (c: unknown) => ({
     current: sorted(current().filter((r) => r.company_id === c), 'received_at', 'id')

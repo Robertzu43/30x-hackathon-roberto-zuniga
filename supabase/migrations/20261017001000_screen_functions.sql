@@ -10,7 +10,8 @@ language sql stable security invoker set search_path = '' as $$
   select m.company_id from public.company_members m where m.user_id = auth.uid() order by m.company_id limit 1
 $$;
 
--- Bandeja: GET /api/invoices (headline in p_lang), GET /api/agent/last-run, and the portal slug of GET /api/portal-link.
+-- Bandeja: GET /api/invoices (headline in p_lang), GET /api/agent/last-run, the portal slug of GET /api/portal-link, and
+-- (R-132) GET /api/beneficiaries' directory as { id, name } by name, for AC-29's filter.
 create function public.screen_inbox(p_lang text) returns jsonb
 language sql stable security invoker set search_path = '' as $$
   select case when c.id is not null then jsonb_build_object(
@@ -22,7 +23,9 @@ language sql stable security invoker set search_path = '' as $$
                    union all
                    (select * from public.agent_runs x where x.company_id is null order by x.created_at desc limit 1)) r
                  order by r.created_at desc limit 1),
-    'portal_slug', (select co.portal_slug from public.companies co where co.id = c.id))
+    'portal_slug', (select co.portal_slug from public.companies co where co.id = c.id),
+    'beneficiaries', coalesce((select jsonb_agg(jsonb_build_object('id', b.id, 'name', b.name) order by b.name) from public.beneficiaries b
+                               where b.company_id = c.id and not b.archived), '[]'))
   end from (select public.screen_company() as id) c
 $$;
 

@@ -44,8 +44,9 @@ async function verify(env: Env, jwt: string, db: Db, budget: Budget): Promise<Au
   }
   const key = await signingKey(env, header.kid, budget);
   const claims = part(p);
-  const signed = !!key && !!claims && await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, key, bytes(s), new TextEncoder().encode(`${h}.${p}`))
-    .catch(() => false);
+  // bytes(s) runs inside the promise, so a malformed signature segment (atob throws) is a false like a wrong one, never a 500
+  const signed = !!key && !!claims && await Promise.resolve()
+    .then(() => crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, key, bytes(s), new TextEncoder().encode(`${h}.${p}`))).catch(() => false);
   if (!signed || claims.aud !== 'authenticated' || claims.iss !== `${env.SUPABASE_URL}/auth/v1` || typeof claims.sub !== 'string'
     || !(typeof claims.exp === 'number' && claims.exp * 1000 > Date.now())) return null;
   return { id: claims.sub, email: claims.email as string | undefined, is_anonymous: claims.is_anonymous === true,

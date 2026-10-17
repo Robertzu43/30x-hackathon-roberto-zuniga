@@ -332,4 +332,14 @@ expect "$UA" "select public.screen_demo_overview('es') is null" '^t$' "screen_de
 expect "$UB" "select jsonb_array_length(public.screen_demo_overview('es') -> 'invoices') > 0 and public.screen_demo_overview('es') ? 'period'" '^t$' "screen_demo_overview of the demo company (AC-45, AC-98)"
 NM=66666666-6666-4666-8666-666666666666   # signed in, member of no company
 expect "$NM" "select coalesce(public.screen_inbox('es'), public.screen_period(), public.screen_beneficiaries(), public.screen_policy(), public.screen_detail('${I}1'), public.screen_demo_overview('es')) is null" '^t$' "a non-member reads a screen (AC-98)"
+# R-132: screen_inbox's top-level beneficiaries is GET /api/beneficiaries' directory as { id, name }: non-archived, ordered by
+# name, the caller's company only (RLS), never null
+sql -c "insert into public.beneficiaries (company_id, name, archived) values ('$CA', 'Zz Archivado', true)" >/dev/null || fail "archived beneficiary fixture"
+ben="public.screen_inbox('es') -> 'beneficiaries'"
+expect "$UA" "select $ben = (select jsonb_agg(jsonb_build_object('id', b.id, 'name', b.name) order by b.name) from public.beneficiaries b where b.company_id = '$CA' and not b.archived)" '^t$' "screen_inbox beneficiaries are not A's non-archived directory by name (R-132)"
+expect "$UA" "select count(*) from jsonb_array_elements($ben) e where e ->> 'name' = 'Zz Archivado' or (select array_agg(k order by k) from jsonb_object_keys(e) k) <> '{id,name}'" '^0$' "screen_inbox beneficiaries carry an archived row or a field beyond id and name (R-132)"
+expect "$UA" "select jsonb_array_length($ben) > 1" '^t$' "screen_inbox beneficiaries empty for A (R-132)"
+expect "$UB" "select count(*) from jsonb_array_elements($ben) e where (e ->> 'id')::uuid in (select id from public.beneficiaries where company_id = '$CA')" '^0$' "B's screen_inbox shows A's beneficiaries (AC-04, R-132)"
+out=$(printf "begin;\nupdate public.beneficiaries set archived = true where company_id = '$CA';\nset role authenticated;\nset request.jwt.claim.sub = '$UA';\nselect $ben;\nrollback;\n" | sql -f -)
+[ "$out" = '[]' ] || fail "screen_inbox beneficiaries of a company with no directory is not [] (got: $out) (R-132)"
 echo "schema.test: greps and live Postgres checks passed"

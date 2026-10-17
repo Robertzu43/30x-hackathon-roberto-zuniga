@@ -1,7 +1,7 @@
-/* global process, console, fetch, URL, Buffer, document, location, localStorage, performance, requestAnimationFrame, window */ // Node script + code that runs in the page
+/* global process, console, fetch, URL, Buffer, document, location, localStorage, performance, requestAnimationFrame, setTimeout, window */ // Node script + code that runs in the page
 // The D40 perf harness (AC-97). Usage:
 //   node scripts/perf.mjs --base <url> [--portal <url>] [--status-token t] [--trial]
-// Read-only: GET requests and one demo sign-in. No AI call, no write. --trial adds one anonymous sign-in (needs the trial door, AC-92).
+// Read-only: GET requests and one demo sign-in. The cache-miss row waits 61 s before each of its samples (about 3 minutes). No AI call, no write. --trial adds one anonymous sign-in (needs the trial door, AC-92).
 // Needs Playwright and Chromium (/opt/pw-browsers/chromium, or GATE_CHROMIUM). Writes docs/perf.md; exits 1 when any row is a FAIL.
 import { writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -13,6 +13,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const VIEWPORT = { width: 1440, height: 900 };
 const RUNS = 3; // median of 3 (targets 1 and 2)
 const SAMPLES = 20, WARMUPS = 2; // sequential requests (target 3)
+const SAMPLE_WAIT = 61_000; // the demo overview is cached for 60 s (R-122)
 const T = { load: 2000, head: 100, data: 1000, api: 600, js: 250 };
 
 // ---- Pure helpers (tested on fixtures) ----
@@ -26,6 +27,20 @@ export const criticalApis = (reqs, origin) => {
   return reqs.filter((r) => r.method === 'GET' && r.url.startsWith(`${origin}/api/`) && !seen.has(r.url) && seen.add(r.url));
 };
 
+// Cache-miss row (AC-97 Clarified, R-140): INFO, never graded. The Worker sets no cache header of its own; the edge's `cf-cache-status` (or a positive `age`) marks a HIT.
+export const isHit = (h) => /^HIT/i.test(h['cf-cache-status'] ?? '') || Number(h.age) > 0;
+export async function missRow({ once, wait, n = 3, tries = 3 }) { // once() -> { ms, headers }; each sample is preceded by a wait, so a HIT is retried after a further wait
+  const base = { screen: 'demo overview (cache miss)', metric: 'Median of 3 uncached requests', unit: 'ms', info: true };
+  const ms = [];
+  for (let i = 0; i < n * tries && ms.length < n; i++) {
+    await wait();
+    const r = await once();
+    if (r.error) return { ...base, value: null, why: r.error };
+    if (!isHit(r.headers)) ms.push(r.ms);
+  }
+  return ms.length < n ? { ...base, value: null, why: `cache header stayed HIT in ${n * tries} samples` } : { ...base, value: Math.round(median(ms)) };
+}
+
 // The 17:40Z numbers, measured before D40 and kept as the first row for comparison. The size basis (raw or gzip) was not recorded.
 export const ROW0 = `## Row 0: baseline at 17:40Z, before D40
 
@@ -36,7 +51,7 @@ export const ROW0 = `## Row 0: baseline at 17:40Z, before D40
 `;
 
 const cell = (r) => (r.na ? `N/A (${r.na})` : r.value == null ? `not measured (${r.why})` : `${r.value} ${r.unit}`);
-const verdict = (r) => (r.na ? 'N/A' : judge(r.value, r.target, r.within));
+const verdict = (r) => (r.na ? 'N/A' : r.info ? 'INFO' : judge(r.value, r.target, r.within));
 export function renderPerf({ when, base, portal, colo, country, rows }) {
   const failed = rows.filter((r) => verdict(r) === 'FAIL').length;
   return `# Performance (AC-97)
@@ -50,7 +65,7 @@ ${ROW0}
 
 | Screen | Measure | Value | Target | Result |
 |---|---|---|---|---|
-${rows.map((r) => `| ${r.screen} | ${r.metric} | ${cell(r)} | ${r.within ? 'within' : 'under'} ${r.target} ${r.unit} | ${verdict(r)} |`).join('\n')}
+${rows.map((r) => `| ${r.screen} | ${r.metric} | ${cell(r)} | ${r.info ? 'not graded' : `${r.within ? 'within' : 'under'} ${r.target} ${r.unit}`} | ${verdict(r)} |`).join('\n')}
 `;
 }
 
@@ -67,9 +82,10 @@ export function navRows(s, runs) {
 export const portalRows = (portalOk) => (portalOk ? [] : [{ screen: 'portal, status', metric: 'First load, median of 3', value: null, why: 'facturas Worker not measured (pass --portal)', unit: 'ms', target: T.load }]);
 
 // ---- Screens ----
+export const PRIMARY = 'button.primary'; // the one primary action: «Probar con mi propia empresa» on /login (R-120)
 const SUBMIT = 'button[type="submit"], button.primary';
 const MAIN = [
-  { id: 'login', path: '/login', auth: false, js: true },
+  { id: 'login', path: '/login', auth: false, js: true, door: true },
   { id: 'demo', path: '/demo', auth: false, js: true },
   { id: 'inbox', path: '/', from: '/policy', js: true },
   { id: 'detail PAGAR', path: (v) => `/invoices/${v.PAGAR}`, from: '/', link: (v) => `/invoices/${v.PAGAR}`, needs: 'PAGAR' },
@@ -95,10 +111,11 @@ const INIT = ({ session }) => {
   window.fetch = (...a) => { window.__p.pending++; return f(...a).finally(() => window.__p.pending--); };
 };
 const SKELETON = '[aria-busy="true"],progress,[role="progressbar"],.skeleton,[data-skeleton]'; // an empty role="status" is a live region, not a loader
-const usable = ({ sel }) => { // AC-91 item 7: the heading and the primary action are visible and enabled
+export const usable = ({ sel, need }) => { // AC-91 item 7: the heading and the primary action are visible and enabled (`need`: the action must exist)
   const h = document.querySelector('h1');
+  const named = h && (h.textContent.trim() || h.querySelector('img[alt]')?.alt.trim()); // the login heading is the logo image (AC-80): its alt is its name
   const ok = [...document.querySelectorAll(sel)].some((e) => e.checkVisibility() && !e.disabled);
-  return h && h.textContent.trim() && h.checkVisibility() && (ok || !document.querySelector(sel)) ? performance.now() : false;
+  return named && h.checkVisibility() && (ok || (!need && !document.querySelector(sel))) ? performance.now() : false;
 };
 const navigate = ({ href, skeleton }) => new Promise((resolve) => { // click a link; time the heading or skeleton, then the data
   const link = [...document.querySelectorAll(`a[href="${href}"]`)].find((a) => a.checkVisibility());
@@ -136,7 +153,7 @@ async function firstLoad(browser, base, screen, session, vars) {
     page.on('response', (r) => r.request().resourceType() === 'script' && scripts.push(r.body().catch(() => Buffer.alloc(0))));
     await page.addInitScript(INIT, { session: screen.auth === false ? null : session });
     await page.goto(base + journey(vars, screen), { waitUntil: 'commit', timeout: 30_000 });
-    const t = await page.waitForFunction(usable, { sel: screen.primary ?? 'button.primary' }, { timeout: 15_000, polling: 'raf' }).then((h) => h.jsonValue()).catch(() => null);
+    const t = await page.waitForFunction(usable, { sel: screen.primary ?? PRIMARY, need: !!screen.door }, { timeout: 15_000, polling: 'raf' }).then((h) => h.jsonValue()).catch(() => null);
     const before = scripts.slice(); // the JS fetched up to the moment the screen was usable
     await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => {}); // the API calls of the whole first load are its critical path
     return { t, reqs, bodies: await Promise.all(before) };
@@ -149,7 +166,7 @@ async function navTime(browser, base, screen, session, vars) {
     const page = await context.newPage();
     await page.addInitScript(INIT, { session });
     await page.goto(base + screen.from, { waitUntil: 'load', timeout: 30_000 });
-    await page.waitForFunction(usable, { sel: 'button.primary' }, { timeout: 15_000, polling: 'raf' });
+    await page.waitForFunction(usable, { sel: PRIMARY }, { timeout: 15_000, polling: 'raf' });
     await page.waitForFunction(() => window.__p.pending === 0);
     return await page.evaluate(navigate, { href: screen.link?.(vars) ?? journey(vars, screen), skeleton: SKELETON });
   } finally { await context.close(); }
@@ -215,6 +232,11 @@ export async function main(argv) {
     const label = url.replace(/^https?:\/\/[^/]+/, '');
     rows.push({ screen: `${label} (${[...new Set(screens)].join(', ')})`, metric: 'API p95 of 20', ...(r.error ? { why: r.error, value: null } : r), unit: 'ms', target: T.api });
   }
+  const demoUrl = `${base}/api/demo/overview`; // the first visitor after 60 s idle; INFO, published but not graded
+  rows.push(await missRow({
+    wait: () => new Promise((r) => setTimeout(r, SAMPLE_WAIT)),
+    once: async () => { const t0 = performance.now(), r = await fetch(demoUrl); await r.arrayBuffer(); return r.ok ? { ms: performance.now() - t0, headers: Object.fromEntries(r.headers) } : { error: `HTTP ${r.status}` }; },
+  }));
   const md = renderPerf({ when: new Date().toISOString(), base, portal: portalOk ? portal : null, colo, country, rows });
   writeFileSync(join(ROOT, 'docs/perf.md'), md);
   const failed = rows.filter((r) => verdict(r) === 'FAIL').length;

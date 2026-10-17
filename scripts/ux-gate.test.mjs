@@ -7,11 +7,11 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { aggregate, FONTS, launch, main, PALETTE, renderGate, runCell, SCREENS, unreadId, writeGate } from './ux-gate.mjs';
+import { aggregate, FONTS, launch, main, MSG, PALETTE, renderGate, runCell, SCREENS, unreadId, writeGate } from './ux-gate.mjs';
 
 const DICTS = {
-  es: { 'f.title': 'Bandeja', 'f.empty': 'Todavía no hay facturas.', 'f.retry': 'Reintentar', 'f.send': 'Enviar', 'f.save': 'Guardar cambios', 'f.err': 'No pude cargar los datos. Inténtalo de nuevo.', 'f.decide': 'decide', 'f.nopay': 'No puedo mostrar este pago', 'f.nopay.next': 'Pídele a quien te lo envió que lo reenvíe.', 'f.offline': 'Sin conexión. Revisa tu conexión e inténtalo de nuevo.', 'f.failed': 'No se pudo enviar. Inténtalo de nuevo.' },
-  en: { 'f.title': 'Inbox', 'f.empty': 'There are no invoices yet.', 'f.retry': 'Retry', 'f.send': 'Send', 'f.save': 'Save changes', 'f.err': 'I could not load the data. Please try again.', 'f.decide': 'decide', 'f.nopay': "I can't show this payment", 'f.nopay.next': 'Ask the sender to send it again.', 'f.offline': 'You are offline. Check your connection and try again.', 'f.failed': 'It could not be sent. Please try again.' },
+  es: { 'f.approve': 'Aprobar', 'f.hello': 'Hola {name}', 'f.title': 'Bandeja', 'f.empty': 'Todavía no hay facturas.', 'f.retry': 'Reintentar', 'f.send': 'Enviar', 'f.save': 'Guardar cambios', 'f.err': 'No pude cargar los datos. Inténtalo de nuevo.', 'f.decide': 'decide', 'f.nopay': 'No puedo mostrar este pago', 'f.nopay.next': 'Pídele a quien te lo envió que lo reenvíe.', 'f.offline': 'Sin conexión. Revisa tu conexión e inténtalo de nuevo.', 'f.failed': 'No se pudo enviar. Inténtalo de nuevo.' },
+  en: { 'f.approve': 'Approve', 'f.hello': 'Hello {name}', 'f.title': 'Inbox', 'f.empty': 'There are no invoices yet.', 'f.retry': 'Retry', 'f.send': 'Send', 'f.save': 'Save changes', 'f.err': 'I could not load the data. Please try again.', 'f.decide': 'decide', 'f.nopay': "I can't show this payment", 'f.nopay.next': 'Ask the sender to send it again.', 'f.offline': 'You are offline. Check your connection and try again.', 'f.failed': 'It could not be sent. Please try again.' },
 };
 const SVG = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='8' height='8'><rect width='8' height='8' fill='%23111111'/></svg>";
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
@@ -68,6 +68,14 @@ const page = (bad, lang) => {
   ${bad === '5.mixed:short' ? `<button type="button">${DICTS.es['f.send']}</button>` : ''}
   ${bad === '5.mixed:both' ? `<p>  ${DICTS.en['f.decide'].toUpperCase()} </p>` : ''}
   ${bad === '5.locale' ? '<p>Total 1,234.50</p>' : ''}
+  ${bad === 'user' ? '<p data-user>USD 1.800,00</p><p data-user>Campaña de lanzamiento</p>' : ''}
+  ${bad === 'user:unmarked' ? '<p>USD 1.800,00</p>' : ''}
+  ${bad === 'user:word' ? '<span data-user>Aprobar</span>' : ''}
+  ${bad === 'user:spaced' ? '<span data-user>  APROBAR </span>' : ''}
+  ${bad === 'user:control' ? '<p data-user>Nota <button type="button">Abrir</button></p>' : ''}
+  ${bad === 'user:heading' ? '<div data-user><h2>Ana Souza</h2></div>' : ''}
+  ${bad === 'user:placeholder' ? '<p data-user>Hola Ana</p>' : ''}
+  ${bad === 'user:words' ? '<p data-user>Total: undefined</p>' : ''}
   ${bad === '6.palette' ? '<p class="pal">Color</p>' : ''}
   ${bad === '6.fonts' ? '<p class="fnt">Fuente</p>' : ''}
   ${bad === '6.images' ? `<img src="${PNG}" width="300" height="100" alt="">` : `<img src="${SVG}" width="8" height="8" alt="">`}
@@ -145,6 +153,11 @@ const statusFixture = () => `<!doctype html><html lang="es"><head><meta charset=
   for (const e of ['online', 'offline']) addEventListener(e, () => { n.hidden = navigator.onLine !== false; });
   </script></body></html>`;
 
+// The portal chat echoes what was typed as a bubble, like the real one (the harness's own typed text must be in the tab's language).
+const echoFixture = (lang) => `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"><title>e</title></head><body><main><h1>Portal</h1><div class="log"></div><form id="f"><label for="m">Message</label><textarea id="m" style="font-size:16px"></textarea><button type="submit" class="primary">${DICTS[lang]['f.send']}</button></form></main><script>
+  document.getElementById('f').addEventListener('submit', (e) => { e.preventDefault(); const p = document.createElement('p'); p.textContent = document.getElementById('m').value; document.querySelector('.log').append(p); });
+  </script></body></html>`;
+
 let server, base, browser;
 const seen = [];
 beforeAll(async () => {
@@ -157,6 +170,7 @@ beforeAll(async () => {
     if (u.pathname.startsWith('/api/approve/')) return void res.writeHead(+(u.searchParams.get('s') ?? 404), { 'content-type': 'application/json' }).end('{"error":"invalid_token"}');
     if (u.pathname === '/ov') return void res.writeHead(200, { 'content-type': 'text/html' }).end(overlapPage(u.searchParams.get('mode')));
     if (u.pathname === '/pf') return void res.writeHead(200, { 'content-type': 'text/html' }).end(req.method === 'POST' ? '{"ok":true}' : portalFixture(u.searchParams.has('bare')));
+    if (u.pathname === '/pe') return void res.writeHead(200, { 'content-type': 'text/html' }).end(echoFixture(u.searchParams.get('lang') === 'en' ? 'en' : 'es'));
     if (u.pathname === '/sf') return void res.writeHead(200, { 'content-type': 'text/html' }).end(statusFixture());
     if (u.pathname === '/gone') return void res.writeHead(u.searchParams.has('spoof') ? 200 : 404, { 'content-type': 'text/html' }).end(gonePage(u));
     if (u.pathname === '/api/demo/overview') return void res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(server.overview ?? { invoices: [] }));
@@ -520,5 +534,75 @@ describe('vendor forced states (QA of Task 25)', () => {
     const r = await state(forced('status', '/sf'), 'offline');
     expect(r.status, JSON.stringify(r)).toBe('pass');
     expect(r.measured).toContain('Sin conexión');
+  }, 60_000);
+});
+
+describe('user data: [data-user] (R-131)', () => {
+  const en = (bad) => cell(bad, { lang: 'en' });
+  const row = (rs, id) => rs.find((r) => r.id === id);
+  it('skips «USD 1.800,00» and «Campaña de lanzamiento» in 5.mixed and 5.locale, counts 2, and keeps 5.marker green', async () => {
+    const rs = await en('user');
+    expect(['5.mixed', '5.locale', '5.marker'].map((id) => status(rs, id))).toEqual(['pass', 'pass', 'pass']);
+    expect(row(rs, '5.locale').measured).toContain('excluded: 2 user-data nodes');
+    expect(row(rs, '5.mixed').measured).toContain('excluded: 2 user-data nodes');
+    expect(row(rs, '5.locale').users).toEqual(['USD 1.800,00', 'Campaña de lanzamiento']);
+    expect(fails(rs)).toEqual([]);
+  }, 60_000);
+  it('prints «excluded: 0 user-data nodes» when nothing is marked', async () => {
+    expect(row(await en('none'), '5.locale').measured).toContain('excluded: 0 user-data nodes');
+  }, 60_000);
+  it('fails 5.locale for the same amount without the marker', async () => {
+    const rs = await en('user:unmarked');
+    expect(status(rs, '5.locale'), JSON.stringify(row(rs, '5.locale'))).toBe('fail');
+    expect(status(rs, '5.marker')).toBe('pass');
+  }, 60_000);
+  it('fails 5.marker for a dictionary word inside [data-user], and 5.mixed does not hide it', async () => {
+    const rs = await en('user:word');
+    expect(status(rs, '5.marker'), JSON.stringify(row(rs, '5.marker'))).toBe('fail');
+    expect(row(rs, '5.marker').measured).toContain('Aprobar');
+    expect(fails(rs)).toEqual(['5.marker']);
+  }, 60_000);
+  it('compares the whole text trimmed, collapsed and ignoring case, in either dictionary', async () => {
+    expect(status(await cell('user:spaced', { lang: 'es' }), '5.marker')).toBe('fail'); // es dictionary on an es screen
+    expect(status(await en('user:spaced'), '5.marker')).toBe('fail'); // es dictionary on an en screen
+  }, 60_000);
+  it('never matches a value with a placeholder', async () => {
+    expect(status(await en('user:placeholder'), '5.marker')).toBe('pass');
+  }, 60_000);
+  it.each(['user:control', 'user:heading'])('fails 5.marker when [data-user] holds a control or heading (%s)', async (bad) => {
+    const rs = await en(bad);
+    expect(status(rs, '5.marker'), JSON.stringify(row(rs, '5.marker'))).toBe('fail');
+  }, 60_000);
+  it('keeps 5.words (and every other check) measuring marked text', async () => {
+    expect(status(await en('user:words'), '5.words')).toBe('fail');
+  }, 60_000);
+
+  const marked = (users) => ({ screen: 'inbox', width: 390, id: '5.locale', status: 'pass', value: 0, measured: `0 numbers; excluded: ${users.length} user-data nodes`, users });
+  const rows = [{ ...marked(['USD 1.800,00', 'Campaña de lanzamiento']), lang: 'en' }, { ...marked(['USD 1.800,00', 'Campaña de lanzamiento']), lang: 'en', width: 1440 }, { ...marked([]), lang: 'es' }];
+  it('lists each excluded text under its screen, per language, cut to 60 characters', () => {
+    const long = 'x'.repeat(70);
+    const md = renderGate('finance', { inbox: aggregate([...rows, { ...marked([long]), lang: 'en', width: 360 }].map((r) => ({ ...r, users: r.users.map((u) => u.slice(0, 60)) }))) }, 'http://x');
+    expect(md).toContain('- en: excluded: 2 user-data nodes');
+    expect(md).toContain('  - USD 1.800,00');
+    expect(md).toContain('  - Campaña de lanzamiento');
+    expect(md).toContain(`  - ${'x'.repeat(60)}\n`);
+    expect(md).not.toContain('x'.repeat(61));
+    expect(md).not.toContain('- es:');
+    expect(md).toContain('FAILED ITEMS: 0');
+  });
+  it('prints no list when no screen excluded anything', () => {
+    expect(renderGate('finance', { inbox: aggregate([{ ...marked([]), lang: 'es' }]) }, 'http://x')).not.toContain('User data excluded');
+  });
+});
+
+describe('the harness types a message in the tab language (Task 32b)', () => {
+  it('has the es and en vendor messages', () => {
+    expect(MSG).toEqual({ es: 'Factura AS-0087 de Ana Souza, 10.000,00 BRL', en: 'Invoice AS-0087 from Ana Souza, 10,000.00 BRL' });
+  });
+  it.each(['es', 'en'])('typed text cannot trip 5.mixed or 5.locale on a %s screen', async (lang) => {
+    const screen = { id: 'echo', exp: 'vendor', path: '/pe', compose: '#m', primary: 'button.primary', send: true };
+    const rs = await run(screen, { state: 'error', lang });
+    expect(['5.mixed', '5.locale'].map((id) => status(rs, id)), JSON.stringify(rs.filter((r) => r.id.startsWith('5.')))).toEqual(['pass', 'pass']);
+    expect(rs.find((r) => r.id === '5.locale').measured).toContain('excluded: 0 user-data nodes');
   }, 60_000);
 });

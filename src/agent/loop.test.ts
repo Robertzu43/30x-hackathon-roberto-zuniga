@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { seedConfidence } from '../engine/__fixtures__/seed';
+import { FX_DAY, marketAt, SEED as MARKET_SEED, seedConfidence } from '../engine/__fixtures__/seed';
 import sql from '../../supabase/migrations/20261017000300_seed_andina.sql?raw';
 import { bogotaDay } from '../engine/checks';
 import type { Env } from '../env';
@@ -25,9 +25,9 @@ const send = vi.mocked(sendEmail);
 const addDays = (day: string, n: number) => new Date(Date.parse(`${day}T00:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
 interface SeedRow { nn: string; source: string; expected_outcome: string; prev_month?: boolean; issue: number | null; due: number | null; raw_text: string | null; fields: object }
 // The seed SQL's rows and date rule (see decide.test.ts), as `invoices` rows of company `companyId`.
-function seedInvoices(companyId: string, only?: string[]) {
+function seedInvoices(companyId: string, only?: string[], seed = SEED) {
   const start = Date.parse(`${bogotaDay(NOW).slice(0, 7)}-01T00:00:00-05:00`);
-  return (SEED.invoices as SeedRow[]).filter((r) => !only || only.includes(r.nn)).map((r) => {
+  return (seed.invoices as SeedRow[]).filter((r) => !only || only.includes(r.nn)).map((r) => {
     const received_at = new Date(r.prev_month ? start - 5 * 864e5 : start + ((Date.parse(NOW) - start) * Number(r.nn)) / 30).toISOString();
     const day = bogotaDay(received_at);
     return {
@@ -40,11 +40,11 @@ function seedInvoices(companyId: string, only?: string[]) {
 const company = (id: string, is_demo = false) => [
   { id, approver_email: `juan.perez@${id}.example`, is_demo },
 ];
-const workspace = (id: string, opts: { demo?: boolean; only?: string[] } = {}) => ({
+const workspace = (id: string, opts: { demo?: boolean; only?: string[] } = {}, seed = SEED) => ({
   companies: company(id, opts.demo),
-  policies: [{ company_id: id, version: 1, name: 'Política general', rules: SEED.rules }],
-  beneficiaries: SEED.beneficiaries.map((b: object, n: number) => ({ ...b, id: `${id}-b${n}`, company_id: id })),
-  invoices: seedInvoices(id, opts.only),
+  policies: [{ company_id: id, version: 1, name: 'Política general', rules: seed.rules }],
+  beneficiaries: seed.beneficiaries.map((b: object, n: number) => ({ ...b, id: `${id}-b${n}`, company_id: id })),
+  invoices: seedInvoices(id, opts.only, seed),
 });
 const decisionsOf = (invoiceId: string) => db.tables.decisions!.filter((d) => d.invoice_id === invoiceId);
 const insertCalls = () => db.rpcs.filter((r) => r.name === 'insert_decision');
@@ -120,6 +120,99 @@ describe('runAgent (D22, AC-61)', () => {
     for (const inv of db.tables.invoices!) expect([inv.id, decisionsOf(String(inv.id)).map((d) => d.outcome)]).toEqual([inv.id, [inv.expected_outcome]]);
     expect(insertCalls()).toHaveLength(29); // every committed amount was right first time: no STALE_PERIOD
     expect(ai.run).not.toHaveBeenCalled(); // seeded fields are already read
+  });
+});
+
+// AC-73, AC-74, R-85: the agent fetches a currency whose newest stored rate is not from today (UTC), once per call and per
+// currency, through the provider chain; "Reevaluar" never fetches. Recorded fixtures only, never the network (R-94).
+describe('consulta: market rates (AC-73, AC-74)', () => {
+  const yahooCop = { chart: { result: [{ meta: { regularMarketPrice: 3170.68 } }] } }; // the 17 Oct fixture value
+  let net: ReturnType<typeof vi.fn>;
+  const market = (o: { yahoo?: () => Response } = {}) => {
+    net = vi.fn(async (u: RequestInfo | URL) => (String(u).includes('yahoo') ? o.yahoo?.() ?? new Response(JSON.stringify(yahooCop))
+      : new Response('down', { status: 503 })));
+    vi.stubGlobal('fetch', net);
+  };
+  afterEach(() => vi.unstubAllGlobals());
+  // Two COP invoices (#07 retainer, #08 over the limit) with no pinned rate: the demo's policy (AC-75).
+  const cop = (rates: Array<Record<string, unknown>> = []) => {
+    const w = workspace('A', { demo: true, only: ['07', '08'] });
+    db = fakeDb({ ...w, policies: [{ ...w.policies[0], rules: { ...SEED.rules, fx_rates: {} } }], fx_latest: rates });
+  };
+  const moneda = (id: string) => (decisionsOf(id)[0]!.checks as Array<{ id: string; verdict: string; values: Record<string, unknown> }>).find((c) => c.id === 'moneda')!;
+  const yesterday = { day: '2026-10-16', currency: 'COP', usd_per_unit: 0.0003, source: 'Yahoo Finance', fetched_at: '2026-10-16T11:00:00.000Z' };
+
+  it('two COP invoices and no row for today: one fetch, one stored row, both decided on it', async () => {
+    market();
+    cop();
+    const b = new Budget(Infinity);
+    await runAgent(deps(b), 'A', 'pending', 'manual');
+    expect(net).toHaveBeenCalledOnce();
+    expect(db.tables.fx_rates).toEqual([{ day: '2026-10-17', currency: 'COP', usd_per_unit: 0.00031538976, source: 'Yahoo Finance', fetched_at: '2026-10-17T15:00:00.000Z' }]);
+    for (const id of ['A-07', 'A-08']) expect(moneda(id)).toMatchObject({ verdict: 'cumple', values: { rate: 0.00031538976, rate_source: 'Yahoo Finance' } });
+    expect(b.used).toBe(5 + 1 + 1 + 1 + 4 + 4); // run, stored rates, the Yahoo call, the upsert, two invoices: all counted (AC-70)
+  });
+  it('a row from today is used as stored: no fetch', async () => {
+    market();
+    cop([{ ...yesterday, day: '2026-10-17', fetched_at: '2026-10-17T11:00:00.000Z' }]);
+    await runAgent(deps(), 'A', 'pending', 'manual');
+    expect(net).not.toHaveBeenCalled();
+    expect(moneda('A-07').values).toMatchObject({ rate: 0.0003, rate_fetched_at: '2026-10-17T11:00:00.000Z' });
+  });
+  it('Reevaluar never fetches: yesterday\'s row (28 h) is used; no row at all escalates with Moneda no_verificado', async () => {
+    market();
+    cop([yesterday]);
+    await runAgent(deps(), 'A', 'pending', 'reevaluate');
+    expect(moneda('A-07')).toMatchObject({ verdict: 'cumple', values: { rate: 0.0003 } });
+    cop();
+    await runAgent(deps(), 'A', 'pending', 'reevaluate');
+    expect([decisionsOf('A-07')[0]!.outcome, moneda('A-07').verdict]).toEqual(['ESCALAR', 'no_verificado']);
+    expect(net).not.toHaveBeenCalled();
+  });
+  it('a pinned currency is never fetched', async () => {
+    market();
+    db = fakeDb(workspace('A', { demo: true, only: ['07'] })); // the old seed policy pins COP
+    await runAgent(deps(), 'A', 'pending', 'manual');
+    expect(net).not.toHaveBeenCalled();
+    expect(moneda('A-07').values.rate_source).toBe('policy');
+  });
+  it('every provider failing: nothing stored, the invoice escalates on Moneda, no throw', async () => {
+    market({ yahoo: () => new Response('Too Many Requests', { status: 429 }) });
+    cop();
+    // #08 is over the limit at any rate, but with no USD amount the limit cannot be checked: ESCALAR, never a guess (D15)
+    expect(await runAgent(deps(), 'A', 'pending', 'manual')).toMatchObject({ ESCALAR: 2, FRENAR: 0, errors: 0 });
+    expect(net).toHaveBeenCalledTimes(2); // Yahoo, then er-api; not again for the second COP invoice
+    expect(db.tables.fx_rates ?? []).toEqual([]);
+    expect(moneda('A-08').verdict).toBe('no_verificado');
+  });
+  it('an invoice read by the model in a currency whose rates no longer fit: the read is spent, the invoice stays pending', async () => {
+    market();
+    cop();
+    const inv = db.tables.invoices!.find((i) => i.id === 'A-07')!;
+    const read: Record<string, unknown> = { ...(inv.fields as Record<string, unknown>), subtotal: null, tax: null };
+    read.confidence = Object.fromEntries(Object.keys(read).filter((k) => k !== 'confidence' && k !== 'subtotal' && k !== 'tax').map((k) => [k, 0.95]));
+    Object.assign(inv, { fields: null, raw_text: 'Contadores Andinos S.A.S. Factura CA-5521. Total: COP 3.673.500. Davivienda corriente 4569-8812-0034' });
+    ai.run.mockImplementationOnce(async () => ({ response: read }) as never);
+    const b = new Budget(4 + 1 + 4 + 1 + 3); // reads, the model read, an attempt and the run row fit; rates 1 + fetch 3 do not
+    expect(await runAgent(deps(b), 'A', ['A-07'], 'manual')).toMatchObject({ errors: 0, remaining: 1 });
+    expect([ai.run.mock.calls.length, net.mock.calls.length, decisionsOf('A-07')]).toEqual([1, 0, []]);
+  });
+  it('the 000600 seed on today\'s stored market rates: 15 PAGAR, 3 FRENAR, 11 ESCALAR, no fetch, no model call (AC-75, AC-10)', async () => {
+    market();
+    const rows = Object.values(marketAt('2026-10-17T11:00:00.000Z')).map((r) => ({ ...r, day: FX_DAY }));
+    const v2 = { ...MARKET_SEED, beneficiaries: MARKET_SEED.beneficiaries.map((b: { agreement: object }) => ({ ...b, agreement: { ...b.agreement, valid_until: '2027-10-17' } })) };
+    const w = workspace('A', { demo: true }, v2);
+    db = fakeDb({ ...w, fx_latest: rows });
+    expect(await runAgent(deps(), 'A', 'pending', 'reset')).toEqual({ PAGAR: 15, FRENAR: 3, ESCALAR: 11, errors: 0, remaining: 0, cursor: null });
+    for (const inv of db.tables.invoices!) expect([inv.id, decisionsOf(String(inv.id)).map((d) => d.outcome)]).toEqual([inv.id, [inv.expected_outcome]]);
+    expect([net.mock.calls.length, ai.run.mock.calls.length]).toEqual([0, 0]);
+  });
+  it('a fetch that does not fit the budget leaves the invoice for the next call', async () => {
+    market();
+    cop();
+    const first = await runAgent(deps(new Budget(12)), 'A', 'pending', 'manual'); // 4 reads, then rates 1 + fetch 3 + attempt 4 + run row 1 = 9 > 8 left
+    expect(first).toMatchObject({ remaining: 2, cursor: expect.any(String) });
+    expect([net.mock.calls.length, decisionsOf('A-07')]).toEqual([0, []]);
   });
 });
 

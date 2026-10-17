@@ -10,6 +10,7 @@ export interface Env {
   SES_REGION: string;
   DEMO_EMAIL: string;
   APP_URL?: string;
+  FX_PROVIDER?: string; // 'yahoo' (default) or 'er-api': the first provider of the FX chain (AC-73)
   // secrets (wrangler secret put)
   AWS_SES_ACCESS_KEY_ID: string;
   AWS_SES_SECRET_ACCESS_KEY: string;

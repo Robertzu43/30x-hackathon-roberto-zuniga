@@ -572,6 +572,42 @@ describe('policy (AC-30, AC-31, R-14, R-41)', () => {
   });
 });
 
+// AC-73, AC-74, R-85.6: the preview uses the stored market rates and never fetches (R-61: it equals "Reevaluar").
+describe('policy preview on market rates (AC-74, R-85)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it.each([
+    ['a row from today', 'PAGAR', [{ day: '2026-10-17', currency: 'COP', usd_per_unit: 0.000245, source: 'Yahoo Finance', fetched_at: '2026-10-17T11:00:00Z' }]],
+    ['no row', 'ESCALAR', []],
+  ])('with %s, a pending COP invoice would be %s; nothing fetched', async (_, to, rates) => {
+    const net = vi.fn(async () => new Response('{}'));
+    vi.stubGlobal('fetch', net);
+    db = testDb({ ...workspace(['07']), fx_latest: rates });
+    const out = await json<{ would_change: Row[] }>(await call('PUT', '/api/policy', { rules: { ...SEED.rules, fx_rates: {} } }));
+    expect(out.would_change.map((w) => [w.invoice_id, w.to])).toEqual([[uid('A-07'), to]]);
+    expect(net).not.toHaveBeenCalled();
+  });
+});
+
+// AC-76's contract, served by Task 21: the newest row per currency, sorted, with 1 USD in units and freshness (48 h).
+describe('GET /api/fx (AC-73, AC-76)', () => {
+  const row = (currency: string, usd_per_unit: number, fetched_at: string, source = 'Yahoo Finance') =>
+    ({ day: fetched_at.slice(0, 10), currency, usd_per_unit, source, fetched_at });
+  it('answers the provider and the stored rates, newest per currency, sorted by currency, with their UTC day (AC-73 QA)', async () => {
+    db = testDb({ fx_latest: [row('MXN', 0.054115482, '2026-10-17T11:00:00Z'), row('COP', 0.00031538976, '2026-10-14T11:00:00Z', 'open.er-api.com')] });
+    const r = await call('GET', '/api/fx');
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({ provider: 'yahoo', rates: [
+      { currency: 'COP', day: '2026-10-14', usd_per_unit: 0.00031538976, units_per_usd: 3170.68, source: 'open.er-api.com', fetched_at: '2026-10-14T11:00:00Z', stale: true },
+      { currency: 'MXN', day: '2026-10-17', usd_per_unit: 0.054115482, units_per_usd: 18.479, source: 'Yahoo Finance', fetched_at: '2026-10-17T11:00:00Z', stale: false },
+    ] });
+  });
+  it('names er-api when FX_PROVIDER says so; empty table -> no rates; no session -> 401', async () => {
+    db = testDb();
+    expect(await json(await call('GET', '/api/fx', undefined, 'tok-a', { ...env, FX_PROVIDER: 'er-api' }))).toEqual({ provider: 'er-api', rates: [] });
+    expect((await call('GET', '/api/fx', undefined, null)).status).toBe(401);
+  });
+});
+
 describe('beneficiaries (AC-33)', () => {
   const pixel = { name: 'Pixel Lab', country: 'CO', currency: 'USD', bank_account: 'Banco de Bogotá ahorros 112-45009-8', route: 'Transferencia COP',
     category: 'Diseño', agreement: { type: 'one_off' } };

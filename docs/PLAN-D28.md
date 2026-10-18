@@ -904,4 +904,175 @@ From D45 (R-173): the two film cut times above move to 12:00Z and 13:00Z; the 14
 - ~07:30-08:00Z: 59 is reviewed and merged. If 58 has not merged by then, 58 rebases onto 59 before its review.
 - 09:30Z: if part 4 is not merged, take R-177's fallback.
 - 10:00Z: the last merge of 59's parts.
-- 10:30Z: the last product deploy, then QA items a-d.
+- 10:30Z: the last product deploy, then QA items a-d. (From D47, R-188: the last product merge is 10:45Z and the "D47" deploy follows before 11:00Z; Task 59's own clock does not change.)
+
+# D47: Tasks 60-62 (product, 18 Oct ~06:30Z)
+
+> Roberto's D47 (~06:10Z): "el tutorial no tiene bien sombreadas las secciones … este tutorial es para quien va a usar la app … AWS Bedrock es un detalle extra; al principio no me gusta el lema; tenemos que revisar todos los copies, revisar la anchura del design en web; debemos también usar Playwright".
+>
+> The ACs are AC-117..AC-122 in `docs/SPEC.md` section 13i. The rulings are R-181..R-188, and Q24 and Q25 are in `docs/QUESTIONS.md`. The copy deck is `docs/COPY.md`; product wrote it, and it is done. Where this section and a ruling differ, the ruling wins.
+
+## Binding order and rules
+- Order:
+  1. Task 58 (D45) and Task 59 merge first, and deploy "D45" as planned (~09:00Z). They keep priority on every seat.
+  2. Task 60 starts at the first free seat. It works on new files until it rebases.
+  3. Task 61 starts once 58 and 59 have merged, or earlier if a seat frees, rebasing onto both.
+  4. Last product merge 10:45Z, then the "D47" deploy before 11:00Z.
+  5. Task 62, 11:00-12:00Z.
+  6. «PRODUCT READY FOR FILM» (ledger line, by the orchestrator).
+  7. Task 37 (re-record) and the D46 film's walkthrough capture.
+  8. Task 38 and the merge to main (~15:00Z).
+- At most 3 agents at a time (the seat plan is below).
+- No migration and no Worker route. Task 60: web, i18n keys it owns, scripts. Task 61: copy only (AC-120's file list).
+- Never lower a bar. A never-cut part that misses 10:45Z stays an open FAIL in README «Lo que no está hecho» and in the ledger (R-188).
+- Budgets as always: 2 builder attempts, 2 reviewer passes, 2 QA runs per task. Task 62's QA run is QA run 1 for Tasks 60 and 61, and its re-check after the fix round is run 2.
+
+## Tasks
+
+**Task 60: Tour spotlight, KPI run state, width at 2560 (AC-117, AC-121, AC-122; R-182, R-186, R-187).** Seat: senior-builder, at the first free seat (expected ~06:30-06:45Z, when Task 57b's reviewer ends). Branch `r202610162341/task/60-d47-tour-kpi-width`, from `r202610162341/integration` at dispatch.
+- Phase A, now. New files only, so there are no conflicts with 58 or 59:
+  - `web/components/spotlight.ts`: pure geometry, with no DOM writes.
+    - `hole(targetRect, p)`, clamped to the viewport.
+    - `cutsText(lineRects, hole)`, true when a line box straddles an edge.
+    - `placeCard(hole, cardSize, viewport, topBar)`: tries below, above, right, then left, keeps ≥ 8 px from the hole, and returns `null` when nothing fits. `null` means the target must be re-anchored.
+    - Tests in `web/spotlight.test.ts`.
+  - `scripts/ux-tour.mjs`: the gate rows `4.target`, `4.spot`, `4.textcut`, `4.dim`, `4.cover`, `4.keys` and `2.kpistate`, plus the 2560 band expectations for `1.band`. Tests in `scripts/ux-tour.test.mjs`: one failing fixture per row (AC-117 and AC-122 Evidence), plus the fixed fixture passing.
+  - Estimate: 0.75 h.
+- Phase B, after Task 59 has merged: rebase, then the KPI run state (AC-121).
+  - `web/charts/Kpi.tsx`: a `busy` text that replaces the value and the hint in the same box. The aria-label is «<label>: Decidiendo… n de m».
+  - `web/dashboard/Dashboard.tsx` and `web/pages/Inbox.tsx`: pass `{ n, m }` from the first-login pass (read from `web/firstRun.tsx`; do not change its logic) or from the «Ejecutar agente» run.
+  - (b) `web/pages/Period.tsx`: the same state on Autonomía and «Decisiones explicadas» while this tab's run is in progress.
+  - Keys `dash.kpi.deciding` and `entry.deciding`, exactly as in `docs/COPY.md` «Owned by Task 60».
+  - Tests: `web/dashboard/Dashboard.test.tsx`, `web/Inbox.test.tsx`, `web/Period.test.tsx`.
+  - Estimate: 0.5 h.
+- Phase C, after Task 58 has merged: rebase, then the tour and the gate.
+  - `web/components/Tour.tsx` and its CSS:
+    - one `data-tour-dim` layer with H cut out (the only `box-shadow` stays the spotlight's, AC-53);
+    - placement through `spotlight.ts`;
+    - scroll into view before a step is shown;
+    - re-placement on scroll, resize and data refresh (R-144);
+    - Escape, the arrow keys, the focus trap, and focus back on «Ver tutorial»;
+    - keep 58's «Paso n de m», dots and R-105's bottom-pinned card.
+  - Anchors (R-182): move the `data-tour` attributes to the AC-117 targets. The files are `web/dashboard/InvoiceTable.tsx` (or wherever the «Facturas» header lives), `web/pages/Policy.tsx`, `web/pages/Beneficiaries.tsx`, `web/pages/Period.tsx`, and `web/tour-steps.ts` if a selector changes. Any anchor that is substituted is named in the report.
+  - `scripts/ux-gate.mjs`, a few lines only:
+    - register the `ux-tour` rows;
+    - 2560 in the layout widths, with `HEIGHT[2560] = 1440`, for D45's layout rows only (R-187);
+    - the 7 tour steps screenshotted at 390, 1440 and 1920, in es and en.
+  - `web/Tour.test.tsx`.
+  - Estimate: 1 h.
+- Keep:
+  - AC-115 (label, dots), AC-112..AC-116 at every width, AC-42's tour behaviour (R-78, R-105, R-144, R-161);
+  - the slow-data `entry` CLS ≤ 0.01 (R-176);
+  - the approved palette (AC-53 Clarified): the dim colour is an existing value with an alpha;
+  - no tour library, and the D40 JS budget.
+- Checks before the report:
+  - `npm run lint && npm run typecheck && npm test && npm run build`;
+  - `npx vitest run scripts web`;
+  - on a local Worker (`scripts/qa-server.sh`):
+    - gate `tour` at the six widths, es and en;
+    - `trial` with `2.kpistate` at 390 and 1440;
+    - `entry` slow-data mode;
+    - the layout rows at 1440, 1920 and 2560 for every screen and state of both experiences.
+  - Screenshots committed under `docs/ux/`: the 42 tour files and the `-2560-` files.
+- Report:
+  - the p used;
+  - the anchor per step, with any substitution;
+  - per step at 390 and 1920, the intersection (0) and the gap;
+  - the tile heights before, during and after the pass;
+  - the 2560 band x and width for `demo` and `inbox`;
+  - the cuts taken, if any, and at which checkpoint.
+- Review: one code reviewer before the merge. Findings are reported at ≥ 95 and cite AC-117, AC-121, AC-122 or a CLAUDE.md rule. The fresh UX reviewer runs in Task 62, on the deployed URL (R-188).
+- Merge: by 10:45Z. Whichever of 60 and 61 merges second rebases.
+- Estimate: 2.25 h build, plus 0.5 h gate and 0.5 h review.
+
+**Task 61: Apply the copy deck (AC-118, AC-119, AC-120; R-183..R-185).** Seat: junior-builder, at the first free seat once Tasks 58 and 59 have merged (expected ~09:00Z). If a seat frees earlier, it starts and rebases onto both before its review. Branch `r202610162341/task/61-d47-copy`.
+- Source of truth: `docs/COPY.md`. Apply every P1 row, then the P2 rows. Never write a string that is not in the deck. A wording question goes to product.
+- Files:
+  - `src/i18n/features/brand.ts` (new: `brand.headline`, `brand.subline`, `brand.descriptor`, `brand.built_for`, es and en);
+  - `src/i18n/es.ts` and `src/i18n/en.ts` (remove `app.tagline`);
+  - in `src/i18n/features/`: `auth.ts`, `ask.ts`, `policy.ts`, `demo.ts`, `dashboard.ts` (P2 `dash.search` only; `dash.kpi.deciding` is Task 60's), `period.ts`, `delivery.ts`, `trial.ts`, `approve.ts`, `portal.ts` (P2).
+  - Key references only:
+    - `web/App.tsx`: top bar → `brand.descriptor`;
+    - `web/pages/Demo.tsx`: h1 → `brand.headline`, a `<p>` with `brand.subline` right after it, footer → `{app.name} · {brand.built_for}`;
+    - `web/pages/Login.tsx`: lead → `brand.subline`;
+    - `web/components/Tour.tsx`: remove the line that renders `tour.inbox.loop`.
+  - `README.md` and `docs/SUBMISSION.md`, per the deck's «README and SUBMISSION».
+  - Text selectors in `scripts/perf.mjs`, `scripts/ux-gate.mjs`, `scripts/record-happy-path.mjs` and `e2e/*`, only where they find a changed text: «Detalle de decisión», «Cómo trabaja», the old /demo h1.
+- Tests, red first:
+  - `src/i18n/copy.test.ts` parses `docs/COPY.md` (AC-120). It fails on today's dictionaries.
+  - `src/i18n/onboarding.test.ts` holds the AC-118 regex, the length and sentence checks, and the allow-list scan. It fails today on `tour.inbox.body`, `ask.label` and `policy.fx.source`.
+  - Then the dictionaries and key references. Then update the expectations in `web/Tour.test.tsx`, `web/Demo.test.tsx`, `web/Login.test.tsx`, `web/Logo.test.tsx`, `web/App.test.tsx`, `web/AskThesaurus.test.tsx`, `web/Policy.test.tsx`, `web/Period.test.tsx`, `web/Approve.test.tsx` and `portal/src/app.test.ts`. Brand values are imported from `brand.ts`, never retyped.
+- Checks before the report:
+  - `npm run lint && npm run typecheck && npm test && npm run build`;
+  - `npx vitest run src/i18n web portal scripts`;
+  - the greps in AC-118 and AC-119;
+  - on a local Worker, the gate rows `5.locale` and the i18n-key pattern on `login`, `demo`, `tour`, `inbox`, `detail-pagar`, `ask`, `policy`, `period`, `approve` and `portal`, at 390 and 1440, es and en.
+- Report: the P1 rows (all), the P2 rows applied or cut, the renamed selectors, and the `git diff --stat`.
+- Review: one code reviewer. The diff touches only AC-120's file list. Component changes are key references only. Every P1 row matches the deck.
+- Merge: by 10:45Z. P2 rows not built by 10:15Z are cut (R-188, cut 1) and named in the ledger.
+- Estimate: 1 h build, plus 0.25 h gate and 0.25 h review.
+
+**Task 62: "D47" deploy and verification; «PRODUCT READY FOR FILM» (AC-117..AC-122 on the deployed URL; AC-91).**
+- Deploy (the orchestrator, from integration, after 60 and 61 have merged and the full suite is green, before 11:00Z):
+  - `wrangler deploy` for the main Worker, and for `portal/` if the portal P2 row is in;
+  - then `node scripts/perf.mjs` for the `entry` and `/demo` rows (AC-97 and AC-107 stay PASS).
+- In parallel, 2 seats:
+  - A fresh `qa`, one run, on the deployed URL, against `docs/SPEC.md` only:
+    - the AC-117..AC-122 Evidence;
+    - regressions: AC-42 (tour, with the new step names), AC-45, AC-66 (amended), AC-107's `entry` rows, AC-112 at 1440 and 1920, AC-114 (hero video), AC-83 (portal greeting and send at 390).
+  - A fresh UX reviewer (`design-taste-frontend` and `minimalist-ui`, never a builder):
+    - runs the D38 gate on the deployed URL for both experiences, with 2560 for the layout rows;
+    - reads the tour screenshots, the 1440, 1920 and 2560 screenshots, and every visible string against the deck's «Voice»;
+    - each failed item blocks (D38).
+- One fix round (senior-builder, at most 45 min): only the failing rows and items, as CSS, copy or anchors. No new feature. These are failing-test fixes, which FREEZE allows. Then a redeploy, and a QA re-check of the failed items only (QA run 2).
+- Then the orchestrator writes «PRODUCT READY FOR FILM» in the ledger. Target 12:00Z, hard 12:30Z (R-188). Anything still failing is ledgered as an open FAIL and listed in README «Lo que no está hecho».
+
+## Shared files (whichever merges second rebases)
+| File | Order |
+|---|---|
+| `web/components/Tour.tsx`, its CSS, `web/tour-steps.ts`, `web/Tour.test.tsx` | 58 → 60; 61 removes one line (60 ↔ 61, second rebases) |
+| `scripts/ux-gate.mjs` | 57b, 58, 59 → 60 (Task 61 only renames text selectors) |
+| `web/charts/Kpi.tsx`, `web/dashboard/Dashboard.tsx`, `web/pages/Inbox.tsx`, `web/pages/Period.tsx` | 58 and 59 → 60 |
+| `web/firstRun.tsx` | 59 only (60 reads its state, does not edit it) |
+| `src/i18n/features/auth.ts` | 58 (`tour.count`), 59 (`login.verify`) → 61 (tour copy, login) |
+| `src/i18n/features/dashboard.ts`, `entry.ts` | 60 (`dash.kpi.deciding`, `entry.deciding`) ↔ 61 (`dash.search`): different keys |
+| `src/i18n/features/demo.ts`, `inbox.ts`, `portal.ts` | 58 (step-card keys) → 61 |
+| `web/App.tsx`, `web/pages/Demo.tsx`, `web/pages/Login.tsx` | 58 and 59 → 61 (key references); 60 only if the tour mount needs it |
+| `README.md`, `docs/SUBMISSION.md` | 35b → 58 (thumbnail) → 61 (top lines) → 37 / film (video lines) |
+
+## Seats (at most 3 agents; the launcher's film producer works outside these seats)
+| Window (UTC) | Seat 1 | Seat 2 | Seat 3 |
+|---|---|---|---|
+| 06:30-08:00 | Task 58 build and gate | Task 59 build, review, merge | Task 60 phase A (after 57b's reviewer ends) |
+| 08:00-09:00 | Task 58 code reviewer | Task 58 UX reviewer | Task 60 phase B (after 59 merged) |
+| 09:00-10:00 | QA for 58 + 59 on the "D45" deploy | Task 61 | Task 60 phase C (after 58 merged) |
+| 10:00-10:45 | Task 60 reviewer | Task 61 reviewer | a builder fix for 60 or 61, if needed |
+| 10:45-11:00 | the orchestrator: full suite, deploy "D47" | | |
+| 11:00-12:00 | Task 62 QA | Task 62 UX reviewer | Task 62 fix round (after findings) |
+| 12:00-13:30 | Task 37 (re-record) | | |
+| ~14:30-15:00 | Task 38 (final QA happy path), merge to main | | |
+
+## Clock (UTC; FREEZE 11:00Z; upload deadline 17:00Z)
+- 06:30Z: `docs/COPY.md`, SPEC 13i, this section and Q24/Q25 are written (product). The orchestrator commits them.
+- ~06:30-06:45Z: Task 60 is dispatched (phase A).
+- ~08:00Z: 59 merged; Task 60 phase B.
+- ~09:00Z: 58 merged; "D45" deploy; Task 60 phase C; Task 61 is dispatched.
+- 09:45Z checkpoint: if Task 58 has not merged, Task 60 takes cuts 2 and 3 (AC-121 (b), AC-117's arrow keys).
+- 10:15Z checkpoint: Task 61 stops starting new P2 rows (cut 1).
+- 10:45Z: the last product merge. 10:45-11:00Z: the "D47" deploy.
+- 11:00-12:00Z: Task 62. 12:00Z target, 12:30Z hard: «PRODUCT READY FOR FILM».
+- 12:00-13:30Z: Task 37, and the film's walkthrough capture (D46, the launcher's producer).
+- ~15:00Z (16:00Z at the latest): Task 38 and the merge to main.
+
+## Cut order (R-188)
+1. AC-120's P2 rows.
+2. AC-121 (b), Periodo.
+3. AC-117's arrow keys (Escape and the focus trap stay).
+4. AC-122 at 2560 for the screens that are not band screens.
+
+Never cut:
+- AC-117: its targets, `4.target`, `4.spot`, `4.textcut`, `4.dim`, `4.cover`, Escape, the focus trap and the 42 screenshots;
+- AC-118 and AC-119;
+- AC-120's P1 rows;
+- AC-121 (a);
+- AC-122 on the band screens.

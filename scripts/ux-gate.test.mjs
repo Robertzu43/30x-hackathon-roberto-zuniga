@@ -800,6 +800,7 @@ describe('entry: the hand-over into Bandeja (AC-109, AC-91 Clarified)', () => {
   it('slow mode passes the same bar when the name slot is reserved from first paint', async () => {
     const rs = await run(entry('reserved'), { kind: 'entry', door: 'login', width: 390, opts: { dicts: DICTS, shots: false, slow: true } });
     expect(status(rs, '4.cls'), JSON.stringify(rs)).toBe('pass');
+    expect(new Set(rs.map((r) => r.screen))).toEqual(new Set(['entry'])); // main() reports a screen's rows by its id: a renamed screen's failures would never be counted
   }, 60_000);
   it('is N/A, never a pass or a fail, while no transition exists', async () => {
     const rs = await go('instant');

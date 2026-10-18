@@ -592,7 +592,7 @@ export async function runCell(browser, job) {
 // N/A while the app starts no transition (neither a View Transition nor an animation on the login or demo page).
 async function runEntry(browser, { base, screen, door, width, lang, run, opts = {} }) {
   const rows = [];
-  const add = (r) => wanted(opts.only, r.id) && rows.push({ screen: opts.slow ? `${screen.id}-slow` : screen.id, width, lang, ...r });
+  const add = (r) => wanted(opts.only, r.id) && rows.push({ screen: screen.id, width, lang, ...r });
   const context = await browser.newContext({ viewport: { width, height: HEIGHT[width] ?? 800 }, deviceScaleFactor: width <= 390 ? 2 : 1, hasTouch: width <= 390, locale: lang === 'es' ? 'es-CO' : 'en-US' });
   try {
     const page = await context.newPage();
@@ -846,7 +846,7 @@ export async function main(argv) {
     for (let c = cells[next++]; c; c = cells[next++]) {
       const r = await runCell(browser, { ...c, base, opts });
       rows.push(...r);
-      console.log(`${c.screen.id}${c.state ? '-' + c.state : ''} ${c.width}/${c.lang} ${c.kind}: ${r.filter((x) => x.status === 'fail').length} failed`);
+      console.log(`${c.screen.id}${c.state ? '-' + c.state : ''} ${c.width}/${c.lang} ${c.kind}: ${r.filter((x) => x.status === 'fail').length} failed${opts.slow ? `, ${c.door} CLS ${r.find((x) => x.id === '4.cls')?.value}` : ''}`);
     }
   };
   await Promise.all(Array.from({ length: JOBS }, worker));
@@ -857,7 +857,7 @@ export async function main(argv) {
   for (const exp of new Set(picked.map((s) => s.exp))) {
     const sections = {};
     for (const r of agg) if (picked.find((s) => s.exp === exp && (r.screen === s.id || s.states?.some((st) => r.screen === cellLabel(s, st))))) (sections[r.screen] ??= []).push(r);
-    if (!only) {
+    if (!only && !opts.slow) { // a slow run is a probe: it prints its failures and leaves the gate document as it was
       mkdirSync(join(ROOT, 'docs/ux'), { recursive: true });
       writeGate(join(ROOT, 'docs/ux', `gate-${exp}.md`), exp, sections, base);
     }

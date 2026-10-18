@@ -79,11 +79,13 @@ export const screens = {
 // tab drops it all (request above, withField.send), and so does another signed-in user (App calls cacheOwner as it renders).
 const cache = new Map<string, unknown>();
 const inflight = new Map<string, Promise<unknown>>();
+const prefetched = new Map<string, number>(); // R-177: key -> when a hover prefetched it; the screen's next load takes that answer, once
 let era = 0; // an answer that left before a drop is never cached after it
 let owner: string | undefined;
 export const dropCache = () => {
   cache.clear();
   inflight.clear();
+  prefetched.clear();
   era++;
 };
 export const cacheOwner = (uid: string | undefined) => {
@@ -121,6 +123,9 @@ export function load<T>(path: string): Promise<T> {
   const key = keyOf(path);
   const at = era;
   let p = inflight.get(key) as Promise<T> | undefined;
+  const used = (prefetched.get(key) ?? 0) + 10_000 > Date.now(); // a prefetch from the last 10 s is this load's request (R-177)
+  prefetched.delete(key);
+  if (!p && used && cache.has(key)) return Promise.resolve(cache.get(key) as T);
   if (!p) {
     const door = handed?.key === key ? (handed.answer as Promise<T>) : undefined;
     if (door) handed = undefined;
@@ -135,7 +140,9 @@ export function load<T>(path: string): Promise<T> {
 
 /** Hover or focus on a nav link (AC-100): fetch the screen's data unless this tab already holds it. */
 export const prefetch = (path: string) => {
-  if (!cache.has(keyOf(path))) load(path).catch(() => {}); // the screen asks again and shows its own error
+  if (cache.has(keyOf(path))) return;
+  load(path).catch(() => {}); // the screen asks again and shows its own error
+  prefetched.set(keyOf(path), Date.now());
 };
 
 type Shown<T> = { key: string; data?: T; error?: unknown };

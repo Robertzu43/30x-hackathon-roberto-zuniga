@@ -154,6 +154,7 @@ test('signing in without touching the language toggle writes no language to the 
 
 // Task 32b (AC-80, AC-81): the logo is the heading; the brand name is not stacked twice.
 test('the heading is the Thesaurus logo, shown once', () => {
+  sessionStorage.setItem('logo-intro:login', '1'); // the intro has played (AC-108): the static logo is under test
   setup();
   const h1 = screen.getByRole('heading', { level: 1, name: 'Thesaurus' });
   expect(h1.querySelector('img')?.getAttribute('src')).toBe('/brand/thesaurus-logo.svg');

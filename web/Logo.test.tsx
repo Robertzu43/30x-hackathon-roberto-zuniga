@@ -12,6 +12,7 @@ beforeEach(() => mockApi({ 'GET /api/invoices': [], 'GET /api/agent/last-run': n
 
 // AC-80: Login (full-bleed), /demo (full-bleed) and the approve page (inside the top bar) each show the Thesaurus logo.
 test.each(['/login', '/demo', '/approve/abc'])('%s shows the Thesaurus logo as an SVG image', async (at) => {
+  for (const s of ['login', 'demo']) sessionStorage.setItem(`logo-intro:${s}`, '1'); // the intro has played: this is the static logo
   renderAt(<App />, { at });
   const logo = await screen.findByRole('img', { name: 'Thesaurus' });
   expect(logo.getAttribute('src')).toBe('/brand/thesaurus-logo.svg');
@@ -82,4 +83,16 @@ test('the stylesheet animates only transform and opacity and has a reduced-motio
   const css = text('web/components/logo-intro.css');
   expect([...css.matchAll(/@keyframes[^{]+\{([\s\S]*?\n\})/g)].join('')).not.toMatch(/\b(top|left|width|height|margin)\s*:/);
   expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*animation: none/);
+});
+
+// AC-108 mounts: the intro plays on the first visit of each screen in a tab, the static logo shows on the second.
+test.each(['login', 'demo'])('/%s plays the intro on the first visit and shows the static logo on the second', async (screenName) => {
+  const first = renderAt(<App />, { at: `/${screenName}` });
+  expect(await screen.findByRole('img', { name: 'Thesaurus' })).toBeTruthy();
+  expect(first.container.querySelector('.logo-word')).not.toBeNull();
+  first.unmount();
+  const second = renderAt(<App />, { at: `/${screenName}` });
+  const logo = await screen.findByRole('img', { name: 'Thesaurus' });
+  expect(second.container.querySelector('.logo-word')).toBeNull();
+  expect(logo.getAttribute('src')).toBe('/brand/thesaurus-logo.svg');
 });

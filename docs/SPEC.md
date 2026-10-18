@@ -1239,6 +1239,16 @@ These guardrails do not move:
   - If a call of the pass fails, the pass stops. RunProgress shows the response's `error` text (AC-70), the rows stay «Pendiente», and the cron decides them later. Bandeja stays usable.
 - The tour starts on landing (AC-42 Clarified, R-144).
 - If a time misses: R-141's first lever is pre-authorised in Task 52. That means running `/api/company` beside the screen request, or folding the company name into the screen payload. The binding table is the one in AC-97.
+- Clarified (R-150, after QA E5a, 18 Oct): how the four doors are held to 2 s.
+  - Each door is graded raw from the QA sandbox: `perf.mjs` median of 3 under 2.000 ms, and QA's own median over at least 10 runs under 2.000 ms. Nothing is subtracted for the network.
+  - The sign-in starts on click, never on pointerdown or page load, and nobody is signed in before they click.
+  - Allowed levers:
+    - the inbox payload carries only what Bandeja draws;
+    - the one screen request starts when the sign-in resolves;
+    - the Inbox chunk is prefetched after `/demo` or `/login` is usable;
+    - one retry on a 5xx from a screen GET or `/api/demo/overview`.
+  - A run that ends on «No pude cargar las facturas…» fails.
+  - `perf.mjs` reports the sign-in, gap, request, server-time (`Server-Timing`), byte and `/api/health` baseline columns as INFO.
 
 Evidence:
 - `npx vitest run web/Login.test.tsx web/Trial.test.tsx web/Demo.test.tsx web/Inbox.test.tsx web/AgentActivity.test.tsx`, plus a test file for the pass's own module:
@@ -1897,6 +1907,32 @@ Rulings folding D42 (product, 17 Oct, ~23:00Z; Roberto's decision, so these amen
   - Principle: scope, in Roberto's stated order (D42 (1), then (2), then (3)), and company-can-deploy-Monday.
   - Loser's best argument: "D42 is Roberto's newest word; the intro and transition should outrank every D39 screen, since he asked for them tonight".
 
+Ruling on the demo door's entry time after QA E5a (product, 18 Oct ~01:20Z; a product question, not a dispute; nobody was asked):
+- **R-150 The demo door reaches 2 s through levers that keep behaviour. Nothing is accepted, and nothing is signed in before the click (AC-107 Clarified, AC-97 target 5).** Option (a), without the pointerdown sign-in. (b), (c) and (d) are rejected.
+  - Evidence first: the demo user's `/api/screen/inbox` takes 0.67-0.86 s server-side for 51 KB, against 0.23-0.34 s for a trial user. Most of the miss is our payload and our waterfall, not the QA network.
+  - The levers, all built in Task 52c. The order is the priority if the attempt budget runs out:
+    1. Trim the inbox payload. `/api/screen/inbox` carries only what Bandeja draws: the table, the dashboard, «Actividad del agente» and the count line. Long decision texts that Detalle already loads with `GET /api/invoices/:id` are left out. Project in the Worker route first. If the demo user's server time is still over 400 ms, a `create or replace` of `screen_inbox` may follow, and it keeps every key that a web or Worker file reads.
+    2. Start the screen request as soon as the sign-in resolves, at the same time as the route change and the chunk load. The door puts the one `GET /api/screen/inbox` in flight, and Inbox uses that same promise. That is still one data request (AC-98), held in the tab's memory and never in a shared cache (R-122).
+    3. Prefetch the Inbox chunk on `/demo` and `/login` once the page is usable (idle), and on hover or focus of a door. Because it starts after the page is usable, AC-97 target 4 (JS bytes before usable) does not change.
+    4. Retry once, after about 300 ms, on a 5xx from `GET /api/screen/inbox` or `GET /api/demo/overview`, keeping the skeleton. Only a second failure shows «No pude cargar las facturas…» with «Reintentar». Only GETs are retried, never a POST. The builder reads the cause of the 500 and the 503 from the Worker logs and puts it in the report.
+  - Rejected:
+    - Sign-in on pointerdown. It starts a sign-in the person has not confirmed: dragging off the button cancels the click but not the sign-in. In a tab with a trial session, it would switch users before R-119's warning can show. Keyboard users gain nothing, and it moves work before R-146's t0, so the measurement looks better while the juror waits just as long.
+    - (b) Signing in before the click. Every visitor to `/demo`, plus every crawler, gate and perf run, would hold the shared demo session without being asked. The public, read-only `/demo` (AC-45) would no longer be a page with no account, and R-119 protects a trial session already in the tab. It also moves the wait before t0.
+    - (c) Showing Bandeja from the public overview. «Nueva factura» and the row actions would stay disabled until the session arrives, so the page is not usable (AC-97 target 5, condition 4). It would also add a second render path for the same screen, and a click in the gap would do nothing.
+    - (d) Accepting the time. D42 (1)'s 2 s is Roberto's number, and product cannot waive it. It is reconsidered only at FREEZE under R-149, if every lever is in and the row still misses. In that case README «Velocidad» states the measured numbers with this breakdown.
+  - The number. `entry demo` is graded like the other three doors: raw, from the QA sandbox, median of 3 in `perf.mjs`, under 2.000 ms (R-146). Nothing is subtracted for the network. A juror's network is unknown, and the sandbox is the only evidence we have. It is slow, so a pass there is a pass on a typical laptop, and the reverse would not hold.
+  - Also reported (INFO, never PASS or FAIL). For each `entry` row, `perf.mjs` records:
+    - the sign-in call in ms;
+    - the gap from the sign-in response to the start of the screen request;
+    - the screen request in the browser;
+    - the server time, from a `Server-Timing: app;dur=<ms>` header that the Worker adds on `/api/screen/inbox`;
+    - the response size in bytes;
+    - a baseline: the median of 5 `GET /api/health` round trips from the sandbox.
+    QA does the same by hand.
+  - QA. QA runs at least 10 demo-door entries and reports the median and how many runs took 2 s or more. AC-107 passes on the demo door when the `perf.mjs` row passes and QA's own median is under 2.000 ms. A run that ends on the error page counts as a failed run. A run that recovers through the retry counts with its full time.
+  - Principle: evidence (the measured breakdown points at our payload), then the company's actual user (a juror is never signed in without clicking).
+  - Loser's best argument, (b): "pre-signing on /demo load makes the door click a pure navigation, the only way to make 2 s certain on any network; the demo user is shared and public anyway".
+
 ---
 
 ## Task to AC map
@@ -1974,6 +2010,7 @@ Rulings folding D42 (product, 17 Oct, ~23:00Z; Roberto's decision, so these amen
 | 51 D39 Política cards + diff list | AC-105, AC-91 (gate: `policy`) |
 | 35b README + SUBMISSION refresh | AC-49 / AC-51 Clarified (D41 doors, «Para el jurado», «Velocidad», SES verified identity, not-done items) |
 | 52 D42 entry speed: land first, the pass on Bandeja | AC-107, AC-92 Amended, AC-40 Amended, AC-42 Clarified (tour on landing, stable anchors), AC-78 Clarified, AC-99 Clarified, AC-91 (gate: `login`, `login-password`, `demo`, `trial`, `inbox`) |
+| 52c Demo door under 2 s (R-150) + QA E5a defects | AC-107 Clarified, AC-97 target 5, AC-98, AC-99 Clarified, AC-91 item 4, AC-95 (R-135), AC-109 (CLS) |
 | 52b D42 perf entry rows + gate timing | AC-97 Clarified (targets 5 and 6), AC-91 Clarified (`trial` through the pass, `login`/`demo` after the intro, `entry`) |
 | 53 D42 wordmark intro | AC-108, AC-80 (final frame), AC-91 (gate: `login`, `demo`) |
 | 54 D42 transition into the app | AC-109, AC-42 Clarified (tour after the transition), AC-91 (gate: `entry`) |

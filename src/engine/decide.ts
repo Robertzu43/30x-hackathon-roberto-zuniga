@@ -11,6 +11,10 @@ const FRENAR_ON: readonly CheckId[] = ['duplicado_exacto', 'limite_pago'];
 
 const passes = (c: Check) => c.verdict === 'cumple' || (!!c.overridden && HUMAN_OVERRIDABLE.includes(c.id));
 
+// A directory hit counts only when it is the payee the engine already trusted. A low-confidence name is not a payee.
+const trustedBeneficiary = (payee: string | null, beneficiary: Beneficiary | null): Beneficiary | null =>
+  payee && beneficiary && C.nameKey(beneficiary.name) === C.nameKey(payee) ? beneficiary : null;
+
 // Fixed consequence table (D15, AC-17): FRENAR wins; PAGAR only when all 13 checks are present and pass.
 export function outcomeOf(checks: Check[]): Outcome {
   if (checks.some((c) => c.verdict === 'no_cumple' && FRENAR_ON.includes(c.id))) return 'FRENAR';
@@ -31,11 +35,12 @@ function conclude(checks: Check[], amount_usd: number | null, invoice: Invoice, 
 export function decide(read: Invoice, beneficiary: Beneficiary | null, rules: PolicyRules | null, period: PeriodState, now: string,
   market: MarketRates = {}): Decision {
   const invoice = { ...read, fields: C.validFields(read.fields) }; // R-71: every check sees only trusted fields
+  const payee = trustedBeneficiary(invoice.fields.payee_name, beneficiary);
   const { amount, currency } = invoice.fields;
   const fx = C.pickRate(currency, rules, market, now);
   const amountUsd = amount === null || !currency || fx.rate === null ? null : toUsd(amount, currency, { [currency]: fx.rate });
-  const ctx: C.CheckContext = { invoice, beneficiary, rules, period, now, amountUsd, fx };
-  return conclude(CHECK_IDS.map((id) => C[id](ctx)), amountUsd, invoice, beneficiary);
+  const ctx: C.CheckContext = { invoice, beneficiary: payee, rules, period, now, amountUsd, fx };
+  return conclude(CHECK_IDS.map((id) => C[id](ctx)), amountUsd, invoice, payee);
 }
 
 // Human approval (R-02, R-21, R-22): every check re-runs fresh; only the given ids that still fail and are
@@ -44,8 +49,9 @@ export function decideWithOverrides(
   overridden: CheckId[], by: { email: string; channel: 'link' | 'dashboard' },
   invoice: Invoice, beneficiary: Beneficiary | null, rules: PolicyRules | null, period: PeriodState, now: string, market: MarketRates = {},
 ): Decision {
-  const d = decide(invoice, beneficiary, rules, period, now, market);
+  const payee = trustedBeneficiary(C.validFields(invoice.fields).payee_name, beneficiary);
+  const d = decide(invoice, payee, rules, period, now, market);
   const checks = d.checks.map((c) => (c.verdict !== 'cumple' && overridden.includes(c.id) && HUMAN_OVERRIDABLE.includes(c.id)
     ? { ...c, overridden: { by: by.email, channel: by.channel } } : c));
-  return conclude(checks, d.amount_usd, invoice, beneficiary);
+  return conclude(checks, d.amount_usd, invoice, payee);
 }

@@ -2,7 +2,7 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useT } from '../i18n';
-import OutcomeChip, { type Outcome } from './OutcomeChip';
+import { OutcomeChip, type Outcome } from './OutcomeChip';
 import { tu } from './User';
 
 export type RuleKey = 'allowed_beneficiaries_only' | 'per_payment_limit_usd' | 'approval_threshold_usd' | 'period_budget_usd' | 'account_balance_usd' | 'duplicate_window_days' | 'agreement_tolerance_pct' | 'due_grace_days';

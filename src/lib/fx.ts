@@ -28,7 +28,7 @@ async function getJson(f: typeof fetch, url: string): Promise<unknown> {
 }
 
 // One request per currency: one bad answer (429, garbage) loses only that currency.
-export const yahoo = (f: typeof fetch): FxProvider => ({
+const yahoo = (f: typeof fetch): FxProvider => ({
   name: 'yahoo',
   fetchRates: async (currencies) => (await Promise.all(currencies.map(async (c) => {
     try {
@@ -43,7 +43,7 @@ export const yahoo = (f: typeof fetch): FxProvider => ({
 });
 
 // One request for every currency.
-export const erApi = (f: typeof fetch): FxProvider => ({
+const erApi = (f: typeof fetch): FxProvider => ({
   name: 'er-api',
   async fetchRates(currencies) {
     const j = await getJson(f, 'https://open.er-api.com/v6/latest/USD') as { rates?: Record<string, unknown> };

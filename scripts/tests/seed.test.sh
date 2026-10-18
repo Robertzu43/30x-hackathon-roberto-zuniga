@@ -213,7 +213,8 @@ is "select count(*) from public.invoices where archived" 0 "a refused reset arch
 sql -c "update public.companies set is_demo = true where id = '$CB'" >/dev/null || fail "mark B demo"
 as "$UA" "insert into public.beneficiaries (company_id, name, bank_account) values ('$CA', 'Pixel Lab', 'x'); update public.beneficiaries set bank_account = 'otra' where name = 'Laura Méndez'; insert into public.policies (company_id, version, name, rules) values ('$CA', 2, 'Juez', '{\"per_payment_limit_usd\": 1000}')" >/dev/null || fail "judge edits"
 # R-69: decisions present (PAGAR, ESCALAR, FRENAR); the reset (security definer) still archives every one of them
-OK=$(printf '{"id":"c%s","verdict":"cumple"},' $(seq 1 13)); OK="[${OK%,}]"
+IDS='lectura beneficiario_permitido beneficiario_cuenta acuerdo duplicado_exacto duplicado_probable limite_pago umbral_aprobacion presupuesto_periodo saldo_cuenta vencimiento periodo moneda'
+OK=$(for id in $IDS; do printf '{"id":"%s","verdict":"cumple"},' "$id"; done); OK="[${OK%,}]"
 for o in "01 PAGAR $OK" "02 ESCALAR []" "03 FRENAR []"; do set -- $o
   sql -c "select public.insert_decision(md5('$CA' || '$1')::uuid, (public.period_state('$CA', current_date, md5('$CA' || '$1')::uuid) ->> 'committed_usd')::numeric, '{\"outcome\":\"$2\",\"actor\":\"agent\",\"amount_usd\":0,\"checks\":$3}', 0)" >/dev/null || fail "seed decision $2"; done
 is "select count(distinct invoice_id) from public.decisions where company_id = '$CA'" 3 "three decided seed invoices"

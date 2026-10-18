@@ -8,7 +8,7 @@ import type { Env } from '../env';
 import type { Lang } from '../i18n';
 import { Budget, must, userClient, type Db } from './supabase';
 
-export type AuthUser = Pick<User, 'id' | 'email' | 'is_anonymous' | 'user_metadata'>;
+type AuthUser = Pick<User, 'id' | 'email' | 'is_anonymous' | 'user_metadata'>;
 type Vars = { user: AuthUser; lang: Lang; db: Db; budget: Budget };
 export type AuthEnv = { Bindings: Env; Variables: Vars };
 export type AppEnv = { Bindings: Env; Variables: Vars & { companyId: string } };

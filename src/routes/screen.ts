@@ -96,7 +96,7 @@ export function periodOf(month: string, { current, directory, policy, seeded, de
 
 // AC-101's dashboard (R-124) on `today`'s Bogotá day, from screen_inbox's rows. Money is AC-44's: Autonomía and Pagado come
 // from periodOf, so Bandeja and Periodo cannot disagree.
-export function dashboardOf(rows: InboxRow[], p: PeriodRows, day: string) {
+function dashboardOf(rows: InboxRow[], p: PeriodRows, day: string) {
   const month = day.slice(0, 7);
   const { autonomy, autonomy_pct } = periodOf(month, p);
   const { read, shown } = fieldsOf(p.decisions);
@@ -131,7 +131,7 @@ export function dashboardOf(rows: InboxRow[], p: PeriodRows, day: string) {
 }
 
 // AC-103's charts (R-124) for periodOf's `period` of `month`, nothing drawn after `day` (no projection).
-export function chartsOf(period: ReturnType<typeof periodOf>, p: TimedRows, day: string) {
+function chartsOf(period: ReturnType<typeof periodOf>, p: TimedRows, day: string) {
   const { month, budget_usd: budget, paid_usd: paid, committed_usd: committed, count_by_outcome } = period;
   const committedOn = new Map<string, number>();
   for (const r of p.current) {
@@ -165,7 +165,7 @@ export function chartsOf(period: ReturnType<typeof periodOf>, p: TimedRows, day:
 }
 
 // AC-104's profile: the invoices the AC-19 name rule matches to `b` (R-63, as Periodo groups them), oldest first in p.current.
-export function beneficiaryOf(b: Beneficiary, p: PeriodRows, month: string) {
+function beneficiaryOf(b: Beneficiary, p: PeriodRows, month: string) {
   const { read, shown } = fieldsOf(p.decisions);
   const key = nameKey(b.name);
   const mine = p.current.filter((r) => key && nameKey(read(r)?.payee_name ?? null) === key);

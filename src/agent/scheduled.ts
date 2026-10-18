@@ -9,7 +9,7 @@ import { Budget, must, SUBREQUESTS } from '../lib/supabase';
 import { FIRST_INVOICE, runAgent } from './loop';
 import { recorder } from './record';
 
-export const FX_CRON = '0 11 * * *'; // 06:00 Bogotá (wrangler.toml [triggers])
+const FX_CRON = '0 11 * * *'; // 06:00 Bogotá (wrangler.toml [triggers])
 
 // The daily market rates (AC-73, R-85.7): the five currencies plus every currency pinned in a company's latest policy,
 // once each through the provider chain, upserted by record.ts. Decides nothing and writes no agent_runs row.

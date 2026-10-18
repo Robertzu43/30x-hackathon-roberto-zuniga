@@ -2,6 +2,8 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { expect, test } from 'vitest';
 import { Route, Routes } from 'react-router-dom';
 import { routes } from './App';
+import { FIRST_RUN } from './firstRun';
+import { useT } from './i18n';
 import Login from './pages/Login';
 import { currentSession } from './test/supabase';
 import { fakeAuth, mockApi, renderAt, signedInAs } from './test/utils';
@@ -16,6 +18,9 @@ function setup() {
     { at: '/login' },
   );
   return fetchMock;
+}
+function Lang() {
+  return <p>{`bandeja ${useT().lang}`}</p>;
 }
 const runCalls = (f: ReturnType<typeof mockApi>) => f.mock.calls.filter(([u, i]) => u === '/api/invoices/run' && i?.method === 'POST');
 
@@ -66,21 +71,58 @@ test('a wrong code shows "Código incorrecto o vencido" and runs nothing', async
   expect(screen.queryByText('bandeja')).toBeNull();
 });
 
-test('a valid code decides pending invoices once, then opens Bandeja (AC-40)', async () => {
+test('a valid code opens Bandeja at once and leaves the first-run flag; the login screen runs nothing (AC-40 Amended, AC-107)', async () => {
   const fetchMock = setup();
   await sendEmail();
   enterCode('123456');
   expect(await screen.findByText('bandeja')).toBeTruthy();
   expect(fakeAuth.verifyOtp).toHaveBeenCalledWith({ email: 'ana@empresa.co', token: '123456', type: 'email' });
-  expect(runCalls(fetchMock)).toHaveLength(1);
+  expect(runCalls(fetchMock)).toHaveLength(0); // the shell runs the pass after landing (web/firstRun.tsx)
+  expect(sessionStorage.getItem(FIRST_RUN)).toBe('1');
 });
 
-test('Bandeja still opens when the agent run fails (the 5-minute cron decides them later)', async () => {
-  mockApi({ 'POST /api/invoices/run': new Response('{"error":"x"}', { status: 500 }) });
-  renderAt(<Routes><Route path="/login" element={<Login />} /><Route path="/" element={<p>bandeja</p>} /></Routes>, { at: '/login' });
+test('«Entrar» is disabled, aria-busy and reads «Entrando…» while the code is checked (AC-107, AC-91 item 4)', async () => {
+  let release: (v: { data: unknown; error: Error | null }) => void = () => {};
+  fakeAuth.verifyOtp.mockImplementationOnce(() => new Promise((r) => (release = r)));
+  setup();
   await sendEmail();
   enterCode('123456');
-  expect(await screen.findByText('bandeja')).toBeTruthy();
+  const busy = screen.getByRole('button', { name: 'Entrando…' }) as HTMLButtonElement;
+  expect([busy.disabled, busy.getAttribute('aria-busy')]).toEqual([true, 'true']);
+  await waitFor(() => expect(fakeAuth.verifyOtp).toHaveBeenCalledOnce());
+  release({ data: {}, error: new Error('Token has expired or is invalid') });
+  expect(await screen.findByText('Código incorrecto o vencido')).toBeTruthy();
+});
+
+// AC-107: nothing but the sign-in call blocks the landing, not the language write, not the pass.
+const returning = async () => { // a returning user whose saved language is es
+  signedInAs('ana@empresa.co', { lang: 'es' });
+  fakeAuth.onAuthStateChange.mock.calls.forEach(([cb]) => cb('SIGNED_IN', currentSession()));
+  return { data: { session: currentSession() }, error: null };
+};
+test.each([
+  ['the code door', async () => {
+    fakeAuth.verifyOtp.mockImplementationOnce(returning);
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'ana@empresa.co' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send code' }));
+    fireEvent.change(await screen.findByLabelText('6-digit code'), { target: { value: '123456' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+  }],
+  ['the password door', async () => {
+    fakeAuth.signInWithPassword.mockImplementationOnce(returning);
+    withPassword('ana@empresa.co', 'secreta-123', ['Sign in with password', 'Email', 'Password', 'Sign in']);
+  }],
+])('%s lands on Bandeja while the language write and the pass never answer, in the language just picked (AC-107, AC-41)', async (_, enter) => {
+  fakeAuth.updateUser.mockImplementationOnce(() => new Promise(() => {}));
+  const f = mockApi({ 'POST /api/invoices/run': () => new Promise(() => {}) });
+  renderAt(<Routes><Route path="/login" element={<Login />} /><Route path="/" element={<Lang />} /></Routes>, { at: '/login' });
+  fireEvent.click(screen.getByRole('button', { name: 'English' }));
+  await enter();
+  expect(await screen.findByText('bandeja en')).toBeTruthy();
+  await new Promise((r) => setTimeout(r, 20)); // the saved language arriving with the session does not win over the click
+  expect(screen.getByText('bandeja en')).toBeTruthy();
+  expect(fakeAuth.updateUser).toHaveBeenCalledWith({ data: { lang: 'en' } });
+  expect(runCalls(f)).toHaveLength(0);
 });
 
 test('"English" switches the screen without reload and is remembered (AC-41)', async () => {
@@ -110,40 +152,9 @@ test('signing in without touching the language toggle writes no language to the 
   expect(fakeAuth.updateUser).not.toHaveBeenCalled();
 });
 
-test('while the first run is going, the screen counts the invoices decided so far, then opens Bandeja when the cursor is null', async () => {
-  let finish: (v: unknown) => void = () => {};
-  const bodies: unknown[] = [];
-  mockApi({
-    'POST /api/invoices/run': (init: RequestInit) => {
-      bodies.push(init.body);
-      return bodies.length === 1
-        ? { PAGAR: 5, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 24, cursor: 'c1' }
-        : new Promise((r) => (finish = r));
-    },
-  });
-  renderAt(<Routes><Route path="/login" element={<Login />} /><Route path="/" element={<p>bandeja</p>} /></Routes>, { at: '/login' });
-  await sendEmail();
-  enterCode('123456');
-  expect(await screen.findByText('Decidiendo tus facturas pendientes… 5 de 29')).toBeTruthy();
-  expect(screen.queryByText('bandeja')).toBeNull();
-  finish({ PAGAR: 24, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null });
-  expect(await screen.findByText('bandeja')).toBeTruthy();
-  expect(bodies).toEqual([undefined, '{"cursor":"c1"}']);
-});
-
-test('an error in the middle of the loop still opens Bandeja', async () => {
-  let n = 0;
-  mockApi({
-    'POST /api/invoices/run': () => (n++ === 0 ? { PAGAR: 1, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 3, cursor: 'c1' } : new Response('{"error":"x"}', { status: 503 })),
-  });
-  renderAt(<Routes><Route path="/login" element={<Login />} /><Route path="/" element={<p>bandeja</p>} /></Routes>, { at: '/login' });
-  await sendEmail();
-  enterCode('123456');
-  expect(await screen.findByText('bandeja')).toBeTruthy();
-});
-
 // Task 32b (AC-80, AC-81): the logo is the heading; the brand name is not stacked twice.
 test('the heading is the Thesaurus logo, shown once', () => {
+  sessionStorage.setItem('logo-intro:login', '1'); // the intro has played (AC-108): the static logo is under test
   setup();
   const h1 = screen.getByRole('heading', { level: 1, name: 'Thesaurus' });
   expect(h1.querySelector('img')?.getAttribute('src')).toBe('/brand/thesaurus-logo.svg');
@@ -174,13 +185,14 @@ test('«Entrar con contraseña» is secondary; it opens an email + password form
   expect(screen.getByRole('button', { name: 'Enviar código' })).toBeTruthy();
 });
 
-test('email + password signs in with no code, decides what is pending once, then opens Bandeja (AC-95)', async () => {
+test('email + password signs in with no code and opens Bandeja at once, leaving the pass to the shell (AC-95, AC-107)', async () => {
   const fetchMock = setup();
   withPassword(' ana@empresa.co ', 'secreta-123');
   expect(await screen.findByText('bandeja')).toBeTruthy();
   expect(fakeAuth.signInWithPassword).toHaveBeenCalledWith({ email: 'ana@empresa.co', password: 'secreta-123' });
   expect(fakeAuth.signInWithOtp).not.toHaveBeenCalled();
-  expect(runCalls(fetchMock)).toHaveLength(1);
+  expect(runCalls(fetchMock)).toHaveLength(0);
+  expect(sessionStorage.getItem(FIRST_RUN)).toBe('1');
 });
 
 test.each([

@@ -94,6 +94,21 @@ test('"Entrar como Andina Labs" signs in with the config demo email and the publ
   expect(sessionStorage.getItem('demo-tour')).toBe('1'); // the click asks for the tour once (R-62)
 });
 
+test('«Entrar como Andina Labs» is busy at once («Entrando…», aria-busy) and lands with no first-login pass (AC-107)', async () => {
+  let release: (v: { data: unknown; error: Error | null }) => void = () => {};
+  fakeAuth.signInWithPassword.mockImplementationOnce(async (a) => { await new Promise((r) => (release = r)); return fakeAuth.verifyOtp({ email: a.email, token: '', type: 'email' }); });
+  const f = mockApi({ 'GET /api/demo/overview': overview, 'POST /api/invoices/run': () => new Promise(() => {}) });
+  app();
+  fireEvent.click(screen.getByRole('button', { name: 'Entrar como Andina Labs' }));
+  const busy = screen.getByRole('button', { name: 'Entrando…' }) as HTMLButtonElement;
+  expect([busy.disabled, busy.getAttribute('aria-busy')]).toEqual([true, 'true']);
+  await waitFor(() => expect(fakeAuth.signInWithPassword).toHaveBeenCalledOnce());
+  release({ data: {}, error: null });
+  expect(await screen.findByText('Bandeja abierta')).toBeTruthy();
+  expect(f.mock.calls.filter(([u]) => u === '/api/invoices/run')).toHaveLength(0);
+  expect(sessionStorage.getItem('first-run')).toBeNull(); // the shared demo runs no pass
+});
+
 test('a failed sign-in stays on /demo with a message', async () => {
   fakeAuth.signInWithPassword.mockResolvedValueOnce({ data: {}, error: new Error('Invalid login credentials') });
   mockApi({ 'GET /api/demo/overview': overview });

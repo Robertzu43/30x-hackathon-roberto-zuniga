@@ -1,18 +1,20 @@
+import type { Session } from '@supabase/supabase-js';
 import { useState, type FormEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '../api';
 import { useLeaveGuard } from '../components/LeaveTrialWarning';
-import Logo from '../components/Logo';
+import LogoIntro from '../components/LogoIntro';
 import { PasswordField } from '../components/SaveAccess';
 import TrialButton from '../components/TrialButton';
+import { markFirstRun } from '../firstRun';
 import { useT } from '../i18n';
-import { runUntilDone, type Progress } from '../runAgent';
 import type { Lang } from '../../src/i18n';
 import './login.css';
 
 
 /**
  * AC-40: email -> one-time code -> Bandeja. A language picked here is stored on the user once the code is accepted (AC-41).
+ * AC-107: Bandeja opens right after the sign-in call; the language write is not awaited and the shell runs the first-login pass.
  * The trial door is the primary (AC-92, R-120); «Enviar código» and «Entrar con contraseña» (AC-95) are secondary and warn
  * an unsaved trial first (AC-94, R-119).
  */
@@ -27,7 +29,6 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [deciding, setDeciding] = useState<Progress | null | false>(false);
   const [picked, setPicked] = useState<Lang | null>(null); // only a click on this screen counts as a choice
   const pick = (l: Lang) => { setPicked(l); setLang(l); };
   const { guard, warning } = useLeaveGuard();
@@ -51,50 +52,50 @@ export default function Login() {
     e.preventDefault();
     setBusy(true);
     setError('');
-    const { error } = await (await supabase()).auth
+    const { data, error } = await (await supabase()).auth
       .verifyOtp({ email: email.trim(), token: code, type: 'email' })
-      .catch((err: Error) => ({ error: err }));
+      .catch((err: Error) => ({ data: null, error: err }));
     if (error) {
       setBusy(false);
       return setError(t('login.wrong_code'));
     }
-    await signedIn();
+    signedIn(data?.session);
   };
 
   const signInPassword = async () => {
     setBusy(true);
     setError('');
-    const { error } = await supabase()
+    const { data, error } = await supabase()
       .then((sb) => sb.auth.signInWithPassword({ email: email.trim(), password }))
-      .catch((err: Error) => ({ error: err }));
+      .catch((err: Error) => ({ data: null, error: err }));
     if (error) {
       setBusy(false);
       const refused = error as { code?: string; status?: number }; // GoTrue: 400 invalid_credentials; a thrown fetch has neither
       return setError(t(refused.code === 'invalid_credentials' || refused.status === 400 ? 'account.wrong' : 'account.login_failed'));
     }
-    await signedIn();
+    signedIn(data?.session);
   };
   const submitPassword = (e: FormEvent) => {
     e.preventDefault();
     guard(() => void signInPassword());
   };
 
-  // After either sign-in (code or password).
-  const signedIn = async () => {
+  // After either sign-in (code or password): nothing else is awaited before Bandeja (AC-107).
+  const signedIn = (session?: Session | null) => {
     if (picked) {
-      await (await supabase()).auth.updateUser({ data: { lang: picked } }).catch(() => undefined);
-      setLang(picked); // the user's previously saved language may have been applied meanwhile; the choice just made wins
+      // AuthProvider applies the language saved on the user from this same session object: the choice just made is put
+      // there at once, so it shows now, and the write that stores it (AC-41) is fired, not awaited.
+      if (session) session.user.user_metadata = { ...session.user.user_metadata, lang: picked };
+      void supabase().then((sb) => sb.auth.updateUser({ data: { lang: picked } })).catch(() => undefined);
     }
-    // First login: decide what is pending, in budgeted calls (AC-70). A failure is not fatal: the 5-minute cron decides them (D23).
-    setDeciding(null);
-    await runUntilDone({ first: '/api/invoices/run', onProgress: setDeciding });
+    markFirstRun(); // the shell decides what is pending, in budgeted calls, after landing (AC-70)
     navigate(typeof from === 'string' ? from : '/', { replace: true });
   };
 
   return (
     <div className="login">
       <section className="login-intro">
-        <h1><Logo /></h1>{/* the logo is the wordmark: the name is shown once (AC-80) */}
+        <h1><LogoIntro screen="login" /></h1>{/* the logo is the wordmark: the name is shown once (AC-80) */}
         <p className="login-lead">{t('login.lead')}</p>
       </section>
       <section className="login-form">
@@ -109,7 +110,7 @@ export default function Login() {
               <label htmlFor="login-email">{t('login.email')}</label>
               <input id="login-email" type="email" autoComplete="email" required autoFocus value={email} onChange={(e) => setEmail(e.target.value)} />
               <PasswordField id="login-password" value={password} onChange={setPassword} autoComplete="current-password" />
-              <button type="submit" className="primary" disabled={busy}>{deciding !== false ? t('login.deciding', { n: deciding?.n ?? 0, m: deciding?.m ?? '…' }) : t(busy ? 'login.verifying' : 'login.verify')}</button>
+              <button type="submit" className="primary" disabled={busy} aria-busy={busy}>{t(busy ? 'entry.signing_in' : 'login.verify')}</button>
               <button type="button" className="link" onClick={() => { setWithPassword(false); setError(''); }}>{t('account.back')}</button>
             </form>
             {warning}
@@ -140,7 +141,7 @@ export default function Login() {
               value={code}
               onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
             />
-            <button type="submit" className="primary" disabled={busy}>{deciding !== false ? t('login.deciding', { n: deciding?.n ?? 0, m: deciding?.m ?? '…' }) : t(busy ? 'login.verifying' : 'login.verify')}</button>
+            <button type="submit" className="primary" disabled={busy} aria-busy={busy}>{t(busy ? 'entry.signing_in' : 'login.verify')}</button>
             <button type="button" className="link" onClick={() => { setSent(false); setCode(''); setError(''); }}>{t('login.other_email')}</button>
           </form>
         )}

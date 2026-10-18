@@ -64,7 +64,7 @@ try {
   const button = (name) => page.getByRole('button', { name, exact: true });
   const link = (name) => page.getByRole('link', { name });
   const h1 = page.getByRole('heading', { level: 1 });
-  const bandeja = async () => { await link('Bandeja').click(); await h1.filter({ hasText: 'Bandeja' }).waitFor(); await page.locator('.inbox-list li').first().waitFor(); };
+  const bandeja = async () => { await link('Bandeja').click(); await h1.filter({ hasText: 'Bandeja' }).waitFor(); await page.locator('.inbox-list tbody tr').first().waitFor(); };
 
   // 1. /demo: the pitch, the loop and the read-only inbox, then "Entrar como Andina Labs" and the tour.
   await page.goto(`${URL_}/demo`);
@@ -93,7 +93,7 @@ try {
   await scrollBy(page, 600);
   await beat(page, 1500);
   await scrollBy(page, -600);
-  await page.locator('.inbox-list li').nth(3).hover();
+  await page.locator('.inbox-list tbody tr').nth(3).hover();
   await beat(page, 1500);
 
   // 3. Upload 01.pdf: the seeded #01 is already paid, so the agent says FRENAR, exact duplicate.

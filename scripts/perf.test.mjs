@@ -2,7 +2,7 @@
 // The perf harness's own checks (AC-97): median, p95, gzip sum, the critical path and the table, on fixtures. No browser, no network.
 import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
-import { coloOf, criticalApis, gzSum, isHit, judge, median, missRow, navRows, p95, portalRows, PRIMARY, renderPerf, ROW0, usable } from './perf.mjs';
+import { admin, allDecided, coloOf, criticalApis, entryReady, entryRows, gzSum, isHit, judge, median, missRow, navRows, otpGuard, p95, portalRows, PRIMARY, renderPerf, ROW0, usable } from './perf.mjs';
 import { SCREENS } from './ux-gate.mjs';
 
 describe('statistics', () => {
@@ -162,5 +162,131 @@ describe('login readiness (AC-97 Clarified, AC-91 item 7)', () => {
   it('is not usable without a heading name', () => {
     dom(`<h1></h1>${door()}`);
     expect(usable({ sel: PRIMARY, need: true })).toBe(false);
+  });
+});
+
+describe('entry: the end of the interval, t1 (AC-97 target 5, R-146)', () => {
+  const ROW = (chip = 'chip-PAGAR') => `<tr data-tour="invoice-row"><td><span class="chip ${chip}">x</span></td></tr>`;
+  const bandeja = ({ rows = ROW(), table = null, nueva = '', run = '', path = '/', skeleton = false } = {}) => { // Inbox.tsx wraps the whole table section in div.skeleton while loading
+    const sec = `<section id="invoices">${table ?? `<table class="inbox-list"><tbody>${rows}</tbody></table>`}</section>`;
+    const w = new JSDOM(`<h1>Bandeja</h1><button data-tour="new-invoice" ${nueva}>Nueva factura</button><button data-tour="run-agent" ${run}>Ejecutar agente</button>
+      ${skeleton ? `<div class="skeleton" aria-hidden="true">${sec}</div>` : sec}`, { url: `https://x.test${path}` }).window;
+    w.Element.prototype.checkVisibility = () => true;
+    globalThis.document = w.document;
+    globalThis.location = w.location;
+    return w;
+  };
+  it('is usable when Bandeja is at / with its heading, rows from data and an enabled Nueva factura', () => {
+    bandeja();
+    expect(entryReady()).toBeGreaterThan(0);
+  });
+  it('a busy Ejecutar agente counts as usable (the first-login pass is running)', () => {
+    bandeja({ run: 'disabled aria-busy="true"' });
+    expect(entryReady()).toBeGreaterThan(0);
+  });
+  it('a skeleton table does not count', () => {
+    bandeja({ rows: ROW('chip-pending'), skeleton: true });
+    expect(entryReady()).toBe(false);
+  });
+  it('the designed empty state counts as a rendered table', () => {
+    bandeja({ table: '<p class="muted">Todavía no hay facturas.</p>' });
+    expect(entryReady()).toBeGreaterThan(0);
+  });
+  it('is not usable on /login, whatever it shows, nor while Nueva factura is disabled', () => {
+    bandeja({ path: '/login' });
+    expect(entryReady()).toBe(false);
+    bandeja({ nueva: 'disabled' });
+    expect(entryReady()).toBe(false);
+  });
+  it('is not usable while an entry transition is running, and is when it has ended', () => {
+    const w = bandeja();
+    w.document.getAnimations = () => [{ playState: 'running', effect: { pseudoElement: '::view-transition-group(root)' } }];
+    expect(entryReady()).toBe(false);
+    w.document.getAnimations = () => [{ playState: 'running', effect: { pseudoElement: null } }]; // a skeleton shimmer is not the transition
+    expect(entryReady()).toBeGreaterThan(0);
+  });
+  it('all decided needs rows and no Pendiente chip', () => {
+    bandeja({ rows: ROW() + ROW('chip-ESCALAR') });
+    expect(allDecided()).toBeGreaterThan(0);
+    bandeja({ rows: ROW() + ROW('chip-pending') });
+    expect(allDecided()).toBe(false);
+    bandeja({ rows: '' });
+    expect(allDecided()).toBe(false);
+  });
+});
+
+describe('entry rows (AC-97 targets 5 and 6, R-146)', () => {
+  const ok = (ms, pending = 0, decided = null) => ({ ms, pending, decided });
+  const otp = 'qa-perf-otp@example.com';
+  it('is the median of 3 under 2000 ms, and names the QA user and the kind of sample', () => {
+    const [r] = entryRows('entry otp', otp, [ok(1800, 11), ok(900), ok(1500)]);
+    expect(r).toMatchObject({ screen: 'entry otp', value: 1500, unit: 'ms', target: 2000 });
+    expect(r.metric).toContain(otp);
+    expect(r.metric).toContain('1 first login with pending invoices, 2 returning');
+    expect(judge(r.value, r.target, r.within)).toBe('PASS');
+  });
+  it('2000 ms is a FAIL', () => expect(judge(...(([r]) => [r.value, r.target, r.within])(entryRows('entry demo', 'shared demo user', [ok(2000), ok(2000), ok(2000)])))).toBe('FAIL'));
+  it('a sample that never became usable makes the row a FAIL carrying the reason', () => {
+    const md = renderPerf({ when: '2026-10-17T20:00:00.000Z', base: 'https://x.test', colo: '?', country: '?', rows: entryRows('entry password', 'qa-perf-password@example.com', [ok(900), { error: 'not usable in 15 s' }, ok(950)]) });
+    expect(md).toMatch(/\| entry password \| .* \| not measured \(not usable in 15 s\) \| under 2000 ms \| FAIL \|/);
+  });
+  it('the trial adds the 30 s row: median of 3 until every row is decided, at most 30000 ms', () => {
+    const rows = entryRows('entry trial', 'a new anonymous user per sample', [ok(900, 11, 18_000), ok(1000, 11, 30_000), ok(1100, 11, 25_000)]);
+    expect(rows.map((r) => r.screen)).toEqual(['entry trial', 'entry trial (all decided)']);
+    expect(rows[1]).toMatchObject({ value: 25_000, target: 30_000, within: true });
+    expect(judge(rows[1].value, rows[1].target, rows[1].within)).toBe('PASS');
+    const slow = entryRows('entry trial', 'u', [ok(900, 11, 31_000), ok(900, 11, 31_000), ok(900, 11, 20_000)])[1];
+    expect(judge(slow.value, slow.target, slow.within)).toBe('FAIL');
+  });
+  it('a pass that never finishes is a FAIL on the 30 s row, not a blank', () => {
+    const rows = entryRows('entry trial', 'u', [ok(900, 11, null), ok(900, 11, 20_000), ok(900, 11, 20_000)]);
+    expect(rows[1].value).toBeNull();
+    expect(rows[1].why).toMatch(/decided/);
+  });
+});
+
+describe('entry otp set-up (R-146)', () => {
+  const route = (method) => { const calls = []; return { calls, request: () => ({ method: () => method }), fulfill: async (o) => calls.push(['fulfill', o]), continue: async () => calls.push(['continue']), fallback: async () => calls.push(['fallback']), fetch: async () => calls.push(['fetch']) }; };
+  it('answers the browser\'s send-code POST itself, with a 200, and never lets it go upstream', async () => {
+    const r = route('POST');
+    await otpGuard(r);
+    expect(r.calls.map((c) => c[0])).toEqual(['fulfill']);
+    expect(r.calls[0][1].status).toBe(200);
+  });
+  it('answers the CORS preflight too', async () => {
+    const r = route('OPTIONS');
+    await otpGuard(r);
+    expect(r.calls.map((c) => c[0])).toEqual(['fulfill']);
+  });
+});
+
+describe('the Admin API helper (R-146)', () => {
+  const KEY = 'sb_secret_THE-SERVICE-KEY';
+  const fake = (replies) => { const calls = []; const f = async (url, init) => { calls.push({ url, method: init.method, body: init.body }); const [status, json] = replies.shift(); return { status, ok: status < 400, json: async () => json }; }; return { calls, f }; };
+  it('takes the code from generate_link and never deletes anything', async () => {
+    const { calls, f } = fake([[200, { email_otp: '123456', id: 'u1' }]]);
+    expect(await admin('https://s.test', KEY, f).code('qa-perf-otp@example.com')).toBe('123456');
+    expect(calls[0].url).toBe('https://s.test/auth/v1/admin/generate_link');
+    expect(calls.every((c) => c.method !== 'DELETE')).toBe(true);
+  });
+  it('creates a missing QA user; an existing one (422) is left alone', async () => {
+    const created = fake([[200, { id: 'u1' }]]);
+    await admin('https://s.test', KEY, created.f).ensure('qa-perf-otp@example.com');
+    expect(created.calls).toHaveLength(1);
+    expect(created.calls[0]).toMatchObject({ url: 'https://s.test/auth/v1/admin/users', method: 'POST' });
+    const exists = fake([[422, { error_code: 'email_exists' }]]);
+    await admin('https://s.test', KEY, exists.f).ensure('qa-perf-otp@example.com');
+    expect(exists.calls).toHaveLength(1);
+  });
+  it('sets the password through the user id, and only ever uses POST and PUT', async () => {
+    const { calls, f } = fake([[422, {}], [200, { email_otp: '1', id: 'u2' }], [200, {}]]);
+    await admin('https://s.test', KEY, f).ensure('qa-perf-password@example.com', 'random-pass');
+    expect(calls.map((c) => `${c.method} ${c.url.split('/admin/')[1]}`)).toEqual(['POST users', 'POST generate_link', 'PUT users/u2']);
+  });
+  it('never puts the service-role key in an error message', async () => {
+    const { f } = fake([[500, {}]]);
+    const err = await admin('https://s.test', KEY, f).code('x@example.com').catch((e) => e);
+    expect(err.message).toMatch(/HTTP 500/);
+    expect(err.message).not.toContain(KEY);
   });
 });

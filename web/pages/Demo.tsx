@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { isDemoUser, useSession } from '../auth';
 import { useLeaveGuard } from '../components/LeaveTrialWarning';
-import Logo from '../components/Logo';
+import LogoIntro from '../components/LogoIntro';
 import TrialButton from '../components/TrialButton';
 import { RunProgress, useRunAgent } from '../components/RunProgress';
 import { useT } from '../i18n';
@@ -84,14 +84,14 @@ export default function Demo() {
       </div>
 
       <header className="demo-hero">
-        <Logo />
+        <LogoIntro screen="demo" />
         <h1>{t('demo.title')}</h1>
         <div className="demo-problem">
           {[1, 2, 3].map((n) => <p key={n} data-testid="problem-line">{t(`demo.problem.${n}`)}</p>)}
         </div>
         <TrialButton />
         <div className="demo-actions">
-          <button type="button" disabled={entering} onClick={() => guard(() => void enter())}>{t(entering ? 'demo.entering' : 'demo.enter')}</button>
+          <button type="button" disabled={entering} aria-busy={entering} onClick={() => guard(() => void enter())}>{t(entering ? 'demo.entering' : 'demo.enter')}</button>
           <a href="/demo/happy-path.webm">{t('demo.video')} →</a>
           <a href={PORTAL}>{t('demo.portal')} →</a>
           {isDemoUser(session?.user, demoEmail) && (

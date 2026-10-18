@@ -215,8 +215,8 @@ export default function Policy() {
   const date = (s: string) => new Date(s).toLocaleDateString(locale, { dateStyle: 'medium' });
 
   return (
-    <section data-tour="policy" className="policy" data-band>
-      <div className="page-head" data-block>
+    <section className="policy" data-band>
+      <div className="page-head" data-block data-tour="policy">{/* AC-117: the h1 with its intro line */}
         <h1>{t('screen.policy')}</h1>
         <p className="muted">{t('policy.intro')}</p>
       </div>

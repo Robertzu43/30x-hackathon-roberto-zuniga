@@ -11,6 +11,8 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { judgeLayout, judgeTour, layoutMeasure, tourMeasure } from './ux-layout.mjs';
+import { judgeKeys, measureKeys, tourRows, WHAT_TOUR } from './ux-tour.mjs';
+import { anchor, tourSteps } from '../web/tour-steps.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
@@ -657,18 +659,30 @@ async function runEntry(browser, { base, screen, door, width, lang, run, opts = 
   }
 }
 
-// AC-115: every step of the tour, measured where the tour placed its card; screenshots at 390 and 1440.
+// AC-115 and AC-117: every step of the tour, measured where the tour placed its card, on the element this width lights (tour-steps.ts);
+// screenshots at 390, 1440 and 1920. Then 4.keys, from «Ver tutorial».
+const openTour = (page) => async () => {
+  await page.locator('[data-tour-opener]').click();
+  await page.waitForFunction(() => document.activeElement?.matches('.tour-card h2'), null, { timeout: 5000 }).catch(() => {});
+};
 async function walkTour(page, add, { width, lang, shots, dir }) {
+  // 2.primary's probe scrolled the page to the top under step 1, as a reader would: start the tour afresh, so each step is measured as shown.
+  await page.keyboard.press('Escape');
+  await openTour(page)();
   for (let i = 0; i < 7; i++) {
     await page.waitForSelector('.tour-card', { timeout: 10_000 }).catch(() => {});
     await sleep(900); // the card's entry and the scroll into the room settle
     const t = await page.evaluate(tourMeasure);
     add(judgeTour(t));
-    if (shots && [390, 1440].includes(width) && t) await page.screenshot({ path: join(dir, `tour-${t.step}-${width}-${lang}.png`) });
+    const step = tourSteps[i];
+    for (const r of await tourRows(page, { target: `[data-tour="${anchor(step, width)}"]` })) add({ ...r, measured: `${step.id}: ${r.measured}` });
+    if (shots && [390, 1440, 1920].includes(width)) await page.screenshot({ path: join(dir, `tour-${step.id}-${width}-${lang}.png`) });
     const next = page.locator('.tour-card button.primary');
     if (i === 6 || !(await next.count())) break;
     await next.click();
   }
+  await page.keyboard.press('Escape');
+  add(judgeKeys(await measureKeys(page, { open: openTour(page), opener: '[data-tour-opener]', steps: 7 })));
 }
 
 // Keyboard path to the primary action (focus ring, Enter), then the response within 100 ms (items 3 and 4).
@@ -746,7 +760,7 @@ export function aggregate(rows) {
     return { screen: g[0].screen, id: g[0].id, status, value: worst.value, measured: `${worst.measured} @${worst.width}/${worst.lang}`, cells: g.length, failing: failing.length, ...(Object.keys(users).length && { users }) };
   }).sort((a, b) => order(a.id).localeCompare(order(b.id)));
 }
-const WHAT = { '0.reach': 'screen opens', '1.scroll': 'no horizontal scroll', '1.offscreen': 'nothing off-screen', '1.clip': 'no clipped text', '1.edge': 'text inside its card', '1.overlap': 'no overlapping text', '1.tables': 'tables reflow or scroll', '2.targets': '44 px targets', '2.inputs': '16 px inputs', '2.primary': 'primary action in the lower 60%', '3.axe': 'axe: 0 serious or critical', '3.contrast': 'contrast AA', '3.focus': 'visible focus ring', '3.enter': 'Enter activates', '3.labels': 'inputs have labels', '3.lang': 'lang follows the language', '4.busy': 'busy within 100 ms', '4.loading': 'no blank while loading', '4.cls': 'CLS 0.01 or less', '4.state': 'designed state with next step', '5.words': 'no developer words', '5.mixed': 'one language per screen', '5.locale': 'numbers and dates in locale', '5.marker': 'data-user used for user data only', '6.palette': 'approved palette', '6.fonts': 'approved fonts', '6.logo': 'logo present', '6.reduced': 'logo at rest at first paint (reduced motion)', '6.console': 'no console errors', '6.images': 'SVG or 2x images', '6.primary_count': 'one primary button (reviewer)', '7.usable': 'usable in under 2 s', '7.longtask': 'no task over 300 ms', '1.band': 'one centred band (AC-112)', '1.cap': 'no cap under M (AC-112)', '1.fill': 'rows span the band (AC-112)', '1.measure': 'prose at most 70ch (AC-112)', '1.centred': 'reading column centred (AC-112)', '1.split': 'login split spans the screen, form centred in its panel (AC-112, R-196)', '1.grid': 'blocks side by side (AC-113)', '1.hero': 'video in the hero (AC-114)', '4.tourcover': 'tour card never covers its target (AC-115)', '6.cards': 'step-card grids (AC-116)' };
+const WHAT = { '0.reach': 'screen opens', '1.scroll': 'no horizontal scroll', '1.offscreen': 'nothing off-screen', '1.clip': 'no clipped text', '1.edge': 'text inside its card', '1.overlap': 'no overlapping text', '1.tables': 'tables reflow or scroll', '2.targets': '44 px targets', '2.inputs': '16 px inputs', '2.primary': 'primary action in the lower 60%', '3.axe': 'axe: 0 serious or critical', '3.contrast': 'contrast AA', '3.focus': 'visible focus ring', '3.enter': 'Enter activates', '3.labels': 'inputs have labels', '3.lang': 'lang follows the language', '4.busy': 'busy within 100 ms', '4.loading': 'no blank while loading', '4.cls': 'CLS 0.01 or less', '4.state': 'designed state with next step', '5.words': 'no developer words', '5.mixed': 'one language per screen', '5.locale': 'numbers and dates in locale', '5.marker': 'data-user used for user data only', '6.palette': 'approved palette', '6.fonts': 'approved fonts', '6.logo': 'logo present', '6.reduced': 'logo at rest at first paint (reduced motion)', '6.console': 'no console errors', '6.images': 'SVG or 2x images', '6.primary_count': 'one primary button (reviewer)', '7.usable': 'usable in under 2 s', '7.longtask': 'no task over 300 ms', '1.band': 'one centred band (AC-112)', '1.cap': 'no cap under M (AC-112)', '1.fill': 'rows span the band (AC-112)', '1.measure': 'prose at most 70ch (AC-112)', '1.centred': 'reading column centred (AC-112)', '1.split': 'login split spans the screen, form centred in its panel (AC-112, R-196)', '1.grid': 'blocks side by side (AC-113)', '1.hero': 'video in the hero (AC-114)', '4.tourcover': 'tour card never covers its target (AC-115)', '6.cards': 'step-card grids (AC-116)', ...WHAT_TOUR };
 const word = { pass: 'PASS', fail: 'FAIL', info: 'INFO', na: 'N/A' };
 // R-131: every text 5.mixed and 5.locale skipped, for the UX reviewer. Any listed product copy is a blocking finding.
 const excludedList = (users = {}) => LANGS.filter((l) => users[l]?.n).length

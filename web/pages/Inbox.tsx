@@ -91,7 +91,7 @@ export default function Inbox() {
   const mins = lastRun ? Math.floor((Date.now() - Date.parse(lastRun.at)) / 60_000) : 0;
 
   return (
-    <section className={held ? 'inbox inbox-held' : 'inbox'} data-tour="inbox" data-band>
+    <section className={held ? 'inbox inbox-held' : 'inbox'} data-band>
       <div className="inbox-top" data-block>
       <header className="inbox-head">
         <h1>{t('screen.inbox')}</h1>

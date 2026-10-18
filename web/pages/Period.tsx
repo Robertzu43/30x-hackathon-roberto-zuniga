@@ -61,7 +61,7 @@ export default function Period() {
   const usd = (n: number | null) => (n === null ? '—' : new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', currencyDisplay: 'code' }).format(n));
 
   return (
-    <section className="period" data-tour="period" data-band>
+    <section className="period" data-band>
       <div className="period-head" data-block>
       <h1>{t('screen.period')}</h1>
       <label>
@@ -98,6 +98,7 @@ export default function Period() {
               <p>{t('period.explained_why')}</p>
             </div>
           </div>
+          <div data-tour="period">{/* AC-117 target 7: the «Dinero del mes» block */}
           <h2 data-block>{t('period.money')}</h2>
           <dl className="period-money" data-block>
             {(['budget', 'balance', 'paid', 'committed', 'available'] as const).map((k) => (
@@ -107,6 +108,7 @@ export default function Period() {
               </div>
             ))}
           </dl>
+          </div>
           <h2 data-block>{t('period.outcomes')}</h2>
           <ul className="period-outcomes" data-block>
             {(['PAGAR', 'FRENAR', 'ESCALAR'] as const).map((o) => (

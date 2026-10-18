@@ -86,7 +86,7 @@ function TopBar({ onTour }: { onTour: () => void }) {
         </div>
         {session && (
           <>
-            <button type="button" onClick={onTour}>{t('topbar.tour')}</button>
+            <button type="button" data-tour-opener="" onClick={onTour}>{t('topbar.tour')}</button>{/* AC-117: focus comes back here */}
             {/* R-135: every user but the shared demo one; empty in its reserved one-line box until the name arrives (R-176) */}
             {!isDemoUser(session.user, demoEmail) && <span className="trial-company" title={company || undefined} data-user={company ? '' : undefined}>{company}</span>}
             {isTrial(session.user) ? ( // AC-94: an anonymous user has no email to show

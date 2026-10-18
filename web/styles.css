@@ -140,12 +140,16 @@ main { max-width: calc(var(--M) + 2 * var(--P)); margin: 0 auto; padding: 6rem v
   .login-intro { justify-content: flex-start; }
 }
 
-/* Tour (AC-42). The spotlight's inline style in Tour.tsx carries the only shadow in web/ (AC-53). */
+/* Tour (AC-42, AC-117). The lit area's inline shadow in Tour.tsx is the one dim layer and the only shadow in web/ (AC-53). */
 .tour { position: fixed; inset: 0; z-index: 1000; }
 .tour-waiting { background: rgba(0, 0, 0, 0.6); }
 /* R-78: the top bar (language, Ver tutorial, Cerrar sesión) stays on screen and clickable above the dim layer. */
 body:has(.tour) .topbar { position: sticky; top: 0; z-index: 1001; }
-.tour-spotlight { position: fixed; border-radius: var(--radius); pointer-events: none; }
+/* AC-91 item 4 under the tour: step 1 scrolls Bandeja down to its table while «Actividad del agente» above still reveals its steps.
+   Never anchor scrolling on that growing box, so the browser keeps what is on screen in place (no layout shift). */
+body:has(.tour) .activity-box { overflow-anchor: none; }
+/* AC-117 4.keys: the layer above spans the screen and the lit area takes the pointer, so nothing under the tour can be clicked. */
+.tour-spotlight { position: fixed; border-radius: 12px; pointer-events: auto; }
 .tour-card {
   position: fixed;
   left: 50%;
@@ -182,6 +186,10 @@ body:has(.tour) .topbar { position: sticky; top: 0; z-index: 1001; }
 .tour-dots { display: flex; gap: 0.375rem; margin: 0 0 0.75rem; }
 .tour-dots span { width: 6px; height: 6px; border-radius: 9999px; background: var(--line); }
 .tour-dots span.on { background: var(--accent); }
+/* AC-117 4.textcut: where Bandeja's buttons wrap under its h1, the line under them sits clear of their lit area (10 px), so its edge cuts no text. */
+@media (max-width: 400px) {
+  .inbox-actions { margin-bottom: 0.75rem; }
+}
 
 @media (prefers-reduced-motion: no-preference) {
   .tour-card { animation: tour-in 400ms cubic-bezier(0.16, 1, 0.3, 1); }

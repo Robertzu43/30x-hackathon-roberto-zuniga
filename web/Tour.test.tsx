@@ -1,17 +1,21 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react';
-import { expect, test, vi } from 'vitest';
+import { expect, onTestFinished, test, vi } from 'vitest';
 import { useState } from 'react';
 import { Route, Routes, useLocation } from 'react-router-dom';
 import Tour from './components/Tour';
 import { FirstRunProvider, markFirstRun } from './firstRun';
 import { useT } from './i18n';
-import { tourSteps } from './tour-steps';
+import { anchor, tourSteps } from './tour-steps';
+import InvoiceTable, { type Row } from './dashboard/InvoiceTable';
+import Policy from './pages/Policy';
+import Beneficiaries from './pages/Beneficiaries';
+import Period from './pages/Period';
 import { mockApi, renderAt, signedInAs } from './test/utils';
 
 const ALL = ['inbox', 'new-invoice', 'run-agent', 'invoice-row', 'policy', 'beneficiaries', 'period'];
 
 // Mocked DOM: every route renders the anchors in `present`, and prints where we are.
-function setup(present = ALL) {
+function setup(present = [...ALL, 'inbox-title', 'invoice-open']) { // + the phone anchors (tour-steps.ts)
   const onDone = vi.fn();
   function Page() {
     return (
@@ -23,6 +27,7 @@ function setup(present = ALL) {
   }
   renderAt(
     <>
+      <button type="button" data-tour-opener="">Ver tutorial</button>
       <Routes><Route path="*" element={<Page />} /></Routes>
       <Tour onDone={onDone} />
       <LangSwitch />
@@ -87,14 +92,48 @@ test('a step whose anchor is missing is skipped instead of breaking the tour', a
   expect(screen.queryByRole('heading', { name: 'Nueva factura' })).toBeNull();
 });
 
-test('the spotlight sits on the target and dims the rest of the page', async () => {
-  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ top: 100, left: 40, width: 300, height: 50 } as DOMRect);
+// AC-117 4.spot / 4.dim: the lit area H is the target grown by p = 10 on every side, and it is the one dim layer (its shadow).
+test('the lit area is the target grown by 10 px, and it is the only dim layer (AC-117)', async () => {
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ top: 100, left: 40, width: 300, height: 50, bottom: 150, right: 340 } as DOMRect);
   setup();
   await screen.findByRole('heading', { name: 'Bandeja' });
-  const spot = document.querySelector<HTMLElement>('.tour-spotlight')!;
-  await waitFor(() => expect(spot.style.top).toBe('92px'));
-  expect([spot.style.left, spot.style.width, spot.style.height]).toEqual(['32px', '316px', '66px']);
-  expect(spot.style.boxShadow).toContain('9999px');
+  const spot = document.querySelector<HTMLElement>('[data-tour-hole]')!;
+  await waitFor(() => expect(spot.style.translate).toBe('30px 90px'));
+  expect([spot.style.width, spot.style.height]).toEqual(['320px', '70px']);
+  expect(document.querySelectorAll('[data-tour-dim]')).toHaveLength(1);
+  expect(spot.hasAttribute('data-tour-dim')).toBe(true);
+  expect(spot.style.boxShadow).toContain('rgba(0,0,0,.6)');
+});
+
+// R-182: no «large target» case any more. The lit area is never cut short where the card is; a target too big for the room
+// is re-anchored (tour-steps.ts), not clipped.
+test('no large-target case: a target taller than the room keeps its whole lit area (AC-117, R-182)', async () => {
+  stubLayout({ top: 300, height: 600 }, { phone: true });
+  setup();
+  await screen.findByRole('heading', { name: 'Bandeja' });
+  await waitFor(() => expect(document.querySelector<HTMLElement>('[data-tour-hole]')!.style.height).toBe('620px'));
+});
+
+// AC-117 4.target with AC-91 item 4: a skeleton (AC-99, inert) is never lit. Scrolling to it would show the loaded page replacing it
+// in the viewport, a layout shift; and while it shows, the page is loading, so the step waits past WAIT_MS instead of being skipped.
+test('a step waits for its loaded element: an anchor in an inert skeleton is not lit and the step is not skipped (AC-117)', async () => {
+  function Loading() {
+    const [loaded, setLoaded] = useState(false);
+    return (
+      <>
+        {ALL.filter((a) => a !== 'inbox').map((a) => <div key={a} data-tour={a} />)}
+        {loaded ? <div key="real" data-tour="inbox" /> : <div key="skeleton" inert><div data-tour="inbox" /></div>}
+        <button type="button" onClick={() => setLoaded(true)}>loaded</button>
+      </>
+    );
+  }
+  renderAt(<><Routes><Route path="*" element={<Loading />} /></Routes><Tour onDone={() => {}} /></>);
+  await new Promise((r) => setTimeout(r, 1700)); // past WAIT_MS
+  expect(document.querySelector('[data-tour-hole]')).toBeNull();
+  expect(document.querySelector('.tour-card')!.getAttribute('data-tour-step')).toBe('inbox'); // still step 1
+  fireEvent.click(screen.getByRole('button', { name: 'loaded' }));
+  await waitFor(() => expect(document.querySelector('[data-tour-hole]')).not.toBeNull());
+  expect(screen.getByText('Paso 1 de 7')).toBeTruthy();
 });
 
 test('Escape does what "Saltar" does (R-78)', async () => {
@@ -102,6 +141,81 @@ test('Escape does what "Saltar" does (R-78)', async () => {
   await screen.findByRole('heading', { name: 'Bandeja' });
   fireEvent.keyDown(document, { key: 'Escape' });
   expect(onDone).toHaveBeenCalledOnce();
+});
+
+// AC-117 4.keys
+const key = (k: string, shiftKey = false) => fireEvent.keyDown(document.activeElement ?? document, { key: k, shiftKey });
+
+test('Escape closes the tour and focus returns to «Ver tutorial» (AC-117)', async () => {
+  const onDone = setup();
+  await screen.findByRole('heading', { name: 'Bandeja' });
+  key('Escape');
+  expect(onDone).toHaveBeenCalledOnce();
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Ver tutorial' }));
+});
+
+test('→ goes to the next step and ← to the previous; ← does nothing on step 1; → on step 7 does what «Terminar» does (AC-117)', async () => {
+  const onDone = setup();
+  await screen.findByRole('heading', { name: 'Bandeja' });
+  key('ArrowLeft');
+  await new Promise((r) => setTimeout(r, 30));
+  expect(screen.getByText('Paso 1 de 7')).toBeTruthy();
+  key('ArrowRight');
+  await screen.findByRole('heading', { name: 'Nueva factura' });
+  key('ArrowLeft');
+  await screen.findByRole('heading', { name: 'Bandeja' });
+  for (const title of ['Nueva factura', 'Ejecutar agente', 'Detalle de factura', 'Política', 'Beneficiarios', 'Periodo']) {
+    key('ArrowRight');
+    await screen.findByRole('heading', { name: title });
+  }
+  expect(onDone).not.toHaveBeenCalled();
+  key('ArrowRight');
+  expect(onDone).toHaveBeenCalledOnce();
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Ver tutorial' }));
+});
+
+test('each new step moves focus to the card heading (AC-117)', async () => {
+  setup();
+  const first = await screen.findByRole('heading', { name: 'Bandeja' });
+  await waitFor(() => expect(document.activeElement).toBe(first));
+  expect(first.getAttribute('tabindex')).toBe('-1');
+  next();
+  const second = await screen.findByRole('heading', { name: 'Nueva factura' });
+  await waitFor(() => expect(document.activeElement).toBe(second));
+});
+
+test('Tab and Shift+Tab cycle inside the card only, from anywhere (AC-117 focus trap)', async () => {
+  setup();
+  await screen.findByRole('heading', { name: 'Bandeja' });
+  next();
+  await screen.findByRole('heading', { name: 'Nueva factura' });
+  const card = screen.getByRole('dialog');
+  const stops = [...card.querySelectorAll<HTMLElement>('button, [tabindex="0"]')];
+  expect(stops[0]!.classList.contains('tour-body')).toBe(true);
+  expect(stops.slice(1).map((s) => s.textContent)).toEqual(['Saltar', 'Atrás', 'Siguiente']);
+  stops.at(-1)!.focus();
+  key('Tab');
+  expect(document.activeElement).toBe(stops[0]);
+  key('Tab', true);
+  expect(document.activeElement).toBe(stops.at(-1));
+  screen.getByRole('button', { name: 'to-en' }).focus(); // a click on the top bar left focus outside the card
+  key('Tab');
+  expect(document.activeElement).toBe(stops[0]);
+  screen.getByRole('button', { name: 'Ver tutorial' }).focus();
+  key('Tab', true);
+  expect(document.activeElement).toBe(stops.at(-1));
+});
+
+// jsdom has no hit-testing: these are the CSS rules that do it (Chromium is measured by the gate's 4.keys row).
+test('nothing under the dim can be clicked: the tour layer spans the screen and the lit area takes the pointer (AC-117)', async () => {
+  const { readFileSync } = (await import('node:fs' as string)) as { readFileSync(p: string, enc: string): string };
+  const css = readFileSync('web/styles.css', 'utf8');
+  expect(css.match(/\n\.tour \{([^}]*)\}/)?.[1]).toMatch(/position: fixed; inset: 0/);
+  expect(css).not.toMatch(/\.tour \{[^}]*pointer-events: none/);
+  const spot = css.match(/\.tour-spotlight \{([^}]*)\}/)?.[1] ?? '';
+  expect(spot).toMatch(/pointer-events: auto/);
+  expect(Number(spot.match(/border-radius: (\d+)px/)?.[1])).toBeGreaterThanOrEqual(8); // 4.spot: rounded, 8 to 16 px
+  expect(Number(spot.match(/border-radius: (\d+)px/)?.[1])).toBeLessThanOrEqual(16);
 });
 
 test('a language switch during a step keeps the same step, now in the new language (R-78)', async () => {
@@ -218,72 +332,80 @@ test('the card is capped below the top bar; at <= 480 px it is a bottom sheet, b
   expect(css).not.toMatch(/\.tour-body[^{]*\{[^}]*font-size/);
 });
 
-// UX-03: at 390 the bottom-sheet card covered step 1's highlighted block. jsdom has no layout: the target, the top bar
-// (bottom 60) and the card (top 420, full width) are stubbed; scrollBy is spied.
-function stubLayout(target: { top: number; height: number; left?: number; width?: number }, cardLeft = 12) {
+// AC-117 4.target / 4.cover. The lit area and the card are moved with `translate`, never top/left: a transform is not a layout shift,
+// so following the target never counts against AC-91 item 4 (CLS). jsdom has no layout: the top bar (bottom 60), the step-1 target and the card are stubbed, and
+// scrollBy moves the target. Desktop is jsdom's 1024 x 768; `phone` is 390 x 844 with the card pinned at top 500 by CSS.
+function stubLayout(target: { top: number; height: number; left?: number; width?: number }, { phone = false } = {}) {
+  let offset = 0;
+  const vp = phone ? { w: 390, h: 844 } : { w: 1024, h: 768 };
+  vi.stubGlobal('innerWidth', vp.w);
+  vi.stubGlobal('innerHeight', vp.h);
+  const card = phone ? { top: 500, width: 366, height: 330 } : { top: 0, width: 400, height: 200 };
   const bar = document.body.appendChild(Object.assign(document.createElement('header'), { className: 'topbar' }));
+  const box = (top: number, left: number, width: number, height: number) => ({ top, left, width, height, bottom: top + height, right: left + width }) as DOMRect;
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
-    const box = (top: number, left: number, width: number, height: number) => ({ top, left, width, height, bottom: top + height, right: left + width }) as DOMRect;
-    if (this === bar) return box(0, 0, 390, 60);
-    if (this.dataset.tour === 'inbox') return box(target.top, target.left ?? 16, target.width ?? 358, target.height);
-    if (this.classList.contains('tour-card')) return box(420, cardLeft, 366, 400);
+    if (this === bar) return box(0, 0, vp.w, 60);
+    if (this.dataset.tour?.startsWith('inbox')) return box(target.top - offset, target.left ?? 16, target.width ?? 358, target.height);
     return box(0, 0, 0, 0);
   });
-  vi.spyOn(HTMLElement.prototype, 'offsetTop', 'get').mockImplementation(function (this: HTMLElement) { return this.classList.contains('tour-card') ? 420 : 0; });
-  vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) { return this.classList.contains('tour-card') ? 400 : 0; });
-  const scroll = vi.fn();
+  const stub = (prop: 'offsetTop' | 'offsetWidth' | 'offsetHeight', v: number) =>
+    vi.spyOn(HTMLElement.prototype, prop, 'get').mockImplementation(function (this: HTMLElement) { return this.classList.contains('tour-card') ? v : 0; });
+  stub('offsetTop', card.top);
+  stub('offsetWidth', card.width);
+  stub('offsetHeight', card.height);
+  const scroll = vi.fn(({ top }: { top: number }) => void (offset += top));
   vi.stubGlobal('scrollBy', scroll);
-  return { scroll, done: () => bar.remove() };
+  onTestFinished(() => { bar.remove(); });
+  return { scroll, move: (dy: number) => void (offset += dy) };
 }
+const hole = () => document.querySelector<HTMLElement>('[data-tour-hole]')!;
+const y = (e: HTMLElement) => e.style.translate.split(' ')[1];
 
-test('a block taller than the room above the card scrolls its start under the top bar, and the spotlight stops above the card (UX-03)', async () => {
-  const { scroll, done } = stubLayout({ top: 300, height: 600 });
+test('before a step shows, the target is scrolled into view and the card goes below the lit area, 8 px from it (AC-117 4.target, 4.cover)', async () => {
+  const { scroll, move } = stubLayout({ top: 900, height: 50, left: 40, width: 300 });
   setup();
   await screen.findByRole('heading', { name: 'Bandeja' });
-  await waitFor(() => expect(scroll).toHaveBeenCalledWith(0, 300 - 68)); // room: 60 + 8 to 420 - 8
-  const spot = document.querySelector<HTMLElement>('.tour-spotlight')!;
-  expect(spot.style.top).toBe('292px');
-  expect(spot.style.height).toBe(`${412 - 292}px`); // never under the card
-  done();
+  // the room runs from the bar + 8 (68) to the bottom - 16 (752); H (70 tall) and the card (200) 8 px under it are centred in it
+  await waitFor(() => expect(scroll).toHaveBeenCalledWith({ top: 900 - (68 + (684 - 278) / 2 + 10), behavior: 'instant' }));
+  await waitFor(() => expect(y(hole())).toBe('271px'));
+  const card = screen.getByRole('dialog');
+  expect([card.style.top, card.style.left, card.style.translate]).toEqual(['0px', '0px', `16px ${271 + 70 + 8}px`]);
+  move(40); // the reader scrolls: H follows T, and the card follows H (R-144)
+  fireEvent.scroll(window);
+  await waitFor(() => expect(y(hole())).toBe('231px'));
+  expect(y(card)).toBe(`${231 + 70 + 8}px`);
+  expect(scroll).toHaveBeenCalledOnce(); // the tour scrolls once, before the step shows; it never fights the reader
 });
 
-test('a block that fits is centred in the room between the top bar and the card, unclipped (UX-03)', async () => {
-  const { scroll, done } = stubLayout({ top: 500, height: 100 });
-  setup();
-  await screen.findByRole('heading', { name: 'Bandeja' });
-  await waitFor(() => expect(scroll).toHaveBeenCalledWith(0, 500 - (68 + (344 - 100) / 2)));
-  expect(document.querySelector<HTMLElement>('.tour-spotlight')!.style.height).toBe('116px');
-  done();
+test('a target replaced under the step (the skeleton table swapped for the loaded one) is scrolled into view again (AC-117 4.target)', async () => {
+  const { scroll, move } = stubLayout({ top: 900, height: 50, left: 40, width: 300 });
+  function Swap() {
+    const [k, setK] = useState(0);
+    return (
+      <>
+        {ALL.filter((a) => a !== 'inbox').map((a) => <div key={a} data-tour={a} />)}
+        <div key={k} data-tour="inbox" />
+        <button type="button" onClick={() => setK(k + 1)}>swap</button>
+      </>
+    );
+  }
+  renderAt(<><Routes><Route path="*" element={<Swap />} /></Routes><Tour onDone={() => {}} /></>);
+  await waitFor(() => expect(scroll).toHaveBeenCalledOnce());
+  move(-500); // the loaded page is taller: the new element sits 500 px lower
+  fireEvent.click(screen.getByRole('button', { name: 'swap' }));
+  await waitFor(() => expect(scroll).toHaveBeenLastCalledWith({ top: 500, behavior: 'instant' }));
+  expect(document.querySelector('.tour-card')!.getAttribute('data-tour-step')).toBe('inbox');
 });
 
-test('a block beside the card (wide screens) is left where it is (UX-03)', async () => {
-  const { scroll, done } = stubLayout({ top: 500, height: 100, left: 16, width: 300 }, 400);
+test('at <= 480 px the card is pinned to the bottom and the target is scrolled to sit above it (AC-117, R-105)', async () => {
+  const { scroll } = stubLayout({ top: 900, height: 100 }, { phone: true });
   setup();
   await screen.findByRole('heading', { name: 'Bandeja' });
-  await new Promise((r) => setTimeout(r, 50));
-  expect(scroll).not.toHaveBeenCalled();
-  expect(document.querySelector<HTMLElement>('.tour-spotlight')!.style.height).toBe('116px');
-  done();
-});
-
-// UX-03 (AC-91 item 4): the spotlight is re-measured in the same frame as the scroll, so it never paints at the old
-// place and then jumps (the gate measured CLS 0.27 at 360 when it waited for the scroll event).
-test('after scrolling the block into the room, the spotlight already sits on its new place, without a scroll event', async () => {
-  let offset = 0;
-  const { done } = stubLayout({ top: 300, height: 600 });
-  const box = HTMLElement.prototype.getBoundingClientRect as unknown as { getMockImplementation(): (this: HTMLElement) => DOMRect };
-  const base = box.getMockImplementation();
-  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
-    const r = base.call(this);
-    return this.dataset.tour === 'inbox' ? ({ ...r, top: r.top - offset, bottom: r.bottom - offset }) as DOMRect : r;
-  });
-  vi.stubGlobal('scrollY', 0);
-  vi.stubGlobal('scrollBy', (_x: number, y: number) => { offset += y; vi.stubGlobal('scrollY', offset); });
-  setup();
-  await screen.findByRole('heading', { name: 'Bandeja' });
-  await waitFor(() => expect(document.querySelector<HTMLElement>('.tour-spotlight')!.style.top).toBe('60px')); // 68 - PAD
-  expect(offset).toBe(232); // one scroll, then it stops
-  done();
+  // the room runs from the bar + 8 (68) to the card's top - 8 (492); H (120 tall) is centred in it
+  await waitFor(() => expect(scroll).toHaveBeenCalledWith({ top: 900 - (68 + (424 - 120) / 2 + 10), behavior: 'instant' }));
+  await waitFor(() => expect(y(hole())).toBe('220px'));
+  expect(screen.getByRole('dialog').style.translate).toBe(''); // the CSS bottom sheet
+  expect(screen.getByRole('dialog').getAttribute('data-tour-step')).toBe('inbox-title'); // the element lit at this width (4.tourcover reads it)
 });
 
 // AC-42 Clarified (D42, R-144): the tour starts on landing while the first-login pass runs, and its spotlight is re-measured
@@ -312,14 +434,14 @@ test('with a pass running, step 1 shows at once; at step 4 a batch refresh re-me
     next();
     await screen.findByRole('heading', { name: title });
   }
-  const spot = () => document.querySelector<HTMLElement>('.tour-spotlight')!.style.top;
-  await waitFor(() => expect(spot()).toBe('92px'));
+  const spot = () => document.querySelector<HTMLElement>('.tour-spotlight')!.style.translate.split(' ')[1];
+  await waitFor(() => expect(spot()).toBe('90px'));
   fireEvent.click(screen.getByRole('button', { name: 'lote' })); // the chip changes in place; the box is the same
   await new Promise((r) => setTimeout(r, 20));
-  expect(spot()).toBe('92px');
+  expect(spot()).toBe('90px');
   top = 140; // had something moved the row, the next refresh puts the spotlight back on it
   fireEvent.click(screen.getByRole('button', { name: 'lote' }));
-  await waitFor(() => expect(spot()).toBe('132px'));
+  await waitFor(() => expect(spot()).toBe('130px'));
 });
 
 // AC-115 (R-170): «Paso n de m» and m dots, decoration only.
@@ -343,4 +465,55 @@ test('English: "Step 1 of 7" (AC-115)', async () => {
   await screen.findByRole('heading', { name: 'Bandeja' });
   fireEvent.click(screen.getByRole('button', { name: 'to-en' }));
   expect(await screen.findByText('Step 1 of 7')).toBeTruthy();
+});
+
+// AC-117 targets (R-182): each step lights one element that holds what its title names, present before the data loads.
+// At <= 480 px (the bottom-sheet card) two of them do not fit above the card, so a smaller element that holds the named thing is lit.
+test('at <= 480 px step 1 lights the «Facturas» title and step 4 the first row\'s invoice; elsewhere the AC-117 targets (R-182)', () => {
+  const at = (w: number) => tourSteps.map((s) => anchor(s, w));
+  expect(at(481)).toEqual(ALL);
+  expect(at(480)).toEqual(ALL.map((a) => ({ inbox: 'inbox-title', 'invoice-row': 'invoice-open' })[a] ?? a));
+});
+
+const ROWS: Row[] = [
+  { id: 'a1', outcome: 'PAGAR', headline: 'PAGAR · 160 USD a Northstar Group', received_at: '2026-10-16T10:00:00Z', amount_usd: 160, fields: { payee_name: 'Northstar Group' }, origin: 'portal' },
+  { id: 'a2', outcome: 'FRENAR', headline: 'FRENAR · 90 USD a Forma Studio', received_at: '2026-10-15T10:00:00Z', amount_usd: 90, fields: { payee_name: 'Forma Studio' }, origin: 'app' },
+];
+
+test('Bandeja: step 1 is the «Facturas» header (title, search, filters), step 4 the first row (AC-117 targets 1 and 4)', () => {
+  renderAt(<InvoiceTable rows={ROWS} directory={[]} outcome="" onOutcome={() => {}} />);
+  const head = document.querySelector('[data-tour="inbox"]')!;
+  expect(head.querySelector('h2')!.textContent).toBe('Facturas');
+  expect(head.querySelectorAll('input[type="search"]')).toHaveLength(1);
+  expect(head.querySelectorAll('select')).toHaveLength(3);
+  expect(head.querySelector('table')).toBeNull();
+  expect(document.querySelector('[data-tour="inbox-title"]')).toBe(head.querySelector('h2'));
+  const first = document.querySelector('tbody tr')!;
+  expect(document.querySelector('[data-tour="invoice-row"]')).toBe(first);
+  const open = document.querySelector('[data-tour="invoice-open"]')!;
+  expect(first.contains(open)).toBe(true);
+  expect(open.querySelector('a')!.getAttribute('href')).toBe('/invoices/a1');
+  expect(open.textContent).toContain('Portal');
+});
+
+test('Política and Beneficiarios: the h1 with its intro line, and nothing else (AC-117 targets 5 and 6)', () => {
+  for (const [Page, title] of [[Policy, 'Política'], [Beneficiaries, 'Beneficiarios']] as const) {
+    const { unmount } = renderAt(<Page />);
+    const t = document.querySelector('[data-tour]')!;
+    expect(t.children).toHaveLength(2);
+    expect(t.querySelector('h1')!.textContent).toBe(title);
+    expect(t.children[1]!.tagName).toBe('P');
+    expect(document.querySelectorAll('[data-tour]')).toHaveLength(1);
+    unmount();
+  }
+});
+
+test('Periodo: the «Dinero del mes» block, before its data loads (AC-117 target 7)', () => {
+  mockApi({ [`GET /api/screen/period?month=${new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }).slice(0, 7)}`]: () => new Promise(() => {}) });
+  renderAt(<Period />, { at: '/period' });
+  const t = document.querySelector('[data-tour="period"]')!;
+  expect(t.querySelector('h2')!.textContent).toBe('Dinero del mes');
+  expect(t.querySelectorAll('dl dt')).toHaveLength(5);
+  expect(t.querySelector('h1')).toBeNull();
+  expect(document.querySelectorAll('[data-tour]')).toHaveLength(1);
 });

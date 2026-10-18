@@ -82,8 +82,8 @@ export default function Beneficiaries() {
   const routes = f.route && !ROUTES.includes(f.route) ? [...ROUTES, f.route] : ROUTES;
 
   return (
-    <section data-tour="beneficiaries" className="beneficiaries" data-band>
-      <div className="page-head" data-block>
+    <section className="beneficiaries" data-band>
+      <div className="page-head" data-block data-tour="beneficiaries">{/* AC-117: the h1 with its intro line */}
         <h1>{t('screen.beneficiaries')}</h1>
         <p className="muted">{t('ben.intro')}</p>
       </div>

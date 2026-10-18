@@ -71,7 +71,8 @@ export default function InvoiceTable({ rows, directory, outcome, onOutcome }: {
 
   return (
     <section id="invoices" className="dash-table" aria-labelledby="dash-table">
-      <h2 id="dash-table">{t('dash.table.title')}</h2>
+      <div data-tour="inbox">{/* AC-117 target 1: the table's header (title, search, filters); its title alone on a phone (tour-steps.ts) */}
+      <h2 id="dash-table" data-tour="inbox-title">{t('dash.table.title')}</h2>
       <div className="inbox-filters">
         <label className="dash-search">
           {t('dash.search')}
@@ -102,6 +103,7 @@ export default function InvoiceTable({ rows, directory, outcome, onOutcome }: {
           </select>
         </label>
       </div>
+      </div>
 
       {rows.length === 0 ? <div className="empty"><StepCards steps={EMPTY.map((icon, i) => ({ icon, title: t(`inbox.empty.${i + 1}.title`), text: t(`inbox.empty.${i + 1}.text`) }))} /></div>
         : shown.length === 0 ? <p className="muted">{t('inbox.no_match')}</p>
@@ -117,12 +119,12 @@ export default function InvoiceTable({ rows, directory, outcome, onOutcome }: {
                   <tr key={r.id} data-id={r.id} data-tour="invoice-row">
                     <td><time dateTime={r.received_at}>{date.format(new Date(r.received_at))}</time></td>
                     <td>{r.fields?.payee_name ? <span data-user="">{r.fields.payee_name}</span> : t('period.unread')}</td>
-                    <td>
+                    <td><div data-tour="invoice-open">{/* AC-117 target 4 on a phone, where the whole row scrolls sideways */}
                       <Link to={`/invoices/${r.id}`} className="dash-headline">
                         {r.headline ?? (r.fields?.payee_name ? tu(t('inbox.pending_headline'), { payee: r.fields.payee_name }) : t('inbox.pending_headline', { payee: t('value.unknown_payee') }))}
                       </Link>
                       {originLabel(t, r) && <small className="muted inbox-origin">{originLabel(t, r)}</small>}
-                    </td>
+                    </div></td>
                     <td className="dash-usd">{value(r, 'usd') === null ? '—' : usd(value(r, 'usd') as number)}</td>
                     <td><OutcomeChip outcome={r.outcome} /></td>
                   </tr>

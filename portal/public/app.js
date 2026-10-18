@@ -45,16 +45,25 @@ function copyButton(link) {
   return b;
 }
 
+// R-131: the payee and the number the vendor sent are data (data-user); the label before them, the amount the page formats and the status words are copy.
+const DATA_LINES = ['portal.reply.payee', 'portal.reply.number'];
+function parts(text) {
+  const t = boot.t[lang];
+  const prefix = DATA_LINES.map((k) => (t[k] ?? '').split('{value}')[0]).find((p) => p && text.startsWith(p));
+  const value = prefix ? text.slice(prefix.length) : '';
+  return value && value !== t['portal.reply.unknown'] ? [prefix, el('span', { 'data-user': '', text: value })] : [text];
+}
+
 function line(text, reply) {
   const prefix = (boot.t[lang]['portal.reply.status'] ?? '').split('{status}')[0];
-  return reply && prefix && text.startsWith(prefix) ? el('p', {}, prefix, el('strong', { text: text.slice(prefix.length) })) : el('p', { text });
+  return reply && prefix && text.startsWith(prefix) ? el('p', {}, prefix, el('strong', { text: text.slice(prefix.length) })) : el('p', {}, ...parts(text));
 }
 
 function bubble(m) {
   const b = el('article', { class: `bubble ${m.from}` });
   if (m.from === 'me') b.append(el('span', { class: 'sr-only', text: `${tr('portal.you')}: ` }));
   const lines = m.lines ? m.lines[lang] : m.keys ? m.keys.map((k) => tr(k, { company })) : [m.text];
-  b.append(...lines.filter(Boolean).map((text) => line(text, !!m.lines)));
+  b.append(...lines.filter(Boolean).map((text) => (m.from === 'me' ? el('p', { 'data-user': '', text }) : line(text, !!m.lines))));
   if (m.file) b.append(el('p', { class: 'file', text: m.file }));
   if (m.link) b.append(el('p', { text: tr('portal.reply.link') }), el('p', {}, el('a', { href: m.link, text: m.link })), copyButton(m.link));
   if (m.pending) b.classList.add('pending');
@@ -179,7 +188,7 @@ function paintStatus() {
   main.replaceChildren(offline, el('article', { class: 'card' },
     head,
     el('h2', { text: tr('portal.status_read') }),
-    el('ul', {}, ...s.read[lang].map((text) => el('li', { text }))),
+    el('ul', {}, ...s.read[lang].map((text) => el('li', {}, ...parts(text)))),
     el('p', { class: 'meta', text: tr('portal.updated', { date: when }) })));
 }
 

@@ -1,5 +1,7 @@
 # Tasks D28-D35 (+ D36-D38): Thesaurus delta plan
 
+> 18 Oct ~03:00Z: D43-D44 (README and architecture, the launch film) are the last section, "D43-D44": Task 35b amended, Tasks 55 and 56 new, Task 37 now the raw happy path. Their clock moves the merge to main to ~09:00Z (R-159).
+>
 > 17 Oct ~18:00Z: Tasks 39-51 for D39-D41 are appended at the end of this file, in the section "D39-D41". Their clock and cut order (R-126) replace the clock and the R-95 checkpoints below.
 >
 > For agentic workers: the orchestrator runs this with subagent-driven-development, one task per builder, in the waves below. Tasks 1-19 (docs/PLAN.md) are done and merged and keep their numbers. The ACs and rulings live in `docs/SPEC.md` (section 13d, AC-73..AC-91, AC-67 now MUST, AC-50 amended, R-85..R-95). Where this file and a ruling differ, the ruling wins. The same list is the section "Tasks D28-D35" at the end of `docs/SPEC.md`.
@@ -177,6 +179,7 @@
 - Estimate: 1 h, plus a fix task if needed.
 
 **Task 37: Happy-path video (D32).** Seat: senior-builder.
+- Amended 18 Oct ~03:00Z (D44, R-155, R-156, R-159): this is now the raw happy path, the second video link «Recorrido completo sin editar». The launch film is Task 56. Add R-156's privacy guard to `scripts/record-happy-path.mjs` (fail a step whose viewport text has an email address or the `HEARTBEAT_EMAIL` value; keep Política's approver field out of view). The brief in section "D43-D44" below wins.
 - ACs: AC-50 Amended.
 - Files: `scripts/record-happy-path.mjs` (captions injected; the step sequence of AC-50; ffmpeg cut and speed when `which ffmpeg` succeeds), `web/public/demo/happy-path.webm` (or `.mp4`), `docs/demo/`. The video URL goes into `docs/SUBMISSION.md`.
 - Dependencies: after 2026-10-18T00:00Z; Task 36 passed; "Reiniciar demo" just before. At most 3 takes (R-94).
@@ -216,7 +219,7 @@
 | `vitest.config.ts`, `tsconfig.json`, `eslint.config.js` | 27 → 25 |
 | `src/i18n/es.ts`, `en.ts` | registration lines only, any order |
 | migrations | 21: 000600, 23: 000700, 25: 000800 |
-| `README.md`, `docs/SUBMISSION.md` | 35 only (37 sets the video URL) |
+| `README.md`, `docs/SUBMISSION.md` | 35 only (37 sets the video URL); from D43-D44: 35b → 37 → 56 |
 
 ## Deploy points (the orchestrator only, from integration, after a green full suite)
 - D1 (20): deploy; 2 live Bedrock reads.
@@ -436,9 +439,10 @@ That leaves 3.5 h of buffer to FREEZE at 11:00. Nothing is cut at plan time beyo
   - Estimate: 1.5 h.
 
 **Task 35b: README + SUBMISSION refresh (AC-49 and AC-51 Clarified).** Seat: junior-builder.
+- Amended 18 Oct ~03:00Z: the scope is now AC-110 (D43). The full brief is in section "D43-D44" at the end of this file and wins over the lines below.
 - The ledgered 17:30Z SES correction, plus D41's two doors in the first 10 lines, «Para el jurado», «Velocidad» (a link to `docs/perf.md`), and the not-done items of AC-49 Clarified.
 - After checkpoint C. It is allowed in FREEZE.
-- Estimate: 1 h.
+- Estimate: 1 h (now 2 h, see D43-D44).
 
 Then the existing tasks, unchanged except for their start: 33 and 34 (the gates) at checkpoint C on E6, then 36, 37 (the video, after 00:00Z and after 33 and 34 pass), and 38 (merge to main).
 
@@ -466,7 +470,7 @@ Then the existing tasks, unchanged except for their start: 33 and 34 (the gates)
 | `web/charts/*` | 46 only |
 | `web/dashboard/*` | 47 only |
 | `src/i18n/es.ts`, `en.ts` | registration lines only, any order |
-| `README.md`, `docs/SUBMISSION.md` | 35b only (37 sets the video URL) |
+| `README.md`, `docs/SUBMISSION.md` | 35b only (37 sets the video URL); from D43-D44: 35b → 37 → 56 |
 
 ## Deploy points (the orchestrator only, from integration, after a green full suite)
 - E1 (39): db-push 000900; `scripts/auth-config.sh`, then `--check`; deploy main; the save-access probe; one anonymous sign-in by curl.
@@ -614,6 +618,27 @@ Then the existing tasks, unchanged except for their start: 33 and 34 (the gates)
 - Deploy E5b, before 02:00Z.
 - Estimate: 1.5 h.
 
+**Task 52c: The demo door under 2 s, plus the QA E5a defects (AC-107 Clarified by R-150, AC-97 target 5, AC-98, AC-99 Clarified, AC-91 item 4, AC-95 with R-135, AC-109 CLS).** Seat: senior-builder, first priority. It is a never-cut speed fix, so it may merge after checkpoint C and until FREEZE (R-149).
+- Part A, R-150's levers. Build all four. The order is the priority if the budget runs out:
+  1. Trim the inbox payload. `src/routes/screen.ts` projects the inbox response down to what Bandeja draws: the table, the dashboard, AgentActivity and the count line. The long decision texts that `web/pages/InvoiceDetail.tsx` loads itself are dropped. A `create or replace` of `screen_inbox` is allowed only if the demo user's server time stays over 400 ms. It keeps every key a web or Worker file reads, and it is applied with `bash scripts/db-push.sh` by the orchestrator. Task checks: the demo user's response is at most 25 KB, and its `Server-Timing` is under 400 ms on the deployed URL.
+  2. Start the request at sign-in. `web/pages/Demo.tsx`, `web/pages/Login.tsx` and `web/trial.ts` put the one `GET /api/screen/inbox` in flight as soon as the sign-in resolves, through `web/api.ts`. `web/pages/Inbox.tsx` uses that same promise, so there is still one data request (AC-98), held in tab memory only (R-122).
+  3. Prefetch the chunk. `web/main.tsx`, or wherever the lazy Inbox import lives, exports a prefetch. `Demo.tsx` and `Login.tsx` call it once the page is usable (idle), and on hover or focus of a door. AC-97 target 4's bytes-before-usable do not change.
+  4. Retry on 5xx. `web/api.ts` retries a GET once, after about 300 ms, on a 5xx from `/api/screen/inbox` or `/api/demo/overview`, and the skeleton stays. Only a second failure shows «No pude cargar las facturas…» with «Reintentar». POSTs are never retried. The report names the cause of QA's 500 and 503, from `wrangler tail` or the Worker logs.
+  - `src/routes/screen.ts` adds `Server-Timing: app;dur=<ms>` on `/api/screen/inbox`.
+  - Not allowed (R-150): a sign-in on pointerdown or on page load, Bandeja drawn from the public overview, or a pre-signed demo session.
+- Part B, plain defects from the same QA run (no ruling needed):
+  1. CLS at the end of the pass. At 390 px, the progress line is replaced by the summary line and pushes `DIV.dash` up 26 px. The progress line and AC-29's summary share one box of fixed height in `web/components/RunProgress.tsx` and its CSS (or `web/dashboard/dashboard.css`). The height is the taller of the two at 360 px, in es and en. Gate `trial`: CLS at most 0.01 through the whole pass, including its end, at 390 es and en (AC-99 Clarified, AC-91 item 4).
+  2. «0 de …» before the first call returns. From its first paint, the progress line reads «0 de <n>» / "0 of <n>", where n is the number of «Pendiente» rows in the landing's inbox data. Until that data is there, the box is reserved and empty. Files: `web/firstRun.tsx`, `web/components/RunProgress.tsx`.
+  3. Company name (R-135, AC-95). `/api/company` fires at most once per page load. Today it fires twice on the trial door. The top bar shows the company name for every signed-in non-demo user: a trial, a saved trial, a password login, an OTP login, and after a reload. The placeholder «tu empresa de prueba» is never shown as a name. Until the answer arrives, the slot keeps its box and stays empty, with no layout shift. Files: `web/trial.ts`, `web/App.tsx` (and `web/auth.tsx` if the fetch belongs there). R-141's fold into the screen payload is allowed but not required.
+  4. Layout shift at the demo landing, 0.0112-0.0277 in QA E5a. It must be at most 0.01 from the click to the end of the transition (AC-109, AC-99). Find the moving element with the gate's CLS attribution and give it its final box.
+  5. The R-137 race (a new tab opened right after landing redirects to `/`). No code in 52c. Task 40d fixes it, and QA re-checks it after 40d merges.
+- `perf.mjs` (Task 52b's file; the orchestrator may give this part to a free junior seat as `52c-perf`, because its files do not overlap): the INFO columns from R-150 (sign-in, gap, request, `Server-Timing`, bytes, and the `/api/health` median of 5) on every `entry` row, with a fixture test in `scripts/perf.test.mjs`.
+- Tests: `web/api.test.ts` (one retry on 5xx, none on POST, the error after the second failure); `web/Demo.test.tsx`, `web/Login.test.tsx` and `web/Trial.test.tsx` (the screen request starts on sign-in resolve and is consumed once by Inbox; no sign-in before the click); `web/Inbox.test.tsx` (one request; «0 de n» at first paint); `web/components/RunProgress.test.tsx` (the same box height for progress and summary); `web/App.test.tsx` (one `/api/company`, the name after a remount, no placeholder text); `src/routes/routes.test.ts` (the projected keys, and the `Server-Timing` header).
+- Gate: `demo`, `trial` (through the pass), `inbox` and `entry`, at 390 and 1440, in es and en.
+- After the merge: deploy, then `perf.mjs` entry rows, then QA on AC-107 (at least 10 demo-door runs, as R-150 says), AC-95 and AC-99.
+- Merge: after 40d (`App.tsx`); first on `screen.ts` and `api.ts`; 54 rebases on 52c if both are open on `Demo.tsx`, `Login.tsx` or `trial.ts`.
+- Estimate: 2 h.
+
 ## Shared files with the tasks in flight (merge in this order; the later task rebases)
 | File | Order |
 |---|---|
@@ -655,3 +680,97 @@ Then the existing tasks, unchanged except for their start: 33 and 34 (the gates)
   8. AC-102;
   9. AC-101.
 - A cut AC becomes SHOULD. Its branch stays unmerged, and the ledger says why. The video then shows the product as it is.
+
+# D43-D44: Tasks 35b (amended), 55, 37 (amended), 56 (product, 18 Oct ~03:00Z)
+
+> These tasks fold Roberto's D43 (README and architecture at the level of ArabicaAI) and D44 (an Apple-style launch film built from code). The ACs are AC-110 and AC-111 in `docs/SPEC.md` section 13g, with AC-49, AC-50 and AC-51 Clarified. The rulings are R-151..R-159, and Q21 and Q22 are in `docs/QUESTIONS.md`. Where this section and a ruling differ, the ruling wins. It replaces Task 35b's scope and splits Task 37 into the raw path (37) and the film (56).
+>
+> Amended 18 Oct ~03:15Z for D44a (R-160): the film's tone is corporate and institutional for finance leaders, and its structure is D44a's seven parts. Task 56 and the cut order below are rewritten; Tasks 55, 35b and 37 do not change.
+
+## Binding order and rules
+- Order (R-159): 55 and 35b now; 37 after the last product deploy (52c, 52d and 34b merged and deployed, Task 36 passed); 56's storyboard now on placeholders if a senior seat is free, its captures and render after 37; then D8 and Task 38.
+- Seats: the never-cut speed and gate fixes (52c, 52d, 34b) keep priority. 55 and 35b take the next free junior seats; 56 the next free senior seat.
+- No migration, no Worker route, no `src/` or `web/` code. Allowed files are listed per task. 55, 35b and 56 are docs or demo assets, so they are allowed in FREEZE (R-159).
+- References, read-only: `/home/user/lucastramonte/factored-hackathon-2026-arabicaai/README.md` (structure), `Docs/Evidence/diagrams/build_architecture.py` and `icons/` (diagram and icon handling), `Docs/Plans/demo-video-script.md` (the beats and "never exaggerate"). Copy the approach, never the content.
+- Every number follows R-156. Every capture and recording follows R-156's privacy guard.
+- Budgets as always: 2 builder attempts, 2 reviewer passes, 2 QA runs per task.
+
+## Tasks
+
+**Task 55: Architecture diagram from code (AC-110 item 8, R-153, R-154).** Seat: junior-builder, next free seat after 34b, now.
+- Files:
+  - `docs/architecture/build_architecture.mjs`: Node standard library only. It writes `architecture.svg`; with `--png` it renders `architecture.png` at 2× through Playwright Chromium (`/opt/pw-browsers/chromium`, already a dev dependency). It copies both to `web/public/demo/architecture.svg` and `.png`. Deterministic output.
+  - `docs/architecture/icons/*.svg` (Simple Icons, unchanged, one pinned version) and `docs/architecture/icons/README.md` (slug, version, licence per icon, trademark sentence; R-154).
+  - `docs/architecture/architecture.svg`, `architecture.png`, and `docs/architecture/architecture.txt` (the ASCII fallback, pasted into README by 35b).
+- Content: AC-110's zones and labelled arrows. Read `wrangler.toml`, `portal/wrangler.toml`, `src/lib/llm.ts`'s provider order and README «Arquitectura» and «Cómo trabaja el agente» to draw only what is deployed or built; dashed for built-but-inactive (email intake, SES limited to verified addresses). Approved palette for everything but brand icons; one grid; Spanish labels.
+- Checks: `node docs/architecture/build_architecture.mjs && git diff --exit-code docs/architecture/architecture.svg`; lint on the `.mjs`.
+- Review: one reviewer, briefed with `minimalist-ui`, reads the PNG and the generator, and checks every box against the deployment files and R-154's licence table.
+- Deploy: static assets only, with the orchestrator's next deploy (needed before 35b's review can curl the image URLs).
+- Estimate: 1.5 h.
+
+**Task 35b (amended): README to D43 + SUBMISSION (AC-110, AC-49 and AC-51 Clarified).** Seat: junior-builder, now, in parallel with 55.
+- Files: `README.md`, `docs/SUBMISSION.md` (description at most 5000 characters). It may add a poster image only by URL; it writes no file under `web/`.
+- What: AC-110's 15 items in that order (R-151). The content AC-49 Clarified requires stays: the 17:30Z SES correction, «Velocidad» from the binding `docs/perf.md`, the not-done items. Absolute URLs for images and video (R-152). The architecture image from Task 55's fixed paths, plus `architecture.txt` as the ASCII fallback. Until Task 56 passes, the thumbnail is a still of the raw happy path or the logo card, and it links to `<URL>/demo/happy-path.webm`.
+- Numbers (R-156): each number in «Resultados» and «Velocidad» names its source on its line. The test count is the full-suite count at a named commit. Autonomy and «Violaciones 0» come from the latest QA ledger line on the live Periodo after «Reiniciar demo».
+- SUBMISSION: AC-51 Clarified (D44): the video URL and the «Recorrido completo sin editar» link; `wc -m` on the description at most 5000.
+- Checks: the AC-110 Evidence greps; `curl -sI` with content-type on every absolute URL (after 55 is deployed).
+- Review: one reviewer, against AC-110's list and three numbers traced to their sources.
+- Merge: after 55. Then 37 and 56 change only their video lines.
+- Estimate: 2 h.
+
+**Task 37 (amended): the raw happy path (AC-50 Amended and Clarified).** Seat: senior-builder.
+- Same as above (step sequence of AC-50 Clarified D42), plus R-156's guard in `scripts/record-happy-path.mjs`. Before recording: «Reiniciar demo», the agent pass done, the warm-up read and question.
+- Who records: the senior-builder, from its worktree, against the deployed URL. At most 3 takes (R-94); a take that trips the guard counts.
+- Output: `web/public/demo/happy-path.webm` (or `.mp4`, at most 24 MiB), `docs/demo/` notes; `README.md` and `docs/SUBMISSION.md` raw-path link only if the file name changes.
+- Review: one reviewer reads frames made with Task 56's `frames.sh` if it exists, otherwise `ffmpeg -vf fps=1,scale=320:-1,tile=5x6` contact sheets; it checks AC-50's sequence and the guard.
+- Estimate: 1.5 h. Target window 05:00-06:30Z.
+
+**Task 56: The launch film (AC-111, R-155..R-160; D44a structure and tone).** Seat: senior-builder.
+- Files:
+  - `docs/film/storyboard.html`, `docs/film/storyboard.css`, `docs/film/cues.json`, `docs/film/numbers.md`, `docs/film/captures/*` (committed so the film can be rebuilt), `docs/film/review/sheet-*.jpg`;
+  - `scripts/film/capture.mjs`, `scripts/film/render.mjs`, `scripts/film/assemble.sh`, `scripts/film/frames.sh`, `scripts/film/numbers.test.mjs` (numbers, plus D44a's structure and tone checks on `cues.json`);
+  - `web/public/demo/thesaurus-launch.mp4`, `thesaurus-launch-poster.jpg`, `thesaurus-launch.en.vtt`;
+  - `README.md` (the thumbnail and «Ver el video» lines only) and `docs/SUBMISSION.md` (the video URL only).
+  - The brand files are read from `web/public/brand/`; the wordmark reveal reuses AC-108's timing, not its component.
+- The film (AC-111's story, verbatim texts there): a launch for finance leaders, corporate and institutional, Apple-keynote production values, third person, one idea per scene. Seven parts, 120 to 150 s in all:
+  1. Title card on the approved palette, at most 10 s: the large wordmark reveal completing «Thesaurus — el agente de cuentas por pagar para empresas globales».
+  2. Business context, at most 24 s: AC-111's three statements, one at a time, type only.
+  3. Product, 60 to 75 s, in device mockups, each scene with its title and one supporting line: «Recibe» (phone: portal send and reply; laptop: carga), «Lee» («Leído por IA · Amazon Nova Lite»), «Verifica» (13 controles, tasa del día), «Decide» (Bandeja with PAGAR, FRENAR and ESCALAR; the PAGAR record per R-157; the trap's ESCALAR with the agent's question; the approver's yes), «Rinde cuentas» (readable trail, «Pregúntale a Thesaurus»), «Controla» (Política with the approver field out of the viewport; Periodo with autonomy and «Violaciones 0»).
+  4. Governance, at most 15 s: «La IA lee.» «El código decide.» «Una persona aprueba.», then «Aislamiento por empresa», «Registro inmutable», «Nunca paga fuera de las reglas».
+  5. Architecture line, at most 10 s, animated, same icons and labels as `architecture.svg`.
+  6. Metrics, at most 14 s: at most four numbers with their scope, equal to README «Resultados».
+  7. Close, at most 12 s: logo, «Listo para conectarse a Blinka», `<URL>/demo`, «Probar con mi propia empresa».
+  Not in the film: a black hook, a phone notification, «¿La pago?», first person, question or exclamation marks, humour, slang, superlatives, Blinka's logo, any claim that Thesaurus is connected to Blinka.
+- Phase A, now if a senior seat is free (new files only): storyboard, cues (es and en), numbers.md, the numbers-and-tone test (red first on fixture cues: an unlisted number, a «?», a first-person word, a scene out of order), render and assembly, all on placeholder stills from `docs/ux/*.png`. Estimate 2.5 h.
+- Phase B, after Task 37: «Reiniciar demo», then `capture.mjs` against the deployed URL (the phone at 390 px, the laptop at 1440 px, at device scale 2). Captures by scene: Recibe (portal on the phone, send and reply; a carga in the Bandeja), Lee and Verifica (one record), Decide (Bandeja; PAGAR record; trap ESCALAR with question; approver's yes), Rinde cuentas (trail; one chat answer), Controla (Política scrolled or with the viewport sized so the approver field is outside it before the guard runs, no blur or mask; Periodo). If no Política viewport excludes the field, Controla uses Periodo only and its line drops «Políticas» (R-160). At most 2 live reads and 2 questions, one retry pass (R-157). Then render and assemble, at most 3 full renders submitted to review. Estimate 1.25 h.
+- Checks before the report: `ffprobe`, `freezedetect`, `blackdetect`, `mpdecimate` (AC-111 numbers), `npx vitest run scripts/film`, `ls -l` at most 25165824 bytes, then `frames.sh` for the reviewer.
+- Review (R-158 plus R-160's items a to f: the parts and scene titles in order; no phone notification, personal scene or black background; each line matches its capture; no approver field or email anywhere; metrics equal README «Resultados»; institutional tone, a finding quotes the caption): one fresh reviewer reads the frames; 2 passes. Fix round estimate 0.5 h.
+- Deploy D8: the orchestrator deploys `web/public/demo/` with both videos, then `curl -sI` per AC-111, then Task 38.
+- Estimate: 4.25 h in all, plus review.
+
+**Task 38 (amended): QA happy path + merge to main.** QA adds AC-110 and AC-111 Evidence: the README greps and curls, `ffprobe` on the deployed film, the vitest numbers test, the contact sheets, and the private-context playback. Then the merge to main as before.
+
+## Shared files
+| File | Order |
+|---|---|
+| `README.md`, `docs/SUBMISSION.md` | 35b → 37 (raw link, only if renamed) → 56 (video lines) |
+| `web/public/demo/architecture.*` | 55 only |
+| `web/public/demo/happy-path.*`, `scripts/record-happy-path.mjs` | 37 only |
+| `web/public/demo/thesaurus-launch.*`, `docs/film/*`, `scripts/film/*` | 56 only |
+| `docs/architecture/*` | 55 only |
+
+## Clock (UTC, target; FREEZE 11:00Z, SHUTDOWN 15:00Z, deadline 17:00Z per `run_status.py`, which equals CONTEXT's 12:00-05:00)
+- ~03:15: dispatch 55 and 35b (juniors, as seats free after 34b). Dispatch 56 phase A if a senior seat is free after 52c and 52d.
+- ~05:00: 55 and 35b merged; static deploy.
+- ~05:00-06:30: the last product deploy, Task 36, then Task 37 (raw path).
+- ~06:30-07:45: 56 phase B: captures, render, assembly.
+- ~08:15: 56 review passed. D8 deploy.
+- ~09:00: Task 38 QA and the merge to main (moved from ~07:30Z by R-159).
+- 08:30Z: if 56 has not passed review, the animated architecture line becomes a still.
+- 09:30Z: if still not passed, cut the device mockups; the merge to main goes without the film; the film follows as a demo-asset change, deployed and merged to main again by 14:00Z.
+
+## Cut order (R-159 as restated by R-160)
+1. 08:30Z: the film's animated architecture line becomes a 4 to 6 s still of `architecture.png` with the same caption. It is never dropped (D44a names it as a part).
+2. 09:30Z: the film's CSS device mockups go (captures full-frame, same zoom, pan and fades; every scene keeps its title, its supporting line and its order).
+Never cut: D44a's seven-part structure and tone, the six scene titles, the governance line, the metrics slide, the close with «Listo para conectarse a Blinka», R-156.
+Never cut: README and the diagram (AC-110), the raw happy path (AC-50), R-156's truth and privacy rules, the film itself (AC-111's other parts).

@@ -1,0 +1,81 @@
+WEBVTT
+
+1
+00:00:00.400 --> 00:00:11.204
+Facturas en varios países y monedas, revisadas a mano, cada mes. Basta un pago fuera de las reglas para perder el control.
+
+2
+00:00:11.754 --> 00:00:16.322
+Las facturas llegan por correo, en PDF o por chat.
+
+3
+00:00:16.872 --> 00:00:23.880
+Alguien las compara con lo acordado, pide aprobación por chat y crea el pago a mano, en otra moneda y otro país.
+
+4
+00:00:24.430 --> 00:00:30.262
+Se concilia en una hoja de cálculo. Cada mes. Si hay alguien disponible.
+
+5
+00:00:30.812 --> 00:00:36.884
+Thesaurus. El agente de cuentas por pagar para empresas globales.
+
+6
+00:00:37.434 --> 00:00:44.462
+Recibe cada factura: portal de proveedores, carga directa, texto pegado o correo.
+
+7
+00:00:45.012 --> 00:00:53.816
+La IA la lee: beneficiario, monto, moneda, cuenta y fechas, con su nivel de confianza.
+
+8
+00:00:54.366 --> 00:01:01.394
+El código verifica 13 reglas, del beneficiario al presupuesto, con la tasa de cambio del día.
+
+9
+00:01:01.944 --> 00:01:09.880
+Y decide: PAGAR, FRENAR o ESCALAR. PAGAR solo se escribe cuando las 13 reglas se cumplen.
+
+10
+00:01:10.430 --> 00:01:17.674
+Cuando algo se sale de las reglas, hace una pregunta concreta. Una persona aprueba en un clic.
+
+11
+00:01:18.224 --> 00:01:26.588
+Cada decisión queda con su registro: lo que leyó, lo que decidió y la aritmética. Y se le puede preguntar.
+
+12
+00:01:27.138 --> 00:01:33.058
+La IA lee. El código decide. Una persona aprueba.
+
+13
+00:01:33.608 --> 00:01:41.136
+Aislamiento por empresa. Registro inmutable. Nunca paga fuera de las reglas.
+
+14
+00:01:41.686 --> 00:01:47.814
+En producción: Andina Labs, una empresa de ejemplo con 29 facturas.
+
+15
+00:01:48.364 --> 00:01:53.940
+La Bandeja: qué hay por pagar, qué espera aprobación y la autonomía del agente.
+
+16
+00:01:54.490 --> 00:02:01.146
+En cada factura: lo que leyó, con su confianza, y las 13 reglas con su aritmética.
+
+17
+00:02:01.696 --> 00:02:07.392
+Cuando una factura supera el umbral, la pregunta es concreta y la respuesta, un clic.
+
+18
+00:02:07.942 --> 00:02:13.902
+El Periodo rinde cuentas: autonomía 62 % y violaciones 0.
+
+19
+00:02:14.452 --> 00:02:20.568
+Y los proveedores envían sus facturas desde un portal propio, también desde el celular.
+
+20
+00:02:21.118 --> 00:02:29.682
+Thesaurus. Listo para conectarse a Blinka. Pruébelo con su propia empresa.

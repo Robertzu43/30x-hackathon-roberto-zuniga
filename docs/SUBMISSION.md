@@ -48,7 +48,7 @@ SES: AWS negó el acceso de producción; el correo llega solo a direcciones veri
 
 - **Repositorio público de GitHub:** https://github.com/Robertzu43/30x-hackathon-roberto-zuniga (debe estar en público antes de enviar)
 - **Demo (URL):** https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo
-- **Video demo (URL):** https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo/happy-path.webm (mientras la película de lanzamiento no esté lista, es el recorrido completo; cuando lo esté, la tarea 56 cambia esta línea a `https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo/thesaurus-launch.mp4`)
+- **Video demo (URL):** https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo/thesaurus-launch.mp4 (película de lanzamiento, 150 s)
 - **Recorrido completo sin editar:** https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo/happy-path.webm
 - **Portal de proveedores:** https://facturas.30x-hackathon-roberto-zuniga.workers.dev/andina-labs
 - **Diagrama de arquitectura:** https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo/architecture.png (SVG: https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo/architecture.svg)

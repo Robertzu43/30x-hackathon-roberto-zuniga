@@ -8,6 +8,7 @@ import LogoIntro from '../components/LogoIntro';
 import TrialButton from '../components/TrialButton';
 import { RunProgress, useRunAgent } from '../components/RunProgress';
 import { useT } from '../i18n';
+import { enterApp } from '../transition';
 import { enterDemo } from '../trial';
 import './demo.css';
 import '../components/ai.css';
@@ -55,7 +56,7 @@ export default function Demo() {
   const enter = async () => {
     setEntering(true);
     setEnterFailed(false);
-    if (await enterDemo()) return navigate('/');
+    if (await enterDemo()) return void enterApp(() => navigate('/')); // AC-109
     setEntering(false);
     setEnterFailed(true);
   };
@@ -91,10 +92,11 @@ export default function Demo() {
         </div>
         <TrialButton />
         <div className="demo-actions">
-          <button type="button" disabled={entering} aria-busy={entering} onClick={() => guard(() => void enter())}>{t(entering ? 'demo.entering' : 'demo.enter')}</button>
+          {/* The shorter busy label keeps the width it had, so the row never re-wraps under the click (AC-109 CLS) */}
+          <button type="button" disabled={entering} aria-busy={entering} onClick={(e) => { e.currentTarget.style.minWidth = `${e.currentTarget.offsetWidth}px`; guard(() => void enter()); }}>{t(entering ? 'demo.entering' : 'demo.enter')}</button>
           <a href="/demo/happy-path.webm">{t('demo.video')} →</a>
           <a href={PORTAL}>{t('demo.portal')} →</a>
-          {isDemoUser(session?.user, demoEmail) && (
+          {isDemoUser(session?.user, demoEmail) && !entering && ( // signed in mid-click: it would re-wrap the row under the transition
             <button type="button" disabled={run.running || asking} onClick={() => setAsking(true)}>{t('demo.reset')}</button>
           )}
         </div>

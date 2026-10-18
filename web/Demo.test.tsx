@@ -1,12 +1,20 @@
 // AC-45, AC-46, AC-47, AC-66, AC-70, R-30: the public /demo page.
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { Route, Routes } from 'react-router-dom';
-import { expect, test } from 'vitest';
+import { beforeEach, expect, test, vi } from 'vitest';
 import Demo from './pages/Demo';
 import { DEMO_EMAIL, fakeAuth, mockApi, renderAt, signedInAs } from './test/utils';
+import { enterApp } from './transition';
 import gate from '../scripts/ux-gate.mjs?raw';
 import portalHtml from '../portal/public/index.html?raw';
 import portalJs from '../portal/public/app.js?raw';
+
+// AC-109: the real enterApp runs (jsdom has no View Transitions, so the swap is instant); the spy proves the door uses it.
+vi.mock('./transition', async (load) => {
+  const real = await load<typeof import('./transition')>();
+  return { ...real, enterApp: vi.fn(real.enterApp) };
+});
+beforeEach(() => { vi.mocked(enterApp).mockClear(); }); // braces: a returned function would run as teardown
 
 const row = (id: string, outcome: string | null, es: string | null, en: string | null) =>
   ({ id, outcome, headline_es: es, headline_en: en, headline: es });
@@ -91,6 +99,7 @@ test('"Entrar como Andina Labs" signs in with the config demo email and the publ
   fireEvent.click(screen.getByRole('button', { name: 'Entrar como Andina Labs' }));
   expect(await screen.findByText('Bandeja abierta')).toBeTruthy();
   expect(fakeAuth.signInWithPassword).toHaveBeenCalledWith({ email: DEMO_EMAIL, password: 'andina-demo-2026' });
+  expect(enterApp).toHaveBeenCalledOnce(); // the hand-over into Bandeja (AC-109)
   expect(sessionStorage.getItem('demo-tour')).toBe('1'); // the click asks for the tour once (R-62)
 });
 
@@ -107,6 +116,27 @@ test('«Entrar como Andina Labs» is busy at once («Entrando…», aria-busy) a
   expect(await screen.findByText('Bandeja abierta')).toBeTruthy();
   expect(f.mock.calls.filter(([u]) => u === '/api/invoices/run')).toHaveLength(0);
   expect(sessionStorage.getItem('first-run')).toBeNull(); // the shared demo runs no pass
+});
+
+// AC-109 (gate `entry`, 4.cls): from the click to the end of the transition nothing on /demo may move. The busy label is
+// shorter and «Reiniciar demo» appears once the demo user is signed in: either one re-wraps the actions row.
+test('while entering, the busy button keeps its width and «Reiniciar demo» stays hidden (AC-109, AC-91 item 4)', async () => {
+  let release: (v: { data: unknown; error: Error | null }) => void = () => {};
+  fakeAuth.signInWithPassword.mockImplementationOnce(async (a) => {
+    await fakeAuth.verifyOtp({ email: a.email, token: '', type: 'email' }); // the session is the demo user's from here
+    return new Promise((r) => (release = r));
+  });
+  mockApi({ 'GET /api/demo/overview': overview });
+  app();
+  const button = screen.getByRole('button', { name: 'Entrar como Andina Labs' });
+  Object.defineProperty(button, 'offsetWidth', { value: 212 });
+  fireEvent.click(button);
+  expect((screen.getByRole('button', { name: 'Entrando…' }) as HTMLButtonElement).style.minWidth).toBe('212px');
+  await waitFor(() => expect(fakeAuth.verifyOtp).toHaveBeenCalledOnce());
+  await new Promise((r) => setTimeout(r, 50));
+  expect(screen.queryByRole('button', { name: 'Reiniciar demo' })).toBeNull();
+  release({ data: {}, error: null });
+  expect(await screen.findByText('Bandeja abierta')).toBeTruthy();
 });
 
 test('a failed sign-in stays on /demo with a message', async () => {

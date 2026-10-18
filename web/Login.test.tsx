@@ -1,12 +1,20 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { expect, test } from 'vitest';
+import { beforeEach, expect, test, vi } from 'vitest';
 import { Route, Routes } from 'react-router-dom';
 import { routes } from './App';
 import { FIRST_RUN } from './firstRun';
 import { useT } from './i18n';
 import Login from './pages/Login';
 import { currentSession } from './test/supabase';
+import { enterApp } from './transition';
 import { fakeAuth, mockApi, renderAt, signedInAs } from './test/utils';
+
+// AC-109: the real enterApp runs (jsdom has no View Transitions, so the swap is instant); the spy proves the door uses it.
+vi.mock('./transition', async (load) => {
+  const real = await load<typeof import('./transition')>();
+  return { ...real, enterApp: vi.fn(real.enterApp) };
+});
+beforeEach(() => { vi.mocked(enterApp).mockClear(); }); // braces: a returned function would run as teardown
 
 function setup() {
   const fetchMock = mockApi({ 'POST /api/invoices/run': { PAGAR: 3, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null } });
@@ -77,6 +85,7 @@ test('a valid code opens Bandeja at once and leaves the first-run flag; the logi
   enterCode('123456');
   expect(await screen.findByText('bandeja')).toBeTruthy();
   expect(fakeAuth.verifyOtp).toHaveBeenCalledWith({ email: 'ana@empresa.co', token: '123456', type: 'email' });
+  expect(enterApp).toHaveBeenCalledOnce(); // the hand-over into Bandeja (AC-109)
   expect(runCalls(fetchMock)).toHaveLength(0); // the shell runs the pass after landing (web/firstRun.tsx)
   expect(sessionStorage.getItem(FIRST_RUN)).toBe('id:ana@empresa.co'); // the flag names whose pass it is
 });
@@ -190,6 +199,7 @@ test('email + password signs in with no code and opens Bandeja at once, leaving 
   withPassword(' ana@empresa.co ', 'secreta-123');
   expect(await screen.findByText('bandeja')).toBeTruthy();
   expect(fakeAuth.signInWithPassword).toHaveBeenCalledWith({ email: 'ana@empresa.co', password: 'secreta-123' });
+  expect(enterApp).toHaveBeenCalledOnce(); // the hand-over into Bandeja (AC-109)
   expect(fakeAuth.signInWithOtp).not.toHaveBeenCalled();
   expect(runCalls(fetchMock)).toHaveLength(0);
   expect(sessionStorage.getItem(FIRST_RUN)).toBe('id:ana@empresa.co'); // the flag names whose pass it is

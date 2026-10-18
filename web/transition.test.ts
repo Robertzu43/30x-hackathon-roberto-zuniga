@@ -101,6 +101,17 @@ describe('enterApp (AC-109)', () => {
 });
 
 describe('entered (AC-109, AC-42: the tour waits for it)', () => {
+  it('replaces the browser\'s image animations, which also animate mix-blend-mode, with opacity and transform only', async () => {
+    // read from disk: a ?raw CSS import is empty under vitest (css processing off)
+    const { readFileSync } = (await import('node:fs' as string)) as { readFileSync(p: string, enc: string): string };
+    const css = readFileSync('web/components/transition.css', 'utf8');
+    expect(css).toMatch(/\.entering::view-transition-old\(\*\) \{ animation-name: vt-fade-out; \}/);
+    expect(css).toMatch(/\.entering::view-transition-new\(\*\) \{ animation-name: vt-fade-in; \}/);
+    expect(css).toMatch(/\.entering::view-transition-new\(brand-logo\) \{ animation-name: none; \}/); // the logo only moves
+    const props = [...css.matchAll(/@keyframes [\w-]+ \{(.*)\}/g)].flatMap((m) => [...m[1]!.matchAll(/([a-z-]+):/g)].map((p) => p[1]!));
+    expect(new Set(props)).toEqual(new Set(['opacity', 'transform']));
+  });
+
   it('resolves only when the transition has ended', async () => {
     const vt = fakeViewTransitions();
     enterApp(page);

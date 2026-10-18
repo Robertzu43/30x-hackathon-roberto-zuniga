@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useT } from '../i18n';
 import './hero-video.css';
 
-export type VideoManifest = { src: string; type: string; poster: string; tracks: Array<{ src: string; srclang: string; label: string }> };
+export type VideoManifest = { src: string; type: string; poster: string; tracks?: Array<{ src: string; srclang: string; label: string }> }; // tracks: optional, none means no captions
 const FALLBACK = '/demo/happy-path.webm';
 
 /** `manifest`: undefined while it loads, null when it failed. */
@@ -32,7 +32,7 @@ export default function HeroVideo({ manifest }: { manifest: VideoManifest | null
         <>
           <video ref={video} src={manifest.src} poster={manifest.poster} controls playsInline preload="metadata"
             onPlay={() => setStarted(true)} onError={() => setFailed(true)}>
-            {manifest.tracks.map((tr) => <track key={tr.src} kind="captions" src={tr.src} srcLang={tr.srclang} label={tr.label} default={tr.srclang === lang} />)}
+            {(manifest.tracks ?? []).map((tr) => <track key={tr.src} kind="captions" src={tr.src} srcLang={tr.srclang} label={tr.label} default={tr.srclang === lang} />)}
           </video>
           {!started && (
             <button type="button" className="hero-play" aria-label={t('demo.video.play')} onClick={play}>

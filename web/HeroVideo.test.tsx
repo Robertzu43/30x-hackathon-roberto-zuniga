@@ -36,7 +36,7 @@ test('in English the English track is the default; with no track in the tab lang
   expect([...document.querySelectorAll('track[default]')].map((t) => t.getAttribute('srclang'))).toEqual(['en']);
   unmount();
   sessionStorage.setItem('lang', 'es');
-  renderAt(<HeroVideo manifest={{ ...M, tracks: [M.tracks[1]!] }} />);
+  renderAt(<HeroVideo manifest={{ ...M, tracks: [M.tracks![1]!] }} />);
   expect(document.querySelectorAll('track[default]')).toHaveLength(0);
 });
 
@@ -66,4 +66,11 @@ test('while the manifest loads the 16:9 box is there, empty', () => {
   renderAt(<HeroVideo manifest={undefined} />);
   expect(document.querySelector('[data-hero-video]')).toBeTruthy();
   expect(video()).toBeNull();
+});
+
+test('a manifest with no tracks (an older video.json) plays with no captions instead of throwing', () => {
+  const { src, type, poster } = M;
+  renderAt(<HeroVideo manifest={{ src, type, poster }} />);
+  expect(video().getAttribute('src')).toBe('/demo/happy-path.webm');
+  expect(document.querySelectorAll('track')).toHaveLength(0);
 });

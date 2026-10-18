@@ -13,7 +13,6 @@ const ICONS = {
   act: <><path d="M4 12h13" /><path d="M13 6l6 6-6 6" stroke="#346538" /></>,
   record: <><path d="M6 3h12v18H6z" /><path d="M9 8h6M9 12h6" /><path d="M9 16l2 2 4-4" stroke="#346538" /></>,
   upload: <><path d="M12 16V4" /><path d="M7 9l5-5 5 5" stroke="#346538" /><path d="M4 16v4h16v-4" /></>,
-  link: <><path d="M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6l-1 1" /><path d="M14 10a4 4 0 0 0-6 0l-3 3a4 4 0 0 0 6 6l1-1" stroke="#346538" /></>,
 };
 export type Icon = keyof typeof ICONS;
 export type Step = { title: string; text: string; icon: Icon; extra?: ReactNode };

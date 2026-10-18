@@ -80,7 +80,7 @@ const wait = async (page: any) => { try { await page.waitForFunction(() => (wind
       await page.getByLabel('Código de 6 dígitos').fill(code);
       await page.waitForTimeout(500);
       await page.evaluate(() => (window as any).__qa.arm(false));
-      const t = Date.now(); await page.getByRole('button', { name: 'Entrar', exact: true }).click(); const ok = await wait(page); const wall = Date.now() - t; if (!ok) { results[NAME].push({ usableMs: 99999, busyMs: null }); await ctx.close(); continue; }
+      const t = Date.now(); await page.getByRole('button', { name: 'Verificar código', exact: true }).click(); const ok = await wait(page); const wall = Date.now() - t; if (!ok) { results[NAME].push({ usableMs: 99999, busyMs: null }); await ctx.close(); continue; }
       const row = await report('otp', i, page, net, wall);
       expect(stubbed).toBe(1);
       expect(row.busyText).toBe('Entrando…');

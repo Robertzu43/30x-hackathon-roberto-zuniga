@@ -269,7 +269,7 @@ async function entrySample(browser, base, kind, { cfg, key, password }) {
         await page.getByRole('button', { name: 'Enviar código' }).click(); // fulfilled by otpGuard
         await page.locator('#login-code').waitFor();
         await page.locator('#login-code').fill(await admin(cfg.supabaseUrl, key).code(email));
-        click = page.getByRole('button', { name: 'Entrar', exact: true });
+        click = page.getByRole('button', { name: 'Verificar código', exact: true }); // R-179
       }
     } else click = page.getByRole('button', { name: kind === 'trial' ? 'Probar con mi propia empresa' : 'Entrar como Andina Labs' });
     await page.evaluate(() => addEventListener('click', (e) => { window.__t0 = e.timeStamp; }, true));

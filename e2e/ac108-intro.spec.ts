@@ -87,7 +87,7 @@ test('AC-108 /demo: door enabled at DCL+100 ms, a click then starts the sign-in,
   await ctx.clearCookies(); const p2 = await ctx.newPage(); await p2.addInitScript(PROBE);
   p2.on('request', (r: any) => { if (/auth\/v1\/token/.test(r.url())) reqs.push(`${r.method()} ${new globalThis.URL(r.url()).pathname} at +${Date.now() - t.v}ms after the click`); });
   await p2.goto(`${URL_}/demo`, { waitUntil: 'commit' });
-  await p2.evaluate(() => new Promise((r) => { const go = () => setTimeout(r, 100); document.readyState !== 'loading' ? go() : document.addEventListener('DOMContentLoaded', go); }));
+  await p2.evaluate(() => new Promise((r) => { const go = () => setTimeout(r, 100); if (document.readyState !== 'loading') go(); else document.addEventListener('DOMContentLoaded', go); }));
   const btn = p2.getByRole('button', { name: /Entrar como Andina Labs/ });
   const st = await p2.evaluate(() => { const b = [...document.querySelectorAll('button')].find((x) => /Entrar como Andina Labs/.test(x.textContent || '')); return { present: !!b, enabled: !!b && !b.disabled, logoAnimating: (window as any).__logoAnims().length }; });
   console.log(`[/demo] at DCL+100 ms: ${J(st)}`);

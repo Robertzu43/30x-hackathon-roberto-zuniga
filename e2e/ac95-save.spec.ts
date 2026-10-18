@@ -16,7 +16,6 @@ test('AC-95 save access, errors, password login elsewhere, no warning once saved
   const company = (await pa.locator('header').first().innerText()).match(/Empresa de prueba \d+/)?.[0] ?? (await pa.waitForFunction(() => /Empresa de prueba \d+/.test(document.querySelector('header')!.innerText)).then(async () => (await pa.locator('header').first().innerText()).match(/Empresa de prueba \d+/)![0]));
   console.log('A company:', company, '| top bar before save:', (await pa.locator('header').first().innerText()).replace(/\s+/g, ' '));
   await pa.getByRole('button', { name: 'Guardar mi acceso' }).first().click();
-  const tokenCalls = () => A.net.filter((x: any) => /token|user/.test(x.path)).length;
   await pa.locator('#save-email').fill(email); await pa.locator('input[autocomplete="new-password"]').fill('abc1234');
   await pa.getByRole('button', { name: 'Guardar mi acceso' }).last().click();
   console.log('short password (7 chars) ->', JSON.stringify(await pa.getByText(/La contraseña debe tener al menos 8 caracteres/).allInnerTexts()));

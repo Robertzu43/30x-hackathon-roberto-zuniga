@@ -23,7 +23,7 @@ async function report(name: string, i: number, page: any, net: any[], wall: numb
 }
 const wait = async (page: any) => { try { await page.waitForFunction(() => (window as any).__qa.usable !== null, null, { timeout: 15000 }); return true; } catch { console.log(`  USABLE NEVER REACHED in 15 s. alerts=${JSON.stringify(await page.getByRole('alert').allInnerTexts().catch(() => []))}`); return false; } };
 
-for (const lang of ['es']) {
+{ // was: for (const lang of ['es'])
   if (door === 'all' || door === 'trial') test('AC-107 trial door x3', async ({ browser }: any) => {
     const NAME = 'trial'; results[NAME] ||= [];
     for (let i = 0; i < RUNS; i++) {

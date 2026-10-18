@@ -7,7 +7,7 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { aggregate, EMPTY_BODY, entryCls, FONTS, launch, logoSettled, main, MSG, PALETTE, renderGate, runCell, SCREENS, unreadId, writeGate } from './ux-gate.mjs';
+import { aggregate, cellLabel, EMPTY_BODY, entryCls, FONTS, launch, logoSettled, main, MSG, PALETTE, renderGate, runCell, SCREENS, unreadId, writeGate } from './ux-gate.mjs';
 
 const DICTS = {
   es: { 'f.approve': 'Aprobar', 'f.hello': 'Hola {name}', 'f.title': 'Bandeja', 'f.empty': 'Todavía no hay facturas.', 'f.retry': 'Reintentar', 'f.send': 'Enviar', 'f.save': 'Guardar cambios', 'f.err': 'No pude cargar los datos. Inténtalo de nuevo.', 'f.decide': 'decide', 'f.nopay': 'No puedo mostrar este pago', 'f.nopay.next': 'Pídele a quien te lo envió que lo reenvíe.', 'f.offline': 'Sin conexión. Revisa tu conexión e inténtalo de nuevo.', 'f.failed': 'No se pudo enviar. Inténtalo de nuevo.' },
@@ -163,6 +163,22 @@ const echoFixture = (lang) => `<!doctype html><html lang="${lang}"><head><meta c
   document.getElementById('f').addEventListener('submit', (e) => { e.preventDefault(); const p = document.createElement('p'); p.textContent = document.getElementById('m').value; document.querySelector('.log').append(p); });
   </script></body></html>`;
 
+// Task 34b: the portal chat as the real one answers a send: the reply bubble with the status link and «Copiar enlace». ?tiny=1 makes that button 20 px tall.
+const replyFixture = (tiny) => `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>r</title><style>
+  body{margin:0;font:16px/1.6 ${FONTS[0]};color:#111111;background:#ffffff} a{display:inline-block;min-height:44px;color:#111111;text-decoration:underline}
+  button{min-width:44px;min-height:44px;border:1px solid #eaeaea;background:#ffffff;color:#111111} button.primary{background:#111111;color:#ffffff}
+  textarea{display:block;width:100%;font:16px/1.6 ${FONTS[0]}} ${tiny ? '.copy{min-height:0;height:20px}' : ''}</style></head><body><header><svg data-logo role="img" aria-label="Logo" width="32" height="32"><rect width="32" height="32" fill="#111111"/></svg></header><main><h1>Portal</h1><div class="log" role="log"></div><form id="f"><label for="m">Mensaje</label><textarea id="m"></textarea><button class="primary" type="submit">Enviar</button></form></main><script>
+  document.getElementById('f').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const d = await (await fetch(location.pathname, { method: 'POST' })).json().catch(() => ({}));
+    if (!d.ok) return;
+    const a = document.createElement('article');
+    for (const t of d.reply.es) a.append(Object.assign(document.createElement('p'), { textContent: t }));
+    a.append(Object.assign(document.createElement('a'), { href: location.origin + d.status_path, textContent: location.origin + d.status_path }), Object.assign(document.createElement('button'), { className: 'copy', type: 'button', textContent: 'Copiar enlace' }));
+    document.querySelector('.log').append(a);
+  });
+  </script></body></html>`;
+
 // D42/AC-109: a login page whose button hands over to Bandeja. ?v=instant swaps at once, vt runs the swap inside a View Transition,
 // shift adds a layout shift 100 ms later (inside the 500 ms the browser excuses after an input), console logs an error after the click.
 const entryPage = (v) => `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>e</title><style>body{margin:0;font:16px sans-serif} #app{padding:16px;min-height:400px}</style></head><body><div id="app"><h1>Entrar</h1><button id="go" class="primary" type="button">Entrar</button><p>cuerpo</p></div><script>
@@ -196,6 +212,7 @@ beforeAll(async () => {
     if (u.pathname === '/ov') return void res.writeHead(200, { 'content-type': 'text/html' }).end(overlapPage(u.searchParams.get('mode')));
     if (u.pathname === '/pf') return void res.writeHead(200, { 'content-type': 'text/html' }).end(req.method === 'POST' ? '{"ok":true}' : portalFixture(u.searchParams.has('bare')));
     if (u.pathname === '/pe') return void res.writeHead(200, { 'content-type': 'text/html' }).end(echoFixture(u.searchParams.get('lang') === 'en' ? 'en' : 'es'));
+    if (u.pathname === '/pr') return void (req.method === 'POST' ? res.writeHead(500, { 'content-type': 'application/json' }).end('{"ok":false}') : res.writeHead(200, { 'content-type': 'text/html' }).end(replyFixture(u.searchParams.has('tiny'))));
     if (u.pathname === '/sf') return void res.writeHead(200, { 'content-type': 'text/html' }).end(statusFixture());
     if (u.pathname === '/gone') return void res.writeHead(u.searchParams.has('spoof') ? 200 : 404, { 'content-type': 'text/html' }).end(gonePage(u));
     if (u.pathname === '/chart-sr') return void res.writeHead(200, { 'content-type': 'text/html' }).end(chartPage());
@@ -742,4 +759,54 @@ describe('entry: the hand-over into Bandeja (AC-109, AC-91 Clarified)', () => {
     expect(status(await go('console'), '6.console')).toBe('fail');
   }, 60_000);
   it('entryCls adds the shifts from the click on, input or not', () => expect(entryCls([{ t: 1, v: 0.5 }, { t: 12, v: 0.004 }, { t: 15, v: 0.006 }], 10)).toBeCloseTo(0.01));
+});
+
+describe('portal-reply is measured after the reply (Task 34b, AC-91, AC-90 e, R-102)', () => {
+  const reply = (path = '/pr') => ({ ...SCREENS.find((s) => s.id === 'portal-reply'), path });
+  it('answers the send with a recorded reply, never reaching the server, and measures every item with the reply on screen', async () => {
+    seen.length = 0;
+    const rs = await run(reply());
+    expect(status(rs, '0.run'), JSON.stringify(rs.find((r) => r.id === '0.run'))).toBeUndefined();
+    for (const id of ['1.scroll', '2.targets', '2.inputs', '3.axe', '5.mixed', '6.console']) expect(rs.some((r) => r.id === id), id).toBe(true);
+    expect(status(rs, '2.targets'), JSON.stringify(rs.find((r) => r.id === '2.targets'))).toBe('pass');
+    expect(rs.find((r) => r.id === '0.reach').status).toBe('pass');
+    expect(seen).toEqual([]); // the POST was answered by the gate (AC-85 rate limit, no real invoice)
+  }, 60_000);
+  it('fails the 44 px check on «Copiar enlace» (R-102): the reply button is measured', async () => {
+    const r = (await run(reply('/pr?tiny=1'))).find((x) => x.id === '2.targets');
+    expect(r.status, JSON.stringify(r)).toBe('fail');
+  }, 60_000);
+  it('also answers the send of the dynamic pass, so 4.busy is measured with no real send', async () => {
+    seen.length = 0;
+    const rs = await run(reply(), { kind: 'dynamic' });
+    expect(status(rs, '4.busy'), JSON.stringify(rs.filter((r) => r.id.startsWith('4.')))).toBeDefined();
+    expect(seen).toEqual([]);
+  }, 60_000);
+  it('a screen that prepare skips reads N/A in the table, not the earlier pre-send PASS', async () => {
+    const rs = await run({ id: 'skipped', exp: 'test', path: '/f?bad=none', primary: '#go', prepare: () => 'na: not measured' });
+    const a = aggregate(rs).find((r) => r.id === '0.reach');
+    expect([a.status, a.measured]).toEqual(['na', 'na: not measured @390/es']);
+  }, 60_000);
+  it('aggregate keeps a real FAIL over a skipped row', () => {
+    const row = (status, extra = {}) => ({ screen: 's', width: 390, lang: 'es', id: '0.reach', status, value: status === 'fail' ? 1 : 0, measured: 'm', ...extra });
+    expect(aggregate([row('fail'), row('na', { skipped: true })])[0].status).toBe('fail');
+    expect(aggregate([row('pass'), row('na', { skipped: true })])[0].status).toBe('na');
+    expect(aggregate([row('pass'), row('na')])[0].status).toBe('pass'); // an ordinary N/A never hides a pass
+  });
+});
+
+describe('a state label never equals a screen id (Task 34b, AC-91)', () => {
+  const labels = SCREENS.flatMap((s) => [s.id, ...(s.states ?? []).map((st) => cellLabel(s, st))]);
+  it('gives the portal error state a label of its own, apart from the designed 404 screen', () => {
+    const portal = SCREENS.find((s) => s.id === 'portal');
+    expect(cellLabel(portal, 'error')).not.toBe('portal-error');
+    expect(cellLabel(portal, null)).toBe('portal');
+    expect(SCREENS.find((s) => s.id === 'portal-error').notFound).toBe(true);
+  });
+  it('keeps every other state label as it was', () => {
+    expect(cellLabel(SCREENS.find((s) => s.id === 'inbox'), 'empty')).toBe('inbox-empty');
+  });
+  it('makes every screen and state label unique, so the table never merges two screens', () => {
+    expect(new Set(labels).size).toBe(labels.length);
+  });
 });

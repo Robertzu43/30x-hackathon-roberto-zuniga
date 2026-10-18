@@ -49,11 +49,23 @@ const kindOf = (ss) => {
   const first = ss.filter((x) => x.pending > 0).length;
   return `${first} first login with pending invoices, ${ss.length - first} returning`;
 };
-export function entryRows(screen, who, samples) {
+// R-150's INFO columns, never graded. `signin` and `inbox` are Resource Timing entries (the page's own clock, as t0 is); `header` is the Server-Timing value of /api/screen/inbox.
+export const serverTiming = (h) => { const m = /(?:^|,)\s*app\s*;(?:[^,]*;)?\s*dur=([\d.]+)/i.exec(h ?? ''); return m ? Number(m[1]) : null; };
+export const entryTimes = ({ t0, signin, inbox, header }) => ({
+  signin: signin ? signin.responseEnd - t0 : null,
+  gap: signin && inbox ? inbox.startTime - signin.responseEnd : null,
+  req: inbox ? inbox.responseEnd - inbox.startTime : null,
+  server: serverTiming(header),
+  bytes: inbox ? inbox.decodedBodySize : null,
+});
+const col = (infos, k, unit) => { const v = infos.map((i) => i[k]).filter((x) => x != null); return v.length ? `${Math.round(median(v))} ${unit}` : 'n/a'; };
+export const entryExtra = (infos, baseline) => `INFO: sign-in ${col(infos, 'signin', 'ms')}; gap ${col(infos, 'gap', 'ms')}; inbox request ${col(infos, 'req', 'ms')}; server ${col(infos, 'server', 'ms')}; ${col(infos, 'bytes', 'bytes')}; /api/health baseline ${baseline} ms`;
+
+export function entryRows(screen, who, samples, baseline) {
   const bad = samples.find((x) => x.error);
   const base = { unit: 'ms', target: T.entry };
   const note = `${who}; ${kindOf(samples.filter((x) => !x.error))}`;
-  const rows = [{ ...base, screen, metric: `Click to usable Bandeja, median of 3 (${note})`, value: bad ? null : Math.round(median(samples.map((x) => x.ms))), why: bad?.error }];
+  const rows = [{ ...base, screen, metric: `Click to usable Bandeja, median of 3 (${note})`, value: bad ? null : Math.round(median(samples.map((x) => x.ms))), why: bad?.error, extra: bad ? undefined : entryExtra(samples.map((x) => x.info), baseline) }];
   if (screen === 'entry trial') {
     const none = samples.some((x) => x.decided == null);
     rows.push({ screen: 'entry trial (all decided)', metric: 'Click to every row decided, median of 3', unit: 'ms', target: T.decided, within: true, value: none ? null : Math.round(median(samples.map((x) => x.decided))), why: bad?.error ?? 'a row was still «Pendiente» after the wait: decided' });
@@ -95,7 +107,7 @@ export const ROW0 = `## Row 0: baseline at 17:40Z, before D40
 | JavaScript, one bundle | 626 KB | gzipped under 250 KB | above target |
 `;
 
-const cell = (r) => (r.na ? `N/A (${r.na})` : r.value == null ? `not measured (${r.why})` : `${r.value} ${r.unit}`);
+const cell = (r) => (r.na ? `N/A (${r.na})` : r.value == null ? `not measured (${r.why})` : `${r.value} ${r.unit}${r.extra ? ` (${r.extra})` : ''}`);
 const verdict = (r) => (r.na ? 'N/A' : r.info ? 'INFO' : judge(r.value, r.target, r.within));
 export function renderPerf({ when, base, portal, colo, country, rows }) {
   const failed = rows.filter((r) => verdict(r) === 'FAIL').length;
@@ -155,6 +167,7 @@ const INIT = ({ session }) => {
   const f = window.fetch; // counts the API calls in flight, so "data rendered" means none are pending
   window.fetch = (...a) => { window.__p.pending++; return f(...a).finally(() => window.__p.pending--); };
 };
+const SIGNIN = /\/auth\/v1\/(token|verify|signup)(\?|$)/, INBOX = /\/api\/screen\/inbox(\?|$)/; // not /auth/v1/otp, the send-code step
 const SKELETON = '[aria-busy="true"],progress,[role="progressbar"],.skeleton,[data-skeleton]'; // an empty role="status" is a live region, not a loader
 export const usable = ({ sel, need }) => { // AC-91 item 7: the heading and the primary action are visible and enabled (`need`: the action must exist)
   const h = document.querySelector('h1');
@@ -260,16 +273,21 @@ async function entrySample(browser, base, kind, { cfg, key, password }) {
       }
     } else click = page.getByRole('button', { name: kind === 'trial' ? 'Probar con mi propia empresa' : 'Entrar como Andina Labs' });
     await page.evaluate(() => addEventListener('click', (e) => { window.__t0 = e.timeStamp; }, true));
+    let header;
+    page.on('response', (r) => { if (INBOX.test(r.url())) header = r.headers()['server-timing']; });
     await click.click();
     const t1 = await page.waitForFunction(entryReady, null, { timeout: 15_000, polling: 'raf' }).then((h) => h.jsonValue());
-    const t0 = await page.evaluate(() => window.__t0);
+    const { t0, signin, inbox } = await page.evaluate(([si, ib]) => {
+      const t0 = window.__t0, res = performance.getEntriesByType('resource').map((e) => e.toJSON());
+      return { t0, signin: res.find((e) => new RegExp(si).test(e.name) && e.startTime >= t0), inbox: res.findLast((e) => new RegExp(ib).test(e.name)) };
+    }, [SIGNIN.source, INBOX.source]);
     const pending = await page.evaluate(() => document.querySelectorAll('#invoices tbody .chip-pending').length);
     const decided = kind === 'trial' ? await page.waitForFunction(allDecided, null, { timeout: 35_000, polling: 'raf' }).then((h) => h.jsonValue()).catch(() => null) : null;
-    return { ms: t1 - t0, pending, decided: decided == null ? null : decided - t0 };
+    return { ms: t1 - t0, pending, decided: decided == null ? null : decided - t0, info: entryTimes({ t0, signin, inbox, header }) };
   } catch (e) { return { error: e.message.split('\n')[0].replace(/^page\.waitForFunction: /, '').replace(/Timeout \d+ms exceeded.*/, 'not usable in 15 s') }; } finally { await context.close(); }
 }
 
-async function entryAll(browser, base, { trial }) {
+async function entryAll(browser, base, { trial, baseline }) {
   const cfg = await (await fetch(`${base}/api/config`)).json();
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY, password = randomBytes(18).toString('base64url'); // held in memory only
   const na = (screen, why) => [{ screen, metric: 'Click to usable Bandeja, median of 3', na: why, unit: 'ms', target: T.entry }];
@@ -278,11 +296,11 @@ async function entryAll(browser, base, { trial }) {
   for (const kind of ['otp', 'password']) {
     if (!key) { rows.push(...na(`entry ${kind}`, 'needs SUPABASE_SERVICE_ROLE_KEY in the environment, for the QA users')); continue; }
     try { await admin(cfg.supabaseUrl, key).ensure(QA[kind], kind === 'password' ? password : undefined); } catch (e) { rows.push(...entryRows(`entry ${kind}`, QA[kind], [{ error: e.message }])); continue; }
-    rows.push(...entryRows(`entry ${kind}`, QA[kind], await run(kind)));
+    rows.push(...entryRows(`entry ${kind}`, QA[kind], await run(kind), baseline));
   }
-  if (trial) rows.push(...entryRows('entry trial', 'a new anonymous user per sample', await run('trial')));
+  if (trial) rows.push(...entryRows('entry trial', 'a new anonymous user per sample', await run('trial'), baseline));
   else rows.push(...na('entry trial', 'run with --trial (needs the trial door, AC-92)'), ...na('entry trial (all decided)', 'run with --trial (needs the trial door, AC-92)'));
-  rows.push(...entryRows('entry demo', 'the shared demo user', await run('demo')));
+  rows.push(...entryRows('entry demo', 'the shared demo user', await run('demo'), baseline));
   return rows;
 }
 
@@ -340,7 +358,9 @@ export async function main(argv) {
       rows.push(...navRows(s, ns));
     }
   }
-  rows.push(...(await entryAll(browser, base, { trial: !!trial })));
+  const rtts = []; // R-150's baseline, measured before the entry rows: the median of 5 /api/health round trips
+  for (let i = 0; i < 5; i++) { const t0 = performance.now(); await (await fetch(`${base}/api/health`)).arrayBuffer(); rtts.push(performance.now() - t0); }
+  rows.push(...(await entryAll(browser, base, { trial: !!trial, baseline: Math.round(median(rtts)) })));
   await browser.close();
   for (const [url, { headers, screens }] of apis) {
     const r = await apiP95(url, headers);

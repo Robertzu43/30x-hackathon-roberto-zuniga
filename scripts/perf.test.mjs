@@ -2,7 +2,7 @@
 // The perf harness's own checks (AC-97): median, p95, gzip sum, the critical path and the table, on fixtures. No browser, no network.
 import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
-import { admin, allDecided, coloOf, criticalApis, entryReady, entryRows, gzSum, isHit, judge, median, missRow, navRows, otpGuard, p95, portalRows, PRIMARY, renderPerf, ROW0, usable } from './perf.mjs';
+import { admin, allDecided, coloOf, criticalApis, entryExtra, entryReady, entryRows, entryTimes, gzSum, isHit, judge, median, missRow, navRows, otpGuard, p95, portalRows, PRIMARY, renderPerf, ROW0, serverTiming, usable } from './perf.mjs';
 import { SCREENS } from './ux-gate.mjs';
 
 describe('statistics', () => {
@@ -216,7 +216,7 @@ describe('entry: the end of the interval, t1 (AC-97 target 5, R-146)', () => {
 });
 
 describe('entry rows (AC-97 targets 5 and 6, R-146)', () => {
-  const ok = (ms, pending = 0, decided = null) => ({ ms, pending, decided });
+  const ok = (ms, pending = 0, decided = null) => ({ ms, pending, decided, info: {} }); // a real sample always has info (entryTimes)
   const otp = 'qa-perf-otp@example.com';
   it('is the median of 3 under 2000 ms, and names the QA user and the kind of sample', () => {
     const [r] = entryRows('entry otp', otp, [ok(1800, 11), ok(900), ok(1500)]);
@@ -242,6 +242,46 @@ describe('entry rows (AC-97 targets 5 and 6, R-146)', () => {
     const rows = entryRows('entry trial', 'u', [ok(900, 11, null), ok(900, 11, 20_000), ok(900, 11, 20_000)]);
     expect(rows[1].value).toBeNull();
     expect(rows[1].why).toMatch(/decided/);
+  });
+});
+
+describe('entry INFO columns (R-150)', () => {
+  const ok = (ms, info) => ({ ms, pending: 0, decided: null, info });
+  const info = (signin, gap, req, server, bytes) => ({ signin, gap, req, server, bytes });
+  it('reads app;dur from Server-Timing, among other metrics, and is null without it', () => {
+    expect(serverTiming('app;dur=412.5')).toBe(412.5);
+    expect(serverTiming('cdn-cache;desc=HIT, app;desc="x";dur=30')).toBe(30);
+    expect(serverTiming('db;dur=9')).toBeNull();
+    expect(serverTiming(undefined)).toBeNull();
+  });
+  it('sign-in is click to its response, the gap runs to the inbox request start, the request is start to end', () => {
+    const t = entryTimes({ t0: 1000, signin: { startTime: 1010, responseEnd: 1400 }, inbox: { startTime: 1415, responseEnd: 2100, decodedBodySize: 51_000 }, header: 'app;dur=450' });
+    expect(t).toEqual({ signin: 400, gap: 15, req: 685, server: 450, bytes: 51_000 });
+  });
+  it('a missing request or header gives null, never a number', () => {
+    expect(entryTimes({ t0: 0, signin: null, inbox: null, header: undefined })).toEqual({ signin: null, gap: null, req: null, server: null, bytes: null });
+  });
+  it('prints the median of each column, n/a for the server time when no sample had the header, and the baseline', () => {
+    const x = entryExtra([info(400, 10, 600, null, 51_000), info(300, 30, 700, null, 51_000), info(500, 20, 650, null, 50_000)], 80);
+    expect(x).toBe('INFO: sign-in 400 ms; gap 20 ms; inbox request 650 ms; server n/a; 51000 bytes; /api/health baseline 80 ms');
+    expect(entryExtra([info(1, 1, 1, 450, 1)], 80)).toContain('server 450 ms');
+  });
+  it('the entry row carries the INFO text in its Value cell and is still graded on its own number', () => {
+    const [r] = entryRows('entry demo', 'shared demo user', [ok(1800, info(400, 10, 600, 450, 51_000)), ok(900, info(300, 10, 500, 450, 51_000)), ok(1500, info(350, 10, 550, 450, 51_000))], 80);
+    const md = renderPerf({ when: '2026-10-17T20:00:00.000Z', base: 'https://x.test', colo: '?', country: '?', rows: [r] });
+    expect(md).toMatch(/\| entry demo \| .* \| 1500 ms \(INFO: sign-in 350 ms; .*baseline 80 ms\) \| under 2000 ms \| PASS \|/);
+    expect(md).toContain('FAILED ROWS: 0');
+  });
+  it('INFO text never turns a FAIL into a pass or a pass into a FAIL, and the failed count only counts the graded number', () => {
+    const slow = entryRows('entry demo', 'u', [ok(2500, info(9, 9, 9, null, 9)), ok(2600, info(9, 9, 9, null, 9)), ok(2700, info(9, 9, 9, null, 9))], 80);
+    const md = renderPerf({ when: '2026-10-17T20:00:00.000Z', base: 'https://x.test', colo: '?', country: '?', rows: slow });
+    expect(md).toContain('FAILED ROWS: 1');
+  });
+  it('an error row carries no INFO text, and the 30 s trial row does not either', () => {
+    expect(entryRows('entry otp', 'u', [ok(900, info(1, 1, 1, 1, 1)), { error: 'not usable in 15 s' }, ok(950, info(1, 1, 1, 1, 1))], 80)[0].extra).toBeUndefined();
+    const rows = entryRows('entry trial', 'u', [ok(900, info(1, 1, 1, 1, 1)), ok(900, info(1, 1, 1, 1, 1)), ok(900, info(1, 1, 1, 1, 1))], 80);
+    expect(rows[0].extra).toMatch(/^INFO:/);
+    expect(rows[1].extra).toBeUndefined();
   });
 });
 

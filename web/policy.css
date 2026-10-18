@@ -1,7 +1,7 @@
 /* Política and Beneficiarios (AC-53): flat cards, 1px #eaeaea borders, no shadows. */
 .policy, .beneficiaries { display: grid; gap: 2rem; }
-.policy > h1, .beneficiaries > h1 { margin-bottom: 0; }
-.policy > p, .beneficiaries > p { margin: -1.5rem 0 0; }
+.page-head h1 { margin-bottom: 0.5rem; }
+.page-head p { margin: 0; }
 .policy > * { min-width: 0; } /* a grid item never grows past the screen because of a wide table inside it */
 
 .card { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 2rem; }
@@ -12,6 +12,11 @@
 /* AC-105: one form holds the five rule cards; the name, the one primary and the save messages close it. */
 .rules { display: grid; gap: 2rem; }
 .rules > * { min-width: 0; }
+/* AC-113: from 1440 px the rule groups two per row; the currency group (rates and pins) and the save row take a whole row. */
+@media (min-width: 1440px) {
+  .rules { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  .rules > [aria-labelledby='currency-h'], .rules > .save { grid-column: 1 / -1; }
+}
 .rules .card > * + * { margin-top: 1.25rem; }
 .rules .card h2 + * { margin-top: 0; }
 .save { display: grid; gap: 1.25rem; justify-items: start; }

@@ -88,7 +88,7 @@ function CompanySection({ initial, skeleton }: { initial: Company; skeleton: boo
 }
 
 // AC-76: the market rates the agent uses, read-only. Staleness comes from the API (R-85.3), never computed here.
-function MarketRates({ pins, rates }: { pins: string[]; rates: Rate[] | null }) {
+function MarketRates({ pins, rates, onRetry }: { pins: string[]; rates: Rate[] | null; onRetry: () => void }) {
   const { t, locale } = useT();
   // es-CO prints «17 de oct de 2026»; AC-76 shows «17 oct 2026» (the replace below)
   const day = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Bogota' });
@@ -99,7 +99,10 @@ function MarketRates({ pins, rates }: { pins: string[]; rates: Rate[] | null }) 
     <div className="fx-market">
       <h3 id="fx-market-h">{t('policy.fx.market')}</h3>
       <div className="fx-slot">
-        {rates && !rates.length && <p className="muted">{t('policy.fx.empty')}</p>}
+        {rates && !rates.length && <>{/* AC-91 item 4: the designed empty state and its next step */}
+          <p className="muted" role="status">{t('policy.fx.empty')}</p>
+          <button type="button" onClick={onRetry}>{t('policy.fx.retry')}</button>
+        </>}
         {shown.length > 0 && (
           // scrolls inside its own container (AC-91 item 1); cards at phone width (policy.css)
           <div className="fx-scroll" role={rates ? 'region' : undefined} aria-labelledby={rates ? 'fx-market-h' : undefined} tabIndex={rates ? 0 : undefined} aria-hidden={rates ? undefined : true}>
@@ -212,18 +215,20 @@ export default function Policy() {
   const date = (s: string) => new Date(s).toLocaleDateString(locale, { dateStyle: 'medium' });
 
   return (
-    <section data-tour="policy" className="policy">
-      <h1>{t('screen.policy')}</h1>
-      <p className="muted">{t('policy.intro')}</p>
+    <section data-tour="policy" className="policy" data-band>
+      <div className="page-head" data-block>
+        <h1>{t('screen.policy')}</h1>
+        <p className="muted">{t('policy.intro')}</p>
+      </div>
       {!d && !loadFailed && <p role="status" className="sr-only">{t('policy.loading')}</p>}
       {loadFailed && (
-        <div>
+        <div data-block>
           <p role="alert" className="error">{t('policy.load_error')}</p>
           <button type="button" onClick={() => void screen.reload()}>{t('policy.fx.retry')}</button>
         </div>
       )}
       {!loadFailed && <>
-        <CompanySection initial={d?.company ?? { ...SKELETON.company, ...who }} skeleton={!d} />
+        <div data-block><CompanySection initial={d?.company ?? { ...SKELETON.company, ...who }} skeleton={!d} /></div>
 
         <form onSubmit={submit} noValidate className="rules">
           <RuleCard group="beneficiaries" skeleton={!d}>
@@ -244,7 +249,7 @@ export default function Policy() {
             <div className="grid">{numRule('duplicate_window_days')}{numRule('due_grace_days')}</div>
           </RuleCard>
           <RuleCard group="currency" skeleton={!d}>
-            <MarketRates pins={pins} rates={d?.fx.rates ?? null} />
+            <MarketRates pins={pins} rates={d?.fx.rates ?? null} onRetry={() => void screen.reload()} />
             <fieldset>
               <legend>{t('policy.fx.title')}</legend>
               <p className="muted hint">{t('policy.fx.hint')}</p>
@@ -259,7 +264,7 @@ export default function Policy() {
             </fieldset>
             <p className="muted hint">{t('policy.fx.source')}</p>
           </RuleCard>
-          <div className="save" {...(!d && hidden)}>
+          <div className="save" data-block {...(!d && hidden)}>
             <label>{t('policy.name')}
               <input value={f.name} placeholder={versions[0]?.name} maxLength={100} onChange={(e) => setF({ ...f, name: e.target.value })} />
             </label>
@@ -269,7 +274,7 @@ export default function Policy() {
           </div>
         </form>
 
-        <section {...card} aria-labelledby="reeval-h">
+        <section {...card} data-block aria-labelledby="reeval-h">
           <h2 id="reeval-h">{t('policy.reevaluate')}</h2>
           {would && (
             <div className="banner" role="status">
@@ -284,7 +289,7 @@ export default function Policy() {
           <RunProgress run={run} mode="reevaluate" />
         </section>
 
-        <section {...card} aria-labelledby="versions-h">
+        <section {...card} data-block aria-labelledby="versions-h">
           <h2 id="versions-h">{t('policy.versions')}</h2>
           <ol className="versions" aria-labelledby="versions-h">
             {(allVersions ? versions : versions.slice(0, 10)).map((v) => (

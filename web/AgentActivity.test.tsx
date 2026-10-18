@@ -27,7 +27,8 @@ const settle = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(
 // act flushes React only when it ends, so the clock moves in 400 ms slices: each played step schedules the next one.
 const slice = (ms: number) => act(async () => { await settle(); await vi.advanceTimersByTimeAsync(ms); await settle(); });
 const tick = async (ms: number) => { for (let t = 0; t === 0 || t < ms; t += 400) await slice(Math.min(400, ms - t)); };
-const shown = () => screen.queryAllByRole('listitem').filter((li) => !li.querySelector('li')).map((li) => li.textContent);
+// not the empty Bandeja's step cards (AC-116 c)
+const shown = () => screen.queryAllByRole('listitem').filter((li) => !li.querySelector('li') && !li.hasAttribute('data-step-card')).map((li) => li.textContent);
 const activityCalls = (f: ReturnType<typeof mockApi>) => f.mock.calls.filter(([u]) => String(u).startsWith('/api/agent/activity')).map(([u]) => String(u));
 let visibility: DocumentVisibilityState = 'visible';
 

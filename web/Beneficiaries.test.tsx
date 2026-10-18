@@ -103,6 +103,8 @@ test('Editar loads a row into the form, keeps a route outside the list, and save
 test('an empty directory says what to do next, and the button takes you to the form (UX-14)', async () => {
   setup({ 'GET /api/screen/beneficiaries': { beneficiaries: [] } });
   expect(await screen.findByText('Todavía no hay beneficiarios. Agrega el primero con el formulario de abajo.')).toBeTruthy();
+  // AC-116 (c): one unnumbered step card with an icon, today's copy and its next step
+  { const c = screen.getByText('Todavía no hay beneficiarios. Agrega el primero con el formulario de abajo.').closest('[data-step-card]')!; expect(c.querySelector('svg[aria-hidden="true"]')).toBeTruthy(); expect(c.querySelector('.step-n')).toBeNull(); }
   expect(screen.queryByRole('table')).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Agregar beneficiario' }));
   expect(document.activeElement).toBe(screen.getByLabelText('Nombre'));
@@ -214,6 +216,8 @@ test('each directory row links its name to the profile at /beneficiaries/:id, an
 test('no invoices says so and what to do next, never a blank chart (AC-104 empty state)', async () => {
   at({ 'GET /api/screen/beneficiary/b1': { ...profile, totals: { paid_month_usd: 0, paid_total_usd: 0, invoices: 0 }, history: [], last: [] } });
   expect(await screen.findByText('Todavía no hay pagos a este beneficiario.')).toBeTruthy();
+  // AC-116 (c): one unnumbered step card with an icon, today's copy and its next step
+  { const c = screen.getByText('Todavía no hay pagos a este beneficiario.').closest('[data-step-card]')!; expect(c.querySelector('svg[aria-hidden="true"]')).toBeTruthy(); expect(c.querySelector('.step-n')).toBeNull(); }
   expect(screen.getByRole('link', { name: 'Ir a la Bandeja' }).getAttribute('href')).toBe('/');
   expect(screen.getByRole('link', { name: 'Volver a Beneficiarios' })).toBeTruthy();
 });

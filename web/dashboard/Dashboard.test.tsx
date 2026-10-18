@@ -255,9 +255,10 @@ test('the beneficiary filter groups like Periodo from the top-level directory (R
   expect(ids()).toEqual(['n2', 'n1']);
 });
 
-test('no invoices: the empty message, the filters stay', () => {
+test('no invoices: the three step cards (AC-116 c), the filters stay', () => {
   table({ rows: [] });
-  expect(screen.getByText(/^Todavía no hay facturas\./)).toBeTruthy();
+  expect(document.querySelectorAll('[data-step-card]')).toHaveLength(3);
+  expect(screen.getByText('Sube una factura')).toBeTruthy();
   expect(screen.getByLabelText('Resultado')).toBeTruthy();
 });
 

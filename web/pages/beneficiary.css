@@ -1,4 +1,4 @@
-.beneficiary { max-width: 64rem; display: grid; gap: 1.5rem; }
+.beneficiary { display: grid; gap: 1.5rem; }
 .beneficiary a { display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; } /* AC-91 item 2 */
 .beneficiary h1, .beneficiary p { margin: 0; }
 .beneficiary-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 1rem; margin: 0; }
@@ -15,6 +15,12 @@
    Drop this once web/charts/charts.css hides the table itself. */
 .beneficiary .chart-sr { transform: scale(0); }
 .beneficiaries td a { display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; } /* AC-91 item 2: the name opens the profile (AC-104) */
-.beneficiary-body { display: grid; gap: 1.5rem; } /* AC-99: the same box loaded or not, so the skeleton swaps in place */
+.beneficiary-body { display: grid; gap: 1.5rem; }
+.beneficiary-profile, .beneficiary-history { display: grid; gap: 1.5rem; align-content: start; min-width: 0; }
+/* AC-113: from 1440 px the agreement and bank route sit beside the history. */
+@media (min-width: 1440px) {
+  .beneficiary-body { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); align-items: start; column-gap: 3rem; }
+  .beneficiary-body > h1 { grid-column: 1 / -1; }
+} /* AC-99: the same box loaded or not, so the skeleton swaps in place */
 .beneficiary .skeleton h1 { background: #f1efe9; border-radius: 4px; width: fit-content; }
 .beneficiary .skeleton :is(.chart-path, .chart-dot) { visibility: hidden; } /* a made-up line must not read as data */

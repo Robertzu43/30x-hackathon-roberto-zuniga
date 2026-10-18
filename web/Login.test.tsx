@@ -357,3 +357,15 @@ test('the shared demo user signing in here keeps the tab\'s language (R-78) and 
   expect(await screen.findByText('bandeja es')).toBeTruthy();
   await waitFor(() => expect(inboxCalls(f)).toEqual(['/api/screen/inbox?lang=es']));
 });
+
+test('the split root carries data-split and the form panel data-panel="form", on both screens (AC-112, R-196)', () => {
+  setup();
+  const check = () => {
+    const root = document.querySelector('[data-split]');
+    expect(root?.className).toBe('login');
+    expect(root?.querySelector('[data-panel="form"]')?.contains(screen.getByLabelText('Correo'))).toBe(true);
+  };
+  check();
+  fireEvent.click(screen.getByRole('button', { name: 'Entrar con contraseña' }));
+  check();
+});

@@ -1,4 +1,4 @@
-/* global process, console, fetch, Buffer, URL, setTimeout, SVGElement, addEventListener, document, window, performance, getComputedStyle, innerWidth, innerHeight, NodeFilter, PerformanceObserver, requestAnimationFrame, location, sessionStorage, localStorage, axe */ // Node script + code that runs in the page
+/* global process, console, fetch, Buffer, URL, setTimeout, SVGElement, DOMRect, addEventListener, document, window, performance, getComputedStyle, innerWidth, innerHeight, NodeFilter, PerformanceObserver, requestAnimationFrame, location, sessionStorage, localStorage, axe */ // Node script + code that runs in the page
 // The D38 UX gate (AC-91). Usage:
 //   node scripts/ux-gate.mjs --base <url> [--screens inbox,policy|all] [--only 6.palette] [--palette]
 //                            [--mutate] [--route id=/path] [--approve-token t] [--status-token t]
@@ -10,6 +10,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { judgeLayout, judgeTour, layoutMeasure, tourMeasure } from './ux-layout.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
@@ -21,9 +22,9 @@ export const FONTS = [
   "'Newsreader', 'Instrument Serif', 'Playfair Display', Georgia, serif",
   "'Geist Mono', 'SF Mono', 'JetBrains Mono', ui-monospace, monospace",
 ];
-export const WIDTHS = [360, 390, 768, 1024, 1440];
+export const WIDTHS = [360, 390, 768, 1024, 1440, 1920]; // 1920: AC-91 Clarified (D45, R-172)
 const LANGS = ['es', 'en'];
-const HEIGHT = { 360: 800, 390: 844, 768: 1024, 1024: 768, 1440: 900 };
+const HEIGHT = { 360: 800, 390: 844, 768: 1024, 1024: 768, 1440: 900, 1920: 1080 };
 const CHROMIUM = process.env.GATE_CHROMIUM ?? '/opt/pw-browsers/chromium';
 const DEMO = { email: 'demo@andina-labs.example', password: 'andina-demo-2026' }; // public by design (D8, AC-46); email is read from /api/config
 
@@ -148,7 +149,14 @@ function measure(o) {
     if (!el || !live.has(el) || inSrOnly(el) || !n.textContent.trim()) continue;
     const range = document.createRange();
     range.selectNodeContents(n);
-    const rects = [...range.getClientRects()].filter((r) => r.width > 1 && r.height > 1);
+    // AC-115: the part of a run that its own scroller hides (a tour card body over its buttons) is not painted, so it cannot overlap.
+    let rects = [...range.getClientRects()].filter((r) => r.width > 1 && r.height > 1);
+    for (let p = el; p && p !== document.body && rects.length; p = p.parentElement) {
+      const cs = getComputedStyle(p);
+      if (cs.overflowX === 'visible' && cs.overflowY === 'visible') continue;
+      const c = p.getBoundingClientRect();
+      rects = rects.map((r) => { const l = Math.max(r.left, c.left), t = Math.max(r.top, c.top), rt = Math.min(r.right, c.right), b = Math.min(r.bottom, c.bottom); return new DOMRect(l, t, rt - l, b - t); }).filter((r) => r.width > 1 && r.height > 1);
+    }
     if (rects.length) runs.push({ el, text: n.textContent.trim().replace(/\s+/g, ' '), rects, modal: !!el.closest('[aria-modal="true"],[role="dialog"]'), user: !!el.closest('[data-user]') });
   }
   // R-114: x is hidden under an opaque sticky or fixed layer when all four hold: (a) the layer is sticky or fixed and a background
@@ -235,7 +243,7 @@ function measure(o) {
   out.primaryCount = els.filter((el) => el.matches('.primary,[data-primary]')).length;
 
   // A designed state marks its message (role alert or status, or class error, empty, state); its container holds the next step.
-  const msg = els.find((el) => el.matches('[role="alert"],[role="status"],.error,.empty,.state,[data-state]') && !el.closest('[aria-busy="true"]'));
+  const msg = els.find((el) => el.matches('[role="alert"],[role="status"],.error,.empty,.state,[data-state]') && !el.closest('[aria-busy="true"]') && el.innerText.trim()); // an empty live region says nothing
   const root = msg && msg.parentElement && !msg.parentElement.matches('main,body') ? msg.parentElement : msg;
   out.message = root ? { text: root.innerText.trim().slice(0, 300), next: els.filter((el) => root.contains(el) && !el.closest('header,nav,.lang,.lang-switch') && el.matches('button,a[href],[role="button"]')).length } : { text: '', next: 0 };
 
@@ -417,6 +425,10 @@ function installRoutes(page, base, { state, guard, delayGets, gate, fake }) {
     const path = new URL(req.url()).pathname;
     const config = path === '/api/config';
     if (state === 'offline' && data && !config) { await gate.release; return route.continue(); }
+    // AC-98 (R-132): Política reads its rates inside GET /api/screen/policy, so an fx state is forced there too; with no rates the
+    // screen's answer is empty of rates, and a failed rate read is the screen's own failed read.
+    if (data && path === '/api/screen/policy' && req.method() === 'GET' && state === 'fx-empty') return patched(route, (j) => ({ ...j, fx: { ...j.fx, rates: [] } }));
+    if (data && path === '/api/screen/policy' && req.method() === 'GET' && state === 'fx-error') return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"gate"}' });
     if (data && path === '/api/fx' && req.method() === 'GET' && state === 'fx-empty') return route.fulfill({ status: 200, contentType: 'application/json', body: '{"provider":"gate","rates":[]}' });
     if (data && path === '/api/fx' && req.method() === 'GET' && state === 'fx-error') return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"gate"}' });
     if (data && !config && state === 'error') return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"gate"}' });
@@ -557,6 +569,9 @@ export async function runCell(browser, job) {
 
     const m = await page.evaluate(measure, { width, primary: primarySel });
     judge(m, { width, lang, dicts: opts.dicts, notFound: noAction }).forEach(add);
+    // D45 rows (scripts/ux-layout.mjs): the band, the hero, the step cards; the tour walks its 7 steps for 4.tourcover (R-172).
+    if (screen.tour) await walkTour(page, add, { width, lang, shots: opts.shots !== false && !opts.only, dir: opts.shotDir ?? join(ROOT, 'docs/ux') });
+    else judgeLayout(await page.evaluate(layoutMeasure), { id: (screen.base ?? screen.id) + (state ? '-' + state : ''), width, screen: screen.base ?? screen.id }).forEach(add);
     if (state || screen.notFound) {
       // A designed 404 page needs no control: its sentence is the next step.
       const t = screen.notFound ? m.message.text || m.main : m.message.text, ok = t.length >= 10 && ((!screen.notFound && m.message.next > 0) || NEXT_STEP.test(t));
@@ -642,6 +657,20 @@ async function runEntry(browser, { base, screen, door, width, lang, run, opts = 
   }
 }
 
+// AC-115: every step of the tour, measured where the tour placed its card; screenshots at 390 and 1440.
+async function walkTour(page, add, { width, lang, shots, dir }) {
+  for (let i = 0; i < 7; i++) {
+    await page.waitForSelector('.tour-card', { timeout: 10_000 }).catch(() => {});
+    await sleep(900); // the card's entry and the scroll into the room settle
+    const t = await page.evaluate(tourMeasure);
+    add(judgeTour(t));
+    if (shots && [390, 1440].includes(width) && t) await page.screenshot({ path: join(dir, `tour-${t.step}-${width}-${lang}.png`) });
+    const next = page.locator('.tour-card button.primary');
+    if (i === 6 || !(await next.count())) break;
+    await next.click();
+  }
+}
+
 // Keyboard path to the primary action (focus ring, Enter), then the response within 100 ms (items 3 and 4).
 async function dynamic(page, screen, primarySel, add, noAction, lang) {
   if (noAction) return ['3.focus', '3.enter', '4.busy'].forEach((id) => add(R(id, 'na', 0, BY_DESIGN)));
@@ -671,9 +700,10 @@ async function dynamic(page, screen, primarySel, add, noAction, lang) {
     window.__act = { clicks: 0, busy: null };
     const step = () => document.querySelector('.tour-card header p')?.textContent ?? null; // R-161: the tour's «n de 7» counter; null once the tour has closed
     const step0 = step();
+    const p = document.querySelector('[data-gate-primary]'); // kept: the action may replace it
     const isBusy = () => {
       if (tour) return step() !== step0; // here "busy" means the step changed
-      const p = document.querySelector('[data-gate-primary]');
+      if (p && !p.isConnected) return true; // the action replaced its own view at once (a dialog opened in its place): that is the response
       return !!(p && (p.disabled || p.getAttribute('aria-busy') === 'true')) || [...document.querySelectorAll('[aria-busy="true"],progress,[role="progressbar"]')].some((e) => e.checkVisibility());
     };
     addEventListener('click', () => {
@@ -716,7 +746,7 @@ export function aggregate(rows) {
     return { screen: g[0].screen, id: g[0].id, status, value: worst.value, measured: `${worst.measured} @${worst.width}/${worst.lang}`, cells: g.length, failing: failing.length, ...(Object.keys(users).length && { users }) };
   }).sort((a, b) => order(a.id).localeCompare(order(b.id)));
 }
-const WHAT = { '0.reach': 'screen opens', '1.scroll': 'no horizontal scroll', '1.offscreen': 'nothing off-screen', '1.clip': 'no clipped text', '1.edge': 'text inside its card', '1.overlap': 'no overlapping text', '1.tables': 'tables reflow or scroll', '2.targets': '44 px targets', '2.inputs': '16 px inputs', '2.primary': 'primary action in the lower 60%', '3.axe': 'axe: 0 serious or critical', '3.contrast': 'contrast AA', '3.focus': 'visible focus ring', '3.enter': 'Enter activates', '3.labels': 'inputs have labels', '3.lang': 'lang follows the language', '4.busy': 'busy within 100 ms', '4.loading': 'no blank while loading', '4.cls': 'CLS 0.01 or less', '4.state': 'designed state with next step', '5.words': 'no developer words', '5.mixed': 'one language per screen', '5.locale': 'numbers and dates in locale', '5.marker': 'data-user used for user data only', '6.palette': 'approved palette', '6.fonts': 'approved fonts', '6.logo': 'logo present', '6.reduced': 'logo at rest at first paint (reduced motion)', '6.console': 'no console errors', '6.images': 'SVG or 2x images', '6.primary_count': 'one primary button (reviewer)', '7.usable': 'usable in under 2 s', '7.longtask': 'no task over 300 ms' };
+const WHAT = { '0.reach': 'screen opens', '1.scroll': 'no horizontal scroll', '1.offscreen': 'nothing off-screen', '1.clip': 'no clipped text', '1.edge': 'text inside its card', '1.overlap': 'no overlapping text', '1.tables': 'tables reflow or scroll', '2.targets': '44 px targets', '2.inputs': '16 px inputs', '2.primary': 'primary action in the lower 60%', '3.axe': 'axe: 0 serious or critical', '3.contrast': 'contrast AA', '3.focus': 'visible focus ring', '3.enter': 'Enter activates', '3.labels': 'inputs have labels', '3.lang': 'lang follows the language', '4.busy': 'busy within 100 ms', '4.loading': 'no blank while loading', '4.cls': 'CLS 0.01 or less', '4.state': 'designed state with next step', '5.words': 'no developer words', '5.mixed': 'one language per screen', '5.locale': 'numbers and dates in locale', '5.marker': 'data-user used for user data only', '6.palette': 'approved palette', '6.fonts': 'approved fonts', '6.logo': 'logo present', '6.reduced': 'logo at rest at first paint (reduced motion)', '6.console': 'no console errors', '6.images': 'SVG or 2x images', '6.primary_count': 'one primary button (reviewer)', '7.usable': 'usable in under 2 s', '7.longtask': 'no task over 300 ms', '1.band': 'one centred band (AC-112)', '1.cap': 'no cap under M (AC-112)', '1.fill': 'rows span the band (AC-112)', '1.measure': 'prose at most 70ch (AC-112)', '1.centred': 'reading column centred (AC-112)', '1.split': 'login split spans the screen, form centred in its panel (AC-112, R-196)', '1.grid': 'blocks side by side (AC-113)', '1.hero': 'video in the hero (AC-114)', '4.tourcover': 'tour card never covers its target (AC-115)', '6.cards': 'step-card grids (AC-116)' };
 const word = { pass: 'PASS', fail: 'FAIL', info: 'INFO', na: 'N/A' };
 // R-131: every text 5.mixed and 5.locale skipped, for the UX reviewer. Any listed product copy is a blocking finding.
 const excludedList = (users = {}) => LANGS.filter((l) => users[l]?.n).length
@@ -832,7 +862,7 @@ export async function main(argv) {
   const cells = [];
   for (const s of picked.map((x) => ({ ...x, path: a.route[x.id] ?? x.path }))) {
     if (s.needs && !vars[s.needs]) {
-      if (s.na) { console.log(`ux-gate: ${s.id} N/A (${s.na})`); rows.push({ screen: s.id, width: 390, lang: 'es', ...R('0.reach', 'na', 0, s.na) }); } else console.log(`ux-gate: ${s.id} skipped (needs --${s.needs.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase())})`);
+      if (typeof s.na === 'string') { console.log(`ux-gate: ${s.id} N/A (${s.na})`); rows.push({ screen: s.id, width: 390, lang: 'es', ...R('0.reach', 'na', 0, s.na) }); } else console.log(`ux-gate: ${s.id} skipped (needs --${s.needs.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase())})`);
       continue;
     }
     if (s.entry) { cells.push(...entryCells(s, a.bool.has('slow'))); continue; }

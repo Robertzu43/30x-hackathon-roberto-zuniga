@@ -65,15 +65,15 @@ export default function InvoiceDetail() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
-  const back = <Link to="/" className="detail-back detail-link">{t('detail.back')}</Link>;
+  const back = <div data-block><Link to="/" className="detail-back detail-link">{t('detail.back')}</Link></div>;
   const loaded = screen.data;
   // UX-18: the API answers an unknown id with 404 (its contract); the page names it and says what to do next.
   if (!loaded && screen.error instanceof ApiError && screen.error.status === 404)
-    return <section>{back}<h1>{t('detail.not_found')}</h1><p>{t('detail.not_found.next')}</p></section>;
-  if (!loaded && screen.error !== undefined) return <section>{back}<p className="error">{t('detail.load_error')}</p></section>;
+    return <section data-band>{back}<div data-block><h1>{t('detail.not_found')}</h1><p>{t('detail.not_found.next')}</p></div></section>;
+  if (!loaded && screen.error !== undefined) return <section data-band>{back}<div data-block><p className="error">{t('detail.load_error')}</p></div></section>;
   const data = loaded ?? SKELETON;
   const latest = data.decisions.at(-1);
-  if (!latest) return <section>{back}<h1>{t('detail.pending')}</h1></section>;
+  if (!latest) return <section data-band>{back}<h1 data-block>{t('detail.pending')}</h1></section>;
 
   const date = (iso: string, timeZone: string) => {
     const d = new Date(iso);
@@ -108,22 +108,24 @@ export default function InvoiceDetail() {
   const unreached = status === 'unavailable';
   const reading = status === 'ai' ? data.reading ?? null : null;
   return (
-    <section className="detail">
+    <section className="detail" data-band>
       {back}
       {!loaded && <p role="status" className="sr-only">{t('detail.loading')}</p>}
       {/* A headline is 3 to 6 lines at 390 px: the record replaces these nodes (new key) rather than moving them (AC-91 item 4 CLS). */}
       <div key={loaded ? 'record' : 'skeleton'} className={loaded ? undefined : 'skeleton'} aria-hidden={loaded ? undefined : true} inert={!loaded}>
-        <h1>{data.headline}</h1>
-        {originLabel(t, invoice) && <p className="muted detail-origin">{originLabel(t, invoice)}</p>}
+        <div data-block>
+          <h1>{data.headline}</h1>
+          {originLabel(t, invoice) && <p className="muted detail-origin">{originLabel(t, invoice)}</p>}
+        </div>
         {invoice.sender_note && (
-          <section aria-labelledby="sender-note">
+          <section data-block aria-labelledby="sender-note">
             <h2 id="sender-note">{t('inbox.sender_note')}</h2>
             <p data-user="" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{invoice.sender_note}</p>
           </section>
         )}
-        <AgentTrace steps={data.trace} />
+        <div data-block><AgentTrace steps={data.trace} /></div>
         <div className="detail-cols">
-          <div>
+          <div data-block>
             <h2>{t('detail.read')}</h2>
             {reading && <p className="ai-badge">{t('detail.read_by', { provider: reading.provider })}</p>}
             {unreached && <p className="detail-notice">{t('detail.reader_unavailable')}</p>}
@@ -143,7 +145,7 @@ export default function InvoiceDetail() {
               })}
             </dl>}
           </div>
-          <div>
+          <div data-block>
             <RuleChecklist explanations={data.explanations} checks={latest.checks} />
             <FxCard check={latest.checks.find((c) => c.id === 'moneda')} version={latest.policy_version} />
             {data.fixes.length > 0 && (

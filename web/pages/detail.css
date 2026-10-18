@@ -63,3 +63,5 @@ pre.detail-doc mark { background: var(--accent-bg); color: var(--ink); padding: 
 .timeline .avatar { width: 24px; height: 24px; flex: none; align-self: center; display: grid; place-items: center; border-radius: 50%;
   background: var(--canvas); border: 1px solid var(--line); color: var(--ink-2); font-size: 0.625rem; font-weight: 600; overflow: hidden; }
 .timeline .avatar img { display: block; border-radius: 6px; }
+/* AC-112 1.measure: the trace and checklist lines keep a readable measure in the wide band. */
+.detail :is(ol, ul) > li { max-width: 70ch; }

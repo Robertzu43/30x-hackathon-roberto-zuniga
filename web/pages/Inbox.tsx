@@ -91,7 +91,8 @@ export default function Inbox() {
   const mins = lastRun ? Math.floor((Date.now() - Date.parse(lastRun.at)) / 60_000) : 0;
 
   return (
-    <section className={held ? 'inbox inbox-held' : 'inbox'} data-tour="inbox">
+    <section className={held ? 'inbox inbox-held' : 'inbox'} data-tour="inbox" data-band>
+      <div className="inbox-top" data-block>
       <header className="inbox-head">
         <h1>{t('screen.inbox')}</h1>
         <div className="inbox-actions">
@@ -115,16 +116,17 @@ export default function Inbox() {
       <RunProgress run={shown} mode="pending" progressKey={shown === pass ? 'entry.deciding' : undefined}
         pending={shown === pass && held ? (d ? pending : null) : undefined} />
       {adding && <NewInvoice />}
+      </div>
 
       {failed ? (
-        <div className="inbox-error">{/* only after the one retry (R-150 lever 4) */}
+        <div className="inbox-error" data-block>{/* only after the one retry (R-150 lever 4) */}
           <p role="alert" className="error">{t('inbox.load_failed')}</p>
           <button type="button" onClick={() => void screen.reload()}>{t('inbox.retry')}</button>
         </div>
       ) : !d ? (
         <>
           <p role="status" className="sr-only">{t('inbox.loading')}</p>
-          <div {...hidden}>{/* R-176: every block that fills from data holds its loaded box from first paint */}
+          <div {...hidden}>{/* R-176: every block that fills from data holds its loaded box from first paint; a wrapper, the cards inside are the blocks */}
             <Dashboard data={SKELETON_DASH} onMore={nothing} />
             <PortalLinkCard link={SKELETON_LINK} />
             <div className="activity-box">
@@ -136,16 +138,17 @@ export default function Inbox() {
         <>
           {d.dashboard && <Dashboard data={d.dashboard} onMore={() => setOutcome('ESCALAR')} deciding={pass.running ? pending : 0}
             run={busy || tail ? { n: shown.progress?.n ?? 0, m: shown.progress?.m ?? pending } : null} />}
-          {link && <PortalLinkCard link={link} />}
-          <div className="activity-box" tabIndex={held ? 0 : undefined}>{/* held: it scrolls inside, so it takes focus (axe) */}
+          {/* keyed: a reused div would carry the skeleton dashboard's box into the card's place, a layout shift (AC-91 item 4) */}
+          {link && <div key="portal" data-block><PortalLinkCard link={link} /></div>}
+          <div className="activity-box" data-block tabIndex={held ? 0 : undefined}>{/* held: it scrolls inside, so it takes focus (axe) */}
             <AgentActivity refresh={batches + pass.batches - base} />
           </div>
         </>
       )}
-      <AskThesaurus />
+      <div data-block><AskThesaurus /></div>
       {!failed && (d
-        ? <InvoiceTable rows={d.invoices} directory={d.beneficiaries} outcome={outcome} onOutcome={setOutcome} />
-        : <div {...hidden}><InvoiceTable rows={SKELETON} directory={[]} outcome="" onOutcome={nothing} /></div>)}
+        ? <div key="table" data-block><InvoiceTable rows={d.invoices} directory={d.beneficiaries} outcome={outcome} onOutcome={setOutcome} /></div>
+        : <div key="table-skeleton" data-block {...hidden}><InvoiceTable rows={SKELETON} directory={[]} outcome="" onOutcome={nothing} /></div>)}
     </section>
   );
 }

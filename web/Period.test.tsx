@@ -96,6 +96,8 @@ test('an empty period shows zeros and never NaN', async () => {
   expect(await screen.findByText('Violaciones 0')).toBeTruthy();
   expect(screen.getByText('0 de 0 facturas decididas solas y correctamente')).toBeTruthy();
   expect(screen.getByText('Sin pagos en este mes.')).toBeTruthy();
+  // AC-116 (c): one unnumbered step card with an icon, today's copy and its next step
+  { const c = screen.getByText('Sin pagos en este mes.').closest('[data-step-card]')!; expect(c.querySelector('svg[aria-hidden="true"]')).toBeTruthy(); expect(c.querySelector('.step-n')).toBeNull(); }
   expect(container.textContent).not.toMatch(/NaN|undefined|null/);
 });
 

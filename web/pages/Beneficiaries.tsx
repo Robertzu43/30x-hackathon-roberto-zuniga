@@ -4,6 +4,7 @@ import type { Beneficiary } from '../../src/engine/types';
 import { screens, useScreen } from '../api';
 import { tu } from '../components/User';
 import { useT } from '../i18n';
+import { StepIcon } from '../components/StepCards';
 import '../policy.css';
 import './beneficiary.css';
 import { failure, send } from '../withField';
@@ -81,15 +82,18 @@ export default function Beneficiaries() {
   const routes = f.route && !ROUTES.includes(f.route) ? [...ROUTES, f.route] : ROUTES;
 
   return (
-    <section data-tour="beneficiaries" className="beneficiaries">
-      <h1>{t('screen.beneficiaries')}</h1>
-      <p className="muted">{t('ben.intro')}</p>
+    <section data-tour="beneficiaries" className="beneficiaries" data-band>
+      <div className="page-head" data-block>
+        <h1>{t('screen.beneficiaries')}</h1>
+        <p className="muted">{t('ben.intro')}</p>
+      </div>
 
-      <section className="card table-wrap" aria-label={t('ben.list')} tabIndex={0}>
+      <section className="card table-wrap" data-block aria-label={t('ben.list')} tabIndex={0}>
         {!rows && !loadFailed && <p role="status" className="sr-only">{t('policy.loading')}</p>}
         {loadFailed && <p role="alert" className="error">{t('ben.load_error')}</p>}
         {rows?.length === 0 && (
-          <div className="empty">
+          <div className="empty step-card" data-step-card>
+            <StepIcon name="inbox" />
             <p className="muted">{t('ben.empty')} {t('ben.empty_next')}</p>
             <button type="button" onClick={() => openForm(null)}>{t('ben.add')}</button>
           </div>
@@ -116,7 +120,7 @@ export default function Beneficiaries() {
         )}
       </section>
 
-      <section className="card" aria-labelledby="ben-form-h" ref={formRef}>
+      <section className="card" data-block aria-labelledby="ben-form-h" ref={formRef}>
         <h2 id="ben-form-h">{editing ? tu(t('ben.edit_title'), { name: editing.name }) : t('ben.new_title')}</h2>
         <form onSubmit={submit} noValidate>
           <div className="grid">

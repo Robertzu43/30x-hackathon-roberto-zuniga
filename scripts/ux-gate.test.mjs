@@ -57,6 +57,7 @@ const page = (bad, lang) => {
   <h1 id="h">${bad.startsWith('intro') ? '<span class="lg">' + ['The', 'sau', 'rus'].map((c) => `<span>${c}</span>`).join('') + '</span>' : t['f.title']}</h1>
   ${bad === 'pass' ? '<section id="invoices"><table class="inbox-list"><tbody><tr><td><span class="chip chip-pending">Pendiente</span></td></tr></tbody></table></section>' : ''}
   <span class="sr-only">Texto solo para lectores de pantalla</span>
+  ${bad === 'quiet' ? '<div><div role="status"></div><p>Sin mensaje aquí</p></div>' : ''}
   <div id="list"></div>
   <p>${lang === 'es' ? '1.234,50 COP' : '1,234.50 COP'}</p>
   <p>160 USD</p><p><span>160</span> USD</p>
@@ -98,9 +99,10 @@ const page = (bad, lang) => {
   const list = document.getElementById('list');
   const show = (rows) => { list.innerHTML = rows.length ? rows.map((r) => '<p>' + r + '</p>').join('') : bad === '4.state' ? '' : '<p role="status">' + T['f.empty'] + '</p><a class="btn" href="#sube">' + T['f.retry'] + '</a>'; };
   const fail = () => { list.innerHTML = bad === '4.state' ? '' : '<p class="err" role="alert">' + T['f.err'] + '</p><button type="button">' + T['f.retry'] + '</button>'; };
-  fetch(bad === 'fx' ? '/api/fx' : '/api/data').then((r) => { if (!r.ok) throw new Error('x'); return r.json(); }).then((d) => show(bad === 'fx' ? d.rates.map((x) => x.c) : d), fail);
+  fetch(bad === 'fx' ? '/api/fx' : bad === 'fxscreen' ? '/api/screen/policy' : '/api/data').then((r) => { if (!r.ok) throw new Error('x'); return r.json(); }).then((d) => show(bad === 'fx' ? d.rates.map((x) => x.c) : bad === 'fxscreen' ? d.fx.rates.map((x) => x.c) : d), fail);
   document.getElementById('go').addEventListener('click', (e) => {
     if (bad === 'compose' && !document.getElementById('msg').value.trim()) return;
+    if (bad === 'swap') return e.currentTarget.replaceWith(Object.assign(document.createElement('div'), { role: 'dialog', textContent: T['f.title'] })); // the action opens a dialog in place of its button
     if (bad !== '4.busy') { e.currentTarget.disabled = true; e.currentTarget.setAttribute('aria-busy', 'true'); }
     fetch('/api/act', { method: 'POST' });
   });
@@ -145,7 +147,7 @@ const overlapPage = (mode) => `<!doctype html><html lang="es"><head><meta charse
   header{position:sticky;top:0;z-index:2;height:${mode === 'outside' ? 20 : 56}px;padding:0 16px;background:${mode === 'translucent' ? 'rgba(255,255,255,0.5)' : '#ffffff'}}
   header span{position:absolute;left:16px;top:0}
   p{margin:0;padding:0 16px;${mode === 'above' ? 'position:relative;z-index:5' : ''}}
-  </style></head><body><header><span>Cabecera fija</span>${mode === 'same' ? '<span style="top:6px">Otra marca de cabecera</span>' : ''}</header><p>Contenido que pasa por debajo</p>${mode === 'srtable' ? '<div style="position:absolute;top:80px;left:0;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)"><table><tr><td style="position:absolute;top:0;left:0">Dato uno</td><td style="position:absolute;top:0;left:0">Dato dos</td></tr></table></div>' : ''}<div style="height:2000px"></div><script>scrollTo(0,${mode === 'outside' ? 12 : 56})</script></body></html>`;
+  </style></head><body><header><span>Cabecera fija</span>${mode === 'same' ? '<span style="top:6px">Otra marca de cabecera</span>' : ''}</header><p>Contenido que pasa por debajo</p>${mode === 'scroller' ? '<section style="position:fixed;left:0;bottom:0;width:300px;background:#ffffff"><div style="height:40px;overflow-y:auto"><p>Primera línea del cuerpo</p><p>Segunda línea que sigue</p><p>Tercera línea escondida</p><p>Cuarta línea escondida</p></div><button type="button">Siguiente</button></section>' : ''}${mode === 'srtable' ? '<div style="position:absolute;top:80px;left:0;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)"><table><tr><td style="position:absolute;top:0;left:0">Dato uno</td><td style="position:absolute;top:0;left:0">Dato dos</td></tr></table></div>' : ''}<div style="height:2000px"></div><script>scrollTo(0,${mode === 'outside' ? 12 : 56})</script></body></html>`;
 // Vendor pages for the forced states: the portal chat (POST answers a bubble) and the server-rendered status page (offline notice).
 const portalFixture = (bare) => `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>p</title></head><body><main><h1>Portal</h1><div class="log"></div><form id="f"><label for="m">Mensaje</label><textarea id="m" style="font-size:16px"></textarea><button type="submit" class="primary">Enviar</button></form></main><script>
   const log = document.querySelector('.log');
@@ -249,6 +251,7 @@ beforeAll(async () => {
     if (u.pathname === '/api/screen/inbox') return void res.writeHead(200, { 'content-type': 'application/json' }).end('{"invoices":[{"id":"a"},{"id":"b"}],"dashboard":{}}');
     if (u.pathname === '/api/reset') return void req.socket.destroy(); // the origin drops the connection: route.fetch() rejects
     if (u.pathname === '/api/demo/overview') return void res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(server.overview ?? { invoices: [] }));
+    if (u.pathname === '/api/screen/policy') return void res.writeHead(200, { 'content-type': 'application/json' }).end('{"versions":[],"fx":{"provider":"gate","rates":[{"c":"USD"}]}}');
     if (u.pathname === '/auth/v1/admin/users') { let b = ''; req.on('data', (c) => (b += c)); return void req.on('end', () => { server.admin = { key: req.headers.apikey, auth: req.headers.authorization, body: JSON.parse(b) }; res.writeHead(200, { 'content-type': 'application/json' }).end('{"id":"u1"}'); }); }
     if (u.pathname === '/api/company') return void res.writeHead(200, { 'content-type': 'application/json' }).end('{"name":"Andina Labs"}');
     if (u.pathname === '/api/fx') return void res.writeHead(200, { 'content-type': 'application/json' }).end('{"provider":"gate","rates":[{"c":"USD"}]}');
@@ -357,6 +360,18 @@ describe('one known violation per item', () => {
   }, 60_000);
 });
 
+describe('4.busy: an action that replaces its own button at once has answered (leave-trial «Guardar mi acceso» opens its dialog, AC-91 item 4)', () => {
+  it('passes when the primary is replaced by a dialog within 100 ms', async () => {
+    expect(status(await cell('swap', { kind: 'dynamic' }), '4.busy')).toBe('pass');
+  }, 60_000);
+});
+
+describe('an empty live region is not the designed message (AC-112 layout moved RunProgress into a block)', () => {
+  it.each(['empty', 'error'])('4.state (%s) reads the real message after an empty role=status', async (state) => {
+    expect(status(await cell('quiet', { state }), '4.state')).toBe('pass');
+  }, 60_000);
+});
+
 describe('chart sr-only table and forced states (46b)', () => {
   const chart = { id: 'chart', exp: 'test', path: '/chart-sr', primary: ':not(*)' };
   it('AC-91 item 1: web/charts/charts.css keeps the sr-only data table out of overlap, scroll and offscreen', async () => {
@@ -396,6 +411,14 @@ describe('policy forced states (AC-91)', () => {
   }, 60_000);
 });
 
+describe('policy forced states reach GET /api/screen/policy, where the rates ride since AC-98 (R-132)', () => {
+  it.each([['fx-empty', 'f.empty'], ['fx-error', 'f.err']])('%s shows its message and next step', async (state, key) => {
+    const rs = await cell('fxscreen', { state });
+    expect(status(rs, '4.state'), JSON.stringify(rs.find((r) => r.id === '4.state'))).toBe('pass');
+    expect(rs.find((r) => r.id === '4.state').measured).toContain(DICTS.es[key].slice(0, 12));
+  }, 60_000);
+});
+
 describe('detail-unread (AC-91)', () => {
   const inv = [{ id: 'a', outcome: 'PAGAR', fields: {} }, { id: 'b', outcome: 'ESCALAR', fields: { read_error: 'lector_no_disponible' } }, { id: 'c', outcome: null }];
   it('opens an invoice the agent has not decided or could not read', () => {
@@ -415,6 +438,17 @@ describe('detail-unread (AC-91)', () => {
       server.overview = undefined;
     }
     expect(lines.join('\n')).toMatch(/detail-unread N\/A/);
+  }, 60_000);
+  it('status without --status-token is skipped by name, never N/A with its per-state reasons printed as [object Object]', async () => {
+    const lines = [];
+    const log = console.log;
+    console.log = (l) => lines.push(l);
+    try {
+      expect(await main(['--base', base, '--screens', 'status', '--only', '0.reach'])).toBe(0);
+    } finally {
+      console.log = log;
+    }
+    expect(lines.join('\n')).toMatch(/status skipped \(needs --status-token\)/);
   }, 60_000);
 });
 
@@ -598,6 +632,10 @@ describe('1.overlap: text under an opaque sticky or fixed layer (R-114)', () => 
   }, 60_000);
   it('skips text inside an sr-only table, not only text whose direct parent is sr-only', async () => {
     const r = one(await ov('srtable'));
+    expect(r.status, JSON.stringify(r)).toBe('pass');
+  }, 60_000);
+  it('skips the part of a text run its own scroller hides (the tour card body over its buttons, AC-115)', async () => {
+    const r = one(await ov('scroller'));
     expect(r.status, JSON.stringify(r)).toBe('pass');
   }, 60_000);
   it.each([['a translucent header', 'translucent'], ['two texts inside the header', 'same'], ['a rectangle outside the layer box', 'outside'], ['content drawn above the header', 'above']])('still fails %s', async (_, mode) => {

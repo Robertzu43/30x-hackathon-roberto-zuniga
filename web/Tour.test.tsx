@@ -159,7 +159,7 @@ test('the card stacks header, a focusable scrolling body and the footer buttons 
   const parts = [...screen.getByRole('dialog').children].map((c) => c.className || c.tagName);
   expect(parts).toEqual(['HEADER', 'tour-body', 'tour-actions']);
   expect(body().getAttribute('tabindex')).toBe('0'); // axe scrollable-region-focusable
-  expect(screen.getByRole('dialog').querySelector('header')!.textContent).toBe('1 de 7Bandeja');
+  expect(screen.getByRole('dialog').querySelector('header')!.textContent).toBe('Paso 1 de 7Bandeja');
 });
 
 // jsdom has no layout: the body's scrollHeight / clientHeight are stubbed.
@@ -214,7 +214,7 @@ test('the card is capped below the top bar; at <= 480 px it is a bottom sheet, b
   expect(phone).toMatch(/left: 0\.75rem/);
   expect(phone).toMatch(/width: calc\(100vw - 1\.5rem\)/);
   expect(phone).toMatch(/padding: 1rem 1\.25rem/);
-  expect(phone).toMatch(/max-height: calc\(100dvh - var\(--tour-top, 0px\) - 1\.5rem\)/);
+  expect(phone).toMatch(/max-height: calc\(\(100dvh - var\(--tour-top, 0px\)\) \/ 2 - 1rem\)/); // AC-115 (R-170): at most half the room under the bar
   expect(css).not.toMatch(/\.tour-body[^{]*\{[^}]*font-size/);
 });
 
@@ -320,4 +320,27 @@ test('with a pass running, step 1 shows at once; at step 4 a batch refresh re-me
   top = 140; // had something moved the row, the next refresh puts the spotlight back on it
   fireEvent.click(screen.getByRole('button', { name: 'lote' }));
   await waitFor(() => expect(spot()).toBe('132px'));
+});
+
+// AC-115 (R-170): «Paso n de m» and m dots, decoration only.
+test('step 3 shows «Paso 3 de 7» and 7 aria-hidden dots, the third one active (AC-115)', async () => {
+  setup();
+  await screen.findByRole('heading', { name: 'Bandeja' });
+  next();
+  await screen.findByRole('heading', { name: 'Nueva factura' });
+  next();
+  await screen.findByRole('heading', { name: 'Ejecutar agente' });
+  expect(screen.getByText('Paso 3 de 7')).toBeTruthy();
+  const dots = document.querySelector('.tour-dots')!;
+  expect(dots.getAttribute('aria-hidden')).toBe('true');
+  expect([...dots.children].map((d) => d.classList.contains('on'))).toEqual([false, false, true, false, false, false, false]);
+  expect(dots.querySelector('button, a, [tabindex]')).toBeNull();
+  expect(document.querySelector('.tour-card')!.getAttribute('data-tour-step')).toBe('run-agent');
+});
+
+test('English: "Step 1 of 7" (AC-115)', async () => {
+  setup();
+  await screen.findByRole('heading', { name: 'Bandeja' });
+  fireEvent.click(screen.getByRole('button', { name: 'to-en' }));
+  expect(await screen.findByText('Step 1 of 7')).toBeTruthy();
 });

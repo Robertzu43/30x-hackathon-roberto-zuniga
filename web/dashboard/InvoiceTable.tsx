@@ -8,7 +8,10 @@ import { OutcomeChip, type Outcome } from '../components/OutcomeChip';
 import { originLabel } from '../components/PortalLinkCard';
 import { tu } from '../components/User';
 import { useT } from '../i18n';
+import StepCards, { type Icon } from '../components/StepCards';
 import './dashboard.css';
+
+const EMPTY: Icon[] = ['upload', 'decide', 'record']; // AC-116 (c)
 
 export type Row = {
   id: string; outcome: Outcome | null; headline: string | null; received_at: string; amount_usd?: number | string | null;
@@ -100,7 +103,7 @@ export default function InvoiceTable({ rows, directory, outcome, onOutcome }: {
         </label>
       </div>
 
-      {rows.length === 0 ? <p className="muted">{t('inbox.empty')}</p>
+      {rows.length === 0 ? <div className="empty"><StepCards steps={EMPTY.map((icon, i) => ({ icon, title: t(`inbox.empty.${i + 1}.title`), text: t(`inbox.empty.${i + 1}.text`) }))} /></div>
         : shown.length === 0 ? <p className="muted">{t('inbox.no_match')}</p>
         : (
           <div className="table-wrap">

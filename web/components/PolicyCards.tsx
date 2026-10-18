@@ -18,7 +18,7 @@ export const RULE_GROUPS: Array<{ id: string; rules: RuleKey[] }> = [
 export function RuleCard({ group, skeleton, children }: { group: string; skeleton?: boolean; children: ReactNode }) {
   const { t } = useT();
   return (
-    <section className={skeleton ? 'card skeleton' : 'card'} aria-labelledby={`${group}-h`} {...(skeleton && { 'aria-hidden': true, inert: true })}>
+    <section className={skeleton ? 'card skeleton' : 'card'} data-block aria-labelledby={`${group}-h`} {...(skeleton && { 'aria-hidden': true, inert: true })}>
       <h2 id={`${group}-h`}>{t(`policy.group.${group}`)}</h2>
       {children}
     </section>

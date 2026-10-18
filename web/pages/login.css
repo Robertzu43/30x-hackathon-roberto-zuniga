@@ -2,8 +2,9 @@
    column with the language switch in the corner, as on /demo. Overrides the older login rules in web/styles.css. */
 .login .login-intro h1 { font-size: inherit; line-height: 0; margin: 0; }
 .login .login-intro .logo { width: min(100%, 36rem); height: auto; }
-.login .login-form { position: relative; }
-.login .login-form > .lang-switch { position: absolute; top: 1.5rem; right: clamp(2rem, 6vw, 6rem); } /* the form's own right edge */
+/* R-196: the form panel fills its column and the form column (34rem less the padding, as before) sits centred in it. */
+.login .login-form { position: relative; max-width: none; --login-x: max(clamp(2rem, 6vw, 6rem), calc(50% - 17rem + clamp(2rem, 6vw, 6rem))); padding-inline: var(--login-x); }
+.login .login-form > .lang-switch { position: absolute; top: 1.5rem; right: var(--login-x); } /* the form's own right edge */
 @media (max-width: 760px) {
   .login .login-intro { padding-top: 5rem; }
   .login .login-intro .logo { width: min(100%, 18rem); }

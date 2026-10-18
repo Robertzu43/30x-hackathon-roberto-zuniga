@@ -341,3 +341,30 @@ describe('user data markers (Task 34b, R-131, AC-91 item 5)', () => {
     rules();
   });
 });
+
+describe('first-message hints as step cards (AC-116 b)', () => {
+  const cards = () => [...document.querySelectorAll('[data-step-card]')].filter((c) => !c.closest('[hidden]'))
+    .map((c) => [c.querySelector('.step-n')?.textContent, c.querySelector('[data-step-title]')?.textContent, c.querySelector('p')?.textContent, c.querySelector('svg')?.getAttribute('aria-hidden')]);
+  it('shows three numbered cards with the exact copy before the first send (es)', async () => {
+    await open({ view: 'chat', company: 'Andina Labs Inc.' });
+    expect(cards()).toEqual([
+      ['1', 'Envía tu factura', 'Adjunta un PDF, PNG o JPEG de hasta 10 MB, o pega el texto.', 'true'],
+      ['2', 'Thesaurus la lee', 'Te responde con el beneficiario, el monto, la moneda y el número que leyó.', 'true'],
+      ['3', 'Guarda tu enlace', 'Con el enlace de estado sigues tu factura sin crear una cuenta.', 'true'],
+    ]);
+  });
+  it('in English', async () => {
+    await open({ view: 'chat', company: 'Andina Labs Inc.' }, '/andina-labs', 'en');
+    expect(cards().map((c) => [c[1], c[2]])).toEqual([
+      ['Send your invoice', 'Attach a PDF, PNG or JPEG up to 10 MB, or paste the text.'],
+      ['Thesaurus reads it', 'It replies with the payee, amount, currency and number it read.'],
+      ['Keep your link', 'The status link lets you follow your invoice without an account.'],
+    ]);
+  });
+  it('the cards are gone once the first message is sent', async () => {
+    await open({ view: 'chat', company: 'Andina Labs Inc.' });
+    typeAndSend('Factura 1050');
+    await settle();
+    expect(cards()).toEqual([]);
+  });
+});

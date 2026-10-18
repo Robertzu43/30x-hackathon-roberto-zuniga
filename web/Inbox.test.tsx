@@ -116,9 +116,29 @@ test('filter by ESCALAR leaves 1, filter by beneficiary narrows too', async () =
   expect(screen.getByText('Ninguna factura coincide con estos filtros.')).toBeTruthy();
 });
 
-test('empty state', async () => {
+// AC-116 (c): the empty Bandeja is three numbered step cards with the exact copy; the screen keeps one primary.
+const stepCards = () => [...document.querySelectorAll('[data-step-card]')].map((c) => [c.querySelector('.step-n')?.textContent, c.querySelector('[data-step-title]')?.textContent, c.querySelector('p')?.textContent]);
+test('empty state: three numbered step cards and one primary (AC-116 c)', async () => {
   setup({ 'GET /api/invoices': [] });
-  expect(await screen.findByText('Todavía no hay facturas. Usa «Nueva factura» para subir un PDF o una imagen, o pegar un correo o un chat.')).toBeTruthy();
+  expect(await screen.findByText('Sube una factura')).toBeTruthy();
+  expect(stepCards()).toEqual([
+    ['1', 'Sube una factura', 'Usa «Nueva factura» para cargar un PDF, una imagen o el texto de un correo o un chat.'],
+    ['2', 'Deja decidir al agente', 'Con «Ejecutar agente», Thesaurus la lee y revisa las 13 reglas.'],
+    ['3', 'Revisa la decisión', 'Cada factura muestra qué decidió el agente y por qué.'],
+  ]);
+  expect(document.querySelectorAll('.primary')).toHaveLength(1);
+  expect(document.querySelectorAll('.empty [data-step-card]')).toHaveLength(3); // marked as the designed empty state (AC-91 item 4)
+});
+
+test('empty state in English (AC-116 c)', async () => {
+  sessionStorage.setItem('lang', 'en');
+  setup({ 'GET /api/invoices': [] });
+  expect(await screen.findByText('Upload an invoice')).toBeTruthy();
+  expect(stepCards().map((c) => c[2])).toEqual([
+    'Use "New invoice" to add a PDF, an image, or the text of an email or a chat.',
+    'With "Run agent", Thesaurus reads it and checks the 13 rules.',
+    'Each invoice shows what the agent decided and why.',
+  ]);
 });
 
 test('a second 5xx shows a plain message with «Reintentar», no skeleton; «Reintentar» loads Bandeja (R-150 lever 4)', async () => {
@@ -312,7 +332,7 @@ test('Bandeja shows the dashboard, then «Pregúntale a Thesaurus», then the ta
   expect(follows(kpi, ask)).toBe(true);
   expect(follows(screen.getByRole('region', { name: 'Necesita tu respuesta' }), ask)).toBe(true);
   expect(follows(ask, tableBlock())).toBe(true);
-  expect(view.container.querySelector('section.inbox')!.lastElementChild).toBe(tableBlock());
+  expect(view.container.querySelector('section.inbox')!.lastElementChild!.firstElementChild).toBe(tableBlock()); // in its band block (AC-112)
   expect(within(tableBlock()).getByRole('table')).toBeTruthy();
 });
 
@@ -341,7 +361,7 @@ test('«y 2 más» filters the table to ESCALAR (AC-101)', async () => {
 
 test('empty states: every dashboard section and the table say so (AC-101, AC-106)', async () => {
   setup({ 'GET /api/invoices': [] }, EMPTY_DASH);
-  expect(await screen.findByText('Todavía no hay facturas. Usa «Nueva factura» para subir un PDF o una imagen, o pegar un correo o un chat.')).toBeTruthy();
+  expect(await screen.findByText('Sube una factura')).toBeTruthy(); // AC-116 (c)
   expect(screen.getByText('Nada espera tu respuesta.')).toBeTruthy();
   expect(screen.getByText('Nada vence en los próximos 7 días.')).toBeTruthy();
   expect(await screen.findAllByText('Todavía no hay datos para este gráfico.')).toHaveLength(3);

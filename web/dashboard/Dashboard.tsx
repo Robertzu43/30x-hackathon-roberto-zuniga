@@ -34,7 +34,7 @@ export default function Dashboard({ data, onMore, deciding = 0, run = null }: { 
   const empty = (key: string) => <p className="muted">{deciding ? t('entry.still_deciding', { n: deciding }) : t(key)}</p>;
   return (
     <div className="dash">
-      <div className="dash-kpis">
+      <div className="dash-kpis" data-block>
         <Kpi label={t('dash.kpi.today')} value={k.to_pay_today_usd} kind="usd" busy={busy}
           hint={k.to_pay_today_count === 1 ? t('dash.kpi.today_hint.one') : t('dash.kpi.today_hint', { n: k.to_pay_today_count })} />
         <Kpi label={t('dash.kpi.awaiting')} value={k.awaiting_count} kind="count" busy={busy} hint={t('dash.kpi.awaiting_hint', { usd: usd(k.awaiting_usd) })} />
@@ -44,7 +44,7 @@ export default function Dashboard({ data, onMore, deciding = 0, run = null }: { 
             : k.autonomy_pct === null ? undefined : t('period.autonomy_of', { n: k.autonomy_n, m: k.autonomy_m })} />
       </div>
 
-      <section className="dash-card dash-wide dash-approvals" aria-labelledby="dash-approvals">
+      <section className="dash-card dash-wide dash-approvals" data-block aria-labelledby="dash-approvals">
         <h2 id="dash-approvals">{t('dash.approvals.title')}</h2>
         <div className="dash-box">
         {data.approvals.length === 0 ? empty('dash.approvals.empty') : (
@@ -64,20 +64,20 @@ export default function Dashboard({ data, onMore, deciding = 0, run = null }: { 
         </div>
       </section>
 
-      <div className="dash-card dash-wide">
+      <div className="dash-card dash-wide dash-by-day" data-block>
         <StackedBars title={t('dash.by_day.title')} unit={t('dash.unit.invoices')}
           series={[{ label: t('outcome.PAGAR'), tone: 'pagar' }, { label: t('outcome.FRENAR'), tone: 'frenar' },
             { label: t('outcome.ESCALAR'), tone: 'escalar' }, { label: t('inbox.pending'), tone: 'pending' }]}
           rows={data.by_day.map((d) => ({ day: d.day, values: [d.PAGAR, d.FRENAR, d.ESCALAR, d.pending] }))} />
       </div>
-      <div className="dash-card">
+      <div className="dash-card" data-block>
         <HBars title={t('dash.by_currency.title')} unit="USD" rows={data.by_currency.map((c) => ({ label: c.currency ?? t('dash.no_currency'), values: [c.usd] }))} />
       </div>
-      <div className="dash-card">
+      <div className="dash-card" data-block>
         <HBars title={t('dash.by_country.title')} unit="USD" rows={data.by_country.map((c) => ({ label: c.country ? country(c.country) : t('dash.no_country'), values: [c.usd] }))} />
       </div>
 
-      <section className="dash-card dash-wide dash-due" aria-labelledby="dash-due">
+      <section className="dash-card dash-wide dash-due" data-block aria-labelledby="dash-due">
         <h2 id="dash-due">{t('dash.due.title')}</h2>
         <div className="dash-box">
         {data.due_soon.length === 0 ? empty('dash.due.empty') : (

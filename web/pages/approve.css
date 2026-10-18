@@ -1,5 +1,5 @@
 /* Approval page (AC-35, minimalist-ui): one narrow document column, flat, one primary action. */
-.approve { max-width: 40rem; }
+.approve { max-width: 40rem; margin-inline: auto; } /* AC-112 1.centred: the reading column sits in the middle */
 .approve h2 { font: 600 var(--text-sm) / 1.4 var(--font-sans); color: var(--ink-2); margin: 2.5rem 0 0.75rem; }
 .approve-headline { font: 400 var(--text-xl) / 1.3 var(--font-serif); letter-spacing: -0.02em; margin: 0 0 1rem; }
 .approve-read { display: grid; grid-template-columns: 11rem 1fr; gap: 0.5rem 1.5rem; margin: 0; }

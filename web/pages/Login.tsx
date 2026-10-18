@@ -106,7 +106,7 @@ export default function Login() {
     <div className="login">
       <section className="login-intro">
         <h1><LogoIntro screen="login" /></h1>{/* the logo is the wordmark: the name is shown once (AC-80) */}
-        <p className="login-lead">{t('login.lead')}</p>
+        <p className="login-lead">{t('brand.subline')}</p>
       </section>
       <section className="login-form" onPointerOver={prefetchInbox} onFocus={prefetchInbox}>
         <div className="lang-switch" role="group" aria-label={t('login.language')}>

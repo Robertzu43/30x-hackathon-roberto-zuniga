@@ -11,7 +11,7 @@ Roberto solo copia y pega estos campos.
 **Descripción (lo que verá el jurado):** el texto entre las líneas de abajo, sin las líneas.
 
 ---
-Thesaurus es un agente de pagos para Blinka. Revisa las facturas de una empresa, decide cuáles pagar dentro de sus reglas y, cuando algo se sale de ellas, le hace una pregunta concreta a una persona.
+Thesaurus es el agente de cuentas por pagar, construido para Blinka. Revisa las facturas de una empresa, decide cuáles pagar dentro de sus reglas y, cuando algo se sale de ellas, le hace una pregunta concreta a una persona.
 
 EL PROBLEMA
 Hoy una factura llega por correo, PDF o chat. Alguien de finanzas la compara con lo acordado, busca los datos de quien cobra, pide aprobación por chat, crea el pago a mano y concilia en una hoja. Es manual, se repite cada mes y depende de una persona disponible. Falta confianza: que el agente pague solo lo que debe, lo explique y nunca se pase de sus límites.

@@ -63,7 +63,7 @@ test('an unread-payee row (beneficiary null) is labelled in the UI language (R-6
   localStorage.setItem('lang', 'en');
   mockApi({ [`GET /api/screen/period?month=${month}`]: scr({ ...body, by_beneficiary: [{ beneficiary: null, paid_usd: 0, committed_usd: 0, count: 3 }] }) });
   show();
-  expect(await screen.findByText('Payee not read')).toBeTruthy();
+  expect(await screen.findByText('Beneficiary not read')).toBeTruthy();
 });
 
 test('every percentage is Intl\'s own percent for the tab locale, so it never breaks from its number (R-63, R-164)', async () => {
@@ -119,7 +119,7 @@ test('shows loading with the anchor present, then a designed error with a retry,
   expect((await screen.findByRole('alert')).textContent).toBe('No pude cargar el periodo. Revisa tu conexión e intenta de nuevo.');
   expect(container.textContent).not.toContain('gate');
   fail = false;
-  fireEvent.click(screen.getByRole('button', { name: 'Intentar de nuevo' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
   expect(await screen.findByText(`Autonomía ${pct(75)}`)).toBeTruthy();
 });
 

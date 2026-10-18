@@ -1,18 +1,17 @@
 // Login, top bar and tour copy (AC-40, AC-41, AC-42, AC-66). Spanish first; English equal.
 export const es: Record<string, string> = {
   'login.title': 'Thesaurus',
-  'login.lead': 'Un agente de pagos construido para Blinka. Lee cada factura, la verifica contra tus reglas y decide: PAGAR, FRENAR o ESCALAR.',
   'login.email': 'Correo',
   'login.send': 'Enviar código',
   'login.sending': 'Enviando…',
-  'login.sent': 'Te enviamos un código de 6 dígitos a {email}.',
+  'login.sent': 'Te envié un código de 6 dígitos a {email}.',
   'login.code': 'Código de 6 dígitos',
   'login.verify': 'Verificar código',
   'login.enter': 'Entrar',
   'login.verifying': 'Verificando…',
   'login.deciding': 'Decidiendo tus facturas pendientes… {n} de {m}',
   'login.wrong_code': 'Código incorrecto o vencido',
-  'login.send_failed': 'No pudimos enviar el código. Revisa el correo e intenta de nuevo.',
+  'login.send_failed': 'No pude enviar el código. Revisa tu correo e intenta de nuevo.',
   'login.other_email': 'Usar otro correo',
   'login.language': 'Idioma',
   'topbar.tour': 'Ver tutorial',
@@ -26,42 +25,40 @@ export const es: Record<string, string> = {
   'tour.skip': 'Saltar',
   'tour.done': 'Terminar',
   'tour.inbox.title': 'Bandeja',
-  'tour.inbox.body':
-    'Dónde actúa la IA: lee cada factura (Amazon Nova Lite en AWS Bedrock) y responde tus preguntas sobre el registro («Pregúntale a Thesaurus»). Dónde decide el código: las 13 reglas, la tabla de consecuencias y la tasa de cambio del día; solo el código puede escribir PAGAR.',
-  'tour.inbox.loop': 'Con cada factura, Thesaurus percibe → lee → consulta sus herramientas → decide → actúa → rinde cuentas.',
+  'tour.inbox.body': 'Aquí llegan todas tus facturas, cada una con lo que decidió Thesaurus. Empieza por las que necesitan tu respuesta.',
   'tour.more': 'Desliza para ver más',
   'tour.new-invoice.title': 'Nueva factura',
   'tour.new-invoice.body': 'Sube un PDF o una imagen, o pega un correo o un chat. El agente la lee y la decide en el momento.',
   'tour.run-agent.title': 'Ejecutar agente',
-  'tour.run-agent.body': 'Pide al agente que decida ahora las facturas pendientes. Al terminar ves cuántas quedaron en PAGAR, FRENAR y ESCALAR.',
-  'tour.invoice-row.title': 'Detalle de decisión',
+  'tour.run-agent.body':
+    'Pídele a Thesaurus que decida ahora tus facturas pendientes. Al terminar ves cuántas quedaron en PAGAR, FRENAR y ESCALAR.',
+  'tour.invoice-row.title': 'Detalle de factura',
   'tour.invoice-row.body':
-    'Abre una factura para ver lo que hizo el agente paso a paso, cada regla que verificó y qué tendría que pasar para pagarla. «Leído por IA» dice qué modelo la leyó y en qué línea del documento encontré cada dato. En «Pregúntale a Thesaurus» le preguntas al registro; la respuesta nunca aprueba ni paga nada.',
+    'Abre una factura para ver qué leyó Thesaurus, cada regla que revisó y por qué decidió así. Si dudas, pregúntale ahí mismo.',
   'tour.policy.title': 'Política',
   'tour.policy.body':
-    'Tus reglas: límite por pago, umbral de aprobación, presupuesto. Cada cambio guarda una versión nueva y puedes reevaluar las facturas pendientes.',
+    'Define tus reglas: el límite por pago, el monto que requiere tu aprobación y el presupuesto del mes. Cada cambio se guarda como una versión nueva.',
   'tour.beneficiaries.title': 'Beneficiarios',
   'tour.beneficiaries.body':
-    'A quién se le paga: cuenta, ruta y acuerdo. Una factura de alguien que no está aquí, o con otra cuenta, nunca se paga sola.',
-  'tour.period.title': 'Periodo y escalado',
+    'Registra a quién le pagas, su cuenta y lo acordado. Si llega una factura de alguien que no está aquí, o con otra cuenta, Thesaurus no la paga sin preguntarte.',
+  'tour.period.title': 'Periodo',
   'tour.period.body':
-    'El presupuesto del mes, lo pagado, lo comprometido y la autonomía del agente. Lo que no puede decidir solo lo escala: pregunta al aprobador y la respuesta, Aprobar o Rechazar, queda en el detalle de la factura.',
+    'Mira cuánto llevas pagado y comprometido este mes frente a tu presupuesto, y cuántas facturas decidió Thesaurus sin ayuda.',
 };
 
 export const en: Record<string, string> = {
   'login.title': 'Thesaurus',
-  'login.lead': 'A payments agent built for Blinka. It reads each invoice, checks it against your rules and decides: PAY, STOP or ESCALATE.',
   'login.email': 'Email',
   'login.send': 'Send code',
   'login.sending': 'Sending…',
-  'login.sent': 'We sent a 6-digit code to {email}.',
+  'login.sent': 'I sent a 6-digit code to {email}.',
   'login.code': '6-digit code',
   'login.verify': 'Verify code',
   'login.enter': 'Sign in',
   'login.verifying': 'Checking…',
   'login.deciding': 'Deciding your pending invoices… {n} of {m}',
   'login.wrong_code': 'Wrong or expired code',
-  'login.send_failed': 'We could not send the code. Check the email and try again.',
+  'login.send_failed': 'I couldn\'t send the code. Check your email address and try again.',
   'login.other_email': 'Use another email',
   'login.language': 'Language',
   'topbar.tour': 'Show tutorial',
@@ -75,23 +72,23 @@ export const en: Record<string, string> = {
   'tour.skip': 'Skip',
   'tour.done': 'Finish',
   'tour.inbox.title': 'Inbox',
-  'tour.inbox.body':
-    'Where the AI acts: it reads each invoice (Amazon Nova Lite on AWS Bedrock) and answers your questions about the record ("Ask Thesaurus"). Where code decides: the 13 rules, the consequence table and the day\'s exchange rate; only code can write PAY.',
-  'tour.inbox.loop': 'With every invoice, Thesaurus perceives → reads → consults its tools → decides → acts → accounts for it.',
+  'tour.inbox.body': 'All your invoices land here, each with what Thesaurus decided. Start with the ones that need your answer.',
   'tour.more': 'Scroll for more',
   'tour.new-invoice.title': 'New invoice',
   'tour.new-invoice.body': 'Upload a PDF or an image, or paste an email or a chat. The agent reads it and decides it right away.',
   'tour.run-agent.title': 'Run agent',
-  'tour.run-agent.body': 'Ask the agent to decide pending invoices now. When it finishes you see how many ended in PAY, STOP and ESCALATE.',
-  'tour.invoice-row.title': 'Decision detail',
-  'tour.invoice-row.body': 'Open an invoice to see what the agent did step by step, every rule it checked and what would have to change to pay it. "Read by AI" says which model read it and on which line of the document I found each value. In "Ask Thesaurus" you ask the record; the answer never approves or pays anything.',
+  'tour.run-agent.body':
+    'Ask Thesaurus to decide your pending invoices now. When it finishes, you see how many ended in PAY, STOP and ESCALATE.',
+  'tour.invoice-row.title': 'Invoice detail',
+  'tour.invoice-row.body':
+    'Open an invoice to see what Thesaurus read, every rule it checked and why it decided that way. If in doubt, ask it right there.',
   'tour.policy.title': 'Policy',
   'tour.policy.body':
-    'Your rules: per-payment limit, approval threshold, budget. Every change saves a new version and you can re-evaluate pending invoices.',
+    'Set your rules: the per-payment limit, the amount that needs your approval and the month\'s budget. Each change is saved as a new version.',
   'tour.beneficiaries.title': 'Beneficiaries',
   'tour.beneficiaries.body':
-    'Who gets paid: account, route and agreement. An invoice from someone not listed here, or with another account, is never paid on its own.',
-  'tour.period.title': 'Period and escalation',
+    'Record who you pay, their account and what you agreed. If an invoice comes from someone not listed here, or with another account, Thesaurus won\'t pay it without asking you.',
+  'tour.period.title': 'Period',
   'tour.period.body':
-    "The month's budget, paid, committed and the agent's autonomy. What it cannot decide alone it escalates: it asks the approver, and the answer, Approve or Reject, is recorded on the invoice detail.",
+    'See how much you have paid and committed this month against your budget, and how many invoices Thesaurus decided without help.',
 };

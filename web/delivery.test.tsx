@@ -28,7 +28,7 @@ test('a page chunk that fails offline shows the designed message and keeps the t
   signedIn();
   renderAt(<App />, { at: '/period' });
   expect(await screen.findByText('No pude abrir esta pantalla. Revisa tu conexión e intenta de nuevo.')).toBeTruthy();
-  expect(screen.getByRole('button', { name: 'Intentar de nuevo' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Reintentar' })).toBeTruthy();
   expect(screen.getByRole('navigation', { name: 'Secciones' })).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Cerrar sesión' })).toBeTruthy();
 });
@@ -36,20 +36,20 @@ test('a page chunk that fails offline shows the designed message and keeps the t
 test('two failing chunks in a row never blank the page; another screen still opens', async () => {
   signedIn();
   renderAt(<App />, { at: '/period' });
-  await screen.findByRole('button', { name: 'Intentar de nuevo' });
+  await screen.findByRole('button', { name: 'Reintentar' });
   const nav = screen.getByRole('navigation', { name: 'Secciones' });
   fireEvent.click(within(nav).getByRole('link', { name: 'Política' }));
-  expect(await screen.findByRole('button', { name: 'Intentar de nuevo' })).toBeTruthy();
+  expect(await screen.findByRole('button', { name: 'Reintentar' })).toBeTruthy();
   expect(screen.getByRole('navigation', { name: 'Secciones' })).toBeTruthy();
   fireEvent.click(within(nav).getByRole('link', { name: 'Bandeja' }));
   expect(await screen.findByRole('heading', { level: 1, name: 'Bandeja' })).toBeTruthy();
 });
 
-test('«Intentar de nuevo» reloads the tab only once the server answers', async () => {
+test('«Reintentar» reloads the tab only once the server answers', async () => {
   signedIn();
   const reload = vi.spyOn(tab, 'reload').mockImplementation(() => {});
   renderAt(<App />, { at: '/period' });
-  const retry = await screen.findByRole('button', { name: 'Intentar de nuevo' });
+  const retry = await screen.findByRole('button', { name: 'Reintentar' });
   mockApi({ 'HEAD /': () => { throw new TypeError('Failed to fetch'); } });
   fireEvent.click(retry);
   await act(async () => {});

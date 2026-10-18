@@ -121,7 +121,7 @@ export default function Tour({ onDone }: { onDone: () => void }) {
               <h2 id="tour-title">{t(`tour.${step.id}.title`)}</h2>
             </header>
             <div className="tour-body" tabIndex={0} ref={body} onScroll={cue}>
-              {['body', 'loop'].map((k) => `tour.${step.id}.${k}`).filter((k) => t(k) !== k).map((k) => <p key={k}>{t(k)}</p>)}
+              <p>{t(`tour.${step.id}.body`)}</p>
               {more && <span className="tour-more muted">{t('tour.more')}</span>}
             </div>
             <div className="tour-actions">

@@ -296,7 +296,7 @@ test('a payee outside the directory is one entry labelled as read on its oldest 
   localStorage.setItem('lang', 'en');
   setup({ 'GET /api/invoices': [at('12', 'p2', 'PIXEL LAB'), at('10', 'p1', 'Pixel Lab S.A.S.'), at('09', 'u1', null)] });
   await screen.findByText('ESCALAR · p2');
-  expect(payeeOptions()).toEqual(['All', 'Pixel Lab S.A.S.', 'Payee not read']);
+  expect(payeeOptions()).toEqual(['All', 'Pixel Lab S.A.S.', 'Beneficiary not read']);
   choosePayee('Pixel Lab S.A.S.');
   expect(items()).toHaveLength(2);
 });

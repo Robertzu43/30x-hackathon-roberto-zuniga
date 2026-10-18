@@ -4,6 +4,7 @@ import { Route, Routes } from 'react-router-dom';
 import { beforeEach, expect, test, vi } from 'vitest';
 import Demo from './pages/Demo';
 import { DEMO_EMAIL, fakeAuth, mockApi, renderAt, signedInAs } from './test/utils';
+import { en as brandEn, es as brandEs } from '../src/i18n/features/brand';
 
 // R-164: Intl's own percent for the tab locale (es-CO), never a hand-typed space.
 const pct = (v: number) => new Intl.NumberFormat('es-CO', { style: 'percent' }).format(v / 100);
@@ -64,6 +65,19 @@ test('the problem in three lines, the six-stage loop, the pitch line verbatim an
   expect(stages).toEqual(['percibe', 'lee', 'consulta sus herramientas', 'decide', 'actúa', 'rinde cuentas']);
   expect(screen.getByText('El LLM lee, JEV duda, el código decide, el agente actúa.')).toBeTruthy();
   expect(screen.getByText('JEV, la intuición rápida, es una capa opcional; en esta demo está apagada.')).toBeTruthy();
+  await screen.findByText(pct(90));
+});
+
+test('the h1, the sub-line right under it and the footer come from brand.ts, in es and en (AC-119)', async () => {
+  mockApi({ 'GET /api/demo/overview': overview });
+  app();
+  for (const [lang, brand] of [['es', brandEs], ['en', brandEn]] as const) {
+    if (lang === 'en') fireEvent.click(screen.getByRole('button', { name: 'English' }));
+    const h1 = screen.getByRole('heading', { level: 1 });
+    expect(h1.textContent).toBe(brand['brand.headline']);
+    expect(h1.nextElementSibling?.textContent).toBe(brand['brand.subline']);
+    expect(document.querySelector('.demo-footer')?.textContent).toBe(`Thesaurus · ${brand['brand.built_for']}`);
+  }
   await screen.findByText(pct(90));
 });
 

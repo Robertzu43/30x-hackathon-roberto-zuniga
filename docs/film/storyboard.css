@@ -1,0 +1,96 @@
+/* The launch film (AC-111, D44a, R-160). 1920x1080, CSS and SVG animation only, no library.
+   Every timed element gets --in and --out (seconds) from cues.json through storyboard.html's script; --lag staggers a child.
+   Palette: AC-53 Clarified plus white. Fonts: the three approved stacks; the OFL files in fonts/ make Newsreader and Geist
+   render the same on any machine (SF Pro Display still wins where it is installed). */
+@font-face { font-family: 'Newsreader'; src: url(fonts/newsreader-latin-400-normal.woff2) format('woff2'); font-weight: 400; }
+@font-face { font-family: 'Geist Sans'; src: url(fonts/Geist-Variable.woff2) format('woff2'); font-weight: 100 900; }
+@font-face { font-family: 'Geist Mono'; src: url(fonts/GeistMono-Regular.woff2) format('woff2'); font-weight: 400; }
+
+:root {
+  --canvas: #fbfbfa; --bone: #f1efe9; --surface: #ffffff; --ink: #111111; --ink-2: #6d6c69; --line: #eaeaea; --accent: #346538;
+  --font-sans: 'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif;
+  --font-serif: 'Newsreader', 'Instrument Serif', 'Playfair Display', Georgia, serif;
+  --font-mono: 'Geist Mono', 'SF Mono', 'JetBrains Mono', ui-monospace, monospace;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: var(--canvas); }
+body:not(.play) *, body:not(.play) *::before { animation-play-state: paused !important; } /* render.mjs starts the clock */
+#film { position: relative; width: 1920px; height: 1080px; overflow: hidden; color: var(--ink); font: 400 24px / 1.45 var(--font-sans); }
+p, h1, h2 { margin: 0; font-weight: 400; }
+
+/* Timing primitives */
+.part { position: absolute; inset: 0; animation: f-in .8s ease-out var(--in) both, out .6s ease-in calc(var(--out) - .6s) forwards; }
+.drift { position: absolute; inset: 0; animation: drift calc(var(--out) - var(--in)) linear var(--in) both; }
+.t { animation: rise 1.4s var(--ease) calc(var(--in) + var(--lag, 0s)) both, out .6s ease-in calc(var(--out) - .6s) forwards; }
+@keyframes f-in { from { opacity: 0; } }
+@keyframes out { to { opacity: 0; } }
+@keyframes rise { from { opacity: 0; transform: translateY(var(--rise, 28px)); } }
+@keyframes drift { to { transform: scale(var(--drift, 1.04)); } }
+
+/* 1. Title card: AC-108's reveal at 5x (letters 50 ms apart, 450 ms each; the mark settles last), on the approved bone */
+.p1 { background: var(--bone); }
+.p1 .drift, .p7 .drift { display: grid; place-content: center; justify-items: center; gap: 56px; }
+.logo { position: relative; width: 880px; aspect-ratio: 5 / 1; container-type: inline-size; }
+.logo .mark { position: absolute; inset: 0 auto 0 0; width: 20%; height: 100%; transform-origin: center; }
+.logo .word { position: absolute; left: 26.25%; top: 0; white-space: nowrap; font: 400 15cqw / 0 var(--font-serif); letter-spacing: -0.02em; color: var(--ink); }
+.logo .word::before { content: ''; display: inline-block; height: 14.375cqw; }
+.logo .word > span { display: inline-block; }
+.p1 .word > span { animation: letter .45s var(--ease) calc(var(--in) + .4s + var(--i) * 50ms) both; }
+.p1 .mark { animation: mark .6s var(--ease) calc(var(--in) + .85s) both; }
+@keyframes letter { from { opacity: 0; transform: translateX(-0.25em); } }
+@keyframes mark { from { opacity: 0; transform: scale(0.85); } }
+.tagline { font: 400 44px / 1.2 var(--font-serif); letter-spacing: -0.02em; color: var(--ink-2); --lag: 1.6s; }
+
+/* 2. Business context and 4. governance: type only, one idea at a time */
+.statement .drift, .p4 .drift { display: grid; align-items: center; padding: 0 192px; }
+.statement p { max-width: 1440px; font: 400 80px / 1.12 var(--font-serif); letter-spacing: -0.03em; }
+.p4 { background: var(--surface); }
+.p4 .drift > * { grid-area: 1 / 1; }
+.p4 .ia p { font: 400 104px / 1.12 var(--font-serif); letter-spacing: -0.035em; }
+.p4 .points { display: grid; grid-template-columns: repeat(3, 1fr); gap: 48px; }
+.p4 .points p { border-top: 1px solid var(--line); padding-top: 32px; font: 400 52px / 1.15 var(--font-serif); letter-spacing: -0.02em; }
+.p4 .points p::before { content: ''; display: block; width: 14px; height: 14px; background: var(--accent); margin-bottom: 28px; }
+
+/* 3. Product: copy on the left, the laptop on the right, the phone in front for «Recibe» */
+.copy { position: absolute; left: 96px; top: 392px; width: 500px; }
+.copy h2 { font: 400 96px / 1.05 var(--font-serif); letter-spacing: -0.035em; }
+.copy p { margin-top: 28px; font-size: 32px; line-height: 1.4; color: var(--ink-2); }
+.laptop { position: absolute; left: 676px; top: 166px; width: 1148px; --rise: 60px; }
+.laptop .bezel { padding: 14px; background: var(--ink); border-radius: 24px 24px 6px 6px; box-shadow: 0 40px 80px rgba(17, 17, 17, 0.04); }
+.laptop .base { height: 22px; margin: 0 -52px; background: var(--line); border-radius: 0 0 18px 18px; position: relative; }
+.laptop .base::before { content: ''; position: absolute; left: 50%; top: 0; width: 160px; height: 8px; margin-left: -80px; background: #ffffff; border-radius: 0 0 8px 8px; }
+.screen { position: relative; overflow: hidden; background: var(--surface); }
+.laptop .screen { width: 1120px; height: 700px; border-radius: 10px 10px 2px 2px; }
+.phone { position: absolute; left: 1524px; top: 300px; width: 300px; padding: 12px; background: var(--ink); border-radius: 52px; --rise: 90px; box-shadow: 0 40px 80px rgba(17, 17, 17, 0.04); }
+.phone .screen { width: 276px; height: 598px; border-radius: 40px; }
+.phone .screen::after { content: ''; position: absolute; left: 50%; top: 12px; width: 84px; height: 24px; margin-left: -42px; border-radius: 12px; background: var(--ink); }
+.group { position: absolute; inset: 0; animation: f-in .8s ease-out var(--in) both, out .01s linear calc(var(--out) + .8s) forwards; }
+.shot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top; transform-origin: var(--o, 50% 20%);
+  animation: f-in .8s ease-out var(--in) both, kb calc(var(--out) - var(--in)) linear var(--in) both, out .01s linear var(--out) forwards; }
+@keyframes kb { from { transform: scale(var(--z0, 1)); } to { transform: scale(var(--z1, 1.16)); } }
+
+/* 5. Architecture: the five zones of architecture.svg, drawn in left to right */
+.p5 { background: var(--surface); }
+.p5 .drift { display: grid; place-content: center; }
+.flow { display: flex; align-items: center; }
+.node { width: 264px; min-height: 196px; padding: 32px 28px; border: 1px solid var(--line); border-radius: 12px; background: var(--canvas); display: grid; align-content: start; gap: 20px; }
+.node p { font-size: 28px; line-height: 1.25; letter-spacing: -0.01em; }
+.node i { display: block; width: 40px; height: 40px; background: var(--brand); -webkit-mask: var(--icon) center / contain no-repeat; mask: var(--icon) center / contain no-repeat; }
+.node i.none { background: none; border: 1px solid var(--line); border-radius: 8px; }
+.arrow { width: 72px; height: 24px; overflow: visible; }
+.arrow path { fill: none; stroke: var(--ink-2); stroke-width: 2; stroke-dasharray: 80; animation: draw .7s var(--ease) calc(var(--in) + var(--lag)) both; }
+@keyframes draw { from { stroke-dashoffset: 80; } to { stroke-dashoffset: 0; } }
+
+/* 6. Metrics: at most four numbers, each with its scope */
+.p6 .drift { display: grid; grid-template-columns: repeat(4, 1fr); gap: 56px; align-content: center; padding: 0 144px; }
+.metric b { display: block; font: 400 136px / 1 var(--font-serif); letter-spacing: -0.04em; }
+.metric span { display: block; margin-top: 24px; font-size: 30px; font-weight: 500; }
+.metric small { display: block; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 22px; line-height: 1.45; color: var(--ink-2); }
+
+/* 7. Close, on the approved bone: logo, claim, URL, the door */
+.p7 { background: var(--bone); }
+.p7 .logo { width: 560px; }
+.claim { font: 400 64px / 1.1 var(--font-serif); letter-spacing: -0.03em; --lag: .6s; }
+.url { font: 400 26px / 1 var(--font-mono); color: var(--ink-2); --lag: .3s; }
+.door { padding: 18px 30px; border-radius: 6px; background: var(--ink); color: #ffffff; font-size: 26px; font-weight: 500; --lag: .2s; }

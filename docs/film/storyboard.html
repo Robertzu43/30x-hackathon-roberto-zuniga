@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Thesaurus · película de lanzamiento (AC-111)</title>
+<link rel="stylesheet" href="storyboard.css">
+</head>
+<!-- One page that plays the whole film (AC-111, R-155). Text and times come from cues.json (the page draws es); the layout lives here.
+     Serve the repository root over HTTP and open /docs/film/storyboard.html, or run scripts/film/render.mjs. -->
+<body>
+<main id="film">
+  <section class="part p1" data-part="1"><div class="drift">
+    <div class="logo" data-cue="titulo" role="img" aria-label="Thesaurus">
+      <img class="mark" src="../../web/public/brand/thesaurus-mark.svg" alt="">
+      <span class="word" data-l data-letters></span>
+    </div>
+    <p class="tagline t" data-cue="titulo"><span data-l hidden></span><span data-l></span></p>
+  </div></section>
+
+  <section class="part statement" data-scene="contexto-1"><div class="drift"><p class="t" data-cue="contexto-1"></p></div></section>
+  <section class="part statement" data-scene="contexto-2"><div class="drift"><p class="t" data-cue="contexto-2"></p></div></section>
+  <section class="part statement" data-scene="contexto-3"><div class="drift"><p class="t" data-cue="contexto-3"></p></div></section>
+
+  <section class="part p3" data-part="3"><div class="drift" style="--drift: 1.02">
+    <div class="copy"><h2 class="t" data-cue="recibe-titulo"></h2><p class="t" data-cue="recibe-linea"></p></div>
+    <div class="copy"><h2 class="t" data-cue="lee-titulo"></h2><p class="t" data-cue="lee-linea"></p></div>
+    <div class="copy"><h2 class="t" data-cue="verifica-titulo"></h2><p class="t" data-cue="verifica-linea"></p></div>
+    <div class="copy"><h2 class="t" data-cue="decide-titulo"></h2><p class="t" data-cue="decide-linea"></p></div>
+    <div class="copy"><h2 class="t" data-cue="rinde-cuentas-titulo"></h2><p class="t" data-cue="rinde-cuentas-linea"></p></div>
+    <div class="copy"><h2 class="t" data-cue="controla-titulo"></h2><p class="t" data-cue="controla-linea"></p></div>
+    <!-- Each scene's captures split its time; --o is the zoom's focus, --z0/--z1 its scale (tuned per capture in phase B). -->
+    <div class="laptop t" data-part="3"><div class="bezel"><div class="screen">
+      <div class="group" data-scene="recibe"><img class="shot" src="captures/recibe-carga.png" alt=""></div>
+      <div class="group" data-scene="lee"><img class="shot" src="captures/lee.png" alt="" style="--o: 40% 30%"></div>
+      <div class="group" data-scene="verifica"><img class="shot" src="captures/verifica.png" alt="" style="--o: 50% 60%"></div>
+      <div class="group" data-scene="decide">
+        <img class="shot" src="captures/decide-bandeja.png" alt="">
+        <img class="shot" src="captures/decide-pagar.png" alt="">
+        <img class="shot" src="captures/decide-escalar.png" alt="" style="--o: 50% 70%">
+        <img class="shot" src="captures/decide-aprobado.png" alt="">
+      </div>
+      <div class="group" data-scene="rinde-cuentas">
+        <img class="shot" src="captures/rinde-registro.png" alt="">
+        <img class="shot" src="captures/rinde-pregunta.png" alt="" style="--o: 50% 70%">
+      </div>
+      <div class="group" data-scene="controla">
+        <img class="shot" src="captures/controla-politica.png" alt="">
+        <img class="shot" src="captures/controla-periodo.png" alt="">
+      </div>
+    </div></div><div class="base"></div></div>
+    <div class="phone t" data-scene="recibe"><div class="screen"><div class="group" data-scene="recibe">
+      <img class="shot" src="captures/recibe-envio.png" alt="" style="--o: 50% 90%">
+      <img class="shot" src="captures/recibe-respuesta.png" alt="" style="--o: 50% 80%">
+    </div></div></div>
+  </div></section>
+
+  <section class="part p4" data-part="4"><div class="drift">
+    <div class="ia"><p class="t" data-cue="gobierno-1"></p><p class="t" data-cue="gobierno-2"></p><p class="t" data-cue="gobierno-3"></p></div>
+    <div class="points"><p class="t" data-cue="gobierno-p1"></p><p class="t" data-cue="gobierno-p2"></p><p class="t" data-cue="gobierno-p3"></p></div>
+  </div></section>
+
+  <!-- The zone titles and icons of docs/architecture/architecture.svg; brand icons keep their colour there and here (R-154). -->
+  <section class="part p5" data-part="5"><div class="drift"><div class="flow" data-cue="arquitectura">
+    <div class="node t"><i class="none"></i><p data-l></p></div>
+    <svg class="arrow" viewBox="0 0 72 24" style="--lag: .8s"><path d="M8 12h52m-8-7 8 7-8 7"/></svg>
+    <div class="node t" style="--lag: 1.2s"><i style="--icon: url(../architecture/icons/cloudflare.svg); --brand: #F38020"></i><p data-l></p></div>
+    <svg class="arrow" viewBox="0 0 72 24" style="--lag: 2s"><path d="M8 12h52m-8-7 8 7-8 7"/></svg>
+    <div class="node t" style="--lag: 2.4s"><i style="--icon: url(../architecture/icons/supabase.svg); --brand: #3FCF8E"></i><p data-l></p></div>
+    <svg class="arrow" viewBox="0 0 72 24" style="--lag: 3.2s"><path d="M8 12h52m-8-7 8 7-8 7"/></svg>
+    <div class="node t" style="--lag: 3.6s"><i class="none"></i><p data-l></p></div>
+    <svg class="arrow" viewBox="0 0 72 24" style="--lag: 4.4s"><path d="M8 12h52m-8-7 8 7-8 7"/></svg>
+    <div class="node t" style="--lag: 4.8s"><i class="none"></i><p data-l></p></div>
+  </div></div></section>
+
+  <section class="part p6" data-part="6"><div class="drift">
+    <div class="metric t" data-cue="metrica-facturas"><b data-l></b><span data-l></span><small data-l></small></div>
+    <div class="metric t" data-cue="metrica-autonomia"><b data-l></b><span data-l></span><small data-l></small></div>
+    <div class="metric t" data-cue="metrica-violaciones"><b data-l></b><span data-l></span><small data-l></small></div>
+    <div class="metric t" data-cue="metrica-pruebas"><b data-l></b><span data-l></span><small data-l></small></div>
+  </div></section>
+
+  <section class="part p7" data-part="7"><div class="drift">
+    <div class="logo t" role="img" aria-label="Thesaurus"><img class="mark" src="../../web/public/brand/thesaurus-mark.svg" alt=""><span class="word">Thesaurus</span></div>
+    <p class="claim t" data-cue="cierre-blinka"></p>
+    <p class="url t" data-cue="cierre-url"></p>
+    <p class="door t" data-cue="cierre-boton"></p>
+  </div></section>
+</main>
+<script type="module">
+  // Text and timing from cues.json. A part or scene lasts from its first cue's start to its last cue's end.
+  const { cues } = await (await fetch('cues.json')).json();
+  const byId = Object.fromEntries(cues.map((c) => [c.id, c]));
+  const span = (key, val) => { const own = cues.filter((c) => String(c[key]) === val); return [Math.min(...own.map((c) => c.start)), Math.max(...own.map((c) => c.end))]; };
+  const time = (el, [a, b]) => { el.style.setProperty('--in', `${a}s`); el.style.setProperty('--out', `${b}s`); };
+  for (const el of document.querySelectorAll('[data-part]')) time(el, span('part', el.dataset.part));
+  for (const el of document.querySelectorAll('[data-scene]')) time(el, span('scene', el.dataset.scene));
+  for (const el of document.querySelectorAll('[data-cue]')) {
+    const c = byId[el.dataset.cue];
+    if (!c) throw new Error(`no cue ${el.dataset.cue}`);
+    time(el, [c.start, c.end]);
+    const lines = c.es.split(/\n| — /);
+    const slots = el.querySelectorAll('[data-l]');
+    if (slots.length) slots.forEach((s, i) => { s.textContent = lines[i] ?? ''; }); else el.textContent = c.es;
+  }
+  for (const el of document.querySelectorAll('[data-letters]')) {
+    el.replaceChildren(...[...el.textContent].map((ch, i) => Object.assign(document.createElement('span'), { textContent: ch, style: `--i: ${i}` })));
+  }
+  // Captures inside a scene share its time; each stays 0.8 s longer so the next one cross-fades over it.
+  for (const g of document.querySelectorAll('.group')) {
+    const [a, b] = span('scene', g.dataset.scene);
+    const shots = g.querySelectorAll('.shot');
+    shots.forEach((s, i) => time(s, [a + (i * (b - a)) / shots.length, a + ((i + 1) * (b - a)) / shots.length + 0.8]));
+  }
+  await document.fonts.ready;
+  await Promise.all([...document.images].map((i) => i.decode()));
+  document.body.dataset.ready = String(Math.max(...cues.map((c) => c.end))); // the film's length, for render.mjs
+</script>
+</body>
+</html>

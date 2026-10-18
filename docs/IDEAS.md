@@ -12,3 +12,5 @@ One line per idea, who had it, which AC it would serve. Nothing here gets built 
 - Before saying «No encontré este valor literal», match a date the document prints in another format, such as "Oct 18, 2026" (Task 33 gate, AC-77 / R-107 / R-166).
 - Plainer words than «LLM» and «JEV» in the /demo pitch copy, for finance readers (Task 33 gate, AC-79 / R-166).
 - A shorter top bar at 360 and 390 px. Today the bar takes about 275 px before the h1 (Task 33 gate, AC-91 / R-166).
+- Show the six /demo agent-loop stages as one row of 6 at ≥ 1440 px, the way the README diagram draws the loop. R-171 chose 3 across (product, AC-116 / R-171).
+- Add a play glyph to the README video thumbnail with an ffmpeg overlay. Today «▶ Ver el video» sits under a plain poster (product, AC-114 / R-169).

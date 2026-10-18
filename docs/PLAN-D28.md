@@ -774,3 +774,63 @@ Then the existing tasks, unchanged except for their start: 33 and 34 (the gates)
 2. 09:30Z: the film's CSS device mockups go (captures full-frame, same zoom, pan and fades; every scene keeps its title, its supporting line and its order).
 Never cut: D44a's seven-part structure and tone, the six scene titles, the governance line, the metrics slide, the close with «Listo para conectarse a Blinka», R-156.
 Never cut: README and the diagram (AC-110), the raw happy path (AC-50), R-156's truth and privacy rules, the film itself (AC-111's other parts).
+
+From D45 (R-173): the two film cut times above move to 12:00Z and 13:00Z; the 14:00Z film deadline stays. Task 56 phase B starts after Task 58 is deployed and Task 37 has re-recorded.
+
+# D45: Task 58 (product, 18 Oct ~05:40Z)
+
+> Roberto's D45 (05:25Z): "la página en web tiene mucha distancia a los lados, mejora los recuadros de las instrucciones, ¿dónde está el video?". The ACs are AC-112..AC-116 in `docs/SPEC.md` section 13h, plus AC-91 Clarified (D45). The rulings are R-167..R-173, and Q23 is in `docs/QUESTIONS.md`. Where this section and a ruling differ, the ruling wins. D45 is a UI fix, so Task 58 is deployed before FREEZE (11:00Z), ideally by ~08:00Z.
+
+## Binding order and rules
+- Order: Task 57 (built, in review) merges, then Task 58 starts from `r202610162341/integration` at that commit. If 57 has not merged by 06:30Z, 58 starts from integration then and rebases onto 57 before its review. After 58 is deployed and QA'd: Task 37 (re-record), then Task 56 phase B (captures of the new layout), then Task 38 (final QA happy path, merge to main).
+- One senior-builder. No migration, no Worker route, no `src/` code outside `src/i18n/`. Product copy for AC-116 (b) and (c) is in the AC, verbatim.
+- Never cut: AC-112 (band), AC-114 (the /demo hero with the inline video, poster, play button and captions, plus the README thumbnail), and AC-115's «Paso n de m» and never-covers rule. Cut order, only at R-173's checkpoints: (1) AC-116 (c), (2) AC-116 (b), (3) AC-113, (4) AC-116 (a)'s icons, (5) AC-115's dots.
+- Budgets as always: 2 builder attempts, 2 reviewer passes, 2 QA runs. Two failed gate rounds on one screen go to product to simplify the screen, never to lower the bar (R-93).
+
+## Task
+
+**Task 58: Layout band, /demo hero video, step cards, tour card, gate at 1920 (AC-112..AC-116, AC-91 Clarified D45; R-167..R-173).** Seat: senior-builder, next free senior seat after Task 57 merges. Branch `r202610162341/task/58-d45-layout`.
+- Files (expected; the builder lists what it actually touched):
+  - Shell and band: `web/styles.css` (one layout scale: P and M as CSS custom properties, the band container, the top bar on the band), `web/App.tsx` only if the shell's container lives there. `data-band` on each band screen's page container and `data-block` on its top-level blocks: `web/pages/Demo.tsx`, `web/dashboard/Dashboard.tsx`, `web/pages/InvoiceDetail.tsx`, `web/pages/Period.tsx`, `web/pages/Beneficiaries.tsx`, `web/pages/Beneficiary.tsx`, `web/pages/Policy.tsx`. Their CSS: `web/pages/demo.css`, `web/pages/inbox.css`, `web/dashboard/dashboard.css`, `web/pages/detail.css`, `web/pages/period.css`, `web/pages/beneficiary.css`, `web/policy.css`, `web/charts/charts.css` (chart blocks fill their column). Remove every 768 px or 608 px cap (AC-112 `1.cap`).
+  - AC-113 grids: the same page and CSS files, at ≥ 1440 only (`@media (min-width: 1440px)`); below 1024 the order stays as today.
+  - AC-114 hero video: a new `web/components/HeroVideo.tsx` (+ `hero-video.css`): reads `/demo/video.json`, a 16:9 reserved box, the poster, the play button, the tracks with the default following the tab's language, the designed error state; mounted in the right column of `/demo`'s hero. New assets: `web/public/demo/video.json`, `web/public/demo/happy-path-poster.jpg` (ffmpeg frame of a Bandeja moment with no email; at most 200 KB), `web/public/demo/happy-path.es.vtt` and `.en.vtt` (one cue per AC-50 step as it appears in today's recording, timed from an `ffmpeg -vf fps=1` contact sheet). `README.md`: only the thumbnail `<img src>` (the poster's absolute URL) and the «▶ Ver el video» link text (AC-114, AC-110 item 2).
+  - AC-115 tour card: `web/components/Tour.tsx` (+ its CSS), the `tour.count` keys in `src/i18n/features/auth.ts` («Paso {n} de {total}» / "Step {n} of {total}"), the dots, and the placement logic (fits: no intersection; large: heading clear, at most 50 % covered).
+  - AC-116 step cards: a new `web/components/StepCards.tsx` (+ `step-cards.css`), used by `/demo` (six AC-66 stages; copy in `src/i18n/features/demo.ts`), Bandeja's empty state (`src/i18n/features/inbox.ts`), and the single-card empty states (`beneficiary.ts`, `period.ts`, `dashboard.ts` as needed). Portal hints: `portal/public/index.html`, `portal/public/app.js`, `portal/public/styles.css`, with the copy in `src/i18n/features/portal.ts` if the portal reads its strings from there, otherwise in `app.js` next to its other strings.
+  - Gate: a new `scripts/ux-layout.mjs` (the checks `1.band`, `1.cap`, `1.fill`, `1.measure`, `1.centred`, `1.grid`, `1.hero`, `4.tourcover`, `6.cards`) and `scripts/ux-layout.test.mjs` (one failing fixture per check, plus the fixed fixture passing). `scripts/ux-gate.mjs`: a few lines only: `WIDTHS` gains 1920, `HEIGHT[1920] = 1080`, the new rows are registered, and the tour walks all 7 steps for `4.tourcover` (R-172).
+  - Tests: `web/Demo.test.tsx`, `web/Tour.test.tsx`, `web/Inbox.test.tsx` (or `web/dashboard/Dashboard.test.tsx`), `portal/src/app.test.ts` or a portal test next to `app.js`, a new `web/HeroVideo.test.tsx`.
+- TDD order (red first): `ux-layout` fixtures (each check fails on its bad page); HeroVideo (no autoplay, manifest-driven poster and tracks, the default track by language, error state, play button calls `play()`); Tour (label, dots, aria-hidden); StepCards and the copy in both languages; portal hints gone after the first send. Then the CSS.
+- Keep: AC-108's wordmark intro on `/demo` (now inside the hero's left column), AC-109's transition, AC-42 R-78/R-105/R-144/R-161, AC-45's /demo content, AC-66's words and greps, AC-79's sentence, AC-91 items 1-7 at every width, `data-user` markers (R-131), one primary per view, the approved palette (AC-53 Clarified) and type, the D40 JS budget (no video or carousel library; the video is a native `<video>`).
+- Checks before the report: `npm run lint && npm run typecheck && npm test && npm run build`; `npx vitest run scripts web portal`; then the D38 gate on a local Worker (`scripts/qa-server.sh`) for both experiences:
+  - finance: `login,login-password,tour,inbox,trial,new-invoice,detail-pagar,detail-frenar,detail-escalar,detail-unread,ask,policy,beneficiaries,beneficiary,period,approve,demo,save-access,leave-trial` with their designed states;
+  - vendor: `portal,portal-reply,portal-error,status,status-invalid` with their designed states;
+  - at 360, 390, 768, 1024, 1440 and 1920, es and en. `docs/ux/gate-finance.md` and `docs/ux/gate-vendor.md` show every row passing, including the new D45 rows. The screenshots are committed under `docs/ux/`.
+- Report: the measured band x and width for `demo` and `inbox` at 1440 and 1920; the video's transferred bytes before a click; which cuts, if any, were taken and at which checkpoint.
+- Review: one code reviewer (findings at ≥ 95 citing AC-112..AC-116 or a CLAUDE.md rule), plus one fresh UX reviewer for the gate (briefed with `design-taste-frontend` and `minimalist-ui`, never the builder). The UX reviewer reads the 1440 and 1920 screenshots against AC-112..AC-116, every screenshot against D38, and the gate tables; each failed item blocks (D38). 2 passes each.
+- Deploy "D45" (the orchestrator, from integration after the merge and a green full suite): `wrangler deploy` for the main Worker and for `portal/` (the `facturas` Worker). Then `curl -sI` on `/demo/video.json`, the poster and both `.vtt` files (content types per AC-114), and `node scripts/perf.mjs` for the `/demo` rows (AC-97 must stay PASS).
+- QA (fresh `qa`, 2 runs max, on the deployed URL, against `docs/SPEC.md` only): AC-112..AC-116 Evidence (the gate rows on the deployed URL at 1440 and 1920 for the band screens, the DevTools console line, the private-window video check with captions in both languages, the curls, the README grep, «Ver tutorial» at 390 × 844 and 1920 × 1080), plus regressions: AC-42 (tour), AC-45 (/demo contents), AC-66 greps, AC-108 (the intro on /demo), AC-97 `/demo` rows, AC-83 (the portal greeting and send at 390).
+- Estimate: 2 h build (1 h band and grids, 0.5 h hero video and assets, 0.5 h tour, step cards and portal hints), plus 0.5 h for its own gate run, 0.75 h review and UX gate, and 0.5 h for a fix round if needed.
+
+**Task 37 (amended again by D45, R-169).** Task 37 runs after Task 58 is deployed. It also writes `web/public/demo/happy-path-poster.jpg` (a frame with no email, at most 200 KB) and `happy-path.es.vtt` / `happy-path.en.vtt` for its new take, all replaced in place under the same names; `video.json` does not change. Its review checks the poster for any email (R-156) and the cue timings against the frames.
+
+**Task 56 (amended by D45, R-169).** At the D8 deploy, Task 56 also rewrites `web/public/demo/video.json` to `{ "src": "/demo/thesaurus-launch.mp4", "type": "video/mp4", "poster": "/demo/thesaurus-launch-poster.jpg", "tracks": [{ "src": "/demo/thesaurus-launch.en.vtt", "srclang": "en", "label": "English" }] }`. It touches no web code.
+
+## Shared files
+| File | Order |
+|---|---|
+| `web/pages/Demo.tsx`, `web/pages/inbox.css`, `web/dashboard/dashboard.css`, `web/charts/charts.css`, `web/pages/Period.tsx`, `src/i18n/*`, `web/charts/Kpi.tsx` | 57 → 58 |
+| `scripts/ux-gate.mjs` | 57b and 58: whichever merges second rebases |
+| `web/public/demo/happy-path-poster.jpg`, `happy-path.*.vtt` | 58 → 37 |
+| `web/public/demo/video.json` | 58 → 56 |
+| `README.md` (thumbnail and video lines) | 58 → 37 (only if renamed) → 56 |
+| `portal/public/*` | 58 only |
+
+## Clock (UTC, target; FREEZE 11:00Z)
+- ~06:00Z: Task 57 merges, then Task 58 is dispatched at once. The fallback start is 06:30Z from integration, with a rebase onto 57 before review.
+- 07:30Z checkpoint: if 58 has not reached its own gate run, it ships without cuts 1 and 2 (R-173).
+- ~08:00Z: 58's gate passes; code review and the fresh UX reviewer run.
+- 08:45Z checkpoint: if 58 has not passed review and the gate, the fix round keeps only the never-cut parts plus whatever already passed (cuts 3 to 5).
+- ~08:30-09:00Z: deploy "D45" (ideally ~08:00Z); QA on the deployed URL.
+- 10:30Z: the latest possible product deploy. A never-cut part that is not deployed by then comes to product to simplify, never to lower the bar.
+- ~09:00-10:30Z: Task 37 re-records (poster and `.vtt` included).
+- ~10:30-12:00Z: Task 56 phase B (demo assets, allowed in FREEZE); the film cut times are 12:00Z and 13:00Z; the film is merged by 14:00Z.
+- After Task 37: Task 38, the final QA happy path, and the merge to main.

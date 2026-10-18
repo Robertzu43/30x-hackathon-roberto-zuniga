@@ -9,7 +9,7 @@
      Serve the repository root over HTTP and open /docs/film/storyboard.html, or run scripts/film/render.mjs. -->
 <body>
 <main id="film">
-  <section class="part p1" data-part="1"><div class="drift" style="--drift: 1.12">
+  <section class="part p1" data-part="1"><div class="drift" style="--drift: 1.2">
     <div class="logo" data-cue="titulo" role="img" aria-label="Thesaurus">
       <img class="mark" src="../../web/public/brand/thesaurus-mark.svg" alt="">
       <span class="word" data-l data-letters></span>
@@ -72,7 +72,7 @@
     <div class="node t" style="--lag: 4.8s"><i class="none"></i><p data-l></p></div>
   </div></div></section>
 
-  <section class="part p6" data-part="6"><div class="drift">
+  <section class="part p6" data-part="6"><div class="drift" style="--drift: 1.04">
     <div class="metric t" data-cue="metrica-facturas"><b data-l></b><span data-l></span><small data-l></small></div>
     <div class="metric t" data-cue="metrica-autonomia"><b data-l></b><span data-l></span><small data-l></small></div>
     <div class="metric t" data-cue="metrica-violaciones"><b data-l></b><span data-l></span><small data-l></small></div>
@@ -112,7 +112,8 @@
     shots.forEach((s, i) => time(s, [a + (i * (b - a)) / shots.length, a + ((i + 1) * (b - a)) / shots.length + 0.8]));
   }
   await document.fonts.ready;
-  await Promise.all([...document.images].map((i) => i.decode()));
+  // decode() can reject spuriously under load; an image that loaded (naturalWidth > 0) is fine, a missing one stops the render.
+  await Promise.all([...document.images].map((i) => i.decode().catch(() => { if (!i.naturalWidth) throw new Error(`${i.src} did not load`); })));
   document.body.dataset.ready = String(Math.max(...cues.map((c) => c.end))); // the film's length, for render.mjs
 </script>
 </body>

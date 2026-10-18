@@ -23,13 +23,28 @@ ffprobe -v error -show_entries stream=codec_name,width,height,r_frame_rate,pix_f
 ffmpeg -hide_banner -i "$MP4" -vf "freezedetect=n=0.001:d=4" -an -f null - 2>&1 | grep -E 'freeze_(start|end|duration)' > "$OUT/freezedetect.log" || true
 ffmpeg -hide_banner -i "$MP4" -vf "blackdetect=d=1.5" -an -f null - 2>&1 | grep -E 'black_start' > "$OUT/blackdetect.log" || true
 ffmpeg -hide_banner -loglevel debug -i "$MP4" -vf mpdecimate -an -f null - 2>&1 | grep -oE '(drop|keep) pts:[0-9]+ pts_time:[0-9.]+' > "$OUT/mpdecimate.raw" || true
-# Total, then dropped frames per second of film, so a drop can be placed inside its scene with cues.json.
-awk '{ n++; if ($1 == "drop") d++ } END { printf "frames %d, dropped %d (%.2f %%)\n", n, d, n ? 100 * d / n : 0 }' "$OUT/mpdecimate.raw" > "$OUT/mpdecimate.log"
-awk -F'pts_time:' '/^drop/ { print int($2) }' "$OUT/mpdecimate.raw" | sort -n | uniq -c | awk '{ printf "second %d: %d dropped\n", $2, $1 }' >> "$OUT/mpdecimate.log"
+# Total, then per part of cues.json (AC-111: at most 2 % inside a scene that moves), then the seconds with drops.
+node -e '
+const fs = require("fs");
+const { cues } = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+const f = fs.readFileSync(process.argv[2], "utf8").trim().split("\n").filter(Boolean).map((l) => [l.startsWith("drop"), Number(l.split("pts_time:")[1])]);
+const pct = (d, n) => `${d}/${n} (${n ? ((100 * d) / n).toFixed(2) : 0} %)`;
+const out = [`frames ${pct(f.filter(([d]) => d).length, f.length)} dropped`];
+for (const part of [...new Set(cues.map((c) => c.part))]) {
+  const own = cues.filter((c) => c.part === part);
+  const [a, b] = [Math.min(...own.map((c) => c.start)), Math.max(...own.map((c) => c.end))];
+  const inside = f.filter(([, t]) => t >= a && t < b);
+  out.push(`part ${part} (${a}-${b} s): ${pct(inside.filter(([d]) => d).length, inside.length)} dropped`);
+}
+const secs = {};
+for (const [d, t] of f) if (d) secs[Math.floor(t)] = (secs[Math.floor(t)] ?? 0) + 1;
+out.push(`drops by second: ${Object.entries(secs).map(([k, v]) => `${k}s:${v}`).join(" ") || "none"}`);
+fs.writeFileSync(process.argv[3], out.join("\n") + "\n");
+' "$ROOT/docs/film/cues.json" "$OUT/mpdecimate.raw" "$OUT/mpdecimate.log"
 rm "$OUT/mpdecimate.raw"
 
 echo "== ffprobe"; cat "$OUT/ffprobe.log"
 echo "== freezedetect (n=0.001, d=4)"; cat "$OUT/freezedetect.log"
 echo "== blackdetect (d=1.5)"; cat "$OUT/blackdetect.log"
-echo "== mpdecimate"; head -1 "$OUT/mpdecimate.log"
+echo "== mpdecimate"; cat "$OUT/mpdecimate.log"
 ls "$OUT" | wc -l

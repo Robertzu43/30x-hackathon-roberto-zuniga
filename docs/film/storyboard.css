@@ -20,28 +20,30 @@ body:not(.play) *, body:not(.play) *::before { animation-play-state: paused !imp
 p, h1, h2 { margin: 0; font-weight: 400; }
 
 /* Timing primitives */
-.part { position: absolute; inset: 0; animation: f-in .8s ease-out var(--in) both, out .6s ease-in calc(var(--out) - .6s) forwards; }
+/* Each part and caption starts fading in .25 s before its cue, while the previous one fades out: a short dissolve, never a run of
+   identical blank frames at a join (mpdecimate, R-155). */
+.part { position: absolute; inset: 0; animation: f-in .8s ease-out calc(var(--in) - .25s) both, out .6s ease-in calc(var(--out) - .6s) forwards; }
 /* --drift (set per part in storyboard.html) is a slow push-in big enough that no hold reads as a repeated frame (mpdecimate, R-155) */
 .drift { position: absolute; inset: 0; animation: drift calc(var(--out) - var(--in)) linear var(--in) both; }
-.t { animation: rise 1.4s var(--ease) calc(var(--in) + var(--lag, 0s)) both, out .6s ease-in calc(var(--out) - .6s) forwards; }
+.t { animation: rise 1.4s var(--ease) calc(var(--in) + var(--lag, 0s) - .25s) both, out .6s ease-in calc(var(--out) - .6s) forwards; }
 @keyframes f-in { from { opacity: 0; } }
 @keyframes out { to { opacity: 0; } }
 @keyframes rise { from { opacity: 0; transform: translateY(var(--rise, 28px)); } }
-@keyframes drift { to { transform: scale(var(--drift, 1.04)); } }
+@keyframes drift { to { transform: scale(var(--drift, 1.08)); } }
 
-/* 1. Title card: AC-108's reveal at 5x (letters 50 ms apart, 450 ms each; the mark settles last), on the approved bone */
-.p1 { background: var(--bone); }
+/* 1. Title card on the approved bone, from the first frame: AC-108's reveal, large, with its timing (letters 50 ms apart, 450 ms each; the mark at 450 ms for 600 ms) */
+.p1 { background: var(--bone); animation: out .6s ease-in calc(var(--out) - .6s) forwards; }
 .p1 .drift, .p7 .drift { display: grid; place-content: center; justify-items: center; gap: 56px; }
 .logo { position: relative; width: 880px; aspect-ratio: 5 / 1; container-type: inline-size; }
 .logo .mark { position: absolute; inset: 0 auto 0 0; width: 20%; height: 100%; transform-origin: center; }
 .logo .word { position: absolute; left: 26.25%; top: 0; white-space: nowrap; font: 400 15cqw / 0 var(--font-serif); letter-spacing: -0.02em; color: var(--ink); }
 .logo .word::before { content: ''; display: inline-block; height: 14.375cqw; }
 .logo .word > span { display: inline-block; }
-.p1 .word > span { animation: letter .45s var(--ease) calc(var(--in) + .4s + var(--i) * 50ms) both; }
-.p1 .mark { animation: mark .6s var(--ease) calc(var(--in) + .85s) both; }
+.p1 .word > span { animation: letter .45s var(--ease) calc(var(--in) + var(--i) * 50ms) both; }
+.p1 .mark { animation: mark .6s var(--ease) calc(var(--in) + .45s) both; }
 @keyframes letter { from { opacity: 0; transform: translateX(-0.25em); } }
 @keyframes mark { from { opacity: 0; transform: scale(0.85); } }
-.tagline { font: 400 44px / 1.2 var(--font-serif); letter-spacing: -0.02em; color: var(--ink-2); --lag: 1.6s; }
+.tagline { font: 400 44px / 1.2 var(--font-serif); letter-spacing: -0.02em; color: var(--ink-2); --lag: 1.2s; }
 
 /* 2. Business context and 4. governance: type only, one idea at a time */
 .statement .drift, .p4 .drift { display: grid; align-items: center; padding: 0 192px; }

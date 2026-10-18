@@ -51,7 +51,9 @@ try {
   page.on('requestfailed', (r) => errors.push(`${r.url()} failed`));
   page.on('response', (r) => { if (r.status() >= 400) errors.push(`${r.url()} ${r.status()}`); });
   await page.goto(url);
-  const length = Number(await page.waitForFunction(() => document.body.dataset.ready, null, { timeout: 30_000 }).then((h) => h.jsonValue()));
+  const ready = await page.waitForFunction(() => document.body.dataset.ready, null, { timeout: 60_000 }).catch((e) => { errors.push(e.message); return null; });
+  if (!ready) throw new Error(`storyboard never became ready:\n${errors.join('\n')}`);
+  const length = Number(await ready.jsonValue());
   if (errors.length) throw new Error(`storyboard errors (R-158 wants 0):\n${errors.join('\n')}`);
 
   if (frames) {

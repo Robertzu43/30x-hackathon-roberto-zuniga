@@ -91,8 +91,9 @@ function segment(s: string): string {
   return tokens.slice(i).join('').replace(/\D/g, '');
 }
 
-// Same account when the directory's segment (or all its digits) is one or more consecutive whole digit groups of the
-// invoice line, and no other long number (6+ digits, groups joined only by separators) the directory lacks is printed.
+// Same account when the directory's segment (or all its digits) is one or more whole digit groups of the invoice line
+// joined only by separators (a word between groups is a different number), and no other long number (6+ digits, groups
+// joined only by separators) the directory lacks is printed.
 // A directory key under 6 digits (Pix email, wallet) is compared as text. last4: what the record shows for the invoice.
 function compareAccounts(inv: string, dir: string): { same: boolean; last4: string | null } {
   const dirAcct = segment(dir), dirAll = dir.replace(/\D/g, '');
@@ -112,9 +113,12 @@ function compareAccounts(inv: string, dir: string): { same: boolean; last4: stri
     flush();
     return out;
   };
+  // Groups join only across separators. A word between two numbers is a different account, not one number split in two.
+  const joined = (i: number, j: number) => /^[\s\-./]*$/.test(inv.slice(g[i]!.end, g[j]!.at));
   const runs: Array<[number, number]> = [];
   for (let a = 0; a < g.length; a++) {
     for (let b = a, s = ''; b < g.length && s.length < dirAll.length; b++) {
+      if (b > a && !joined(b - 1, b)) break;
       s += g[b]!.d;
       if (s === dirAcct || s === dirAll) runs.push([a, b]);
     }
@@ -147,10 +151,12 @@ export function acuerdo(ctx: CheckContext): Check {
   if (a.valid_until && a.valid_until < bogotaDay(now)) return out('no_cumple', a.valid_until);
   if (a.type === 'one_off') return out('cumple');
   if (a.type === 'hourly') {
-    if (typeof a.cap_usd !== 'number') return out('no_verificado');
+    if (typeof a.cap_usd !== 'number' || !Number.isFinite(a.cap_usd)) return out('no_verificado');
     const m = month(invoice.received_at);
-    const total = round2(earlier(ctx).filter((p) => p.outcome !== 'FRENAR' && month(p.received_at) === m)
-      .reduce((s, p) => s + (p.amount_usd ?? 0), amountUsd));
+    const prior = earlier(ctx).filter((p) => p.outcome !== 'FRENAR' && month(p.received_at) === m);
+    // A missing USD amount is not zero: counting it as 0 could pay past the cap.
+    if (prior.some((p) => p.amount_usd === null || !Number.isFinite(p.amount_usd))) return out('no_verificado');
+    const total = round2(prior.reduce((s, p) => s + p.amount_usd!, amountUsd));
     values.month_total_usd = total;
     return out(total <= a.cap_usd ? 'cumple' : 'no_cumple', a.cap_usd);
   }
@@ -213,11 +219,12 @@ export function periodo({ invoice, now }: CheckContext): Check {
 // AC-74: the policy's pinned rate; else the newest market rate if fetched at most 48 h before `now` (R-85.3); else none.
 export function pickRate(currency: string | null, rules: PolicyRules | null, market: MarketRates, now: string): PickedRate {
   if (currency === 'USD') return { rate: 1, rate_source: null, rate_fetched_at: null };
+  const usable = (n: number) => n > 0 && Number.isFinite(n);
   const pin = currency ? rules?.fx_rates?.[currency] : undefined;
-  if (typeof pin === 'number' && pin > 0 && Number.isFinite(pin)) return { rate: pin, rate_source: 'policy', rate_fetched_at: null };
+  if (typeof pin === 'number' && usable(pin)) return { rate: pin, rate_source: 'policy', rate_fetched_at: null };
   const m = currency ? market[currency] : undefined;
   if (!m) return { rate: null, rate_source: null, rate_fetched_at: null };
-  const fresh = Date.parse(now) - Date.parse(m.fetched_at) <= FRESH_MS && m.usd_per_unit > 0;
+  const fresh = Date.parse(now) - Date.parse(m.fetched_at) <= FRESH_MS && usable(m.usd_per_unit);
   return { rate: fresh ? m.usd_per_unit : null, rate_source: m.source, rate_fetched_at: m.fetched_at };
 }
 

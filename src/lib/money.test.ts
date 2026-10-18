@@ -34,5 +34,10 @@ describe('toUsd and round2 (AC-22, D6)', () => {
     expect(toUsd(100, 'EUR', { EUR: 0 })).toBeNull();
     expect(toUsd(100, 'EUR', { EUR: -1 })).toBeNull();
   });
+  it('a non-finite rate or amount is no rate, and does not throw', () => {
+    expect(toUsd(100, 'EUR', { EUR: Number.POSITIVE_INFINITY })).toBeNull();
+    expect(toUsd(Number.POSITIVE_INFINITY, 'USD', {})).toBeNull();
+    expect(round2(Number.POSITIVE_INFINITY)).toBeNaN();
+  });
   it('round2 rounds half up despite binary floats', () => expect(round2(1.005)).toBe(1.01));
 });

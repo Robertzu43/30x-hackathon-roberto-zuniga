@@ -3,7 +3,7 @@
 import { ApiError, dropCache, supabase } from './api';
 import { storedLang } from './i18n';
 
-export class FieldError extends ApiError {
+class FieldError extends ApiError {
   field?: string;
 }
 

@@ -2,7 +2,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { Route, Routes } from 'react-router-dom';
 import { expect, test, vi } from 'vitest';
-import OutcomeChip from './components/OutcomeChip';
+import { OutcomeChip } from './components/OutcomeChip';
 import { routes } from './App';
 import type { DashboardData } from './dashboard/Dashboard';
 import { FirstRunProvider, markFirstRun } from './firstRun';

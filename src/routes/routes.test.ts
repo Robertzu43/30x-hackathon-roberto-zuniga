@@ -664,6 +664,18 @@ describe('policy (AC-30, AC-31, R-14, R-41)', () => {
     expect(db.tables.policies).toHaveLength(1);
   });
 
+  // JSON.stringify(Infinity) is null, so the wire form of an infinite amount is an out-of-range literal (1e309).
+  it.each([
+    ['per_payment_limit_usd', '{"rules":{"per_payment_limit_usd":1e309}}'],
+    ['fx_rates', '{"rules":{"fx_rates":{"COP":1e309}}}'],
+  ])('PUT /api/policy rejects Infinity in %s -> 400, no version created', async (field, body) => {
+    db = testDb(workspace([]));
+    const r = await app.request('/api/policy', { method: 'PUT', headers: { Authorization: 'Bearer tok-a', 'Content-Type': 'application/json' }, body }, env);
+    expect(r.status).toBe(400);
+    expect(await r.json()).toEqual({ error: 'Valor no válido: los montos y los días deben ser números mayores o iguales a 0, y las tasas mayores que 0', field });
+    expect(db.tables.policies).toHaveLength(1);
+  });
+
   it('PUT /api/policy stores the version the database assigns, ignores a body version, and lists what would change without deciding', async () => {
     decided();
     const r = await call('PUT', '/api/policy', { name: 'Límite 1.000', version: 999, rules });

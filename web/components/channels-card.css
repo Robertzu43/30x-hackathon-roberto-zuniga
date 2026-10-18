@@ -1,0 +1,23 @@
+/* The Canales card (AC-123): flat, warm monochrome; the chip reuses the approved pastels (AC-53). */
+.channels-card {
+  container-type: inline-size; /* the rows read this box: three across from 600 px of content, one per row below */
+  margin-top: 2.5rem;
+  padding: 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.channels-card h2 { font: 400 var(--text-xl) / 1.2 var(--font-serif); letter-spacing: -0.02em; margin: 0 0 0.5rem; }
+.channels-card > p { margin: 0 0 1rem; }
+.channels-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+@container (min-width: 600px) {
+  .channels-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.channels-list > li { display: grid; align-content: start; justify-items: start; gap: 0.5rem; min-width: 0; padding: 1rem; border: 1px solid var(--line); border-radius: var(--radius); }
+.channels-list h3 { font: 600 var(--text-base) / 1.3 var(--font-sans); margin: 0; }
+.channels-list p { margin: 0; min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.channel-chip { border-radius: 9999px; padding: 0.125rem 0.625rem; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; white-space: nowrap; }
+.channel-chip-active { background: var(--accent-bg); color: var(--accent); }
+.channel-chip-idle { background: #f1efe9; color: var(--ink-2); }
+.channel-url { font-family: var(--font-mono); font-size: var(--text-sm); }
+.channels-list button { min-height: 44px; min-width: 44px; }

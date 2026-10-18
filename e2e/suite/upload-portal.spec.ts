@@ -17,6 +17,9 @@ test('Subir factura PDF + image to a decision, then the trial company portal (39
   const portalUrl = (await page.locator('main').innerText()).match(/https:\/\/\S+/)?.[0];
   for (const file of ['01.pdf', '18.png']) {
     await page.goto(page.url().replace(/(https?:\/\/[^/]+).*/, '$1/'));
+    // AC-42: the tour must not come back after Saltar; if it does, that is recorded as a failure and dismissed so the upload is still tested
+    const again = page.getByRole('button', { name: t(lang, 'Saltar', 'Skip') });
+    if (await again.isVisible({ timeout: 4000 }).catch(() => false)) { expect.soft(false, `AC-42 tour reappeared after Saltar on the way to «Nueva factura» (${file})`).toBe(true); await again.click(); }
     await page.getByRole('button', { name: t(lang, 'Nueva factura', 'New invoice') }).click();
     await guard.check(`new-invoice-dialog-${file}`);
     await page.locator('input[type=file]').first().setInputFiles(path.join(FIX, file));

@@ -289,6 +289,8 @@ bash scripts/tests/run.sh
 
 Las pruebas usan Supabase, Bedrock, Workers AI, Yahoo y open.er-api.com simulados o con respuestas grabadas; no necesitan red y no gastan ninguna cuota. `scripts/tests/run.sh` además aplica las migraciones a un Postgres 15+ local temporal si existe uno. Para correr la app necesitas un proyecto de Supabase y las variables de `.env.example` (nunca en un archivo versionado): `npm run build`, un `.dev.vars` local con `SUPABASE_SERVICE_ROLE_KEY` y `APPROVAL_HMAC_SECRET` (ignorado por git), y `npx wrangler dev`. Sin las claves de SES el correo no se envía: queda en el log y el registro dice que no se pudo enviar. Sin las claves de Bedrock (`AWS_BEDROCK_ACCESS_KEY_ID` y `AWS_BEDROCK_SECRET_ACCESS_KEY`) el lector y el chat usan Workers AI. Para revisar las pantallas con un navegador (360 a 1440 px, es y en), `npm run ux:gate -- --base <URL>`.
 
+Pruebas de punta a punta en navegador (390 y 1440 px, es y en; crean hasta 17 empresas de prueba, usuarios `qa-*@example.com` por la API de administración y 3 lecturas de IA por corrida): `E2E_BASE=<URL> npm run e2e`; el reporte queda en `.wrangler/e2e-report`. Usa `@playwright/test` si está instalado y, si no, el Playwright global (`npm root -g`, o `PLAYWRIGHT_DIR`); necesita `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` en el entorno.
+
 ## Cómo desplegarlo
 
 Antes de desplegar en otra cuenta, cambia en `wrangler.toml` lo que hoy apunta a las cuentas de Roberto: `account_id` (Cloudflare) y las variables `APP_URL` (la URL del Worker) y `SUPABASE_URL` (junto con `SUPABASE_ANON_KEY`, de tu proyecto de Supabase).

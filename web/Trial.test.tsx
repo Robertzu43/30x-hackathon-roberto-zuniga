@@ -114,7 +114,7 @@ test('from the door: Bandeja and the tour before any run answers, then the pass 
   fireEvent.click(await screen.findByRole('button', { name: 'Probar con mi propia empresa' }));
   expect(await screen.findByRole('dialog')).toBeTruthy(); // tour step 1, on landing
   expect(screen.getByRole('heading', { level: 1, name: 'Bandeja' })).toBeTruthy();
-  expect(await screen.findByText('Decidiendo tus facturas pendientes… 0 de 1. Las cifras se actualizan con cada decisión.')).toBeTruthy(); // the «Pendiente» rows (Part B 2)
+  expect(await screen.findByText('Decidiendo tus facturas pendientes… 0 de 1. Las cifras aparecen al terminar.')).toBeTruthy(); // the «Pendiente» rows (Part B 2)
   expect(runCalls(f)).toHaveLength(1);
   release({ PAGAR: 1, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null });
   expect(await screen.findByText('1 PAGAR · 0 FRENAR · 0 ESCALAR')).toBeTruthy();

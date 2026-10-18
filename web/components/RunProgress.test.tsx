@@ -102,10 +102,10 @@ test('the pass line and the summary are the same box: both lines in it, the one 
   mockApi({ 'POST /api/invoices/run': () => new Promise((r) => (release = r)) });
   renderAt(<Boxed pending={29} />);
   go();
-  const progress = 'Decidiendo tus facturas pendientes… 0 de 29. Las cifras se actualizan con cada decisión.';
+  const progress = 'Decidiendo tus facturas pendientes… 0 de 29. Las cifras aparecen al terminar.';
   await waitFor(() => expect(lines()).toEqual([[progress, false], ['0 PAGAR · 0 FRENAR · 0 ESCALAR', true]]));
   release(b({ PAGAR: 20, FRENAR: 3, ESCALAR: 6 }));
-  await waitFor(() => expect(lines()).toEqual([['Decidiendo tus facturas pendientes… 29 de 29. Las cifras se actualizan con cada decisión.', true],
+  await waitFor(() => expect(lines()).toEqual([['Decidiendo tus facturas pendientes… 29 de 29. Las cifras aparecen al terminar.', true],
     ['20 PAGAR · 3 FRENAR · 6 ESCALAR', false]]));
   expect(document.querySelectorAll('.run-box .run-ghost[aria-hidden="true"]')).toHaveLength(1);
 });

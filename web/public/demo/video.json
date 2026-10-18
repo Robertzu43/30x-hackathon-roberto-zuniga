@@ -1,1 +1,1 @@
-{ "src": "/demo/happy-path.webm", "type": "video/webm", "poster": "/demo/happy-path-poster.jpg", "tracks": [{ "src": "/demo/happy-path.es.vtt", "srclang": "es", "label": "Español" }, { "src": "/demo/happy-path.en.vtt", "srclang": "en", "label": "English" }] }
+{ "src": "/demo/thesaurus-launch.mp4", "type": "video/mp4", "poster": "/demo/thesaurus-launch-poster.jpg", "tracks": [{ "src": "/demo/thesaurus-launch.en.vtt", "srclang": "en", "label": "English" }] }

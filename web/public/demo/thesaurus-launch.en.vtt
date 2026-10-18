@@ -1,0 +1,81 @@
+WEBVTT
+
+1
+00:00:00.400 --> 00:00:11.204
+Invoices across countries and currencies, reviewed by hand, every month. One payment outside the rules is enough to lose control.
+
+2
+00:00:11.754 --> 00:00:16.322
+Invoices arrive by email, as PDFs or by chat.
+
+3
+00:00:16.872 --> 00:00:23.880
+Someone compares them with what was agreed, asks for approval by chat and creates the payment by hand, in another currency and country.
+
+4
+00:00:24.430 --> 00:00:30.262
+It is reconciled in a spreadsheet. Every month. If someone is available.
+
+5
+00:00:30.812 --> 00:00:36.884
+Thesaurus. The accounts payable agent for global companies.
+
+6
+00:00:37.434 --> 00:00:44.462
+It receives every invoice: vendor portal, direct upload, pasted text or email.
+
+7
+00:00:45.012 --> 00:00:53.816
+AI reads it: payee, amount, currency, account and dates, with its confidence level.
+
+8
+00:00:54.366 --> 00:01:01.394
+Code checks 13 rules, from payee to budget, with the day's exchange rate.
+
+9
+00:01:01.944 --> 00:01:09.880
+And it decides: PAY, STOP or ESCALATE. PAY is only written when all 13 rules pass.
+
+10
+00:01:10.430 --> 00:01:17.674
+When something falls outside the rules, it asks a concrete question. A person approves in one click.
+
+11
+00:01:18.224 --> 00:01:26.588
+Every decision keeps its record: what it read, what it decided and the arithmetic. And you can ask it.
+
+12
+00:01:27.138 --> 00:01:33.058
+AI reads. Code decides. A person approves.
+
+13
+00:01:33.608 --> 00:01:41.136
+Isolation per company. Immutable record. It never pays outside the rules.
+
+14
+00:01:41.686 --> 00:01:47.814
+In production: Andina Labs, a sample company with 29 invoices.
+
+15
+00:01:48.364 --> 00:01:53.940
+The inbox: what is due, what awaits approval and the agent's autonomy.
+
+16
+00:01:54.490 --> 00:02:01.146
+On every invoice: what it read, with its confidence, and the 13 rules with their arithmetic.
+
+17
+00:02:01.696 --> 00:02:07.392
+When an invoice exceeds the threshold, the question is concrete and the answer is one click.
+
+18
+00:02:07.942 --> 00:02:13.902
+The period reports: 62% autonomy and 0 violations.
+
+19
+00:02:14.452 --> 00:02:20.568
+And vendors send their invoices from their own portal, also from a phone.
+
+20
+00:02:21.118 --> 00:02:29.682
+Thesaurus. Ready to connect to Blinka. Try it with your own company.

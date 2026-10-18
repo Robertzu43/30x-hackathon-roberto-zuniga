@@ -240,7 +240,7 @@ function measure(o) {
 
   out.logo = els.some((el) => el.matches('[data-logo],[aria-label*="logo" i],img[alt*="logo" i],img[src*="logo" i],.logo'));
   out.images = els.filter((el) => el.tagName === 'IMG').map((el) => ({ src: (el.currentSrc || el.src).slice(0, 60), svg: /\.svg(\?|$)|^data:image\/svg/.test(el.currentSrc || el.src), natural: el.naturalWidth, shown: el.getBoundingClientRect().width }));
-  out.primaryCount = els.filter((el) => el.matches('.primary,[data-primary]')).length;
+  out.primaryCount = els.filter((el) => el.matches('.primary,[data-primary]') && getComputedStyle(el).backgroundColor !== 'rgb(255, 255, 255)').length; // filled only: behind an open save or leave panel the page's primaries render as secondaries (R-197)
 
   // A designed state marks its message (role alert or status, or class error, empty, state); its container holds the next step.
   const msg = els.find((el) => el.matches('[role="alert"],[role="status"],.error,.empty,.state,[data-state]') && !el.closest('[aria-busy="true"]') && el.innerText.trim()); // an empty live region says nothing

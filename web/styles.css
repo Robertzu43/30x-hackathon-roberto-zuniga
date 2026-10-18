@@ -71,6 +71,8 @@ button:active { transform: scale(0.98); }
 button:disabled { opacity: 0.6; cursor: default; }
 button.primary { background: var(--ink); color: #fff; border-color: var(--ink); padding: 0.625rem 1rem; font-size: var(--text-base); }
 button.primary:hover:not(:disabled) { background: #333; }
+/* AC-91 item 6 (R-197): while «Guardar mi acceso» or the leave warning is open (useLeaveGuard sets .panel-open), the panel holds the one filled primary; same box, only colours change */
+body.panel-open button.primary:not(.save-access *, .leave-trial *) { background: var(--surface); color: var(--ink); border-color: var(--line); }
 button.link { border: 0; background: none; padding: 0; color: var(--ink-2); text-decoration: underline; text-underline-offset: 3px; }
 button.link[aria-pressed='true'] { background: none; color: var(--ink); text-decoration: none; font-weight: 600; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

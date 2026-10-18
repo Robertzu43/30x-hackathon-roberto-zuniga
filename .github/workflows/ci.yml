@@ -5,16 +5,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: bash scripts/tests/run.sh  # harness scripts: bash + python3 stdlib, no npm needed
+      - run: bash scripts/tests/run.sh  # harness scripts: bash + python3 stdlib
       - uses: actions/setup-node@v4
-        if: hashFiles('package-lock.json') != ''
         with: { node-version: 22, cache: npm }
-      # npm steps run only once the product exists (package-lock.json); the harness alone has nothing to build
       - run: npm ci
-        if: hashFiles('package-lock.json') != ''
-      - run: npm run lint --if-present
-        if: hashFiles('package-lock.json') != ''
-      - run: npm run typecheck --if-present
-        if: hashFiles('package-lock.json') != ''
-      - run: npm test --if-present -- --run
-        if: hashFiles('package-lock.json') != ''
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build

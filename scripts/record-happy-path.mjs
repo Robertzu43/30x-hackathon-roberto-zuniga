@@ -1,6 +1,6 @@
 /* global process, console, fetch, Buffer */ // Node script: eslint.config.js declares no Node globals
 // Records the happy path (AC-50, R-35) on the DEPLOYED product: node scripts/record-happy-path.mjs [URL]
-// Needs Playwright (local node_modules, else the global one) and its Chromium; writes docs/demo/happy-path.webm
+// Needs Playwright (local node_modules, else the global one) and its Chromium; writes web/public/demo/happy-path.webm
 // and web/public/demo/happy-path.webm. Before and after the recording the demo company is reset through the API
 // (outside the video), so the script is re-runnable and leaves the seeded state. It also asserts what the video claims.
 import { execSync } from 'node:child_process';
@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const URL_ = (process.argv[2] ?? 'https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev').replace(/\/$/, '');
 const DEMO_PASSWORD = 'andina-demo-2026'; // public by design (D8, AC-46)
-const OUT = [join(ROOT, 'docs/demo/happy-path.webm'), join(ROOT, 'web/public/demo/happy-path.webm')];
+const OUT = [join(ROOT, 'web/public/demo/happy-path.webm')];
 
 const { chromium } = await import('playwright').catch(() =>
   createRequire(join(execSync('npm root -g').toString().trim(), '_'))('playwright'));

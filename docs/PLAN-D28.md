@@ -1076,3 +1076,162 @@ Never cut:
 - AC-120's P1 rows;
 - AC-121 (a);
 - AC-122 on the band screens.
+
+# D48: Tasks 63-64 (product, 18 Oct ~09:15Z)
+
+> Roberto's D48 (~06:50Z): "no me convence eso de que pega un chat o un correo, esto ya debería integrarse directo". D49 (the launcher, applying Roberto's 18 Oct orders) sets the clock: D48 item 1 may be built and merged until 14:00Z; Telegram is cut first.
+>
+> The ACs are AC-123..AC-126 in `docs/SPEC.md` section 13j. The rulings are R-189..R-195, and Q26 and Q27 are in `docs/QUESTIONS.md`. The copy is `docs/COPY.md`, tables «Owned by Task 63» and «Owned by Task 64», written by product. Where this section and a ruling differ, the ruling wins.
+
+## Binding order and rules
+- Order:
+  1. Tasks 58, 59, 60 and 61 keep priority on every seat and merge first, in that order.
+  2. Task 63 phase A starts at the first free seat. It builds new files only.
+  3. Task 63 phase B starts after Task 61 merges. If 61 has not merged by 12:00Z, 63 rebases onto what is merged and merges first; then 61 rebases.
+  4. Task 64 runs only under R-195: a seat idle and every D45/D47 task merged or in review by 09:45Z, or Roberto's bot token by then. It merges by 10:50Z, before 63, or it is cut.
+  5. Task 63 merges by 13:30Z (target), 14:00Z (hard).
+  6. 14:00-15:00Z (D49): the deploy, the D38 gate, Task 62's checks (now with AC-123..AC-125), and «PRODUCT READY FOR FILM».
+- At most 3 agents at a time (D49).
+- Task 63: no migration (R-193), no new route. It changes `GET /api/portal-link` and the screen answers, and uses one DNS-over-HTTPS read (R-190).
+- Task 64: one additive migration (R-194), one new route, back end only, no web file.
+- Never lower a bar. A never-cut part not merged by 14:00Z stays an open FAIL in README «Lo que no está hecho» and in the ledger (R-195).
+- Budgets as always: 2 builder attempts, 2 reviewer passes, 2 QA runs per task. The 14:00-15:00Z QA on the deployed URL is QA run 1 for Task 63.
+
+## Tasks
+
+**Task 63: The Canales card, «Subir factura», the channel label (AC-123, AC-124, AC-125; R-189..R-193, R-195).** Seat: senior-builder. Branch `r202610162341/task/63-channels`, from `r202610162341/integration` at dispatch.
+- Phase A, at the first free seat. New files only, so there is no conflict with 58-61:
+  - `src/lib/channels.ts`:
+    - `channelOf({ origin, sender, telegram_from, seeded })` returns `{ kind, from }`, as in AC-125's table;
+    - `emailLive(env, fetchImpl)` is R-190's check: no fetch when `INBOUND_EMAIL_DOMAIN` is empty, a 1500 ms timeout, a 10-minute cache for true and a 1-minute cache for false.
+    - Tests in `src/lib/channels.test.ts`: every row of AC-125's table, and every case in AC-123's Evidence for `emailLive`.
+  - `src/i18n/features/channels.ts`: the keys of `docs/COPY.md` «Owned by Task 63» that are new, in es and en. The one-line registration in `src/i18n/es.ts` and `en.ts` waits for phase B.
+  - `web/components/ChannelsCard.tsx` and its CSS:
+    - three `[data-channel]` rows: name, status chip with its word, one line, and the URL, address or link with «Copiar enlace»;
+    - the copy behaviour is moved from `PortalLinkCard.tsx` (AC-84 Clarified), not rewritten;
+    - inside the card, a grid that is three across when its content box is at least 600 px, and one per row below.
+    - Tests in `web/ChannelsCard.test.tsx`: every state in es and en, no address while pending, copy success and refusal.
+  - `scripts/ux-channels.mjs`: the gate row `1.channels`. Tests in `scripts/ux-channels.test.mjs`: one failing fixture each (a 2 + 1 split at 1440, unequal widths, a URL overflowing at 360) and the fixed page passing.
+  - Estimate: 1 h.
+- Phase B, after Task 61 merges (12:00Z fallback, R-195): rebase, then wire it in.
+  - Worker:
+    - `src/routes/screen.ts`: `portalOf` answers `{ portal_url, email_address, email_live, telegram_url }`, with `telegram_url` null unless Task 64 merged its computation. `drawn` adds `channel` from `channelOf`, with `seeded` taken from the `period.seeded` ids already in the same payload.
+    - `src/routes/portal-link.ts`.
+    - `src/routes/invoices.ts`: Detalle's invoice carries `channel`, with `seeded = expected_outcome != null`. `expected_outcome` itself is never sent.
+  - Web:
+    - `web/pages/Inbox.tsx`: ChannelsCard replaces PortalLinkCard in the same slot. The loading markup carries a hidden ChannelsCard, so the box is reserved (R-176). The empty state's primary is the portal's «Copiar enlace». The last-run line shows «Telegram» when `last_run.via_telegram` is true.
+    - `web/components/PortalLinkCard.tsx`: `originLabel` becomes `channelLabel`, which reads `channel`. Delete the card if nothing else imports it.
+    - `web/dashboard/InvoiceTable.tsx`: the label line, and the «Canal» filter (cut 2).
+    - `web/pages/InvoiceDetail.tsx`: the label under the h1.
+    - `web/components/NewInvoice.tsx` and `new-invoice.css` (AC-124): the file first, then the disclosure `inbox.new.paste` with the radio and the textarea. No tabs. The class and the selectors stay (R-192).
+  - Copy:
+    - `src/i18n/features/inbox.ts`: `inbox.new` and `inbox.new.tab.*` per the deck; `inbox.origin.*` removed;
+    - `auth.ts`: `tour.new-invoice.*`;
+    - `dashboard.ts`: `dash.filter.origin` and `dash.origin.app`;
+    - the empty-state card 1 keys that Task 58 created;
+    - the registration line for `channels.ts`.
+  - Scripts and e2e:
+    - `scripts/ux-gate.mjs`: register `1.channels` on `inbox`, `trial` and `inbox-empty`; the `newInvoice()` prepare step opens the disclosure and picks the radio for `-email` and `-chat`; the gate ids are unchanged;
+    - `scripts/record-happy-path.mjs`, `e2e/ac93-trial.spec.ts`, `e2e/ac93-regress.spec.ts` and `e2e/qa52-helpers.ts`: «Subir factura» / "Upload invoice", the disclosure, and «un chat»;
+    - `scripts/perf.mjs`: the selector does not change; update only its comment's words.
+  - Tests updated: `web/Inbox.test.tsx`, `web/NewInvoice.test.tsx`, `web/Tour.test.tsx`, `web/App.test.tsx`, `web/mobile.test.ts`, `web/userMarkers.test.tsx`, `web/InvoiceDetail.test.tsx` (or wherever Detalle is tested), `scripts/ux-gate.test.mjs`, `scripts/perf.test.mjs` (label text only), `src/routes/portal-link.test.ts`, `src/routes/routes.test.ts`.
+  - README: «Nueva factura» becomes «Subir factura». «Facturas por correo» gains one line: Bandeja's Canales card shows «Activo» once the MX records point to Email Routing.
+  - Estimate: 1.5 h.
+- TDD order:
+  1. `channels.test.ts` red, then `channels.ts`;
+  2. `ChannelsCard.test.tsx` red, then the card;
+  3. `ux-channels.test.mjs` red, then the row;
+  4. (phase B) `portal-link.test.ts` and `routes.test.ts` red on the new fields, then the Worker;
+  5. `NewInvoice.test.tsx` red on the disclosure and no tabs, then the form;
+  6. `Inbox.test.tsx` and the Detalle test red on the labels and the card, then the wiring;
+  7. the scripts and e2e selectors.
+- Keep:
+  - AC-11 and AC-15 behaviour;
+  - AC-84 Clarified's copy button;
+  - AC-112's band, AC-113's rows and AC-122 at 2560;
+  - AC-117's tour (target 2 is the same element);
+  - AC-121's tiles, AC-98's one round trip, and AC-97's inbox rows;
+  - the approved palette (AC-53): the chip uses existing tokens;
+  - every R-185 frozen template.
+- Checks before the report:
+  - `npm run lint && npm run typecheck && npm test && npm run build`;
+  - `npx vitest run src web scripts`;
+  - the grep in AC-124's Evidence;
+  - on a local Worker (`scripts/qa-server.sh`), the gate on `inbox`, `trial`, `inbox-empty`, `new-invoice-file`, `new-invoice-email`, `new-invoice-chat`, `detail-pagar` and `tour`, at 360, 390, 768, 1024, 1440, 1920 and 2560, in es and en;
+  - the slow-data `entry` mode's CLS ≤ 0.01;
+  - `node scripts/perf.mjs` against the local Worker for the inbox row.
+- Report:
+  - the `/api/portal-link` JSON on the local Worker;
+  - the `channel.kind` counts for the demo company;
+  - the `1.channels` cells at 360 and 1440;
+  - the CLS;
+  - the selectors renamed;
+  - any cut taken (R-195) and at what time.
+- Review: one code reviewer, with findings ≥ 95 citing AC-123..AC-125 or a CLAUDE.md rule. Then one fresh UX reviewer on the screenshots of `inbox`, `trial`, `inbox-empty` and `new-invoice-*` at 390, 1440 and 2560.
+- Merge: target 13:30Z, hard 14:00Z.
+- Estimate: 2.5 h build, plus 0.5 h gate and 0.5 h of the two reviews.
+
+**Task 64: The Telegram channel, back end only (AC-126; R-194, R-195). SHOULD.** Seat: senior-builder, only under R-195's condition (a seat idle by 09:45Z, or Roberto's token by then). Branch `r202610162341/task/64-telegram`, from `r202610162341/integration` at dispatch. If it is not merged by 10:50Z, it is cut: the orchestrator ledgers the cut, README «Lo que no está hecho» lists "Telegram intake: specified (AC-126), not built", and this brief stays for the company's team.
+- Files:
+  - `supabase/migrations/20261018000300_telegram.sql`: R-194's list, built from the latest `screen_inbox`, `invoice_current` and `invoices_member_insert`. First list the `public` tables to confirm that `telegram_chats` is new. The orchestrator applies it with `bash scripts/db-push.sh`, after the merge.
+  - `src/telegram/webhook.ts` and the route mount in `src/index.ts`, before the JWT middleware: the env gate (404), the constant-time secret check (401), 200 at once and the work in `ctx.waitUntil`, `/start`, the chat-to-company upsert, `getFile` and the download, and `sendMessage`.
+  - `src/agent/intake.ts`: one optional `telegram_from` parameter, written with origin `portal`. The portal and email paths are unchanged.
+  - `src/agent/trace.ts`: a new key, `trace.read.telegram`, in `src/i18n/features/telegram.ts`, together with the vendor replies of `docs/COPY.md` «Owned by Task 64». No existing template changes.
+  - `src/routes/screen.ts` `portalOf`: `telegram_url` from `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` and `TELEGRAM_BOT_USERNAME`.
+  - `src/env.ts` and `wrangler.toml`: `TELEGRAM_BOT_USERNAME = ""` as a plain var. The token and the secret are `wrangler secret put` only.
+  - `scripts/telegram-setup.mjs`: `getMe`, `setWebhook` and `getWebhookInfo`. It reads the token from the session env and never prints it.
+  - README «Facturas por Telegram»: @BotFather, the two secrets, the var, and the setup script.
+- TDD order:
+  1. `src/telegram/webhook.test.ts` red: env unset, wrong secret, `/start` (known, unknown), no company;
+  2. then the file, photo, text and caption paths;
+  3. then the limits and the abuse list of AC-126's Evidence;
+  4. `scripts/tests/run.sh` cases for the migration;
+  5. `portal-link.test.ts` for `telegram_url`.
+- Checks:
+  - `npm run lint && npm run typecheck && npm test && npm run build`;
+  - `bash scripts/tests/run.sh`;
+  - on a local Worker: `curl -X POST /api/telegram/webhook` answers 404 with the env unset, and 401 with a wrong header once the env is set to fakes.
+- Report: the test list, the migration's statements, and the curl outputs.
+- Review: one code reviewer, security first: the secret compare, untrusted input, no HTML in replies, no account digits.
+- Live check: only when the token exists (the orchestrator runs the setup script; Roberto sends a PDF from his phone).
+
+## Shared files (merge in the order shown; the later task rebases)
+| File | Order |
+|---|---|
+| `web/pages/Inbox.tsx`, `web/pages/inbox.css` | 58 → 59 → 60 → 63 |
+| `web/dashboard/InvoiceTable.tsx` | 58 → 60 (tour anchor) → 63 |
+| `web/pages/InvoiceDetail.tsx` | 58 → 63 |
+| `web/components/NewInvoice.tsx`, `new-invoice.css` | 63 only |
+| `src/i18n/features/auth.ts` (`tour.new-invoice.*`) | 58 → 59 → 61 → 63 |
+| `src/i18n/features/inbox.ts`, `dashboard.ts`, the empty-state card keys | 58 → 60 → 61 → 63 |
+| `src/i18n/es.ts`, `en.ts` (registration lines) | 61 → 64 → 63 (one line each) |
+| `docs/COPY.md` | product only. 63's and 64's rows are in their own tables, which `copy.test.ts` skips. |
+| `scripts/ux-gate.mjs`, `scripts/ux-gate.test.mjs` | 57b, 58, 59, 60 → 61 (text) → 63 |
+| `scripts/record-happy-path.mjs`, `e2e/*` | 61 (text) → 63 |
+| `src/routes/screen.ts` | 64 (`portalOf`, if it runs) → 63 |
+| `README.md` | 35b → 58 → 61 → 64 (if it runs) → 63 → 37 / film (video lines) |
+
+## Seats (at most 3 agents, D49)
+| Window (UTC) | Seat 1 | Seat 2 | Seat 3 |
+|---|---|---|---|
+| now-09:45 | Task 58 / its reviews | Task 59 / 60 | Task 63 phase A, when a seat frees; Task 64 only under R-195 |
+| 09:45-12:00 | Task 60 / reviews | Task 61 / review | Task 63 phase A, then waits for 61 |
+| 12:00-13:30 | Task 63 phase B | Task 63 code reviewer (after the build) | Task 63 UX reviewer |
+| 13:30-14:00 | a fix for 63, if needed; merge | | |
+| 14:00-15:00 | the deploy, the gate, Task 62's QA (with AC-123..AC-125), «PRODUCT READY FOR FILM» | | |
+
+## Clock (UTC; D49)
+- 09:15Z: SPEC 13j, these briefs, and the COPY rows written (product).
+- 09:45Z: the Task 64 decision. Without an idle seat or the token, it is cut and ledgered.
+- 10:50Z: the last Task 64 merge, if it ran.
+- 12:00Z: if Task 61 has not merged, Task 63 phase B starts anyway and merges first.
+- 12:30Z checkpoint: if phase B has not started, take cut 2 (the «Canal» filter) at once.
+- 13:30Z: Task 63's merge target. 14:00Z: hard.
+- 14:00-15:00Z: the deploy and the verification (D49). 15:30Z: QA happy path and the merge to main. 16:00Z: SUBMISSION.md final.
+
+## Cut order (R-195)
+1. Task 64, whole.
+2. AC-125's «Canal» filter: the old «Origen» filter and its keys stay.
+3. The 2560 screenshots of `inbox-empty` (the `1.channels` row itself stays).
+
+Never cut: AC-123's three honest rows, R-190's check and the empty-state copy; AC-124; AC-125's labels on Bandeja rows and Detalle.

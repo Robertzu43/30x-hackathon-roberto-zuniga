@@ -10,7 +10,8 @@ Owner: product (R-185). Applied by Task 61, except the rows under «Owned by Tas
 - Priority:
   - P1 is never cut.
   - P2 is cut first if Task 61 runs out of time (R-188). A P2 row that is cut is listed in the ledger, and its «before» value stays.
-- `src/i18n/copy.test.ts` (Task 61) parses every table in this file except two: the one under a heading that says «not a dictionary», and the one under «Owned by Task 60». For each row it checks that `ui[lang][key]` equals «after», or that the key is absent when «after» is `(removed)`. A P2 row that is cut is skipped only if the ledger names it. Task 60's own tests check its rows, so the result is the same whichever of 60 and 61 merges first.
+- `src/i18n/copy.test.ts` (Task 61) parses every table in this file except two kinds: a table under a heading that says «not a dictionary», and a table under any heading that starts with «Owned by Task» (Tasks 60, 63 and 64). For each row it checks that `ui[lang][key]` equals «after», or that the key is absent when «after» is `(removed)`. A P2 row that is cut is skipped only if the ledger names it. Each owning task's own tests check its rows, so the result is the same whichever task merges first.
+- D48 (18 Oct ~09:15Z, R-192): the `tour.new-invoice.body` rows moved from «Guided tour» to «Owned by Task 63», because the button they describe is renamed there.
 - Quotes and ellipses are literal: «», “”, and the single character `…` (U+2026).
 
 ## Voice (one voice for every screen and email)
@@ -58,8 +59,6 @@ The tour is written for the finance lead who will use the app. The step titles a
 | P1 | tour.inbox.body | en | Where the AI acts: it reads each invoice (Amazon Nova Lite on AWS Bedrock) and answers your questions about the record ("Ask Thesaurus"). Where code decides: the 13 rules, the consequence table and the day's exchange rate; only code can write PAY. | All your invoices land here, each with what Thesaurus decided. Start with the ones that need your answer. |
 | P1 | tour.inbox.loop | es | Con cada factura, Thesaurus percibe → lee → consulta sus herramientas → decide → actúa → rinde cuentas. | (removed) |
 | P1 | tour.inbox.loop | en | With every invoice, Thesaurus perceives → reads → consults its tools → decides → acts → accounts for it. | (removed) |
-| P1 | tour.new-invoice.body | es | Sube un PDF o una imagen, o pega un correo o un chat. El agente la lee y la decide en el momento. | Sube un PDF o una imagen, o pega el texto de un correo o un chat. Thesaurus la lee y la decide en el momento. |
-| P1 | tour.new-invoice.body | en | Upload a PDF or an image, or paste an email or a chat. The agent reads it and decides it right away. | Upload a PDF or an image, or paste the text of an email or a chat. Thesaurus reads it and decides it right away. |
 | P1 | tour.run-agent.body | es | Pide al agente que decida ahora las facturas pendientes. Al terminar ves cuántas quedaron en PAGAR, FRENAR y ESCALAR. | Pídele a Thesaurus que decida ahora tus facturas pendientes. Al terminar ves cuántas quedaron en PAGAR, FRENAR y ESCALAR. |
 | P1 | tour.run-agent.body | en | Ask the agent to decide pending invoices now. When it finishes you see how many ended in PAY, STOP and ESCALATE. | Ask Thesaurus to decide your pending invoices now. When it finishes, you see how many ended in PAY, STOP and ESCALATE. |
 | P1 | tour.invoice-row.title | es | Detalle de decisión | Detalle de factura |
@@ -140,6 +139,114 @@ D47 (2) allows the technology to appear in the «Cómo funciona» section of /de
 | P1 | dash.kpi.deciding | en | (new) | Deciding… {n} of {m} |
 | P1 | entry.deciding | es | Decidiendo tus facturas pendientes… {n} de {m}. Las cifras se actualizan con cada decisión. | Decidiendo tus facturas pendientes… {n} de {m}. Las cifras aparecen al terminar. |
 | P1 | entry.deciding | en | Deciding your pending invoices… {n} of {m}. The figures update with each decision. | Deciding your pending invoices… {n} of {m}. The figures appear when it finishes. |
+
+## Owned by Task 63 (D48 channels; AC-123..AC-125; checked by Task 63's own tests; copy.test.ts skips this table)
+New keys live in `src/i18n/features/channels.ts`. The `inbox.*`, `tour.*` and `dash.*` rows edit their existing files.
+
+| P | key | lang | before | after |
+|---|---|---|---|---|
+| P1 | channels.title | es | (new) | Canales |
+| P1 | channels.title | en | (new) | Channels |
+| P1 | channels.lead | es | (new) | Tus proveedores te envían las facturas por aquí, y Thesaurus decide cada una al llegar. |
+| P1 | channels.lead | en | (new) | Your vendors send you invoices here, and Thesaurus decides each one as it arrives. |
+| P1 | channels.status.active | es | (new) | Activo |
+| P1 | channels.status.active | en | (new) | Active |
+| P1 | channels.status.pending_domain | es | (new) | Pendiente de dominio |
+| P1 | channels.status.pending_domain | en | (new) | Waiting for a domain |
+| P1 | channels.status.off | es | (new) | Sin conectar |
+| P1 | channels.status.off | en | (new) | Not connected |
+| P1 | channels.portal.name | es | (new) | Portal de proveedores |
+| P1 | channels.portal.name | en | (new) | Vendor portal |
+| P1 | channels.portal.text | es | (new) | Comparte este enlace con tus proveedores. |
+| P1 | channels.portal.text | en | (new) | Share this link with your vendors. |
+| P1 | channels.email.name | es | (new) | Correo |
+| P1 | channels.email.name | en | (new) | Email |
+| P1 | channels.email.text | es | (new) | Tus proveedores escriben a esta dirección con la factura adjunta. |
+| P1 | channels.email.text | en | (new) | Your vendors write to this address with the invoice attached. |
+| P1 | channels.email.pending | es | (new) | Pide a tu equipo técnico que conecte un dominio de correo a Thesaurus (README, «Facturas por correo»). |
+| P1 | channels.email.pending | en | (new) | Ask your technical team to connect an email domain to Thesaurus (README, "Facturas por correo"). |
+| P1 | channels.telegram.name | es | (new) | Chat de Telegram |
+| P1 | channels.telegram.name | en | (new) | Telegram chat |
+| P1 | channels.telegram.text | es | (new) | Tus proveedores abren este enlace y te envían la factura por chat. |
+| P1 | channels.telegram.text | en | (new) | Your vendors open this link and send you the invoice by chat. |
+| P1 | channels.telegram.off | es | (new) | Todavía no recibe facturas. |
+| P1 | channels.telegram.off | en | (new) | It doesn't receive invoices yet. |
+| P1 | channels.via.portal | es | (new) | vía portal |
+| P1 | channels.via.portal | en | (new) | via portal |
+| P1 | channels.via.email | es | (new) | vía correo de {from} |
+| P1 | channels.via.email | en | (new) | via email from {from} |
+| P1 | channels.via.email_unknown | es | (new) | vía correo |
+| P1 | channels.via.email_unknown | en | (new) | via email |
+| P1 | channels.via.telegram | es | (new) | vía Telegram de {from} |
+| P1 | channels.via.telegram | en | (new) | via Telegram from {from} |
+| P1 | channels.via.upload | es | (new) | subida a mano |
+| P1 | channels.via.upload | en | (new) | uploaded by hand |
+| P1 | channels.via.sample | es | (new) | factura de ejemplo |
+| P1 | channels.via.sample | en | (new) | sample invoice |
+| P2 | channels.kind.portal | es | (new) | Portal |
+| P2 | channels.kind.portal | en | (new) | Portal |
+| P2 | channels.kind.email | es | (new) | Correo |
+| P2 | channels.kind.email | en | (new) | Email |
+| P2 | channels.kind.telegram | es | (new) | Telegram |
+| P2 | channels.kind.telegram | en | (new) | Telegram |
+| P2 | channels.kind.upload | es | (new) | Subida a mano |
+| P2 | channels.kind.upload | en | (new) | Uploaded by hand |
+| P2 | channels.kind.sample | es | (new) | De ejemplo |
+| P2 | channels.kind.sample | en | (new) | Sample |
+| P2 | dash.filter.origin | es | Origen | Canal |
+| P2 | dash.filter.origin | en | Origin | Channel |
+| P2 | dash.origin.app | es | Subida en la app | (removed) |
+| P2 | dash.origin.app | en | Uploaded in the app | (removed) |
+| P1 | inbox.origin.portal | es | Portal de proveedores | (removed) |
+| P1 | inbox.origin.portal | en | Vendor portal | (removed) |
+| P1 | inbox.origin.email | es | Correo de {sender} | (removed) |
+| P1 | inbox.origin.email | en | Email from {sender} | (removed) |
+| P1 | inbox.origin.email_unknown | es | Correo | (removed) |
+| P1 | inbox.origin.email_unknown | en | Email | (removed) |
+| P1 | inbox.last_run.telegram | es | (new) | Telegram |
+| P1 | inbox.last_run.telegram | en | (new) | Telegram |
+| P1 | inbox.new | es | Nueva factura | Subir factura |
+| P1 | inbox.new | en | New invoice | Upload invoice |
+| P1 | inbox.new.lead | es | (new) | ¿Te llegó una factura por fuera de tus canales? Súbela en PDF o imagen. |
+| P1 | inbox.new.lead | en | (new) | Got an invoice outside your channels? Upload it as a PDF or an image. |
+| P1 | inbox.new.paste | es | (new) | ¿Solo tienes el texto? Pégalo aquí |
+| P1 | inbox.new.paste | en | (new) | Only have the text? Paste it here |
+| P1 | inbox.new.kind | es | (new) | Es el texto de: |
+| P1 | inbox.new.kind | en | (new) | This text is from: |
+| P1 | inbox.new.tab.file | es | Subir PDF o imagen | (removed) |
+| P1 | inbox.new.tab.file | en | Upload PDF or image | (removed) |
+| P1 | inbox.new.tab.email | es | Pegar correo | un correo |
+| P1 | inbox.new.tab.email | en | Paste email | an email |
+| P1 | inbox.new.tab.chat | es | Pegar chat | un chat |
+| P1 | inbox.new.tab.chat | en | Paste chat | a chat |
+| P1 | tour.new-invoice.title | es | Nueva factura | Subir factura |
+| P1 | tour.new-invoice.title | en | New invoice | Upload invoice |
+| P1 | tour.new-invoice.body | es | Sube un PDF o una imagen, o pega un correo o un chat. El agente la lee y la decide en el momento. | Si una factura no llegó por tus canales, súbela aquí en PDF o imagen, o pega su texto. Thesaurus la lee y la decide en el momento. |
+| P1 | tour.new-invoice.body | en | Upload a PDF or an image, or paste an email or a chat. The agent reads it and decides it right away. | If an invoice didn't come through your channels, upload it here as a PDF or an image, or paste its text. Thesaurus reads it and decides it right away. |
+
+Not a dictionary row, because Task 58 names the keys. AC-116 (c) empty-state card 1 becomes:
+- es: «Comparte tu portal» — «Envía a tus proveedores el enlace que está en «Canales»; sus facturas llegan aquí solas.»
+- en: "Share your portal" — "Send your vendors the link in "Channels"; their invoices land here on their own."
+
+If `inbox.empty` is still rendered anywhere, it becomes «Todavía no hay facturas. Comparte el enlace de tu portal en «Canales» o usa «Subir factura».» / "No invoices yet. Share your portal link in "Channels" or use "Upload invoice"."
+
+## Owned by Task 64 (D48 Telegram; AC-126; vendor-facing; checked by Task 64's own tests; copy.test.ts skips this table)
+Keys live in `src/i18n/features/telegram.ts`. The reply to an invoice is AC-83's portal template with the `portal.status.*` words, unchanged (R-90).
+
+| P | key | lang | before | after |
+|---|---|---|---|---|
+| P1 | telegram.start.ok | es | (new) | Hola, soy Thesaurus, el agente de cuentas por pagar de {company}. Envíame tu factura en PDF o en foto, o escribe su texto. |
+| P1 | telegram.start.ok | en | (new) | Hi, I'm Thesaurus, {company}'s accounts payable agent. Send me your invoice as a PDF or a photo, or type its text. |
+| P1 | telegram.no_company | es | (new) | Para empezar, abre el enlace de Telegram que te dio la empresa que te contrató. |
+| P1 | telegram.no_company | en | (new) | To start, open the Telegram link the company that hired you gave you. |
+| P1 | telegram.rate.chat | es | (new) | Recibí muchas facturas desde este chat; intenta de nuevo en una hora. |
+| P1 | telegram.rate.chat | en | (new) | I received many invoices from this chat; try again in an hour. |
+| P1 | telegram.rate.company | es | (new) | Esta empresa recibió muchas facturas hoy; intenta de nuevo mañana. |
+| P1 | telegram.rate.company | en | (new) | This company received many invoices today; try again tomorrow. |
+| P1 | trace.read.telegram | es | (new) | Leí {document} que llegó por Telegram de {from} y encontré |
+| P1 | trace.read.telegram | en | (new) | I read {document} that came by Telegram from {from} and found |
+
+The unknown-slug reply and the bad-file reply reuse AC-83's and AC-85's existing keys verbatim. `trace.read.telegram` follows the shape of the existing «Lo que hice» step 1 portal template, and Task 64 matches its placeholders to that template's.
 
 ## README and SUBMISSION (not a dictionary; checked by grep, AC-119)
 - P1. README line 3, `<br><b>Thesaurus</b>, un agente de pagos construido para Blinka`, becomes two lines. The first is `<br><b>Thesaurus</b> · Paga lo que debes. Frena lo que no. Pregunta cuando dudes.` The second is `<br>El agente de cuentas por pagar que decide con tus reglas. Construido para Blinka.`

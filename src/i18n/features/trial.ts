@@ -11,7 +11,7 @@ export const es: Record<string, string> = {
   'trial.leave.ask': 'Si sales sin guardar tu acceso, no podrás volver a «{company}». ¿Guardas tu acceso primero?',
   'trial.leave.go': 'Salir de todos modos',
   'trial.leave.cancel': 'Cancelar',
-  'trial.approver': 'Las empresas de prueba no envían correos; las escalaciones esperan en el tablero.',
+  'trial.approver': 'Tu empresa de prueba no envía correos: lo que necesite tu respuesta te espera en la Bandeja.',
 };
 
 export const en: Record<string, string> = {
@@ -26,5 +26,5 @@ export const en: Record<string, string> = {
   'trial.leave.ask': 'If you leave without saving your access, you can\'t come back to "{company}". Save your access first?',
   'trial.leave.go': 'Leave anyway',
   'trial.leave.cancel': 'Cancel',
-  'trial.approver': 'Trial companies send no email; escalations wait on the dashboard.',
+  'trial.approver': 'Your trial company sends no email: anything that needs your answer waits for you in the Inbox.',
 };

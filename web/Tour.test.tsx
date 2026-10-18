@@ -58,14 +58,14 @@ test('"Saltar" calls onDone', async () => {
 
 test('the tour navigates to each step route and "Terminar" on the last step calls onDone', async () => {
   const onDone = setup();
-  for (const title of ['Bandeja', 'Nueva factura', 'Ejecutar agente', 'Detalle de decisión', 'Política']) {
+  for (const title of ['Bandeja', 'Nueva factura', 'Ejecutar agente', 'Detalle de factura', 'Política']) {
     await screen.findByRole('heading', { name: title });
     next();
   }
   expect(await screen.findByRole('heading', { name: 'Beneficiarios' })).toBeTruthy();
   expect(screen.getByText('at:/beneficiaries')).toBeTruthy();
   next();
-  expect(await screen.findByRole('heading', { name: 'Periodo y escalado' })).toBeTruthy();
+  expect(await screen.findByRole('heading', { name: 'Periodo' })).toBeTruthy();
   expect(screen.getByText('at:/period')).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: 'Terminar' }));
   expect(onDone).toHaveBeenCalledOnce();
@@ -123,41 +123,34 @@ test('while the tour is shown, the top bar sits above the dim layer and stays on
   expect(Number(rule.match(/z-index: (\d+)/)?.[1])).toBeGreaterThan(Number(css.match(/\.tour \{[^}]*z-index: (\d+)/)?.[1]));
 });
 
-// AC-79: step 1 says where the AI acts and where code decides; the Detalle step names «Leído por IA» and the chat.
-const WHERE = 'Dónde actúa la IA: lee cada factura (Amazon Nova Lite en AWS Bedrock) y responde tus preguntas sobre el registro («Pregúntale a Thesaurus»). Dónde decide el código: las 13 reglas, la tabla de consecuencias y la tasa de cambio del día; solo el código puede escribir PAGAR.';
+// AC-118 (R-183): the tour names no vendor, model or loop; the copy is docs/COPY.md «Guided tour», verbatim. AC-79 and AC-66 stay on /demo.
+const INBOX = 'Aquí llegan todas tus facturas, cada una con lo que decidió Thesaurus. Empieza por las que necesitan tu respuesta.';
+const INBOX_EN = 'All your invoices land here, each with what Thesaurus decided. Start with the ones that need your answer.';
+const DETAIL = 'Abre una factura para ver qué leyó Thesaurus, cada regla que revisó y por qué decidió así. Si dudas, pregúntale ahí mismo.';
+const DETAIL_EN = 'Open an invoice to see what Thesaurus read, every rule it checked and why it decided that way. If in doubt, ask it right there.';
+const body = () => screen.getByRole('dialog').querySelector('.tour-body')!;
+const paras = () => [...body().querySelectorAll('p')].map((p) => p.textContent);
 
-test('the Detalle step names «Leído por IA» and «Pregúntale a Thesaurus», in es and en (AC-79)', async () => {
+test('the Detalle step is «Detalle de factura» and names no model, in es and en (AC-118)', async () => {
   setup();
   for (const title of ['Bandeja', 'Nueva factura', 'Ejecutar agente']) {
     await screen.findByRole('heading', { name: title });
     next();
   }
-  await screen.findByRole('heading', { name: 'Detalle de decisión' });
-  expect(screen.getByRole('dialog').textContent).toMatch(/«Leído por IA».*«Pregúntale a Thesaurus»/);
+  await screen.findByRole('heading', { name: 'Detalle de factura' });
+  expect(paras()).toEqual([DETAIL]);
   fireEvent.click(screen.getByRole('button', { name: 'to-en' }));
-  await screen.findByRole('heading', { name: 'Decision detail' });
-  expect(screen.getByRole('dialog').textContent).toMatch(/"Read by AI".*"Ask Thesaurus"/);
-  fireEvent.click(screen.getByRole('button', { name: 'Back' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Back' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Back' }));
-  await screen.findByRole('heading', { name: 'Inbox' });
-  expect(screen.getByRole('dialog').textContent).toContain('Where code decides: the 13 rules');
+  await screen.findByRole('heading', { name: 'Invoice detail' });
+  expect(paras()).toEqual([DETAIL_EN]);
 });
 
-// R-105: step 1 is exactly AC-79's sentence, then the loop. Nothing else (no opener, no 5-minute sentence).
-const WHERE_EN = 'Where the AI acts: it reads each invoice (Amazon Nova Lite on AWS Bedrock) and answers your questions about the record ("Ask Thesaurus"). Where code decides: the 13 rules, the consequence table and the day\'s exchange rate; only code can write PAY.';
-const LOOP = 'Con cada factura, Thesaurus percibe → lee → consulta sus herramientas → decide → actúa → rinde cuentas.';
-const LOOP_EN = 'With every invoice, Thesaurus perceives → reads → consults its tools → decides → acts → accounts for it.';
-const body = () => screen.getByRole('dialog').querySelector('.tour-body')!;
-const paras = () => [...body().querySelectorAll('p')].map((p) => p.textContent);
-
-test('step 1 is two paragraphs, AC-79\'s sentence then the loop, in es and en (R-105, AC-79, AC-66)', async () => {
+test('step 1 is one paragraph with no loop line, in es and en (AC-118, R-105)', async () => {
   setup();
   await screen.findByRole('heading', { name: 'Bandeja' });
-  expect(paras()).toEqual([WHERE, LOOP]);
+  expect(paras()).toEqual([INBOX]);
   fireEvent.click(screen.getByRole('button', { name: 'to-en' }));
   await screen.findByRole('heading', { name: 'Inbox' });
-  expect(paras()).toEqual([WHERE_EN, LOOP_EN]);
+  expect(paras()).toEqual([INBOX_EN]);
 });
 
 test('the card stacks header, a focusable scrolling body and the footer buttons (R-105)', async () => {
@@ -315,7 +308,7 @@ test('with a pass running, step 1 shows at once; at step 4 a batch refresh re-me
   }
   renderAt(<FirstRunProvider><Routes><Route path="*" element={<Bandeja />} /></Routes><Tour onDone={() => {}} /></FirstRunProvider>);
   await screen.findByRole('heading', { name: 'Bandeja' });
-  for (const title of ['Nueva factura', 'Ejecutar agente', 'Detalle de decisión']) {
+  for (const title of ['Nueva factura', 'Ejecutar agente', 'Detalle de factura']) {
     next();
     await screen.findByRole('heading', { name: title });
   }

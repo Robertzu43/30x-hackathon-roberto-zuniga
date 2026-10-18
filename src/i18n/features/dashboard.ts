@@ -51,7 +51,7 @@ export const en: Record<string, string> = {
   'dash.due.on': 'due {date}',
   'dash.due.empty': 'Nothing is due in the next 7 days.',
   'dash.table.title': 'Invoices',
-  'dash.search': 'Search by payee, number or concept',
+  'dash.search': 'Search by beneficiary, number or concept',
   'dash.filter.origin': 'Origin',
   'dash.origin.app': 'Uploaded in the app',
   'dash.col.date': 'Date',

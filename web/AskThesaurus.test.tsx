@@ -7,7 +7,7 @@ import { mockApi, renderAt } from './test/utils';
 
 const ASK = 'POST /api/ask';
 const NOVA = 'Amazon Nova Lite (AWS Bedrock)';
-const LABEL_ES = `Respuesta generada por IA (${NOVA}) a partir del registro; puede equivocarse: el registro manda.`;
+const LABEL_ES = 'Respuesta generada por IA a partir del registro. Puede equivocarse: el registro manda.'; // AC-118: no provider in the label
 const MESSAGES = {
   user_cap: 'Llegaste al límite de 10 preguntas por día. El cupo se renueva a las 19:00, hora de Bogotá. Todo lo que el agente hizo sigue en el registro.',
   ai_quota: 'La IA de Thesaurus no tiene cupo disponible en este momento. Vuelve más tarde; el cupo diario se renueva a las 19:00, hora de Bogotá. Las decisiones no dependen de la IA: el registro de cada factura sigue completo.',
@@ -44,7 +44,8 @@ test('on Bandeja: no invoice is sent; one question left reads in the singular', 
   open();
   ask('¿cuánto queda del presupuesto?');
   expect(await screen.findByText('Te queda 1 pregunta hoy')).toBeTruthy();
-  expect(screen.getByText(/^Respuesta generada por IA \(Workers AI · @cf\/meta\/llama-3.1-8b-instruct\)/)).toBeTruthy();
+  expect(screen.getByText(LABEL_ES)).toBeTruthy();
+  expect(screen.queryByText(/Workers AI|llama/)).toBeNull();
   expect(bodies(f)).toEqual([{ question: '¿cuánto queda del presupuesto?', lang: 'es' }]);
 });
 
@@ -101,7 +102,7 @@ test('in English: sends lang en, shows the English label and count', async () =>
   expect(screen.getByRole('heading', { name: 'Ask Thesaurus' })).toBeTruthy();
   fireEvent.change(screen.getByLabelText('Your question about the record'), { target: { value: 'why?' } });
   fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
-  expect(await screen.findByText(`AI-generated answer (${NOVA}) based on the record; it can be wrong: the record prevails.`)).toBeTruthy();
+  expect(await screen.findByText('AI-generated answer based on the record. It can be wrong: the record prevails.')).toBeTruthy();
   expect(screen.getByText('0 questions left today')).toBeTruthy();
   expect(bodies(f)).toEqual([{ question: 'why?', lang: 'en', invoice_id: 'inv-1' }]);
 });

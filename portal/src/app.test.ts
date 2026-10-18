@@ -49,7 +49,7 @@ describe('chat page (AC-83, AC-90)', () => {
     await open({ view: 'chat', company: 'Andina Labs Inc.' });
     expect(document.documentElement.lang).toBe('es');
     expect($('h1').textContent).toBe('Facturas para Andina Labs Inc.');
-    expect(texts('.log .bubble')[0]).toContain('Hola, soy Thesaurus, el agente de pagos de Andina Labs Inc. Envíame tu factura o cuenta de cobro.');
+    expect(texts('.log .bubble')[0]).toContain('Hola, soy Thesaurus, el agente de cuentas por pagar de Andina Labs Inc. Envíame tu factura o cuenta de cobro.');
     expect($('label[for=msg]').textContent).toBe('Mensaje');
     expect($('button.attach').getAttribute('aria-label')).toBe('Adjuntar factura');
     expect($('button[type=submit]').textContent).toBe('Enviar');
@@ -60,7 +60,7 @@ describe('chat page (AC-83, AC-90)', () => {
     await open({ view: 'chat', company: 'Andina Labs Inc.' });
     $<HTMLButtonElement>('button[data-lang=en]').click();
     expect(document.documentElement.lang).toBe('en');
-    expect(texts('.log .bubble')[0]).toContain("Hi, I'm Thesaurus, Andina Labs Inc.'s payments agent. Send me your invoice or bill.");
+    expect(texts('.log .bubble')[0]).toContain("Hi, I'm Thesaurus, Andina Labs Inc.'s accounts payable agent. Send me your invoice or bill.");
     expect($('button[type=submit]').textContent).toBe('Send');
     expect($('button[data-lang=en]').getAttribute('aria-pressed')).toBe('true');
     await open({ view: 'chat', company: 'Andina Labs Inc.' });

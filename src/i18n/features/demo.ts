@@ -1,6 +1,5 @@
 // Public /demo pitch page (AC-45, AC-46, AC-47, AC-66, R-30). The problem lines are Blinka's own words (docs/PROBLEM.md).
 export const es: Record<string, string> = {
-  'demo.title': 'Un agente que decide qué facturas pagar.',
   'demo.problem.1': 'Llega una factura o cuenta de cobro por correo, PDF o chat.',
   'demo.problem.2': 'Alguien de finanzas la revisa, la compara con lo acordado, pide aprobación y crea el pago a mano.',
   'demo.problem.3': 'Todo eso es manual, se repite cada mes y depende de que una persona esté disponible.',
@@ -13,13 +12,13 @@ export const es: Record<string, string> = {
   'demo.reset.ask': '¿Reiniciar la demo? Las facturas actuales se archivan y vuelve el conjunto de ejemplo; los cambios de otros visitantes también se pierden.',
   'demo.reset.yes': 'Reiniciar',
   'demo.reset.no': 'Cancelar',
-  'demo.loop.title': 'Cómo trabaja',
+  'demo.loop.title': 'Cómo funciona',
   'demo.loop.lead': 'Thesaurus es un agente. Con cada factura sigue el mismo ciclo, solo: en cuanto llega una y cada 5 minutos.',
   'demo.loop.label': 'El ciclo del agente',
   'demo.stage.percibe': 'percibe',
   'demo.stage.percibe.text': 'Llega una factura en PDF, imagen, correo o chat, o la revisión automática la encuentra pendiente.',
   'demo.stage.lee': 'lee',
-  'demo.stage.lee.text': 'El LLM extrae a quién, cuánto, en qué moneda y para cuándo.',
+  'demo.stage.lee.text': 'La IA lee la factura y extrae a quién, cuánto, en qué moneda y para cuándo.',
   'demo.stage.consulta': 'consulta sus herramientas',
   'demo.stage.consulta.text': 'Revisa el directorio de beneficiarios, la política, el presupuesto del periodo y las facturas anteriores.',
   'demo.stage.decide': 'decide',
@@ -53,7 +52,6 @@ export const es: Record<string, string> = {
 };
 
 export const en: Record<string, string> = {
-  'demo.title': 'An agent that decides which invoices to pay.',
   'demo.problem.1': 'An invoice or bill arrives by email, PDF or chat.',
   'demo.problem.2': 'Someone in finance reviews it, compares it with what was agreed, asks for approval and creates the payment by hand.',
   'demo.problem.3': 'All of it is manual, repeats every month and depends on a person being available.',
@@ -72,7 +70,7 @@ export const en: Record<string, string> = {
   'demo.stage.percibe': 'perceives',
   'demo.stage.percibe.text': 'An invoice arrives as a PDF, image, email or chat, or the automatic check finds it pending.',
   'demo.stage.lee': 'reads',
-  'demo.stage.lee.text': 'The LLM extracts who, how much, in which currency and by when.',
+  'demo.stage.lee.text': 'The AI reads the invoice and extracts who, how much, in which currency and by when.',
   'demo.stage.consulta': 'consults its tools',
   'demo.stage.consulta.text': "It checks the payee directory, the policy, the period's budget and earlier invoices.",
   'demo.stage.decide': 'decides',

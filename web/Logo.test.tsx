@@ -4,6 +4,7 @@ import App from './App';
 import LogoIntro from './components/LogoIntro';
 import { useT } from './i18n';
 import { mockApi, renderAt } from './test/utils';
+import { en as brandEn, es as brandEs } from '../src/i18n/features/brand';
 
 const { readFileSync } = (await import('node:fs' as string)) as { readFileSync(p: string, enc: string): string }; // no @types/node here
 const text = (p: string) => readFileSync(p, 'utf8');
@@ -18,9 +19,10 @@ test.each(['/login', '/demo', '/approve/abc'])('%s shows the Thesaurus logo as a
   expect(logo.getAttribute('src')).toBe('/brand/thesaurus-logo.svg');
 });
 
-test('the tagline stays as text next to the logo', async () => {
+test.each([['es', brandEs], ['en', brandEn]])('the brand descriptor stays as text next to the logo, in %s (AC-119)', async (lang, brand) => {
+  localStorage.setItem('lang', lang);
   renderAt(<App />, { at: '/approve/abc' });
-  expect(await screen.findByText('un agente de pagos construido para Blinka')).toBeTruthy();
+  expect(await screen.findByText(brand['brand.descriptor']!)).toBeTruthy();
 });
 
 // AC-108 (R-147): the wordmark intro. Letters and mark carry their own delay and duration inline, so the timing is testable.

@@ -3,7 +3,7 @@ export const es: Record<string, string> = {
   'detail.sending': 'Enviando tu respuesta…',
   'app.loading': 'Cargando…',
   'app.chunk_error': 'No pude abrir esta pantalla. Revisa tu conexión e intenta de nuevo.',
-  'app.retry': 'Intentar de nuevo',
+  'app.retry': 'Reintentar',
 };
 
 export const en: Record<string, string> = {

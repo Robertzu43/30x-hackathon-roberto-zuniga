@@ -46,7 +46,8 @@ export default function Period() {
   const usd = (n: number | null) => (n === null ? '—' : new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', currencyDisplay: 'code' }).format(n));
 
   return (
-    <section className="period" data-tour="period">
+    <section className="period" data-tour="period" data-band>
+      <div className="period-head" data-block>
       <h1>{t('screen.period')}</h1>
       <label>
         {t('period.month')}
@@ -56,8 +57,9 @@ export default function Period() {
           ))}
         </select>
       </label>
+      </div>
       {failed && (
-        <div className="period-state">
+        <div className="period-state" data-block>
           <p role="alert" className="error">{t('period.load_error')}</p>
           <button type="button" onClick={() => void screen.reload()}>{t('period.retry')}</button>
         </div>
@@ -65,7 +67,7 @@ export default function Period() {
       {!data && !failed && <p role="status" className="sr-only">{t('period.loading')}</p>}
       {!failed && (
         <div className={data ? undefined : 'skeleton'} aria-hidden={data ? undefined : true} inert={!data}>
-          <div className="period-figures">
+          <div className="period-figures" data-block>
             <div className="period-fig">
               <p className="big">{t('period.autonomy', { v: shown.autonomy_pct === null ? '—' : pct(shown.autonomy_pct) })}</p>
               <p>{t('period.autonomy_of', shown.autonomy)}</p>
@@ -81,8 +83,8 @@ export default function Period() {
               <p>{t('period.explained_why')}</p>
             </div>
           </div>
-          <h2>{t('period.money')}</h2>
-          <dl className="period-money">
+          <h2 data-block>{t('period.money')}</h2>
+          <dl className="period-money" data-block>
             {(['budget', 'balance', 'paid', 'committed', 'available'] as const).map((k) => (
               <div key={k}>
                 <dt>{t(`period.${k}`)}</dt>
@@ -90,22 +92,22 @@ export default function Period() {
               </div>
             ))}
           </dl>
-          <h2>{t('period.outcomes')}</h2>
-          <ul className="period-outcomes">
+          <h2 data-block>{t('period.outcomes')}</h2>
+          <ul className="period-outcomes" data-block>
             {(['PAGAR', 'FRENAR', 'ESCALAR'] as const).map((o) => (
               <li key={o}>{`${t(`outcome.${o}`)}: ${shown.count_by_outcome[o]}`}</li>
             ))}
           </ul>
           {charts && <PeriodCharts charts={charts} byBeneficiary={shown.by_beneficiary} />}
-          <h2>{t('period.beneficiaries')}</h2>
+          <h2 data-block>{t('period.beneficiaries')}</h2>
           {shown.by_beneficiary.length === 0 ? (
-            <div key="empty" className="period-state empty">
+            <div key="empty" className="period-state empty" data-block>
               <p>{t('period.none')}</p>
               <p className="muted">{t('period.none_next')}</p>
               <Link to="/">{t('period.to_inbox')}</Link>
             </div>
           ) : (
-            <div key="table" className="table-wrap" role="region" aria-label={t('period.beneficiaries')} tabIndex={0}>
+            <div key="table" className="table-wrap" data-block role="region" aria-label={t('period.beneficiaries')} tabIndex={0}>
               <table>
                 <thead>
                   <tr>

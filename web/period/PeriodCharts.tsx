@@ -18,39 +18,40 @@ export default function PeriodCharts({ charts: c, byBeneficiary }: { charts: Cha
   const { stack: s, outcomes: o } = c;
   return (
     <>
-      <h2>{t('periodviz.heading')}</h2>
+      <h2 data-block>{t('periodviz.heading')}</h2>
+      {/* AC-112/113: each chart is a block of the band; up to 3 side by side from 1440 px (period.css) */}
       <div className="period-charts">
-        <Line title={t('periodviz.burn')} unit="USD" points={c.burn.map((b) => ({ day: b.day, value: b.available_usd }))}
-          reference={c.budget_usd === null ? undefined : { label: t('periodviz.budget_line'), value: c.budget_usd }} />
-        <Segments title={t('periodviz.stack')} unit="USD" note={s.over ? t('periodviz.over', { usd: usd(s.over) }) : undefined}
+        <div data-block><Line title={t('periodviz.burn')} unit="USD" points={c.burn.map((b) => ({ day: b.day, value: b.available_usd }))}
+          reference={c.budget_usd === null ? undefined : { label: t('periodviz.budget_line'), value: c.budget_usd }} /></div>
+        <div data-block><Segments title={t('periodviz.stack')} unit="USD" note={s.over ? t('periodviz.over', { usd: usd(s.over) }) : undefined}
           segments={[
             { label: t('periodviz.paid'), value: s.paid, tone: 'pagar' },
             { label: t('periodviz.escalated'), value: s.escalated, tone: 'escalar' },
             ...(s.available === null ? [] : [{ label: t('periodviz.available'), value: s.available, tone: 'track' as const }]),
-          ]} />
-        <Segments title={t('periodviz.outcomes')} unit={t('periodviz.invoices')}
+          ]} /></div>
+        <div data-block><Segments title={t('periodviz.outcomes')} unit={t('periodviz.invoices')}
           segments={[
             { label: t('outcome.PAGAR'), value: o.PAGAR, tone: 'pagar' },
             { label: t('outcome.FRENAR'), value: o.FRENAR, tone: 'frenar' },
             { label: t('outcome.ESCALAR'), value: o.ESCALAR, tone: 'escalar' },
             { label: t('periodviz.pending'), value: o.pending, tone: 'pending' },
-          ]} />
+          ]} /></div>
         {c.trend.length > 1 ? (
           <>
-            <Line title={t('periodviz.autonomy_trend')} unit="%" points={c.trend.map((p) => ({ day: p.day, value: p.autonomy_pct }))} />
-            <Line title={t('periodviz.violations_trend')} unit={t('periodviz.violations_unit')} points={c.trend.map((p) => ({ day: p.day, value: p.violations }))} />
+            <div data-block><Line title={t('periodviz.autonomy_trend')} unit="%" points={c.trend.map((p) => ({ day: p.day, value: p.autonomy_pct }))} /></div>
+            <div data-block><Line title={t('periodviz.violations_trend')} unit={t('periodviz.violations_unit')} points={c.trend.map((p) => ({ day: p.day, value: p.violations }))} /></div>
           </>
         ) : (
-          <div className="period-trend">
+          <div className="period-trend" data-block>
             <Kpi label={t('periodviz.autonomy')} value={last?.autonomy_pct ?? null} kind="pct" />
             <Kpi label={t('periodviz.violations')} value={last?.violations ?? null} kind="count" />
             <p className="muted">{t('periodviz.one_day')}</p>
           </div>
         )}
         {/* last: its height grows with the number of beneficiaries, so nothing below it can jump (AC-91 CLS) */}
-        <HBars title={t('periodviz.bene')} unit="USD"
+        <div data-block><HBars title={t('periodviz.bene')} unit="USD"
           series={[{ label: t('periodviz.paid'), tone: 'ink' }, { label: t('periodviz.committed'), tone: 'pending' }]}
-          rows={byBeneficiary.map((b) => ({ label: b.beneficiary || t('period.unread'), values: [b.paid_usd, b.committed_usd], user: !!b.beneficiary }))} />
+          rows={byBeneficiary.map((b) => ({ label: b.beneficiary || t('period.unread'), values: [b.paid_usd, b.committed_usd], user: !!b.beneficiary }))} /></div>
       </div>
     </>
   );

@@ -19,6 +19,11 @@
   .dash-wide { grid-column: 1 / -1; }
   .dash-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
+/* AC-113: from 1440 px the decisions-per-day chart and the two spend breakdowns share one row. */
+@media (min-width: 1440px) {
+  .dash { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .dash .dash-by-day { grid-column: span 2; }
+}
 @media (max-width: 640px) {
   .dash-card { padding: 1rem; }
   .dash-kpis .chart-kpi { padding: 0.75rem; }

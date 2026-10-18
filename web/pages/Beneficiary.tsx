@@ -30,19 +30,19 @@ export default function Beneficiary() {
   // The raw API text never reaches the screen (UX-13); another company's id answers 404.
   const state = data ? 'ok' : screen.error === undefined ? 'loading' : screen.error instanceof ApiError && screen.error.status === 404 ? 'missing' : 'failed';
 
-  const back = <Link to="/beneficiaries">{t('ben.p.back')}</Link>;
+  const back = <div data-block><Link to="/beneficiaries">{t('ben.p.back')}</Link></div>;
   if (state === 'missing' || state === 'failed')
     return (
-      <section className="beneficiary" data-tour="beneficiary">
+      <section className="beneficiary" data-tour="beneficiary" data-band>
         {back}
         {state === 'missing' && (
-          <div className="beneficiary-state">
+          <div className="beneficiary-state" data-block>
             <p role="alert">{t('ben.p.not_found')}</p>
             <p className="muted">{t('ben.p.not_found_next')}</p>
           </div>
         )}
         {state === 'failed' && (
-          <div className="beneficiary-state">
+          <div className="beneficiary-state" data-block>
             <p role="alert" className="error">{t('ben.p.load_error')}</p>
             <button type="button" onClick={() => void screen.reload()}>{t('period.retry')}</button>
           </div>
@@ -66,11 +66,13 @@ export default function Beneficiary() {
   const tail = b.bank_account?.replace(/\D/g, '').slice(-4);
 
   return (
-    <section className="beneficiary" data-tour="beneficiary">
+    <section className="beneficiary" data-tour="beneficiary" data-band>
       {back}
       {!data && <p role="status" className="sr-only">{t('policy.loading')}</p>}
       <div className={data ? 'beneficiary-body' : 'beneficiary-body skeleton'} aria-hidden={data ? undefined : true} inert={!data}>
-      <h1><span data-user="">{b.name}</span></h1>
+      <h1 data-block><span data-user="">{b.name}</span></h1>
+      {/* AC-113: the agreement and bank route beside the history from 1440 px */}
+      <div className="beneficiary-profile" data-block>
       <dl className="beneficiary-facts">
         <div><dt>{t('ben.col.country')}</dt><dd>{b.country ?? '—'}</dd></div>
         <div><dt>{t('ben.col.currency')}</dt><dd>{b.currency ?? '—'}</dd></div>
@@ -78,15 +80,16 @@ export default function Beneficiary() {
         <div><dt>{t('ben.p.bank')}</dt><dd>{tail ? tu(t('ben.p.account'), { last: tail }) : t('ben.p.no_account')}</dd></div>
       </dl>
       <p><b>{t('ben.p.agreement')}.</b> {agreement}</p>
+      </div>
 
       {totals.invoices === 0 && history.length === 0 && last.length === 0 ? (
-        <div className="beneficiary-state">
+        <div className="beneficiary-state" data-block>
           <p>{t('ben.p.empty')}</p>
           <p className="muted">{t('ben.p.empty_next')}</p>
           <Link to="/">{t('period.to_inbox')}</Link>
         </div>
       ) : (
-        <>
+        <div className="beneficiary-history" data-block>
           <div className="beneficiary-totals">
             <Kpi label={t('ben.p.paid_month')} value={totals.paid_month_usd} kind="usd" />
             <Kpi label={t('ben.p.paid_total')} value={totals.paid_total_usd} kind="usd" />
@@ -111,7 +114,7 @@ export default function Beneficiary() {
               </tbody>
             </table>
           </div>
-        </>
+        </div>
       )}
       </div>
     </section>

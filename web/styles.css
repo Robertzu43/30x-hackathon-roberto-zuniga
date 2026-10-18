@@ -14,7 +14,13 @@
   --text-xl: 1.5rem;
   --text-3xl: 2.5rem;
   --radius: 8px;
+  /* AC-112 (R-167): one layout scale. P, the side padding; M, the band's maximum (1440 on the shell, 1280 on /demo). */
+  --P: 24px;
+  --M: 1440px;
+  --band-pad: max(var(--P), (100% - var(--M)) / 2); /* in a full-width bar: the padding that puts its content on the band */
 }
+@media (min-width: 768px) { :root { --P: 32px; } }
+@media (min-width: 1280px) { :root { --P: 48px; } }
 
 * { box-sizing: border-box; }
 
@@ -39,7 +45,7 @@ a { color: var(--ink); text-underline-offset: 3px; } /* UX-11: never the browser
   display: flex;
   align-items: center;
   gap: 1rem;
-  padding: 1rem 2rem;
+  padding: 1rem var(--band-pad);
   border-bottom: 1px solid var(--line);
   background: var(--surface);
   flex-wrap: wrap;
@@ -80,21 +86,23 @@ input {
 label { font-size: var(--text-sm); color: var(--ink-2); }
 .error { color: #9f2f2d; background: #fdebec; padding: 0.5rem 0.75rem; border-radius: 4px; margin: 0; }
 
-.screens { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; padding: 0.75rem 2rem; border-bottom: 1px solid var(--line); font-size: var(--text-sm); }
+.screens { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; padding: 0.75rem var(--band-pad); border-bottom: 1px solid var(--line); font-size: var(--text-sm); }
 .screens a { color: var(--ink-2); text-decoration: none; }
 .screens a.active { color: var(--accent); }
 
-main { max-width: 64rem; margin: 0 auto; padding: 6rem 2rem; }
+/* AC-112: main is the band's frame; each screen's [data-band] container fills it, so the band is min(M, W - 2P), centred. */
+main { max-width: calc(var(--M) + 2 * var(--P)); margin: 0 auto; padding: 6rem var(--P); }
 .table-wrap { overflow-x: auto; }
+/* AC-112 1.measure: prose keeps a readable measure inside wide blocks; the blocks themselves span the band. */
+[data-band] :is(p, dd):not([data-block]) { max-width: 70ch; }
 
 /* AC-72 (R-67): at phone width the chrome tightens so nothing scrolls sideways. */
 @media (max-width: 640px) {
-  .topbar, .screens { padding-left: 1rem; padding-right: 1rem; }
   .topbar { padding-top: 0.75rem; padding-bottom: 0.75rem; } /* AC-91 item 1 (UX-03): the trial bar (5 buttons, 3 rows) was 245 px = 29% of 390x844 */
   .topbar-actions { margin-left: 0; }
   .screens a { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; }
   button, select { min-height: 44px; min-width: 44px; } /* AC-72 (R-79), AC-91 item 2 (UX-05): tap targets */
-  main { padding: 3rem 1rem; }
+  main { padding-top: 3rem; padding-bottom: 3rem; }
 }
 /* AC-91 item 2 (UX-06): 16 px fields stop iOS zooming in; !important so page styles (`font: inherit` under a 14 px label) cannot undo it. */
 @media (max-width: 768px) {
@@ -163,10 +171,14 @@ body:has(.tour) .topbar { position: sticky; top: 0; z-index: 1001; }
     translate: none;
     width: calc(100vw - 1.5rem);
     padding: 1rem 1.25rem;
-    max-height: calc(100dvh - var(--tour-top, 0px) - 1.5rem);
+    /* AC-115 (R-170): on a phone the card takes at most half the room under the top bar, so a whole section it points at stays at least half clear */
+    max-height: calc((100dvh - var(--tour-top, 0px)) / 2 - 1rem);
   }
 }
 .tour-actions span { flex: 1; }
+.tour-dots { display: flex; gap: 0.375rem; margin: 0 0 0.75rem; }
+.tour-dots span { width: 6px; height: 6px; border-radius: 9999px; background: var(--line); }
+.tour-dots span.on { background: var(--accent); }
 
 @media (prefers-reduced-motion: no-preference) {
   .tour-card { animation: tour-in 400ms cubic-bezier(0.16, 1, 0.3, 1); }

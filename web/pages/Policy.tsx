@@ -212,18 +212,20 @@ export default function Policy() {
   const date = (s: string) => new Date(s).toLocaleDateString(locale, { dateStyle: 'medium' });
 
   return (
-    <section data-tour="policy" className="policy">
-      <h1>{t('screen.policy')}</h1>
-      <p className="muted">{t('policy.intro')}</p>
+    <section data-tour="policy" className="policy" data-band>
+      <div className="page-head" data-block>
+        <h1>{t('screen.policy')}</h1>
+        <p className="muted">{t('policy.intro')}</p>
+      </div>
       {!d && !loadFailed && <p role="status" className="sr-only">{t('policy.loading')}</p>}
       {loadFailed && (
-        <div>
+        <div data-block>
           <p role="alert" className="error">{t('policy.load_error')}</p>
           <button type="button" onClick={() => void screen.reload()}>{t('policy.fx.retry')}</button>
         </div>
       )}
       {!loadFailed && <>
-        <CompanySection initial={d?.company ?? { ...SKELETON.company, ...who }} skeleton={!d} />
+        <div data-block><CompanySection initial={d?.company ?? { ...SKELETON.company, ...who }} skeleton={!d} /></div>
 
         <form onSubmit={submit} noValidate className="rules">
           <RuleCard group="beneficiaries" skeleton={!d}>
@@ -259,7 +261,7 @@ export default function Policy() {
             </fieldset>
             <p className="muted hint">{t('policy.fx.source')}</p>
           </RuleCard>
-          <div className="save" {...(!d && hidden)}>
+          <div className="save" data-block {...(!d && hidden)}>
             <label>{t('policy.name')}
               <input value={f.name} placeholder={versions[0]?.name} maxLength={100} onChange={(e) => setF({ ...f, name: e.target.value })} />
             </label>
@@ -269,7 +271,7 @@ export default function Policy() {
           </div>
         </form>
 
-        <section {...card} aria-labelledby="reeval-h">
+        <section {...card} data-block aria-labelledby="reeval-h">
           <h2 id="reeval-h">{t('policy.reevaluate')}</h2>
           {would && (
             <div className="banner" role="status">
@@ -284,7 +286,7 @@ export default function Policy() {
           <RunProgress run={run} mode="reevaluate" />
         </section>
 
-        <section {...card} aria-labelledby="versions-h">
+        <section {...card} data-block aria-labelledby="versions-h">
           <h2 id="versions-h">{t('policy.versions')}</h2>
           <ol className="versions" aria-labelledby="versions-h">
             {(allVersions ? versions : versions.slice(0, 10)).map((v) => (

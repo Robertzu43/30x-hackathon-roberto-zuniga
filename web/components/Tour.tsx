@@ -114,11 +114,14 @@ export default function Tour({ onDone }: { onDone: () => void }) {
             key={i}
             ref={card}
             className="tour-card"
+            data-tour-step={step.id}
             style={{ '--tour-top': `${document.querySelector('.topbar')?.getBoundingClientRect().bottom ?? 0}px` } as CSSProperties}
             role="dialog" aria-modal="true" aria-labelledby="tour-title" aria-label={t('tour.label')}>
             <header>
               <p className="muted">{t('tour.count', { n: i + 1, total: tourSteps.length })}</p>
               <h2 id="tour-title">{t(`tour.${step.id}.title`)}</h2>
+              {/* AC-115 (R-170): decoration only, never a tap target or a focus stop */}
+              <span className="tour-dots" aria-hidden="true">{tourSteps.map((s, k) => <span key={s.id} className={k === i ? 'on' : undefined} />)}</span>
             </header>
             <div className="tour-body" tabIndex={0} ref={body} onScroll={cue}>
               {['body', 'loop'].map((k) => `tour.${step.id}.${k}`).filter((k) => t(k) !== k).map((k) => <p key={k}>{t(k)}</p>)}

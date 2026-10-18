@@ -312,7 +312,7 @@ test('Bandeja shows the dashboard, then «Pregúntale a Thesaurus», then the ta
   expect(follows(kpi, ask)).toBe(true);
   expect(follows(screen.getByRole('region', { name: 'Necesita tu respuesta' }), ask)).toBe(true);
   expect(follows(ask, tableBlock())).toBe(true);
-  expect(view.container.querySelector('section.inbox')!.lastElementChild).toBe(tableBlock());
+  expect(view.container.querySelector('section.inbox')!.lastElementChild!.firstElementChild).toBe(tableBlock()); // in its band block (AC-112)
   expect(within(tableBlock()).getByRole('table')).toBeTruthy();
 });
 

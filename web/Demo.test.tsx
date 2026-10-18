@@ -52,7 +52,7 @@ test('shows the inbox rows (outcome + one-line reason) and the three Periodo fig
   expect(within(figures).getByText(pct(90))).toBeTruthy();
   expect(within(figures).getByText('0')).toBeTruthy();
   expect(within(figures).getByText(pct(100))).toBeTruthy();
-  expect(screen.getByRole('link', { name: /Ver el recorrido en video/ }).getAttribute('href')).toBe('/demo/happy-path.webm');
+  expect(screen.getAllByRole('link', { name: /Ver el recorrido en video/ })[0]!.getAttribute('href')).toBe('/demo/happy-path.webm'); // [1]: the video box's own fallback (AC-114)
   expect(screen.queryByRole('group', { name: /Filtrar/ })).toBeNull();
 });
 
@@ -311,4 +311,36 @@ test('once usable /demo fetches the Inbox chunk and signs nobody in; a door\'s h
   load.mockClear();
   fireEvent.focusIn(screen.getByRole('button', { name: 'Probar con mi propia empresa' }));
   expect(load).toHaveBeenCalledOnce();
+});
+
+// AC-114 (R-169): the hero holds the video, read from /demo/video.json; AC-112 markers for the gate.
+test('the hero plays the manifest video in place, with its poster, inside the one band (AC-114, AC-112)', async () => {
+  const manifest = { src: '/demo/happy-path.webm', type: 'video/webm', poster: '/demo/happy-path-poster.jpg', tracks: [{ src: '/demo/happy-path.es.vtt', srclang: 'es', label: 'Español' }] };
+  mockApi({ 'GET /api/demo/overview': overview, 'GET /demo/video.json': manifest });
+  const { container } = app();
+  await waitFor(() => expect(container.querySelector('video')?.getAttribute('poster')).toBe('/demo/happy-path-poster.jpg'));
+  expect(container.querySelector('[data-band] .demo-hero [data-hero-video] video')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Reproducir el video' })).toBeTruthy();
+  expect(container.querySelectorAll('[data-band]')).toHaveLength(1);
+});
+
+test('no manifest: the box shows «No pude cargar el video.» and the walkthrough link stays (AC-114)', async () => {
+  mockApi({ 'GET /api/demo/overview': overview });
+  app();
+  expect(await screen.findByText('No pude cargar el video.')).toBeTruthy();
+  expect(screen.getAllByRole('link', { name: /Ver el recorrido en video/ }).length).toBeGreaterThan(0);
+});
+
+// AC-116 (a): «Cómo trabaja el agente» as six numbered step cards in AC-66's order and words.
+test('the agent loop is six numbered step cards, each with an icon, a title and one sentence (AC-116 a, AC-66)', () => {
+  mockApi({ 'GET /api/demo/overview': overview });
+  app();
+  expect(screen.getByRole('heading', { name: 'Cómo trabaja el agente' })).toBeTruthy();
+  const cards = [...document.querySelectorAll('[data-step-card]')];
+  expect(cards.map((c) => c.querySelector('.step-n')?.textContent)).toEqual(['1', '2', '3', '4', '5', '6']);
+  expect(cards.map((c) => c.querySelector('[data-step-title]')?.textContent)).toEqual(['percibe', 'lee', 'consulta sus herramientas', 'decide', 'actúa', 'rinde cuentas']);
+  for (const c of cards) {
+    expect(c.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
+    expect(c.querySelector('p')!.textContent!.length).toBeLessThanOrEqual(140);
+  }
 });

@@ -64,3 +64,24 @@ test('stops after 20 calls even if cursors keep changing', async () => {
   const r = await runUntilDone({ first: '/api/policy/reevaluate' });
   expect([r.calls, r.ESCALAR, post.mock.calls.length]).toEqual([20, 20, 20]);
 });
+
+// R-175: a "busy" answer (503: the company's run is still going) is retried after `busyWait` ms, up to 3 times, then fails.
+test('busyWait: a 503 is retried up to 3 times, then the run stops with its text', async () => {
+  for (let i = 0; i < 4; i++) post.mockRejectedValueOnce(new ApiError('ocupado', 503));
+  const r = await runUntilDone({ first: '/api/invoices/run', busyWait: 1 });
+  expect(post.mock.calls).toHaveLength(4);
+  expect([r.calls, r.error]).toEqual([1, 'ocupado']);
+});
+
+test('busyWait: a busy continuation is retried with the same cursor', async () => {
+  post.mockResolvedValueOnce(batch({ PAGAR: 1, remaining: 1, cursor: 'a' })).mockRejectedValueOnce(new ApiError('ocupado', 503)).mockResolvedValueOnce(batch({ PAGAR: 1 }));
+  const r = await runUntilDone({ first: '/api/invoices/run', busyWait: 1 });
+  expect(post.mock.calls).toEqual([['/api/invoices/run'], ['/api/invoices/run', { cursor: 'a' }], ['/api/invoices/run', { cursor: 'a' }]]);
+  expect(r).toEqual({ PAGAR: 2, FRENAR: 0, ESCALAR: 0, errors: 0, calls: 2 });
+});
+
+test('without busyWait a 503 stops the run at once', async () => {
+  post.mockRejectedValueOnce(new ApiError('ocupado', 503));
+  expect(await runUntilDone({ first: '/api/invoices/run' })).toMatchObject({ calls: 1, error: 'ocupado' });
+  expect(post).toHaveBeenCalledTimes(1);
+});

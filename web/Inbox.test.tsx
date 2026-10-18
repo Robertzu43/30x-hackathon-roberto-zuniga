@@ -591,7 +591,7 @@ test('each call of the pass refreshes the screen data with one screen request in
 
 test('a failed call of the pass stops it with the response text; the rows stay «Pendiente» and Bandeja stays usable (AC-107, AC-40)', async () => {
   setup({ 'GET /api/invoices': PENDING,
-    'POST /api/invoices/run': new Response(JSON.stringify({ error: 'El agente no está disponible ahora.' }), { status: 503 }) }, DASH, true);
+    'POST /api/invoices/run': new Response(JSON.stringify({ error: 'El agente no está disponible ahora.' }), { status: 500 }) }, DASH, true);
   expect((await screen.findByText('El agente no está disponible ahora.')).getAttribute('role')).toBe('alert');
   expect(items().map((r) => within(r).getByText('Pendiente'))).toHaveLength(2);
   expect((screen.getByRole('button', { name: 'Ejecutar agente' }) as HTMLButtonElement).disabled).toBe(false);

@@ -8,16 +8,18 @@
  *     onProgress  after each answered call: n = decided + errors so far, m = n + remaining, done = last call
  *     onBatch     after each answered call, with the raw answer (e.g. reload the list)
  *     stop        asked before each call; true ends the run there (the first-login pass: the user changed, R-119)
+ *     busyWait    ms to wait before asking again after a 503 (the company's run is busy, R-175), up to 3 times; unset: a 503 fails
  *   Stops on a null cursor, on a repeated cursor, on any non-2xx (error = its text) or after 20 calls.
  *   Never throws: counts so far are always returned. UI wiring: useRunAgent in components/RunProgress.tsx.
  */
-import { api } from './api';
+import { ApiError, api } from './api';
 
 export type Batch = { PAGAR: number; FRENAR: number; ESCALAR: number; errors: number; remaining: number; cursor: string | null };
 export type Progress = { n: number; m: number; done: boolean };
 export type RunResult = { PAGAR: number; FRENAR: number; ESCALAR: number; errors: number; calls: number; error?: string };
 
 const MAX_CALLS = 20;
+const BUSY_TRIES = 3;
 
 export async function runUntilDone(o: {
   first: string;
@@ -25,6 +27,7 @@ export async function runUntilDone(o: {
   onProgress?: (p: Progress) => void;
   onBatch?: (b: Batch) => void;
   stop?: () => boolean;
+  busyWait?: number;
 }): Promise<RunResult> {
   const r: RunResult = { PAGAR: 0, FRENAR: 0, ESCALAR: 0, errors: 0, calls: 0 };
   let sent: string | undefined;
@@ -32,11 +35,18 @@ export async function runUntilDone(o: {
     const path = r.calls === 0 ? o.first : (o.next ?? o.first);
     let b: Batch;
     r.calls++;
-    try {
-      b = await (sent === undefined ? api.post<Batch>(path) : api.post<Batch>(path, { cursor: sent }));
-    } catch (e) {
-      r.error = e instanceof Error ? e.message : String(e);
-      return r;
+    for (let busy = 0; ; busy++) {
+      try {
+        b = await (sent === undefined ? api.post<Batch>(path) : api.post<Batch>(path, { cursor: sent }));
+        break;
+      } catch (e) {
+        if (o.busyWait !== undefined && busy < BUSY_TRIES && e instanceof ApiError && e.status === 503) {
+          await new Promise((ok) => setTimeout(ok, o.busyWait));
+          continue;
+        }
+        r.error = e instanceof Error ? e.message : String(e);
+        return r;
+      }
     }
     for (const k of ['PAGAR', 'FRENAR', 'ESCALAR', 'errors'] as const) r[k] += b[k];
     const n = r.PAGAR + r.FRENAR + r.ESCALAR + r.errors;

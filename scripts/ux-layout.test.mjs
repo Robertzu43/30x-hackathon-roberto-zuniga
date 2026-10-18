@@ -27,6 +27,12 @@ const bandPage = (bad = '') => `<!doctype html><html><head><style>${CSS}
 const centredPage = (bad = '') => `<!doctype html><html><head><style>*{box-sizing:border-box} body{margin:0} main{padding:24px}
   .card{width:600px;margin:0 ${bad ? '0' : 'auto'};border:1px solid #eaeaea;padding:24px}</style></head>
   <body><main><div class="card"><h1>Aprobar</h1></div></main></body></html>`;
+// R-196: the login split, a brand panel and a form panel; 'hug' puts the form column on its panel's left edge, 'narrow' shrinks the root.
+const splitPage = (bad = '') => `<!doctype html><html><head><style>*{box-sizing:border-box} body{margin:0}
+  [data-split]{display:grid;grid-template-columns:1.3fr 1fr;min-height:100vh${bad === 'narrow' ? ';width:80%' : ''}}
+  .intro{background:#f1efe9} [data-panel]{padding:96px;display:flex;flex-direction:column;justify-content:center}
+  form{display:grid;gap:12px;width:352px;margin:0 ${bad === 'hug' ? '0' : 'auto'}} input,button{height:44px;border:1px solid #eaeaea}</style></head>
+  <body><div data-split><section class="intro"><h1>Thesaurus</h1></section><section data-panel="form"><form><input aria-label="Correo"><button>Entrar</button></form></section></div></body></html>`;
 const heroPage = (bad = '', w = 1440) => `<!doctype html><html><head><style>*{box-sizing:border-box} body{margin:0}
   [data-band]{max-width:1376px;margin:0 auto;padding:0 48px;position:relative}
   [data-topbar]{position:absolute;right:48px;top:0} .hero{display:grid;grid-template-columns:${bad || w < 1024 ? '1fr' : '1fr 1fr'};gap:48px;padding-top:48px}
@@ -46,10 +52,10 @@ beforeAll(async () => {
 }, 30_000);
 afterAll(async () => browser?.close());
 
-const rows = async (html, id, width = 1440) => {
+const rows = async (html, id, width = 1440, screen) => {
   await page.setViewportSize({ width, height: 900 });
   await page.setContent(html);
-  return judgeLayout(await page.evaluate(layoutMeasure), { id, width });
+  return judgeLayout(await page.evaluate(layoutMeasure), { id, width, screen });
 };
 const status = (rs, id) => rs.find((r) => r.id === id)?.status;
 
@@ -83,7 +89,31 @@ describe('other screens: 1.centred (AC-112)', () => {
     expect(status(await rows(centredPage(), 'approve'), '1.centred')).toBe('pass');
     expect(status(await rows(centredPage('off'), 'approve'), '1.centred')).toBe('fail');
   });
-  it('is N/A under 1024', async () => expect(status(await rows(centredPage('off'), 'approve', 768), '1.centred')).toBe('na'));
+  it('is not asked under 1024, so the table prints a measured cell', async () => expect(status(await rows(centredPage('off'), 'approve', 768), '1.centred')).toBeUndefined());
+  it('prints the margins of a passing cell', async () => expect((await rows(centredPage(), 'approve')).find((r) => r.id === '1.centred').measured).toContain('margins 420/420'));
+  it('N/A is a FAIL on approve, portal and status (R-196), and stays N/A on the other screens', async () => {
+    const bare = '<!doctype html><body><main><p>Hola</p></main></body>';
+    for (const screen of ['approve', 'portal', 'status']) expect(status(await rows(bare, `${screen}-offline`, 1440, screen), '1.centred')).toBe('fail');
+    expect(status(await rows(bare, 'portal-error'), '1.centred')).toBe('na');
+  });
+});
+
+describe('login screens: 1.split (AC-112, R-196)', () => {
+  it.each([1024, 1440, 1920])('passes the form column centred in its panel at %i and prints the panel and both margins', async (w) => {
+    const r = (await rows(splitPage(), 'login', w)).find((x) => x.id === '1.split');
+    expect(r.status).toBe('pass');
+    expect(r.measured).toMatch(/^split 0-\d+ of \d+; form panel x \d+ width \d+; form column margins (\d+)\/\1$/);
+  });
+  it('fails a form column that hugs its panel\'s left edge', async () => expect(status(await rows(splitPage('hug'), 'login-password'), '1.split')).toBe('fail'));
+  it('fails a split root narrower than the viewport', async () => expect(status(await rows(splitPage('narrow'), 'login'), '1.split')).toBe('fail'));
+  it('fails (not N/A) a login screen with no [data-split] or no form panel', async () => {
+    expect(status(await rows(centredPage(), 'login'), '1.split')).toBe('fail');
+    expect(status(await rows(splitPage().replace(' data-panel="form"', ''), 'login'), '1.split')).toBe('fail');
+  });
+  it('replaces 1.centred on the login screens and is not asked under 1024', async () => {
+    expect(status(await rows(splitPage(), 'login'), '1.centred')).toBeUndefined();
+    expect(status(await rows(splitPage('hug'), 'login', 768), '1.split')).toBeUndefined();
+  });
 });
 
 describe('/demo hero (AC-114)', () => {

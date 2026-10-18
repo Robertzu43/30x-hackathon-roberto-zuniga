@@ -47,7 +47,7 @@ a { color: var(--ink); text-underline-offset: 3px; } /* UX-11: never the browser
 .topbar .logo { align-self: center; }
 .topbar-actions { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; font-size: var(--text-sm); min-width: 0; }
 .topbar-actions .muted { overflow-wrap: anywhere; }
-.topbar-actions .trial-company { width: 11em; min-height: 1lh; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } /* R-176: one box from first paint, the name arriving moves nothing */
+.topbar-actions .trial-company { width: 13em; min-height: 1lh; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } /* R-176: one box from first paint, the name arriving moves nothing */
 .topbar .lang { display: flex; gap: 0.25rem; }
 
 button {

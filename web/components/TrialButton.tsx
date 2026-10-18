@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '../auth';
 import { useT } from '../i18n';
+import { enterApp } from '../transition';
 import { enterDemo, isTrial, startTrial } from '../trial';
 import './trial.css';
 
@@ -15,18 +16,18 @@ export default function TrialButton() {
 
   // The sign-in below makes this a trial session mid-click: the busy text stays until Bandeja opens.
   if (isTrial(session?.user) && !busy)
-    return <button type="button" className="primary" onClick={() => navigate('/')}>{t('trial.back')}</button>;
+    return <button type="button" className="primary" onClick={() => void enterApp(() => navigate('/'))}>{t('trial.back')}</button>;
 
   const start = async () => {
     if (busy) return;
     setBusy(true);
     setFailed(null);
-    if (await startTrial(lang)) return navigate('/', { replace: true });
+    if (await startTrial(lang)) return void enterApp(() => navigate('/', { replace: true })); // AC-109
     setBusy(false);
     setFailed('trial');
   };
   const demo = async () => {
-    if (await enterDemo()) return navigate('/');
+    if (await enterDemo()) return void enterApp(() => navigate('/'));
     setFailed('demo');
   };
 

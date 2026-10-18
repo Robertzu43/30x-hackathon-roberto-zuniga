@@ -21,7 +21,7 @@ export default function LogoIntro({ screen }: { screen: string }) {
   useEffect(() => { try { sessionStorage.setItem(key(screen), '1'); } catch { /* no storage: it just plays again */ } }, [screen]);
   if (!plays) return <Logo />;
   return (
-    <span className="logo logo-intro" role="img" aria-label={t('app.name')}>
+    <span className="logo logo-intro vt-logo" role="img" aria-label={t('app.name')}>
       <svg className="logo-mark" viewBox="0 0 32 32" aria-hidden="true" style={timing(MARK_DELAY_MS, MARK_MS)}>
         <rect width="32" height="32" rx="6" fill="#111111" />
         <rect x="8" y="8" width="16" height="4" fill="#ffffff" />

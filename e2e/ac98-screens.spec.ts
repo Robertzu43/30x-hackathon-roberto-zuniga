@@ -45,7 +45,7 @@ async function walk(page: any, tr: any, label: string) {
       console.log(`   ${label} ${pass} ${name}: heading visible in ${Date.now() - t}ms (includes 1.5 s settle)`);
     }
     tr.set(`${label} ${pass} Detalle`);
-    await page.locator('.inbox-list tbody tr a, .inbox-list tbody tr').first().click();
+    await page.locator('.inbox-list tbody tr a.dash-headline').first().click();
     await expect(page.getByRole('heading', { name: 'Lo que hice' })).toBeVisible({ timeout: 15000 });
     await page.waitForTimeout(1500);
     await page.getByRole('link', { name: 'Volver a la bandeja' }).first().click();
@@ -83,7 +83,7 @@ test('AC-98 trial user: requests per screen + door timing (D41)', async ({ brows
   await expect(dialog.getByText(/^1 de \d+$/)).toBeVisible();
   console.log('DOOR url:', page.url());
   console.log('DOOR top bar:', (await page.locator('header').first().innerText()).replace(/\s+/g, ' '));
-  await page.screenshot({ path: '.wrangler/qa-39c/door-bandeja.png' });
+  await page.screenshot({ path: '.wrangler/qa-52x/door-bandeja.png' });
   await dialog.getByRole('button', { name: 'Saltar' }).click();
   await page.locator('.inbox-list tbody tr').first().waitFor();
   await page.waitForTimeout(1500);

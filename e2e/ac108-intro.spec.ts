@@ -13,7 +13,7 @@ const PROBE = `(() => {
   const logoAnims = () => document.getAnimations().filter((a) => ['logo-letter', 'logo-mark'].includes(a.animationName) || (a.effect && a.effect.target && a.effect.target.closest && a.effect.target.closest('.logo')));
   w.__logoAnims = logoAnims;
   const rec = new Map();
-  (function tick() { for (const a of logoAnims()) { const el = a.effect.target; const k = el.tagName + (el.textContent || '').slice(0, 1) + a.animationName; if (!rec.has(k)) { const kf = a.effect.getKeyframes(); const t = a.effect.getComputedTiming(); rec.set(k, { tag: el.tagName, txt: (el.textContent || '').slice(0, 1), name: a.animationName, props: [...new Set(kf.flatMap((x) => Object.keys(x).filter((p) => !['offset', 'easing', 'composite', 'computedOffset'].includes(p))))], delay: Math.round(t.delay), dur: Math.round(t.duration), startAt: Math.round(a.startTime), end: Math.round(t.endTime), inHeader: !!el.closest('header') }); } } w.__p.anims = [...rec.values()]; requestAnimationFrame(tick); })();
+  (function tick() { for (const a of logoAnims()) { const el = a.effect.target; const k = el; if (!rec.has(k)) { const kf = a.effect.getKeyframes(); const t = a.effect.getComputedTiming(); rec.set(k, { tag: el.tagName, txt: (el.textContent || '').slice(0, 1), name: a.animationName, props: [...new Set(kf.flatMap((x) => Object.keys(x).filter((p) => !['offset', 'easing', 'composite', 'computedOffset'].includes(p))))], delay: Math.round(t.delay), dur: Math.round(t.duration), startAt: Math.round(a.startTime), end: Math.round(t.endTime), inHeader: !!el.closest('header') }); } } w.__p.anims = [...rec.values()]; requestAnimationFrame(tick); })();
 })();`;
 const watch = (page: any, ms: number) => page.evaluate((ms: number) => new Promise((res) => { const w: any = window; let max = 0; let intro = false; const t0 = performance.now(); (function tick() { max = Math.max(max, w.__logoAnims().length); if (document.querySelector('.logo-intro')) intro = true; if (performance.now() - t0 < ms) requestAnimationFrame(tick); else res({ maxLogoAnims: max, introClassSeen: intro }); })(); }), ms);
 
@@ -77,6 +77,7 @@ test('AC-108 final frame equals the static logo (pixels), login', async ({ brows
   const boxA = await a.page.locator(sel).first().boundingBox(); const boxB = await b.page.locator(sel).first().boundingBox();
   const bufA = await a.page.locator(sel).first().screenshot(); const bufB = await b.page.locator(sel).first().screenshot();
   console.log(`[/login] logo box intro-end ${J(boxA)} vs static ${J(boxB)}; screenshots byte-identical: ${Buffer.compare(bufA, bufB) === 0} (${bufA.length} vs ${bufB.length} bytes)`);
+  const fsx = await import('node:fs'); fsx.writeFileSync(`${DIR}/logo-intro-end.png`, bufA); fsx.writeFileSync(`${DIR}/logo-static.png`, bufB);
   await a.ctx.close(); await b.ctx.close();
 });
 
@@ -96,4 +97,18 @@ test('AC-108 /demo: door enabled at DCL+100 ms, a click then starts the sign-in,
   await p2.locator('h1', { hasText: /Bandeja/ }).waitFor({ timeout: 20000 });
   console.log(`[/demo] in-app top-bar logo: ${J(await watch(p2, 600))}; header logo class: ${await p2.evaluate(() => document.querySelector('header .logo')?.className)}`);
   await ctx.close();
+});
+
+// Door readiness: record when the door button first exists and is enabled, against DOMContentLoaded and first paint; a click the instant it exists must start the sign-in. Cold context each run.
+test('AC-108 /demo door readiness x5 (cold context each)', async ({ browser }: any) => {
+  for (let i = 0; i < 5; i++) {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    await ctx.addInitScript(`(() => { const w = window; w.__d = { dcl: null, btn: null, enabled: null, fp: null, fcp: null };
+      document.addEventListener('DOMContentLoaded', () => { w.__d.dcl = performance.now(); });
+      (function tick() { const b = [...document.querySelectorAll('button')].find((x) => /Entrar como Andina Labs/.test(x.textContent || '')); if (b && w.__d.btn === null) w.__d.btn = performance.now(); if (b && !b.disabled && w.__d.enabled === null) w.__d.enabled = performance.now(); if (w.__d.enabled === null) requestAnimationFrame(tick); })(); })();`);
+    const page = await ctx.newPage(); await page.goto(`${URL_}/demo`); await page.waitForTimeout(1500);
+    const d = await page.evaluate(() => { const w: any = window; const fcp = performance.getEntriesByName('first-contentful-paint')[0]; return { dcl: Math.round(w.__d.dcl), buttonExists: Math.round(w.__d.btn), buttonEnabled: Math.round(w.__d.enabled), fcp: fcp && Math.round(fcp.startTime) }; });
+    console.log(`[/demo] cold run ${i + 1}: ${J(d)} => enabled ${d.buttonEnabled - d.dcl} ms after DCL, ${d.buttonEnabled - d.fcp} ms after FCP`);
+    await ctx.close();
+  }
 });

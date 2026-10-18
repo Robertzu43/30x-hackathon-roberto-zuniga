@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 export const { test, expect, chromium } = Object.assign({}, createRequire(import.meta.url)('/opt/node22/lib/node_modules/playwright/test'), { chromium: createRequire(import.meta.url)('/opt/node22/lib/node_modules/playwright').chromium });
 
 export const URL_ = process.env.QA_URL!;
-export const DIR = '.wrangler/qa-52-run2';
+export const DIR = '.wrangler/qa-52x';
 
 // Recorder: arm() before the click; the capture-phase click listener stamps t0; a rAF loop records, per frame, the pressed state,
 // the usable state, row snapshots (order/height/chip), progress text, KPI text, CLS entries, and every Bandeja-data fetch response.

@@ -47,3 +47,15 @@ test('at 480 px or less a read field stacks its confidence under the value, and 
   expect(small).toMatch(/\.detail-fields dd \+ dd \{[^}]*grid-column: 2/);
   expect(detail).toMatch(/\n\.detail-fields dd \{[^}]*min-width: 0;[^}]*overflow-wrap: anywhere/);
 });
+
+// AC-91 items 1 and 2 (R-165, Task 33 gate G1 and F1): jsdom has no layout, so these guard the rules; the boxes were measured in
+// Chromium at 360, 390 and 1440 px, es and en (Task 57 report).
+const at400 = (file: string) => readFileSync(file, 'utf8').split('@media (max-width: 400px) {')[1]?.split('\n}')[0] ?? '';
+
+test('at 400 px or less Bandeja\'s action row always sits under the h1, in es and en (G1)', () => {
+  expect(at400('web/pages/inbox.css')).toMatch(/\.inbox-actions \{[^}]*flex-basis: 100%/);
+});
+
+test('at 400 px or less the KPI tiles stack in one column, so no amount is clipped or painted over by the next tile (F1)', () => {
+  expect(at400('web/dashboard/dashboard.css')).toMatch(/\.dash-kpis \{[^}]*grid-template-columns: minmax\(0, 1fr\)/);
+});

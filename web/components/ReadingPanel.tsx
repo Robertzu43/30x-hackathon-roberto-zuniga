@@ -18,9 +18,7 @@ export type Reading = { provider: string; fields: ReadField[] };
 const known = (v: ReadField['value']) => v !== null && !['', 'desconocido', 'unknown'].includes(String(v).trim().toLowerCase());
 
 export default function ReadingPanel({ fields, show }: { fields: ReadField[]; show: (name: string, v: string | number) => string }) {
-  const { t, lang } = useT();
-  // AC-77 prints «92 %»; Intl's es-CO percent has no space.
-  const pct = (c: number) => `${Math.round(c * 100)}${lang === 'es' ? ' ' : ''}%`;
+  const { t, pct } = useT(); // R-164: Intl's percent for the tab locale
   const read = fields.filter((f) => known(f.value));
   const unread = fields.filter((f) => !known(f.value)).map((f) => t(`detail.field.${f.name}`));
   return (
@@ -34,7 +32,7 @@ export default function ReadingPanel({ fields, show }: { fields: ReadField[]; sh
               <div key={f.name}>
                 <dt>{t(`detail.field.${f.name}`)}</dt>
                 <dd data-user={printedAsRead(f.name, f.value!) ? '' : undefined}>{show(f.name, f.value!)}</dd>
-                {typeof c === 'number' && c >= 0 && c <= 1 && <dd className="muted">{t('detail.ai_confidence', { pct: pct(c) })}</dd>}
+                {typeof c === 'number' && c >= 0 && c <= 1 && <dd className="muted">{t('detail.ai_confidence', { pct: pct(Math.round(c * 100)) })}</dd>}
                 <dd className="reading-snippet" data-user={f.snippet ? '' : undefined}>
                   {!f.snippet ? t('detail.snippet_none') : s ? (
                     <>{f.snippet.slice(0, s[0])}<mark>{f.snippet.slice(s[0], s[1])}</mark>{f.snippet.slice(s[1])}</>

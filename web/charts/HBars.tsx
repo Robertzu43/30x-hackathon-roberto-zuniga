@@ -7,7 +7,7 @@ const ONE: Series[] = [{ label: '', tone: 'ink' }]; // a single measure: one ink
 export default function HBars({ title, unit, series = ONE, rows, height }: {
   title: string; unit: string; series?: Series[]; rows: { label: string; values: number[]; user?: boolean }[]; height?: number;
 }) {
-  const { t, n } = useFmt();
+  const { t, n } = useFmt(unit);
   const max = Math.max(...rows.flatMap((r) => r.values));
   const many = series.length > 1;
   const rest = (r: { values: number[] }) => (many ? ` (${series.map((s, i) => `${s.label} ${n(r.values[i] ?? 0)}`).join(', ')})` : ` ${n(r.values[0] ?? 0)}`);

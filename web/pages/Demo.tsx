@@ -31,7 +31,7 @@ const SKELETON: Overview = {
 const hide = (loading: boolean) => (loading ? { 'aria-hidden': true, inert: true } as const : {});
 
 export default function Demo() {
-  const { t, lang, setLang } = useT();
+  const { t, lang, setLang, pct } = useT();
   const navigate = useNavigate();
   const { session, demoEmail } = useSession();
   const [data, setData] = useState<Overview | null>(null);
@@ -161,11 +161,11 @@ export default function Demo() {
         <h2 id="demo-period-title">{t('demo.period.title')}</h2>
         {!failed && (
           <dl className={data ? undefined : 'skeleton'} {...hide(!data)}>
-            <dt>{p.autonomy_pct === null ? '—' : `${p.autonomy_pct} %`}</dt>
+            <dt>{p.autonomy_pct === null ? '—' : pct(p.autonomy_pct)}</dt>
             <dd>{t('demo.period.autonomy', p.autonomy)}</dd>
             <dt>{p.violations}</dt>
             <dd>{t('demo.period.violations')}</dd>
-            <dt>{`${p.explained_pct} %`}</dt>
+            <dt>{pct(p.explained_pct)}</dt>
             <dd>{t('demo.period.explained')}</dd>
           </dl>
         )}

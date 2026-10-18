@@ -152,10 +152,10 @@ try {
   await page.getByText(/\d+ PAGAR · \d+ FRENAR · \d+ ESCALAR/).waitFor();
   await beat(page, 3000);
 
-  // 7. Periodo: autonomy, violations 0, decisions explained 100 %.
+  // 7. Periodo: autonomy, violations 0, decisions explained 100%.
   await link('Periodo').click();
   await page.getByText(/^Violaciones 0$/).waitFor();
-  await page.getByText(/^Decisiones explicadas 100\s%$/).waitFor();
+  await page.getByText(/^Decisiones explicadas 100\s?%$/).waitFor();
   await page.getByText(/^Autonomía /).waitFor();
   await beat(page, 4000);
   await scrollBy(page, 500);

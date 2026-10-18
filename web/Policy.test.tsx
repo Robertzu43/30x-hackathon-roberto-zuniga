@@ -588,13 +588,15 @@ test('CSS: at phone width the «Pagar solo a beneficiarios permitidos» checkbox
 });
 
 // ---- AC-105: rule cards, one sentence per rule, the diff list. New components, not mounted in the page yet. ----
+// R-164: Intl's own percent for the tab locale, never a hand-written "{n} %"; a policy value keeps its decimals.
+const pct = (v: number, locale: string) => new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 2 }).format(v / 100);
 const SENTENCES = {
   per_payment_limit_usd: ['Si una factura supera 10.000 USD, la freno: no se paga.', 'If an invoice is above 10,000 USD, I stop it: it is not paid.'],
   approval_threshold_usd: ['Desde 10.000 USD te pregunto antes de pagar.', 'From 10,000 USD I ask you before paying.'],
   period_budget_usd: ['Si con una factura los pagos del mes pasarían de 10.000 USD, la escalo.', 'If an invoice would take the month\'s payments past 10,000 USD, I escalate it.'],
   account_balance_usd: ['Si el saldo de 10.000 USD no alcanza para una factura, la escalo.', 'If the 10,000 USD balance does not cover an invoice, I escalate it.'],
   duplicate_window_days: ['Si ya recibí una factura igual en los últimos 10.000 día(s), la freno; si es parecida, la escalo.', 'If I already received an identical invoice in the last 10,000 day(s), I stop it; if it looks similar, I escalate it.'],
-  agreement_tolerance_pct: ['Acepto hasta 10.000 % de diferencia con el monto acordado; si es más, la escalo.', 'I accept up to 10,000 % difference from the agreed amount; beyond that, I escalate it.'],
+  agreement_tolerance_pct: [`Acepto hasta ${pct(10000, 'es-CO')} de diferencia con el monto acordado; si es más, la escalo.`, `I accept up to ${pct(10000, 'en-US')} difference from the agreed amount; beyond that, I escalate it.`],
   due_grace_days: ['Acepto una factura hasta 10.000 día(s) después de su vencimiento; después, la escalo.', 'I accept an invoice up to 10,000 day(s) after its due date; after that, I escalate it.'],
 } as const;
 const EMPTY = ['Sin valor: no puedo verificar esta regla y escalo la factura.', 'No value: I cannot check this rule, so I escalate the invoice.'];
@@ -609,6 +611,12 @@ test.each([['es', 0], ['en', 1]] as const)('each rule gets one sentence with its
     expect(screen.getByText(EMPTY[i]!)).toBeTruthy();
     empty.unmount();
   }
+});
+
+test.each([['es', 'es-CO'], ['en', 'en-US']] as const)('a tolerance with decimals is printed whole, through Intl percent (%s, R-164)', (lang, locale) => {
+  localStorage.setItem('lang', lang);
+  renderAt(<RuleSentence rule="agreement_tolerance_pct" value="2.5" />);
+  expect(document.getElementById('agreement_tolerance_pct-hint')!.textContent).toContain(pct(2.5, locale));
 });
 
 test('the spec examples read exactly, a half-typed value counts as empty, and the switch has its own two sentences (AC-105)', () => {

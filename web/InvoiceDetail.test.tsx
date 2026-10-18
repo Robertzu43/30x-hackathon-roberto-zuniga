@@ -11,6 +11,9 @@ import InvoiceDetail from './pages/InvoiceDetail';
 import { sentence } from './test/text';
 import { mockApi, renderAt, signedInAs } from './test/utils';
 
+// R-164: every percentage is Intl's own output for the tab locale, never a hand-typed space.
+const pct = (v: number, locale = 'es-CO') => new Intl.NumberFormat(locale, { style: 'percent' }).format(v);
+
 const IDS = ['lectura', 'beneficiario_permitido', 'beneficiario_cuenta', 'acuerdo', 'duplicado_exacto', 'duplicado_probable',
   'limite_pago', 'umbral_aprobacion', 'presupuesto_periodo', 'saldo_cuenta', 'vencimiento', 'periodo', 'moneda'];
 const checks = (failing: string[] = [], overridden?: { by: string; channel: 'link' | 'dashboard' }) =>
@@ -109,7 +112,7 @@ test('"Lo que leí" previews the PDF and lists each field with its confidence; a
   const frame = await screen.findByTitle('Documento de la factura');
   expect(frame.getAttribute('src')).toBe('/demo/invoices/11.pdf');
   expect(screen.getByText('Nube Sur LLC', { selector: 'dd' }).textContent).toBe('Nube Sur LLC');
-  expect(screen.getByText('confianza 97%')).toBeTruthy();
+  expect(screen.getByText(`confianza ${pct(0.97)}`)).toBeTruthy();
   expect(screen.getByText('4.200')).toBeTruthy();
   const account = screen.getByText('Cuenta bancaria').nextElementSibling!;
   expect(account.textContent).toBe('no se pudo leer');
@@ -156,11 +159,12 @@ const mixed = () => IDS.map((id) => ({ id, verdict: id === 'umbral_aprobacion' ?
   actual: '', threshold: '', values: {} })) as Check[];
 const sentences = IDS.map((id, i) => `Regla ${i + 1}: frase de la regla ${i + 1} → ${id === 'umbral_aprobacion' ? 'no cumple' : id === 'moneda' ? 'no se pudo verificar' : 'cumple'}`);
 
-test('the rules checklist: a segmented bar «11 de 13 cumplen» with its three counts, then one row per check (AC-102)', async () => {
+test('the rules checklist: a segmented bar «11 de 13 reglas cumplen» with its three counts, then one row per check (AC-102, R-163)', async () => {
   renderAt(<RuleChecklist explanations={sentences} checks={mixed()} />);
   const bar = await screen.findByRole('figure');
-  expect(bar.getAttribute('aria-label')).toBe('11 de 13 cumplen, en reglas: cumple 11, no cumple 1, no se pudo verificar 1.');
-  expect(within(bar).getByText('11 de 13 cumplen')).toBeTruthy();
+  expect(bar.getAttribute('aria-label')).toBe('11 de 13 reglas cumplen; 1 no cumple y 1 no se pudo verificar.');
+  expect(bar.querySelector('figcaption')!.textContent).toBe('11 de 13 reglas cumplen');
+  expect(within(bar).getByText('11 de 13 reglas cumplen; 1 no cumple y 1 no se pudo verificar.', { selector: 'p' })).toBeTruthy();
   const rows = within(screen.getByRole('list', { name: 'Lo que decidí' })).getAllByRole('listitem');
   expect(rows).toHaveLength(13);
   expect(rows[7]!.className).toBe('no_cumple');
@@ -174,13 +178,31 @@ test('the rules checklist: a segmented bar «11 de 13 cumplen» with its three c
 test('the rules checklist in English, and one passing rule in the singular (AC-102)', async () => {
   localStorage.setItem('lang', 'en');
   const { unmount } = renderAt(<RuleChecklist explanations={sentences} checks={mixed()} />);
-  expect(await screen.findByText('11 of 13 pass')).toBeTruthy();
+  expect(await screen.findByText('11 of 13 rules pass')).toBeTruthy();
   expect(screen.getAllByText('passes', { selector: '.check-verdict' })).toHaveLength(11);
   unmount();
   localStorage.setItem('lang', 'es');
   const one = mixed().map((c, i) => ({ ...c, verdict: i === 0 ? 'cumple' : 'no_cumple' })) as Check[];
   renderAt(<RuleChecklist explanations={sentences} checks={one} />);
-  expect(await screen.findByText('1 de 13 cumple')).toBeTruthy();
+  expect(await screen.findByText('1 de 13 reglas cumple')).toBeTruthy();
+});
+
+// R-163: the bar's own summary, parts with a count of 0 left out, words from the trace.count.* plural keys.
+const verdicts = (pass: number, fail: number) => IDS.map((id, i) => ({ id, verdict: i < pass ? 'cumple' : i < pass + fail ? 'no_cumple' : 'no_verificado',
+  actual: '', threshold: '', values: {} })) as Check[];
+test.each([
+  ['es', 13, 0, '13 de 13 reglas cumplen.'],
+  ['es', 11, 2, '11 de 13 reglas cumplen; 2 no cumplen.'],
+  ['es', 8, 4, '8 de 13 reglas cumplen; 4 no cumplen y 1 no se pudo verificar.'],
+  ['en', 13, 0, '13 of 13 rules pass.'],
+  ['en', 11, 2, '11 of 13 rules pass; 2 do not pass.'],
+  ['en', 8, 4, '8 of 13 rules pass; 4 do not pass and 1 could not be verified.'],
+  ['en', 1, 12, '1 of 13 rules passes; 12 do not pass.'],
+] as const)('the rules bar summary (%s, %i pass, %i fail) is visible and its aria-label (R-163)', async (lang, pass, fail, summary) => {
+  localStorage.setItem('lang', lang);
+  renderAt(<RuleChecklist explanations={sentences} checks={verdicts(pass, fail)} />);
+  expect((await screen.findByRole('figure')).getAttribute('aria-label')).toBe(summary);
+  expect(screen.getByText(summary, { selector: 'p' })).toBeTruthy();
 });
 
 const moneda = (values: Record<string, string | number | null>) =>
@@ -230,7 +252,7 @@ test('the record mounts the D39 parts from GET /api/invoices/:id: marked text, t
   mockApi({ [GET]: { ...escalated, invoice: { ...escalated.invoice, raw_text: RAW }, doc_marks: MARKS,
     decisions: [escalated.decisions[0], decision(2, 'ESCALAR', { checks: fx })] } });
   const { container } = open();
-  expect(await screen.findByText('12 de 13 cumplen')).toBeTruthy();
+  expect(await screen.findByText('12 de 13 reglas cumplen')).toBeTruthy();
   expect(screen.getByTitle('Documento de la factura').getAttribute('src')).toBe('/demo/invoices/11.pdf');
   const text = container.querySelector('pre.detail-doc')!;
   expect(text.hasAttribute('data-user')).toBe(true);
@@ -244,7 +266,7 @@ test('the record mounts the D39 parts from GET /api/invoices/:id: marked text, t
 test('the record shows no FX card when the Moneda check stored no rate (AC-102)', async () => {
   mockApi({ [GET]: escalated });
   open();
-  expect(await screen.findByText('12 de 13 cumplen')).toBeTruthy();
+  expect(await screen.findByText('12 de 13 reglas cumplen')).toBeTruthy();
   expect(screen.queryByRole('heading', { name: 'Tasa de cambio' })).toBeNull();
 });
 
@@ -431,11 +453,11 @@ test('a model-read invoice heads «Lo que leí» with the provider, and shows ea
   const badge = await screen.findByText(`Leído por IA · ${NOVA}`);
   expect(screen.getByRole('heading', { name: 'Lo que leí' }).compareDocumentPosition(badge) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   const payee = fieldRow('Beneficiario');
-  expect(payee.textContent).toMatch(/Nube Sur LLC.*confianza de la IA: 97\s%/);
+  expect(payee.textContent).toMatch(new RegExp(`Nube Sur LLC.*confianza de la IA: ${pct(0.97)}`));
   expect(payee.querySelector('mark')?.textContent).toBe('Nube Sur LLC');
   expect(payee.textContent).toContain('Emisor: Nube Sur LLC, NIT 900.123');
   const amount = fieldRow('Monto');
-  expect(amount.textContent).toMatch(/^Monto4\.200confianza de la IA: 92\s%/);
+  expect(amount.textContent).toMatch(new RegExp(`^Monto4\\.200confianza de la IA: ${pct(0.92)}`));
   expect(amount.querySelector('mark')?.textContent).toBe('4,200.00');
   expect(fieldRow('Número de factura').querySelector('mark')?.textContent).toBe('2044');
   expect(fieldRow('Vencimiento').textContent).toContain(NOT_FOUND_ES);
@@ -489,7 +511,7 @@ test('«Leído por IA» in English (AC-77)', async () => {
   open();
   expect(await screen.findByText(`Read by AI · ${NOVA}`)).toBeTruthy();
   expect(fieldRow('Due date').textContent).toContain('I did not find this value verbatim in the text');
-  expect(fieldRow('Beneficiary').textContent).toMatch(/AI confidence: 97%/);
+  expect(fieldRow('Beneficiary').textContent).toContain(`AI confidence: ${pct(0.97, 'en-US')}`);
   expect(screen.getByText('The AI could not read 1 field: Bank account.')).toBeTruthy();
 });
 
@@ -577,7 +599,7 @@ test('FRENAR, a known value code could not find: the value, «confianza de la IA
   await screen.findByText(`Leído por IA · ${NOVA}`);
   const row = fieldRow('Vencimiento');
   expect(row.textContent).toContain('31 de octubre de 2026');
-  expect(row.textContent).toMatch(/confianza de la IA: 100\s%/);
+  expect(row.textContent).toContain(`confianza de la IA: ${pct(1)}`);
   expect(row.textContent).toContain(NOT_FOUND_ES);
   expect(screen.queryByText(/La IA no pudo leer/)).toBeNull(); // nothing unknown, no line
 });

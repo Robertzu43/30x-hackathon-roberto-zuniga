@@ -44,10 +44,10 @@ test('every chart has a one-sentence summary as its aria-label (es)', () => {
   });
   expect(sentences).toEqual([
     'Facturas por día: 6 facturas en 3 días, PAGAR 3, FRENAR 1, ESCALAR 0, pendiente 2.',
-    'Pagado por moneda, en USD: COP 4.200, USD 1.500,5.',
-    'Por beneficiario, en USD: Nube Sur LLC (Pagado 0, Comprometido 4.200).',
-    'Presupuesto disponible: 4.299,5 USD el 16 de oct, máximo 10.000 USD, presupuesto 10.000.',
-    'Últimas facturas pagadas: 3 valores en USD, el último 80, entre 80 y 250,5.',
+    'Pagado por moneda, en USD: COP 4.200,00, USD 1.500,50.',
+    'Por beneficiario, en USD: Nube Sur LLC (Pagado 0,00, Comprometido 4.200,00).',
+    'Presupuesto disponible: 4.299,50 USD el 16 de oct, máximo 10.000,00 USD, presupuesto 10.000,00.',
+    'Últimas facturas pagadas: 3 valores en USD, el último 80,00, entre 80,00 y 250,50.',
     'Reglas, en reglas: cumplen 11, no cumplen 2.',
   ]);
 });
@@ -56,8 +56,28 @@ test('numbers and dates follow the tab language (en)', () => {
   localStorage.setItem('lang', 'en');
   const { container } = renderAt(line);
   expect(container.querySelector('figure')!.getAttribute('aria-label')).toBe(
-    'Presupuesto disponible: 4,299.5 USD on Oct 16, highest 10,000 USD, presupuesto 10,000.',
+    'Presupuesto disponible: 4,299.50 USD on Oct 16, highest 10,000.00 USD, presupuesto 10,000.00.',
   );
+});
+
+// R-163: one value reads in the singular, through Intl.PluralRules.
+test.each([
+  ['es', 'Últimas facturas pagadas: 1 valor en USD, 80,00.'],
+  ['en', 'Últimas facturas pagadas: 1 value in USD, 80.00.'],
+])('a sparkline with one value reads in the singular (%s)', (lang, sentence) => {
+  localStorage.setItem('lang', lang);
+  const { container } = renderAt(<Sparkline title="Últimas facturas pagadas" unit="USD" values={[80]} />);
+  expect(container.querySelector('figure')!.getAttribute('aria-label')).toBe(sentence);
+  expect(screen.getByText(sentence, { selector: 'p' })).toBeTruthy();
+});
+
+// R-164: a percentage chart prints Intl's own percent for the tab locale, never a hand-written "{n} %".
+test.each([['es', 'es-CO', 'el 16 de oct, máximo'], ['en', 'en-US', 'on Oct 16, highest']])('a percentage line formats through Intl percent (%s)', (lang, locale, words) => {
+  localStorage.setItem('lang', lang);
+  const p = (v: number) => new Intl.NumberFormat(locale, { style: 'percent' }).format(v / 100);
+  const { container } = renderAt(<Line title="Autonomía" unit="%" points={[{ day: '2026-10-15', value: 80 }, { day: '2026-10-16', value: 62 }]} />);
+  expect(container.querySelector('figure')!.getAttribute('aria-label')).toBe(`Autonomía: ${p(62)} ${words} ${p(80)}.`);
+  expect(within(screen.getByRole('table')).getByRole('row', { name: new RegExp(` ${p(62)}$`) })).toBeTruthy();
 });
 
 test('the summary is also visible, with the title and its unit', () => {
@@ -81,7 +101,7 @@ test('a single-measure chart has no legend and one ink colour', () => {
   const { container } = renderAt(hbars);
   expect(container.querySelector('.chart-legend')).toBeNull();
   expect(container.querySelectorAll('.tone-ink').length).toBe(2);
-  expect(screen.getByText('1.500,5')).toBeTruthy();
+  expect(screen.getByText('1.500,50')).toBeTruthy(); // R-166: a money value cell has the tables' two decimals
 });
 
 test('grouped bars have a legend with words', () => {
@@ -135,6 +155,15 @@ test('charts.css uses only approved palette colours and no animation', async () 
   expect(hexes.filter((h) => !PALETTE.includes(h))).toEqual([]);
   for (const c of ['#346538', '#9f2f2d', '#956400', '#6d6c69']) expect(hexes).toContain(c);
   expect(css).not.toMatch(/animation|transition/);
+});
+
+// AC-91 item 1 (R-165): measured in Chromium, «US$ 18.409,39» overflowed a two-column Bandeja tile at 401-460 px and the
+// four-column strip at 900 px; an 11 rem Beneficiario tile is narrower still. The value shrinks with its own tile instead.
+test('a KPI value scales with its tile, so an amount is never clipped or painted over at any width', async () => {
+  const { readFileSync } = (await import('node:fs' as string)) as { readFileSync(p: string, enc: string): string };
+  const css = readFileSync('web/charts/charts.css', 'utf8');
+  expect(css).toMatch(/\n\.chart-kpi \{[^}]*container-type: inline-size/);
+  expect(css).toMatch(/\n\.chart-kpi-value \{[^}]*font-size: min\(var\(--text-xl\), 12cqi\)/);
 });
 
 test('AC-91/AC-103: the sr-only data table is a 1px clipped box, and so is every caption and cell in it (a table grows to its content)', async () => {

@@ -64,6 +64,11 @@ test('«Necesita tu respuesta»: the stored question in Spanish, «Responder» t
   expect(within(r).queryAllByRole('button')).toHaveLength(0);
 });
 
+test('wide, «Necesita tu respuesta» spans the full row, with no empty half column beside it (R-166)', () => {
+  show();
+  expect(region('Necesita tu respuesta').classList.contains('dash-wide')).toBe(true);
+});
+
 test('«y 3 más» filters the table to ESCALAR and goes to it', async () => {
   const onMore = vi.fn();
   show(DATA, onMore);
@@ -97,6 +102,7 @@ test('currency and country bars in USD; an unread currency and an unmatched coun
   const country = await screen.findByRole('figure', { name: /^Pagado este mes por país, en USD: / });
   expect(country.textContent).toContain('Colombia');
   expect(country.textContent).toContain('Sin país en el directorio');
+  expect(cur.textContent).toContain('1.500,00'); // R-166: money values with the tables' two decimals
 });
 
 test('«Vence pronto (7 días)»: each with its due date and USD, linked to Detalle, then «y 5 más»', async () => {

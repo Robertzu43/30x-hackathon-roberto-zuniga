@@ -35,7 +35,7 @@ const lastMonths = (from: string) => Array.from({ length: 24 }, (_, i) => {
 });
 
 export default function Period() {
-  const { t, locale } = useT();
+  const { t, locale, pct } = useT();
   const [month, setMonth] = useState(thisMonth);
   const screen = useScreen<{ period: Period; charts: Charts | null }>(screens.period(month));
   const data = screen.data?.period;
@@ -67,7 +67,7 @@ export default function Period() {
         <div className={data ? undefined : 'skeleton'} aria-hidden={data ? undefined : true} inert={!data}>
           <div className="period-figures">
             <div className="period-fig">
-              <p className="big">{t('period.autonomy', { v: shown.autonomy_pct === null ? '—' : `${shown.autonomy_pct}\u00a0%` })}</p>
+              <p className="big">{t('period.autonomy', { v: shown.autonomy_pct === null ? '—' : pct(shown.autonomy_pct) })}</p>
               <p>{t('period.autonomy_of', shown.autonomy)}</p>
               <p>{t('period.autonomy_why')}</p>
             </div>
@@ -77,7 +77,7 @@ export default function Period() {
               <p>{t('period.violations_why')}</p>
             </div>
             <div className="period-fig">
-              <p className="big">{t('period.explained', { pct: shown.explained_pct })}</p>
+              <p className="big">{t('period.explained', { pct: pct(shown.explained_pct) })}</p>
               <p>{t('period.explained_why')}</p>
             </div>
           </div>

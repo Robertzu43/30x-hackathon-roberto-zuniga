@@ -4,7 +4,7 @@ import { Frame, useFmt, type Series } from './shared';
 export default function StackedBars({ title, unit, series, rows, height }: {
   title: string; unit: string; series: Series[]; rows: { day: string; values: number[] }[]; height?: number;
 }) {
-  const { t, n, d } = useFmt();
+  const { t, n, d } = useFmt(unit);
   const totals = series.map((_, i) => rows.reduce((a, r) => a + (r.values[i] ?? 0), 0));
   const total = totals.reduce((a, b) => a + b, 0);
   const max = Math.max(...rows.map((r) => r.values.reduce((a, b) => a + b, 0)));

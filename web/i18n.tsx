@@ -7,6 +7,8 @@ type Ctx = {
   lang: Lang;
   /** For Intl number/date formats (AC-41). */
   locale: 'es-CO' | 'en-US';
+  /** A percentage in points (62 → es «62%», en "62%"), always Intl's percent for the tab locale (R-164); decimals kept, up to 2. */
+  pct: (points: number) => string;
   /** `tabOnly`: this tab's session only, never other tabs or the next visit (R-78: the shared demo user, /demo). */
   setLang: (l: Lang, tabOnly?: boolean) => void;
 };
@@ -24,7 +26,9 @@ export function LangProvider({ children }: { children: ReactNode }) {
     set(l);
   };
   const t: Ctx['t'] = (k, v) => format(ui[lang], k, v);
-  return <LangCtx.Provider value={{ lang, setLang, t, locale: lang === 'es' ? 'es-CO' : 'en-US' }}>{children}</LangCtx.Provider>;
+  const locale = lang === 'es' ? 'es-CO' : 'en-US';
+  const pct = (v: number) => new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 2 }).format(v / 100);
+  return <LangCtx.Provider value={{ lang, setLang, t, locale, pct }}>{children}</LangCtx.Provider>;
 }
 
 export function useT(): Ctx {

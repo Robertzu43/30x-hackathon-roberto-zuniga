@@ -22,7 +22,7 @@ beforeEach(() => localStorage.clear());
 test('burn-down: the budget line, the last known day, and no projection after today (AC-103)', async () => {
   show();
   const f = await chart('Presupuesto disponible');
-  expect(f.getAttribute('aria-label')).toMatch(/4\.299,5 USD el 2 de oct/);
+  expect(f.getAttribute('aria-label')).toMatch(/4\.299,50 USD el 2 de oct/);
   expect(f.getAttribute('aria-label')).toMatch(/presupuesto 10\.000/);
   expect(within(f).queryByText(/3 de oct/, { selector: 'th' })).toBeNull(); // the null day is not a row
 });
@@ -45,7 +45,7 @@ test('over budget: the label names the excess in USD and Disponible is 0 (AC-103
 test('per-beneficiary bars: paid and committed per row, the unread payee in words (R-63)', async () => {
   show();
   const f = await chart('Por beneficiario');
-  expect(f.getAttribute('aria-label')).toMatch(/Nube Sur LLC \(Pagado 0, Comprometido 4\.200\)/);
+  expect(f.getAttribute('aria-label')).toMatch(/Nube Sur LLC \(Pagado 0,00, Comprometido 4\.200,00\)/);
   expect(f.getAttribute('aria-label')).toMatch(/Beneficiario no leído \(Pagado 1\.500,5/);
 });
 
@@ -57,7 +57,7 @@ test('outcome breakdown: PAGAR, FRENAR, ESCALAR and pendiente, with counts', asy
 
 test('trend with two days: one line for autonomy and one for violations (never two scales in one chart)', async () => {
   show();
-  expect((await chart('Autonomía')).getAttribute('aria-label')).toMatch(/75 % el 2 de oct/);
+  expect((await chart('Autonomía')).getAttribute('aria-label')).toContain(`${new Intl.NumberFormat('es-CO', { style: 'percent' }).format(0.75)} el 2 de oct`); // R-164: Intl's own percent
   expect((await chart('Violaciones')).getAttribute('aria-label')).toMatch(/0 violaciones el 2 de oct/);
   expect(screen.queryByText('La tendencia aparece cuando haya decisiones en más de un día.')).toBeNull();
 });

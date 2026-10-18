@@ -63,15 +63,16 @@ function countsLine(rows: Array<{ outcome: string | null }>, lang: Lang): string
 // Periodo's figures as "<label Periodo shows>: <value as Periodo prints it>", one per line (web/pages/Period.tsx).
 function periodLines(p: Figures, lang: Lang): string[] {
   const l = (key: string, vars?: Record<string, string | number>) => format(periodText[lang], `period.${key}`, vars);
+  const pct = (n: number) => new Intl.NumberFormat(lang === 'es' ? 'es-CO' : 'en-US', { style: 'percent', maximumFractionDigits: 2 }).format(n / 100); // R-164, as Periodo
   const usd = (n: number | null) =>
     n === null ? '—' : new Intl.NumberFormat(lang === 'es' ? 'es-CO' : 'en-US', { style: 'currency', currency: 'USD', currencyDisplay: 'code' }).format(n);
   return [
     `${l('month')}: ${p.month}`,
     ...(['budget', 'committed', 'available', 'paid', 'balance'] as const).map((k) => `${l(k)}: ${usd(p[`${k}_usd`])} (${MEANING[lang][k]})`),
     `${l('outcomes')}: ${(['PAGAR', 'FRENAR', 'ESCALAR'] as const).map((o) => `${t(lang, `outcome.${o}`)} ${p.count_by_outcome[o]}`).join(', ')}`,
-    `${l('autonomy', { v: p.autonomy_pct === null ? '—' : `${p.autonomy_pct}\u00a0%` })}: ${l('autonomy_of', p.autonomy)}`,
+    `${l('autonomy', { v: p.autonomy_pct === null ? '—' : pct(p.autonomy_pct) })}: ${l('autonomy_of', p.autonomy)}`,
     l('violations', { n: p.violations }),
-    l('explained', { pct: p.explained_pct }),
+    l('explained', { pct: pct(p.explained_pct) }),
     `${l('beneficiaries')}:`,
     ...p.by_beneficiary.map((b) => `- ${b.beneficiary ?? l('unread')}: ${l('invoices')} ${b.count}; ${l('paid')} ${usd(b.paid_usd)}; ${l('committed')} ${usd(b.committed_usd)}`),
   ];

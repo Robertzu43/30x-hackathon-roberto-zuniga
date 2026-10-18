@@ -17,7 +17,7 @@ test('HBars: a user row marks its label and only its name in the visible summary
   expect(names(fig.querySelector('.chart-hbars')!)).toEqual(['Nube Sur LLC']);
   expect(names(summary)).toEqual(['Nube Sur LLC']);
   expect(summary.textContent).toBe(fig.getAttribute('aria-label'));
-  expect(summary.textContent).toBe('Por beneficiario, en USD: Nube Sur LLC 10, Beneficiario no leído 5.');
+  expect(summary.textContent).toBe('Por beneficiario, en USD: Nube Sur LLC 10,00, Beneficiario no leído 5,00.');
   expect(fig.querySelector('figcaption [data-user]')).toBeNull();
 });
 

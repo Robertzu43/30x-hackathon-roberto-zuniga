@@ -23,6 +23,10 @@
   .dash-card { padding: 1rem; }
   .dash-kpis .chart-kpi { padding: 0.75rem; }
 }
+/* AC-91 item 1 (R-165): two tiles side by side clipped «US$ 18.409,39» at 360/390 es; one column gives an amount the full width. */
+@media (max-width: 400px) {
+  .dash-kpis { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* The table: last on the page; on phones and tablets it scrolls inside its own container (AC-91 item 1). */
 .dash-table { margin-top: 2.5rem; }

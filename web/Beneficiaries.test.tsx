@@ -195,6 +195,13 @@ test('the profile shows who, the route, the account tail, the agreement in words
   expect(screen.getByRole('link', { name: 'Volver a Beneficiarios' }).getAttribute('href')).toBe('/beneficiaries');
 });
 
+test.each([['es', 'Últimas facturas'], ['en', 'Latest invoices']])('the last invoices heading names no count, which can be fewer than 5 (%s, R-166)', async (lang, heading) => {
+  localStorage.setItem('lang', lang);
+  at({ 'GET /api/screen/beneficiary/b1': profile });
+  expect(await screen.findByRole('heading', { level: 2, name: heading })).toBeTruthy();
+  expect(screen.getByRole('region', { name: heading })).toBeTruthy();
+});
+
 test('each directory row links its name to the profile at /beneficiaries/:id, and the route table mounts it there (AC-104)', async () => {
   setup();
   const link = await screen.findByRole('link', { name: 'Laura Méndez' });

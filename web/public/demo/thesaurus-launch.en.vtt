@@ -1,53 +1,53 @@
 WEBVTT
 
 1
-00:00:00.400 --> 00:00:11.940
+00:00:00.400 --> 00:00:11.451
 29 invoices. 4 currencies. 1 person reviewing them by hand. 3 should not be paid. 11 need an approval. Which ones?
 
 2
-00:00:13.440 --> 00:00:22.320
+00:00:12.951 --> 00:00:21.560
 Thesaurus knows in seconds. And explains why. The accounts payable agent that decides with your rules.
 
 3
-00:00:22.870 --> 00:00:39.258
+00:00:22.110 --> 00:00:36.354
 It receives every invoice, by portal, PDF or email. And AI reads it: payee, amount, currency, account and dates, with its confidence level.
 
 4
-00:00:39.808 --> 00:00:45.376
+00:00:36.904 --> 00:00:41.528
 Code checks 13 rules, with the day's exchange rate.
 
 5
-00:00:45.926 --> 00:00:52.566
+00:00:42.078 --> 00:00:49.032
 And it decides: PAY, STOP or ESCALATE. PAY is only written when all 13 pass.
 
 6
-00:00:53.116 --> 00:01:00.168
+00:00:49.582 --> 00:00:56.265
 If something falls outside the rules, it asks a concrete question. A person approves in one click.
 
 7
-00:01:00.718 --> 00:01:05.590
+00:00:56.815 --> 00:01:01.868
 Every decision keeps its record. And you can ask it.
 
 8
-00:01:06.140 --> 00:01:11.124
-AI reads. Code decides. A person approves.
+00:01:02.418 --> 00:01:08.770
+Artificial intelligence reads. Code decides. A person approves.
 
 9
-00:01:11.674 --> 00:01:17.146
+00:01:09.320 --> 00:01:14.544
 29 sample invoices. 0 payments outside the rules.
 
 10
-00:01:17.696 --> 00:01:24.400
+00:01:15.094 --> 00:01:22.680
 In production: the inbox shows what gets paid, what awaits approval and the agent's autonomy.
 
 11
-00:01:24.950 --> 00:01:31.966
+00:01:23.230 --> 00:01:30.637
 When an invoice exceeds the threshold, the question is concrete and the answer is one click.
 
 12
-00:01:32.516 --> 00:01:38.944
+00:01:31.187 --> 00:01:36.791
 And vendors send their invoices from their own portal, also from a phone.
 
 13
-00:01:39.494 --> 00:01:45.782
+00:01:37.341 --> 00:01:43.518
 Thesaurus. Ready to connect to Blinka. Try it today with your own company.

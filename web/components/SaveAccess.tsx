@@ -5,7 +5,7 @@ import { supabase } from '../api';
 import { useT } from '../i18n';
 import './trial.css';
 
-const MIN = 8; // the Auth config's password_min_length (R-118); checked here so the message is ours, not the browser's
+export const MIN = 8; // the Auth config's password_min_length (R-118); checked here so the message is ours, not the browser's
 
 /** The password input with its show/hide toggle; Login's «Entrar con contraseña» uses it too. */
 export function PasswordField({ id, value, onChange, autoComplete, hint }: {

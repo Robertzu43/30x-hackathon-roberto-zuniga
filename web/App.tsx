@@ -90,7 +90,12 @@ function TopBar({ onTour }: { onTour: () => void }) {
                 <span className="muted">{t('trial.unsaved')}</span>
                 <button type="button" onClick={save}>{t('trial.save')}</button>
               </>
-            ) : <span className="muted">{session.user.email}</span>}
+            ) : (
+              <>
+                {company && <span className="trial-company" data-user="">{company}</span>}{/* R-135: a saved trial keeps its company name */}
+                <span className="muted">{session.user.email}</span>
+              </>
+            )}
             <button type="button" onClick={() => guard(signOut)}>{t('topbar.sign_out')}</button>
           </>
         )}
@@ -123,7 +128,14 @@ export default function App() {
   const [touring, setTouring] = useState(false);
 
   const { pathname } = useLocation();
-  useEffect(() => void entered().then(() => setTouring(!!user && shouldStartTour(user, demoEmail))), [user?.id, demoEmail]); // the tour waits for the entry transition (AC-109) // keyed on the id: USER_UPDATED (tour_seen) must not restart it
+  // One Tour outside <Routes> keeps its step across navigation; it never shows on public pages (/demo, /approve).
+  const onPublic = pages.find((p) => matchPath(p.route.path, pathname))?.route.public;
+  // R-137: it starts on landing (Bandeja, or a public page whose sign-in is about to land there), never on a deep link: its first step would navigate to `/`.
+  // It waits for the entry transition (AC-109); keyed on the id: USER_UPDATED (tour_seen) must not restart it.
+  useEffect(() => {
+    const start = !!user && (onPublic || pathname === '/') && shouldStartTour(user, demoEmail);
+    void entered().then(() => setTouring(start));
+  }, [user?.id, demoEmail]);
   // R-62: the demo click may sign in the same user id again, so the marker is also checked when the click navigates.
   useEffect(() => {
     if (isDemoUser(user, demoEmail) && takeDemoTour()) void entered().then(() => setTouring(true));
@@ -134,8 +146,6 @@ export default function App() {
     if (user && !isDemoUser(user, demoEmail)) void supabase().then((sb) => sb.auth.updateUser({ data: { tour_seen: true } }));
   };
   const startTour = () => setTouring(true);
-  // One Tour outside <Routes> keeps its step across navigation; it never shows on public pages (/demo, /approve).
-  const onPublic = pages.find((p) => matchPath(p.route.path, pathname))?.route.public;
 
   return (
     <FirstRunProvider>{/* the first-login pass belongs to the shell: navigation never stops or restarts it (AC-107) */}

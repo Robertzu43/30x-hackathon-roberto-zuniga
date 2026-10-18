@@ -77,6 +77,8 @@ test('saving attaches the email and the password to the same user, says so, and 
   expect(updateUser).toHaveBeenCalledOnce();
   expect(updateUser).toHaveBeenCalledWith({ email: EMAIL, password: PASSWORD });
   await waitFor(() => expect(topBar().textContent).toContain(EMAIL));
+  expect(topBar().textContent).toContain('Empresa de prueba 7'); // R-135: the email replaces «Acceso sin guardar»; the company name stays
+  expect(within(topBar()).getByText('Empresa de prueba 7').hasAttribute('data-user')).toBe(true);
   expect(topBar().textContent).not.toContain('Acceso sin guardar');
   expect(within(topBar()).queryByRole('button', { name: 'Guardar mi acceso' })).toBeNull();
   fireEvent.click(within(d).getByRole('button', { name: 'Cerrar' }));

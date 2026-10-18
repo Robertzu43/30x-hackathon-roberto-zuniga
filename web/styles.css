@@ -90,6 +90,7 @@ main { max-width: 64rem; margin: 0 auto; padding: 6rem 2rem; }
 /* AC-72 (R-67): at phone width the chrome tightens so nothing scrolls sideways. */
 @media (max-width: 640px) {
   .topbar, .screens { padding-left: 1rem; padding-right: 1rem; }
+  .topbar { padding-top: 0.75rem; padding-bottom: 0.75rem; } /* AC-91 item 1 (UX-03): the trial bar (5 buttons, 3 rows) was 245 px = 29% of 390x844 */
   .topbar-actions { margin-left: 0; }
   .screens a { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; }
   button, select { min-height: 44px; min-width: 44px; } /* AC-72 (R-79), AC-91 item 2 (UX-05): tap targets */

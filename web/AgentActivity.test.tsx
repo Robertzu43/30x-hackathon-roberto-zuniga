@@ -155,7 +155,7 @@ test('an answer still in flight when the language switches is dropped', async ()
 
 // AC-78 Clarified (D42): the first-login pass is the shell's loop; started before Bandeja mounted, its calls still play there.
 test('a pass started before Bandeja mounted still plays each batch on Bandeja', async () => {
-  markFirstRun();
+  markFirstRun('id:ana@empresa.co');
   let answer: unknown = { items: [] };
   let release: (v: unknown) => void = () => {};
   let runs = 0;

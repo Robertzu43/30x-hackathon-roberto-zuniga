@@ -73,7 +73,7 @@ test('one click signs in anonymously once, in the page language, then opens Band
   expect(auth.signInAnonymously).toHaveBeenCalledOnce();
   expect(auth.signInAnonymously).toHaveBeenCalledWith({ options: { data: { lang: 'es' } } });
   expect(runCalls(f)).toHaveLength(0); // the shell runs the pass after landing
-  expect(sessionStorage.getItem(FIRST_RUN)).toBe('1');
+  expect(sessionStorage.getItem(FIRST_RUN)).toBe('3f9a1c2b-0000-4000-8000-000000000000'); // the trial user's id: their pass, nobody else's
 });
 
 test('while the sign-in runs the door reads «Creando tu empresa de prueba…», never «n de m» (AC-92 Amended)', async () => {

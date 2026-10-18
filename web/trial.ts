@@ -22,11 +22,11 @@ export const guardLeave = (user: User | null | undefined, leave: () => void, war
 
 /** False when the sign-in fails (AC-96's rate limit, network, Auth down). Nothing after the sign-in is awaited (AC-107). */
 export async function startTrial(lang: Lang): Promise<boolean> {
-  const { error } = await supabase()
+  const { data, error } = await supabase()
     .then((sb) => sb.auth.signInAnonymously({ options: { data: { lang } } })) // AC-41: the page's language, stored on the user
-    .catch((e: Error) => ({ error: e }));
+    .catch((e: Error) => ({ data: null, error: e }));
   if (error) return false;
-  markFirstRun();
+  if (data?.user) markFirstRun(data.user.id);
   return true;
 }
 

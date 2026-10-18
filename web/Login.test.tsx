@@ -78,7 +78,7 @@ test('a valid code opens Bandeja at once and leaves the first-run flag; the logi
   expect(await screen.findByText('bandeja')).toBeTruthy();
   expect(fakeAuth.verifyOtp).toHaveBeenCalledWith({ email: 'ana@empresa.co', token: '123456', type: 'email' });
   expect(runCalls(fetchMock)).toHaveLength(0); // the shell runs the pass after landing (web/firstRun.tsx)
-  expect(sessionStorage.getItem(FIRST_RUN)).toBe('1');
+  expect(sessionStorage.getItem(FIRST_RUN)).toBe('id:ana@empresa.co'); // the flag names whose pass it is
 });
 
 test('«Entrar» is disabled, aria-busy and reads «Entrando…» while the code is checked (AC-107, AC-91 item 4)', async () => {
@@ -191,7 +191,7 @@ test('email + password signs in with no code and opens Bandeja at once, leaving 
   expect(fakeAuth.signInWithPassword).toHaveBeenCalledWith({ email: 'ana@empresa.co', password: 'secreta-123' });
   expect(fakeAuth.signInWithOtp).not.toHaveBeenCalled();
   expect(runCalls(fetchMock)).toHaveLength(0);
-  expect(sessionStorage.getItem(FIRST_RUN)).toBe('1');
+  expect(sessionStorage.getItem(FIRST_RUN)).toBe('id:ana@empresa.co'); // the flag names whose pass it is
 });
 
 test.each([

@@ -1,0 +1,2 @@
+# Supabase publishable (anon) key in wrangler.toml: public by design, protected by RLS.
+71d664efc96cdf92acab9a7c92c7438486f599e2:wrangler.toml:generic-api-key:11

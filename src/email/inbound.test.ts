@@ -61,7 +61,10 @@ function intakeDb() {
 }
 
 const EML = import.meta.glob<string>('./__fixtures__/*.eml', { query: '?raw', import: 'default', eager: true });
-const fixture = (name: string) => EML[`./__fixtures__/${name}.eml`]!;
+// big-pdf.eml is generated, not committed: an 11 MB 7bit PDF attachment (same bytes as the old fixture).
+const BIG_PDF_HEAD = "From: Laura M\u00e9ndez <laura@mendez.example>\r\nTo: facturas+andina-labs@correo.thesaurus.example\r\nSubject: Factura adjunta\r\nDate: Fri, 17 Oct 2026 10:00:00 -0500\r\nMessage-ID: <Factura-adjunta@mendez.example>\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"thesaurus-boundary\"\r\n\r\n--thesaurus-boundary\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\nCuenta de cobro #1056 Laura M\u00e9ndez 2.500 USD. Va el PDF escaneado.\r\n--thesaurus-boundary\r\nContent-Type: application/pdf; name=\"cuenta-1056.pdf\"\r\nContent-Disposition: attachment; filename=\"cuenta-1056.pdf\"\r\nContent-Transfer-Encoding: 7bit\r\n\r\n%PDF-1.4\r\n";
+const bigPdf = () => BIG_PDF_HEAD + `${'A'.repeat(75)}\r\n`.repeat(149797) + '\r\n--thesaurus-boundary--\r\n';
+const fixture = (name: string) => (name === 'big-pdf' ? bigPdf() : EML[`./__fixtures__/${name}.eml`]!);
 // Cloudflare hands the handler the envelope recipient; the fixtures carry it in their To header.
 async function deliver(raw: string, rcpt?: string) {
   const bytes = new TextEncoder().encode(raw);

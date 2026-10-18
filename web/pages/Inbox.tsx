@@ -46,20 +46,28 @@ export default function Inbox() {
   const lastRun = d?.last_run;
   const link = d && (typeof d.portal?.portal_url === 'string' ? d.portal : null); // null: no URL in the answer, no card
 
-  // One screen request in flight: a call answered meanwhile asks for one more refresh after it (AC-107).
-  const refreshing = useRef(false);
+  // One screen request in flight (AC-107), Bandeja's first load included: it is out until a fresh answer shows (a cached one,
+  // AC-100, shows at once). A call answered meanwhile asks for one more refresh after it.
+  const refreshing = useRef(true);
   const again = useRef(false);
+  const settle = () => {
+    refreshing.current = false;
+    if (again.current) {
+      again.current = false;
+      refresh();
+    }
+  };
   const refresh = () => {
     if (refreshing.current) return void (again.current = true);
     refreshing.current = true;
-    void screen.reload().finally(() => {
-      refreshing.current = false;
-      if (again.current) {
-        again.current = false;
-        refresh();
-      }
-    });
+    void screen.reload().finally(settle);
   };
+  const first = useRef<Screen | null | undefined>(d); // null once the first load answered
+  useEffect(() => {
+    if (first.current === null || (d === first.current && screen.error === undefined)) return;
+    first.current = null;
+    settle();
+  }, [d, screen.error]);
   const run = useRunAgent({ first: '/api/invoices/run', onBatch: () => { refresh(); setBatches((n) => n + 1); } });
   const pass = useFirstRun();
   const base = useRef(pass.batches).current; // the calls answered before this screen mounted are in its first load

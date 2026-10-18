@@ -297,7 +297,7 @@ test('after scrolling the block into the room, the spotlight already sits on its
 // after each refresh of the screen data. jsdom has no layout: the row's box is stubbed, and a click stands in for a refresh.
 test('with a pass running, step 1 shows at once; at step 4 a batch refresh re-measures the row\'s spotlight, with no scroll or resize', async () => {
   signedInAs('ana@empresa.co');
-  markFirstRun();
+  markFirstRun('id:ana@empresa.co');
   mockApi({ 'POST /api/invoices/run': () => new Promise(() => {}) });
   let top = 100;
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {

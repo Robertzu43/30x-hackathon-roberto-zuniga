@@ -42,7 +42,7 @@ const screenCalls = (f: ReturnType<typeof mockApi>) => f.mock.calls.filter(([u])
 const PARTS = { 'GET /api/invoices': 'invoices', 'GET /api/agent/last-run': 'last_run', 'GET /api/portal-link': 'portal', 'GET /api/beneficiaries': 'beneficiaries' };
 function setup(routes: Record<string, unknown> = {}, dashboard: DashboardData | null = DASH, pass = false) {
   signedInAs('ana@empresa.co');
-  if (pass) markFirstRun(); // the entry's tab flag: the shell's first-login pass starts (AC-107)
+  if (pass) markFirstRun('id:ana@empresa.co'); // the entry's tab flag: the shell's first-login pass starts (AC-107)
   const all: Record<string, unknown> = { 'GET /api/invoices': ROWS, 'GET /api/agent/last-run': { at: minsAgo(7), trigger: 'cron' },
     'GET /api/portal-link': { portal_url: PORTAL, email_address: null }, 'GET /api/beneficiaries': [], 'GET /api/agent/activity': { items: [] }, ...routes };
   const inbox = async () => {
@@ -546,28 +546,34 @@ test('the shell\'s pass shows its progress sentence in RunProgress\'s place, kee
   expect(run.disabled).toBe(false);
 });
 
-test('each call of the pass refreshes the screen data, with never two screen requests in flight, and the last one shows the end state (AC-107)', async () => {
+test('each call of the pass refreshes the screen data with one screen request in flight, a first load slower than the calls included, and the last answer shows the end state (AC-107)', async () => {
   let decided = 0;
   let inFlight = 0;
   let most = 0;
+  const held: Array<() => void> = []; // each screen request answers when the test says so, with the state it left with
   const { f } = setup({
-    'POST /api/invoices/run': async () => { // calls answer faster than the screen request
-      await new Promise((r) => setTimeout(r, 40));
+    'POST /api/invoices/run': () => {
       decided++;
-      return batch({ PAGAR: 1, remaining: 3 - decided, cursor: decided < 3 ? `c${decided}` : null });
+      return batch({ PAGAR: 1, remaining: 2 - decided, cursor: decided < 2 ? `c${decided}` : null });
     },
     'GET /api/invoices': async () => {
       most = Math.max(most, ++inFlight);
-      await new Promise((r) => setTimeout(r, 100));
+      const seen = decided;
+      await new Promise<void>((r) => held.push(r));
       inFlight--;
-      return PENDING.map((r, i) => (i < decided - 1 ? { ...r, outcome: 'PAGAR', headline: `PAGAR · ${r.fields.payee_name}` } : r));
+      return PENDING.map((r, i) => (i < seen ? { ...r, outcome: 'PAGAR', headline: `PAGAR · ${r.fields.payee_name}` } : r));
     },
   }, DASH, true);
-  expect(await screen.findByText('3 PAGAR · 0 FRENAR · 0 ESCALAR')).toBeTruthy();
+  expect(await screen.findByText('2 PAGAR · 0 FRENAR · 0 ESCALAR')).toBeTruthy(); // both calls answered while the first load is out
+  expect(held).toHaveLength(1);
+  held.shift()!();
+  await waitFor(() => expect(held).toHaveLength(1)); // then one refresh, for both calls
+  expect(items().map((r) => within(r).getByText('Pendiente'))).toHaveLength(2); // the first load's older state, for now
+  held.shift()!();
   await waitFor(() => expect(within(table()).getAllByText('PAGAR')).toHaveLength(2));
+  await new Promise((r) => setTimeout(r, 50));
   expect(most).toBe(1);
-  expect(screenCalls(f).length).toBeGreaterThanOrEqual(2); // the load, then at least one refresh after the last call
-  expect(screenCalls(f).length).toBeLessThanOrEqual(4);
+  expect(screenCalls(f)).toHaveLength(2);
 });
 
 test('a failed call of the pass stops it with the response text; the rows stay «Pendiente» and Bandeja stays usable (AC-107, AC-40)', async () => {

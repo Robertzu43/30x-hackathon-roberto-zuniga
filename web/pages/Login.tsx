@@ -88,7 +88,7 @@ export default function Login() {
       if (session) session.user.user_metadata = { ...session.user.user_metadata, lang: picked };
       void supabase().then((sb) => sb.auth.updateUser({ data: { lang: picked } })).catch(() => undefined);
     }
-    markFirstRun(); // the shell decides what is pending, in budgeted calls, after landing (AC-70)
+    if (session) markFirstRun(session.user.id); // the shell decides what is pending, in budgeted calls, after landing (AC-70)
     navigate(typeof from === 'string' ? from : '/', { replace: true });
   };
 

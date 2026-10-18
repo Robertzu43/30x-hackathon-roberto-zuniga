@@ -19,6 +19,9 @@ export interface PeriodRows {
   policy: { version: number; rules: PolicyRules } | null;
   seeded: Array<{ id: string; expected_outcome: Outcome }>;
   decisions: Array<{ invoice_id: string; outcome: Outcome; actor: 'agent' | 'human'; checks: Check[] | null }>;
+  // Since migration 20261018000200 «Decisiones explicadas» is counted in SQL over every decision: `decisions` then carries only
+  // non-archived invoices' ones, with checks only where the invoice has no stored fields (R-150).
+  explained?: { n: number; m: number };
 }
 // screen_period's rows since migration 001100: each decision with its time (AC-103's trend).
 type TimedRows = PeriodRows & { decisions: Array<PeriodRows['decisions'][number] & { created_at: string }> };
@@ -48,7 +51,7 @@ function fieldsOf(decisions: PeriodRows['decisions']) {
 }
 
 // GET /api/period's figures for `month` (AC-44, D17, R-01, R-45, R-63); period.ts answers with this too (R-132: one copy).
-export function periodOf(month: string, { current, directory, policy, seeded, decisions }: PeriodRows) {
+export function periodOf(month: string, { current, directory, policy, seeded, decisions, explained }: PeriodRows) {
   // R-01: each seeded invoice's FIRST agent decision, so a later human answer or a policy change never moves the figures.
   const first = new Map<string, Outcome>();
   for (const d of decisions) if (d.actor === 'agent' && !first.has(d.invoice_id)) first.set(d.invoice_id, d.outcome);
@@ -74,6 +77,7 @@ export function periodOf(month: string, { current, directory, policy, seeded, de
   const committed = round2(rows.reduce((s, r) => s + usdOf(r, ['PAGAR', 'ESCALAR']), 0));
   const budget = policy?.rules.period_budget_usd ?? null;
   const account = policy?.rules.account_balance_usd ?? null;
+  const ex = explained ?? { n: decisions.filter((d) => d.checks?.length).length, m: decisions.length }; // «Decisiones explicadas»
   return {
     month,
     count_by_outcome,
@@ -86,7 +90,7 @@ export function periodOf(month: string, { current, directory, policy, seeded, de
     autonomy: { n, m: seeded.length },
     autonomy_pct: seeded.length ? Math.round((100 * n) / seeded.length) : null,
     violations: seeded.filter((i) => violation(first.get(i.id), i.expected_outcome)).length,
-    explained_pct: decisions.length ? Math.round((100 * decisions.filter((d) => d.checks?.length).length) / decisions.length) : 100,
+    explained_pct: ex.m ? Math.round((100 * ex.n) / ex.m) : 100,
   };
 }
 
@@ -193,7 +197,7 @@ const deny = (c: Context<AuthEnv>) => c.json({ error: 'No autorizado' }, 401);
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 export const screen = new Hono<AuthEnv>()
-  .use('/inbox', async (c, next) => { // R-150: the server's own time on Bandeja's request, perf.mjs's INFO column
+  .use('*', async (c, next) => { // R-150: the server's own time on each screen's request, perf.mjs's INFO column
     const t0 = Date.now();
     await next();
     c.header('Server-Timing', `app;dur=${Date.now() - t0}`);

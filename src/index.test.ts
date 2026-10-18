@@ -33,3 +33,8 @@ test('Smart Placement runs the Worker near Supabase, so each screen\'s round tri
   const toml = readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf8');
   expect(toml).toMatch(/^\[placement\]\nmode = "smart"$/m);
 });
+
+test('Workers observability is on, so a 500 can be read back later (R-150)', async () => {
+  const { readFileSync } = (await import('node:fs' as string)) as { readFileSync(u: URL, enc: 'utf8'): string };
+  expect(readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf8')).toMatch(/^\[observability\]\nenabled = true$/m);
+});

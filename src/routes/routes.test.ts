@@ -929,6 +929,26 @@ describe('GET /api/screen/* and Detalle: one RPC per screen, the same data as th
     expect([bad.res.status, bad.body, bad.rpcs]).toEqual([400, { error: 'Mes no válido: usa AAAA-MM' }, []]);
   });
 
+  it('period: with archived decided invoices, screen_period\'s trimmed rows (migration 20261018000200) give the figures of /api/period (AC-44, R-150)', async () => {
+    db = testDb(workspace());
+    await runAll();
+    const gone = db.tables.invoices!.filter((i) => i.company_id === 'A').slice(0, 3);
+    for (const i of gone) i.archived = true;
+    db.tables.decisions!.find((d) => d.invoice_id === gone[0]!.id)!.checks = []; // an archived decision that explains nothing still counts
+    Object.assign(db.tables.invoices!.find((i) => i.company_id === 'A' && !i.archived)!, { fields: null }); // read from its checks
+    const p = (await old('/api/screen/period')).period as Row;
+    expect(p).toEqual(await old('/api/period'));
+    expect(p.explained_pct).toBeLessThan(100);
+  });
+
+  it('Server-Timing: app;dur=<ms> on period, beneficiaries, a beneficiary and policy, as on inbox (R-150)', async () => {
+    db = testDb(workspace(['01']));
+    for (const path of ['/api/screen/period', '/api/screen/beneficiaries', `/api/screen/beneficiary/${uid('A-b0')}`, '/api/screen/policy']) {
+      const r = await call('GET', path);
+      expect([path, r.status, r.headers.get('Server-Timing')]).toEqual([path, 200, expect.stringMatching(/^app;dur=\d+$/)]);
+    }
+  });
+
   it('beneficiaries: { beneficiaries } equal to /api/beneficiaries', async () => {
     db = testDb(workspace([]));
     db.tables.beneficiaries!.push({ id: 'old', company_id: 'A', name: 'Antiguo', archived: true }, { id: 'b', company_id: 'B', name: 'De otra' });

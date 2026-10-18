@@ -16,3 +16,7 @@ html_handling = "none"
 binding = "MAIN"
 service = "30x-hackathon"
 entrypoint = "PortalApi"
+
+# R-150: Workers Logs, so an error can be read back after the fact
+[observability]
+enabled = true

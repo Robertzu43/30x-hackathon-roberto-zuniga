@@ -1,81 +1,53 @@
 WEBVTT
 
 1
-00:00:00.400 --> 00:00:11.204
-Facturas en varios países y monedas, revisadas a mano, cada mes. Basta un pago fuera de las reglas para perder el control.
+00:00:00.400 --> 00:00:11.940
+29 facturas. 4 monedas. 1 persona revisándolas a mano. 3 no deberían pagarse. 11 necesitan una aprobación. ¿Cuáles?
 
 2
-00:00:11.754 --> 00:00:16.322
-Las facturas llegan por correo, en PDF o por chat.
+00:00:13.440 --> 00:00:22.320
+Thesaurus lo sabe en segundos. Y explica por qué. El agente de cuentas por pagar que decide con tus reglas.
 
 3
-00:00:16.872 --> 00:00:23.880
-Alguien las compara con lo acordado, pide aprobación por chat y crea el pago a mano, en otra moneda y otro país.
+00:00:22.870 --> 00:00:39.258
+Recibe cada factura, por portal, PDF o correo. Y la IA la lee: beneficiario, monto, moneda, cuenta y fechas, con su nivel de confianza.
 
 4
-00:00:24.430 --> 00:00:30.262
-Se concilia en una hoja de cálculo. Cada mes. Si hay alguien disponible.
+00:00:39.808 --> 00:00:45.376
+El código verifica 13 reglas, con la tasa de cambio del día.
 
 5
-00:00:30.812 --> 00:00:36.884
-Thesaurus. El agente de cuentas por pagar para empresas globales.
+00:00:45.926 --> 00:00:52.566
+Y decide: PAGAR, FRENAR o ESCALAR. PAGAR solo se escribe cuando las 13 se cumplen.
 
 6
-00:00:37.434 --> 00:00:44.462
-Recibe cada factura: portal de proveedores, carga directa, texto pegado o correo.
+00:00:53.116 --> 00:01:00.168
+Si algo se sale de las reglas, hace una pregunta concreta. Una persona aprueba en un clic.
 
 7
-00:00:45.012 --> 00:00:53.816
-La IA la lee: beneficiario, monto, moneda, cuenta y fechas, con su nivel de confianza.
+00:01:00.718 --> 00:01:05.590
+Cada decisión queda con su registro. Y se le puede preguntar.
 
 8
-00:00:54.366 --> 00:01:01.394
-El código verifica 13 reglas, del beneficiario al presupuesto, con la tasa de cambio del día.
-
-9
-00:01:01.944 --> 00:01:09.880
-Y decide: PAGAR, FRENAR o ESCALAR. PAGAR solo se escribe cuando las 13 reglas se cumplen.
-
-10
-00:01:10.430 --> 00:01:17.674
-Cuando algo se sale de las reglas, hace una pregunta concreta. Una persona aprueba en un clic.
-
-11
-00:01:18.224 --> 00:01:26.588
-Cada decisión queda con su registro: lo que leyó, lo que decidió y la aritmética. Y se le puede preguntar.
-
-12
-00:01:27.138 --> 00:01:33.058
+00:01:06.140 --> 00:01:11.124
 La IA lee. El código decide. Una persona aprueba.
 
-13
-00:01:33.608 --> 00:01:41.136
-Aislamiento por empresa. Registro inmutable. Nunca paga fuera de las reglas.
+9
+00:01:11.674 --> 00:01:17.146
+29 facturas de ejemplo. 0 pagos fuera de las reglas.
 
-14
-00:01:41.686 --> 00:01:47.814
-En producción: Andina Labs, una empresa de ejemplo con 29 facturas.
+10
+00:01:17.696 --> 00:01:24.400
+En producción: la Bandeja muestra qué se paga, qué espera aprobación y la autonomía del agente.
 
-15
-00:01:48.364 --> 00:01:53.940
-La Bandeja: qué hay por pagar, qué espera aprobación y la autonomía del agente.
-
-16
-00:01:54.490 --> 00:02:01.146
-En cada factura: lo que leyó, con su confianza, y las 13 reglas con su aritmética.
-
-17
-00:02:01.696 --> 00:02:07.392
+11
+00:01:24.950 --> 00:01:31.966
 Cuando una factura supera el umbral, la pregunta es concreta y la respuesta, un clic.
 
-18
-00:02:07.942 --> 00:02:13.902
-El Periodo rinde cuentas: autonomía 62 % y violaciones 0.
-
-19
-00:02:14.452 --> 00:02:20.568
+12
+00:01:32.516 --> 00:01:38.944
 Y los proveedores envían sus facturas desde un portal propio, también desde el celular.
 
-20
-00:02:21.118 --> 00:02:29.682
-Thesaurus. Listo para conectarse a Blinka. Pruébelo con su propia empresa.
+13
+00:01:39.494 --> 00:01:45.782
+Thesaurus. Listo para conectarse a Blinka. Pruébelo hoy con su propia empresa.

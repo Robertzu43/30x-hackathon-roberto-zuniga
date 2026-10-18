@@ -285,7 +285,8 @@ describe('user data markers (Task 34b, R-131, AC-91 item 5)', () => {
     read: { es: ['Beneficiario: Ana Souza', 'Monto y moneda: 10.000 BRL', 'Número: AS-0941'], en: ['Payee: Ana Souza', 'Amount and currency: 10,000 BRL', 'Number: AS-0941'] },
     updated_at: '2026-10-17T15:00:00Z' };
   const dictionary = new Set([...Object.values(es), ...Object.values(en)]);
-  const marked = (root: ParentNode = document) => [...root.querySelectorAll('[data-user]')];
+  const bubble = (i: number) => document.querySelectorAll<HTMLElement>('.log .bubble')[i]!;
+  const marked = (root: Document | HTMLElement = document) => [...root.querySelectorAll('[data-user]')];
   // The structural rules of web/userMarkers.test.tsx: no control or heading inside, never a dictionary string, never a line that also holds copy.
   const rules = () => {
     for (const e of marked()) {
@@ -297,8 +298,7 @@ describe('user data markers (Task 34b, R-131, AC-91 item 5)', () => {
   it('the vendor\'s own message is marked, the sr-only «Tú: » is not', async () => {
     await open({ view: 'chat', company: 'A' });
     typeAndSend('Factura AS-0087 de Ana Souza');
-    const mine = document.querySelectorAll('.log .bubble')[1]!;
-    expect(marked(mine).map((e) => [e.tagName, e.textContent])).toEqual([['P', 'Factura AS-0087 de Ana Souza']]);
+    expect(marked(bubble(1)).map((e) => [e.tagName, e.textContent])).toEqual([['P', 'Factura AS-0087 de Ana Souza']]);
     rules();
   });
 
@@ -306,11 +306,11 @@ describe('user data markers (Task 34b, R-131, AC-91 item 5)', () => {
     await open({ view: 'chat', company: 'A' });
     typeAndSend('mi factura');
     await settle();
-    const reply = document.querySelectorAll('.log .bubble')[2]!;
+    const reply = bubble(2);
     expect(marked(reply).map((e) => [e.tagName, e.textContent])).toEqual([['SPAN', XSS], ['SPAN', '1050']]);
     expect([...reply.querySelectorAll('p')].slice(0, 5).map((p) => p.textContent)).toEqual(REPLY.reply.es); // the lines read as before
     $<HTMLButtonElement>('button[data-lang=en]').click();
-    expect(marked(document.querySelectorAll('.log .bubble')[2]!).map((e) => e.textContent)).toEqual([XSS, '1050']);
+    expect(marked(bubble(2)).map((e) => e.textContent)).toEqual([XSS, '1050']);
     rules();
   });
 
@@ -319,7 +319,7 @@ describe('user data markers (Task 34b, R-131, AC-91 item 5)', () => {
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ...REPLY, reply: { es: ['Beneficiario: no pude leerlo', 'Número: AS-0941'], en: ['Payee: could not read it', 'Number: AS-0941'] } }), { status: 200 }));
     typeAndSend('mi factura');
     await settle();
-    expect(marked(document.querySelectorAll('.log .bubble')[2]!).map((e) => e.textContent)).toEqual(['AS-0941']);
+    expect(marked(bubble(2)).map((e) => e.textContent)).toEqual(['AS-0941']);
   });
 
   it('the status page marks the payee and the number, in both languages; the amount and the labels stay copy', async () => {

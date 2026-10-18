@@ -7,7 +7,7 @@ import { useT } from './i18n';
 import Login from './pages/Login';
 import { currentSession } from './test/supabase';
 import { enterApp } from './transition';
-import { fakeAuth, mockApi, renderAt, signedInAs } from './test/utils';
+import { DEMO_EMAIL, fakeAuth, mockApi, renderAt, signedInAs } from './test/utils';
 
 // AC-109: the real enterApp runs (jsdom has no View Transitions, so the swap is instant); the spy proves the door uses it.
 vi.mock('./transition', async (load) => {
@@ -312,4 +312,19 @@ test('once usable /login fetches the Inbox chunk, signing nobody in; a door\'s h
   load.mockClear();
   fireEvent.focusIn(screen.getByRole('button', { name: 'Entrar con contraseña' }));
   expect(load).toHaveBeenCalledOnce();
+});
+
+test('the shared demo user signing in here keeps the tab\'s language (R-78) and asks in it (R-150)', async () => {
+  fakeAuth.signInWithPassword.mockImplementationOnce(async () => {
+    signedInAs(DEMO_EMAIL, { lang: 'en' });
+    fakeAuth.onAuthStateChange.mock.calls.forEach(([cb]) => cb('SIGNED_IN', currentSession()));
+    return { data: { session: currentSession() }, error: null };
+  });
+  const f = mockApi({ 'POST /api/invoices/run': () => new Promise(() => {}) });
+  renderAt(<Routes><Route path="/login" element={<Login />} /><Route path="/" element={<Lang />} /></Routes>, { at: '/login' });
+  await waitFor(() => expect(fakeAuth.onAuthStateChange).toHaveBeenCalled()); // the page knows the demo email (/api/config) before anyone types
+  await new Promise((r) => setTimeout(r, 0));
+  withPassword(DEMO_EMAIL, 'andina-demo-2026');
+  expect(await screen.findByText('bandeja es')).toBeTruthy();
+  await waitFor(() => expect(inboxCalls(f)).toEqual(['/api/screen/inbox?lang=es']));
 });

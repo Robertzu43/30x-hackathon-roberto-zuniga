@@ -3,6 +3,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { startInbox, supabase } from '../api';
 import { prefetchInbox, whenIdle } from '../App';
+import { isDemoUser, useSession } from '../auth';
 import { useLeaveGuard } from '../components/LeaveTrialWarning';
 import LogoIntro from '../components/LogoIntro';
 import { MIN, PasswordField } from '../components/SaveAccess';
@@ -34,6 +35,7 @@ export default function Login() {
   const [picked, setPicked] = useState<Lang | null>(null); // only a click on this screen counts as a choice
   const pick = (l: Lang) => { setPicked(l); setLang(l); };
   const { guard, warning } = useLeaveGuard();
+  const { demoEmail } = useSession();
   useEffect(() => whenIdle(prefetchInbox), []); // R-150 lever 3: once usable; and on a door's hover or focus, below
 
   const send = (e: FormEvent) => {
@@ -86,8 +88,8 @@ export default function Login() {
 
   // After either sign-in (code or password): nothing else is awaited before Bandeja (AC-107).
   const signedIn = (session?: Session | null) => {
-    const saved: unknown = session?.user.user_metadata?.lang;
-    if (!picked && (saved === 'es' || saved === 'en')) setLang(saved); // AuthProvider applies it too; Bandeja's request asks in it
+    const saved: unknown = session?.user.user_metadata?.lang; // AuthProvider applies it too (AC-41, never the demo's, R-78): ask in it
+    if (!picked && (saved === 'es' || saved === 'en') && !isDemoUser(session?.user, demoEmail)) setLang(saved);
     if (picked) {
       // AuthProvider applies the language saved on the user from this same session object: the choice just made is put
       // there at once, so it shows now, and the write that stores it (AC-41) is fired, not awaited.

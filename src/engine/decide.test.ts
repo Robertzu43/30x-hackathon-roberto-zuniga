@@ -599,6 +599,18 @@ describe.each(['2026-10-17T15:00:00Z', '2026-11-01T05:01:00Z', '2027-04-01T04:59
     expect([d.outcome, failing(d)]).toEqual(['ESCALAR', ['presupuesto_periodo', 'umbral_aprobacion']]);
     expect(check(d, 'presupuesto_periodo').values.total_usd).toBe(43205.36);
   });
+  it('seed replay is 15 PAGAR, 3 FRENAR, 11 ESCALAR (29)', () => {
+    const n = (o: Outcome) => done.filter((x) => x.outcome === o).length;
+    expect(done).toHaveLength(29);
+    expect(n('PAGAR')).toBe(15);
+    expect(n('FRENAR')).toBe(3);
+    expect(n('ESCALAR')).toBe(11);
+  });
+  it('autonomy on this replay is 18/29: a PAGAR or FRENAR that matches the label', () => {
+    const auto = done.filter((x) => x.outcome !== 'ESCALAR' && x.outcome === x.row.expected_outcome).length;
+    expect(auto).toBe(18);
+    expect(done).toHaveLength(29);
+  });
   it('R-35: rejecting #15 (releases 2.500) then approving Nube Sur -> PAGAR', () => {
     const d = approveNube(done, rejected15(done), now, market);
     expect(d.outcome).toBe('PAGAR');

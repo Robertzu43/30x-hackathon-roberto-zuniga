@@ -1,4 +1,7 @@
--- Final QA A database guards (Task 8e-db: AC-06, AC-20, AC-23, AC-44, AC-47; R-69, R-70). Forward-only and additive.
+-- Member-facing invoice guards. Forward-only and additive.
+-- Safety invariants: a member can archive only an invoice that has no decision, and cannot un-archive one.
+-- On a member insert the database ignores expected_outcome, received_at and archived, so a client cannot
+-- plant the label the autonomy figure is scored against or backdate an invoice into the open month.
 -- Both triggers act only on a member's request (current_user authenticated or anon). They are security invoker on
 -- purpose: inside reset_demo_company / seed_company (security definer) current_user is the owner, and the Worker's
 -- service role is neither role, so seeding, reset and the record writer keep writing every column.

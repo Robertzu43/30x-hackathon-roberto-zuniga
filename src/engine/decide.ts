@@ -1,4 +1,16 @@
-// The decision engine (D2, D15). PAGAR exists only as the output of this file, when all 13 checks pass.
+// The decision engine. This file is the only place that returns the outcome PAGAR
+// (`outcomeOf` below). `decideWithOverrides` re-runs `decide` and may then mark a check overridden.
+//
+// Safety invariants, matched by public.decisions_guard() in
+// supabase/migrations/20261018000300_pagar_check_ids.sql:
+// - Agent PAGAR: all 13 CHECK_IDS are present and every verdict is 'cumple', with no `overridden` key.
+// - FRENAR beats ESCALAR. It fires only for duplicado_exacto and limite_pago, and that outcome is final.
+// - Any other failure, a missing check, or 'no_verificado' is ESCALAR. A missing fact never becomes a payment.
+// - A person may override only HUMAN_OVERRIDABLE. Budget, balance, the per-payment limit, an exact
+//   duplicate and a missing exchange rate stay blocking: approving them cannot produce PAGAR.
+// - The payee is the directory row whose name matches the field the engine already trusted.
+//   The payment route is that row's route, never the account printed on the invoice.
+// - Every check reads validFields(): confidence under 0.8, a bad shape, or a read_error drops the amount.
 import { toUsd } from '../lib/money';
 import * as C from './checks';
 import { CHECK_IDS, type Beneficiary, type Check, type CheckId, type Decision, type Invoice, type MarketRates, type Outcome, type PeriodState, type PolicyRules } from './types';

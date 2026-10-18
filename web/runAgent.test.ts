@@ -16,6 +16,7 @@ test('three batches then a null cursor: sums the counts and reports progress n o
   const onProgress = vi.fn();
   const onBatch = vi.fn();
   const r = await runUntilDone({ first: '/api/invoices/run', onProgress, onBatch });
+  // Sum of the three fixture batches (5+6+7, 2+4, 1+2). Not the 29-invoice dataset (15 PAGAR, 3 FRENAR, 11 ESCALAR).
   expect(r).toEqual({ PAGAR: 18, FRENAR: 6, ESCALAR: 3, errors: 1, calls: 3 });
   expect(onProgress.mock.calls.map(([p]) => p)).toEqual([
     { n: 8, m: 29, done: false },

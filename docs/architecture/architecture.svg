@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1620" height="1080" viewBox="0 0 1620 1080" role="img" aria-labelledby="t d">
+<title id="t">Thesaurus: arquitectura desplegada</title>
+<desc id="d">Las facturas entran por el portal de proveedores (Worker facturas), por la app web (carga y chat) o por correo (construido, inactivo hasta conectar un dominio). Todas llegan al Worker 30x-hackathon en Cloudflare, que corre el ciclo del agente: percibe, lee, consulta, decide, actúa y rinde cuentas. Lee y escribe en Supabase (Postgres con RLS, Auth, Storage). La IA lee en Amazon Nova Lite sobre AWS Bedrock, con Workers AI de respaldo; las tasas de mercado vienen de Yahoo Finance y open.er-api.com. El código decide con 13 controles. Salidas: la decisión registrada, el escalado por correo con Amazon SES (solo direcciones verificadas) y la orden de pago preparada, sin mover dinero.</desc>
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#6d6c69"/></marker></defs>
+<rect width="1620" height="1080" fill="#ffffff"/>
+<text x="40" y="60" font-family="'Newsreader', 'Instrument Serif', 'Playfair Display', Georgia, serif" font-size="30" font-weight="400" fill="#111111" text-anchor="start">Thesaurus · arquitectura</text>
+<text x="40" y="90" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="13" font-weight="400" fill="#6d6c69" text-anchor="start">Solo lo desplegado o construido · línea punteada: construido y probado, inactivo en este despliegue</text>
+<rect x="40" y="120" width="320" height="640" rx="8" fill="#fbfbfa" stroke="#eaeaea" stroke-width="1"/>
+<text x="60" y="154" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="16" font-weight="600" fill="#111111" text-anchor="start">Entradas</text>
+<rect x="60" y="180" width="280" height="140" rx="8" fill="#ffffff" stroke="#eaeaea" stroke-width="1"/>
+<g data-brand="cloudflareworkers" transform="translate(300,196) scale(1)"><path d="m8.213.063 8.879 12.136-8.67 11.739h2.476l8.665-11.735-8.89-12.14Zm4.728 0 9.02 11.992-9.018 11.883h2.496L24 12.656v-1.199L15.434.063ZM7.178 2.02.01 11.398l-.01 1.2 7.203 9.644 1.238-1.676-6.396-8.556 6.361-8.313Z" fill="#F38020"/></g>
+<text x="80" y="214" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="14" font-weight="600" fill="#111111" text-anchor="start">Portal de proveedores</text>
+<text x="80" y="238" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start">Worker facturas</text>
+<text x="80" y="255" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start">facturas.…workers.dev/&lt;enlace&gt;</text>
+<text x="80" y="272" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start">sin cuenta: PDF, imagen o texto</text>
+<rect x="60" y="360" width="280" height="140" rx="8" fill="#ffffff" stroke="#eaeaea" stroke-width="1"/>
+<text x="80" y="394" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="14" font-weight="600" fill="#111111" text-anchor="start">Carga y chat en la app</text>
+<text x="80" y="418" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start">Vite + React, servida por el Worker</text>
+<text x="80" y="435" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start">subir PDF o imagen, pegar</text>
+<text x="80" y="452" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start">un correo o un chat</text>
+<rect x="60" y="540" width="280" height="140" rx="8" fill="#ffffff" stroke="#6d6c69" stroke-width="1" stroke-dasharray="6 4"/>
+<text x="80" y="574" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="14" font-weight="600" fill="#111111" text-anchor="start">Correo entrante</text>
+<text x="80" y="598" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start">facturas+&lt;enlace&gt;@&lt;dominio&gt;</text>
+<text x="80" y="615" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start">construido, inactivo: sin dominio</text>
+<text x="80" y="632" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start">(INBOUND_EMAIL_DOMAIN vacío)</text>
+<rect x="440" y="120" width="500" height="640" rx="8" fill="#fbfbfa" stroke="#eaeaea" stroke-width="1"/>
+<g data-brand="cloudflare" transform="translate(460,136) scale(1)"><path d="M16.5088 16.8447c.1475-.5068.0908-.9707-.1553-1.3154-.2246-.3164-.6045-.499-1.0615-.5205l-8.6592-.1123a.1559.1559 0 0 1-.1333-.0713c-.0283-.042-.0351-.0986-.021-.1553.0278-.084.1123-.1484.2036-.1562l8.7359-.1123c1.0351-.0489 2.1601-.8868 2.5537-1.9136l.499-1.3013c.0215-.0561.0293-.1128.0147-.168-.5625-2.5463-2.835-4.4453-5.5499-4.4453-2.5039 0-4.6284 1.6177-5.3876 3.8614-.4927-.3658-1.1187-.5625-1.794-.499-1.2026.119-2.1665 1.083-2.2861 2.2856-.0283.31-.0069.6128.0635.894C1.5683 13.171 0 14.7754 0 16.752c0 .1748.0142.3515.0352.5273.0141.083.0844.1475.1689.1475h15.9814c.0909 0 .1758-.0645.2032-.1553l.12-.4268zm2.7568-5.5634c-.0771 0-.1611 0-.2383.0112-.0566 0-.1054.0415-.127.0976l-.3378 1.1744c-.1475.5068-.0918.9707.1543 1.3164.2256.3164.6055.498 1.0625.5195l1.8437.1133c.0557 0 .1055.0263.1329.0703.0283.043.0351.1074.0214.1562-.0283.084-.1132.1485-.204.1553l-1.921.1123c-1.041.0488-2.1582.8867-2.5527 1.914l-.1406.3585c-.0283.0713.0215.1416.0986.1416h6.5977c.0771 0 .1474-.0489.169-.126.1122-.4082.1757-.837.1757-1.2803 0-2.6025-2.125-4.727-4.7344-4.727" fill="#F38020"/></g>
+<text x="494" y="154" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="16" font-weight="600" fill="#111111" text-anchor="start">Agente en Cloudflare Workers</text>
+<rect x="460" y="180" width="460" height="140" rx="8" fill="#ffffff" stroke="#eaeaea" stroke-width="1"/>
+<g data-brand="cloudflareworkers" transform="translate(880,196) scale(1)"><path d="m8.213.063 8.879 12.136-8.67 11.739h2.476l8.665-11.735-8.89-12.14Zm4.728 0 9.02 11.992-9.018 11.883h2.496L24 12.656v-1.199L15.434.063ZM7.178 2.02.01 11.398l-.01 1.2 7.203 9.644 1.238-1.676-6.396-8.556 6.361-8.313Z" fill="#F38020"/></g>
+<text x="480" y="214" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="14" font-weight="600" fill="#111111" text-anchor="start">Worker 30x-hackathon (Hono)</text>
+<text x="480" y="238" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start">API, app web y PortalApi</text>
+<text x="480" y="255" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start">cron cada 5 min: decide sin nadie conectado</text>
+<text x="480" y="272" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start">cron 06:00 Bogotá: tasas de cambio</text>
+<rect x="460" y="360" width="460" height="200" rx="8" fill="#ffffff" stroke="#eaeaea" stroke-width="1"/>
+<text x="480" y="394" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="14" font-weight="600" fill="#111111" text-anchor="start">runAgent: el ciclo de cada factura</text>
+<rect x="480" y="420" width="120" height="40" rx="8" fill="#fbfbfa" stroke="#eaeaea" stroke-width="1"/>
+<text x="540" y="445" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="600" fill="#111111" text-anchor="middle">percibe</text>
+<polyline points="600,440 620,440" fill="none" stroke="#6d6c69" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="620" y="420" width="120" height="40" rx="8" fill="#fbfbfa" stroke="#eaeaea" stroke-width="1"/>
+<text x="680" y="445" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="600" fill="#111111" text-anchor="middle">lee (IA)</text>
+<polyline points="740,440 760,440" fill="none" stroke="#6d6c69" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="760" y="420" width="120" height="40" rx="8" fill="#fbfbfa" stroke="#eaeaea" stroke-width="1"/>
+<text x="820" y="445" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="600" fill="#111111" text-anchor="middle">consulta</text>
+<rect x="480" y="480" width="120" height="40" rx="8" fill="#fbfbfa" stroke="#eaeaea" stroke-width="1"/>
+<text x="540" y="505" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="600" fill="#111111" text-anchor="middle">decide</text>
+<polyline points="600,500 620,500" fill="none" stroke="#6d6c69" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="620" y="480" width="120" height="40" rx="8" fill="#fbfbfa" stroke="#eaeaea" stroke-width="1"/>
+<text x="680" y="505" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="600" fill="#111111" text-anchor="middle">actúa</text>
+<polyline points="740,500 760,500" fill="none" stroke="#6d6c69" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="760" y="480" width="120" height="40" rx="8" fill="#fbfbfa" stroke="#eaeaea" stroke-width="1"/>
+<text x="820" y="505" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="600" fill="#111111" text-anchor="middle">rinde cuentas</text>
+<polyline points="840,460 840,470 540,470 540,480" fill="none" stroke="#6d6c69" stroke-width="1.5" marker-end="url(#a)"/>
+<rect x="460" y="600" width="460" height="140" rx="8" fill="#ffffff" stroke="#eaeaea" stroke-width="1"/>
+<text x="480" y="634" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="14" font-weight="600" fill="#111111" text-anchor="start">decide(): 13 controles, solo código</text>
+<text x="480" y="658" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start">PAGAR solo si los 13 cumplen; ningún modelo decide</text>
+<text x="480" y="675" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start">la base rechaza un PAGAR fuera de las reglas</text>
+<text x="480" y="692" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start">ESCALAR pregunta a una persona; FRENAR es final</text>
+<polyline points="340,250 458,250" fill="none" stroke="#6d6c69" stroke-width="1.5" marker-end="url(#a)"/>
+<text x="350" y="222" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="11" font-weight="400" fill="#6d6c69" text-anchor="start">PortalApi</text>
+<text x="350" y="238" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="11" font-weight="400" fill="#6d6c69" text-anchor="start">(servicio interno)</text>
+<polyline points="340,430 458,430" fill="none" stroke="#6d6c69" stroke-width="1.5" marker-end="url(#a)"/>
+<text x="350" y="422" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="11" font-weight="400" fill="#6d6c69" text-anchor="start">HTTPS /api</text>
+<polyline points="340,610 400,610 400,500 458,500" fill="none" stroke="#6d6c69" stroke-width="1.5" marker-end="url(#a)" stroke-dasharray="6 4"/>
+<text x="350" y="602" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="11" font-weight="400" fill="#6d6c69" text-anchor="start">email()</text>
+<rect x="1020" y="120" width="560" height="220" rx="8" fill="#fbfbfa" stroke="#eaeaea" stroke-width="1"/>
+<g data-brand="supabase" transform="translate(1040,136) scale(1)"><path d="M11.9 1.036c-.015-.986-1.26-1.41-1.874-.637L.764 12.05C-.33 13.427.65 15.455 2.409 15.455h9.579l.113 7.51c.014.985 1.259 1.408 1.873.636l9.262-11.653c1.093-1.375.113-3.403-1.645-3.403h-9.642z" fill="#3FCF8E"/></g>
+<text x="1074" y="154" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="16" font-weight="600" fill="#111111" text-anchor="start">Datos en Supabase</text>
+<rect x="1040" y="180" width="160" height="140" rx="8" fill="#ffffff" stroke="#eaeaea" stroke-width="1"/>
+<text x="1060" y="214" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="14" font-weight="600" fill="#111111" text-anchor="start">Postgres + RLS</text>
+<text x="1060" y="238" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start">facturas, políticas,</text>
+<text x="1060" y="255" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start">decisiones de solo</text>
+<text x="1060" y="272" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start">adición, fx_rates,</text>
+<text x="1060" y="289" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start">agent_runs</text>
+<rect x="1220" y="180" width="160" height="140" rx="8" fill="#ffffff" stroke="#eaeaea" stroke-width="1"/>
+<text x="1240" y="214" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="14" font-weight="600" fill="#111111" text-anchor="start">Auth</text>
+<text x="1240" y="238" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start">código por correo</text>
+<text x="1240" y="255" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start">demo sin código</text>
+<text x="1240" y="272" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start">(Andina Labs)</text>
+<rect x="1400" y="180" width="160" height="140" rx="8" fill="#ffffff" stroke="#eaeaea" stroke-width="1"/>
+<text x="1420" y="214" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="14" font-weight="600" fill="#111111" text-anchor="start">Storage</text>
+<text x="1420" y="238" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start">bucket privado</text>
+<text x="1420" y="255" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start">URL firmada</text>
+<text x="1420" y="272" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start">de 5 minutos</text>
+<polyline points="920,230 1038,230" fill="none" stroke="#6d6c69" stroke-width="1.5" marker-end="url(#a)"/>
+<text x="930" y="222" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="11" font-weight="400" fill="#6d6c69" text-anchor="start">escribe decisiones</text>
+<polyline points="1038,270 920,270" fill="none" stroke="#6d6c69" stroke-width="1.5" marker-end="url(#a)"/>
+<text x="930" y="290" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="11" font-weight="400" fill="#6d6c69" text-anchor="start">lee política y registro</text>
+<rect x="1020" y="380" width="560" height="220" rx="8" fill="#fbfbfa" stroke="#eaeaea" stroke-width="1"/>
+<text x="1040" y="414" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="16" font-weight="600" fill="#111111" text-anchor="start">IA en AWS Bedrock (Workers AI de respaldo)</text>
+<rect x="1040" y="440" width="220" height="140" rx="8" fill="#ffffff" stroke="#eaeaea" stroke-width="1"/>
+<text x="1060" y="474" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="14" font-weight="600" fill="#111111" text-anchor="start">Amazon Nova Lite</text>
+<text x="1060" y="498" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start">AWS Bedrock, us-east-2</text>
+<text x="1060" y="515" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start">primero, espera 20 s</text>
+<text x="1060" y="532" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start">lee facturas, responde el chat</text>
+<rect x="1320" y="440" width="240" height="140" rx="8" fill="#ffffff" stroke="#eaeaea" stroke-width="1"/>
+<text x="1340" y="474" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="14" font-weight="600" fill="#111111" text-anchor="start">Workers AI</text>
+<text x="1340" y="498" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start">Llama 3.3 70B y visión 3.2 11B</text>
+<text x="1340" y="515" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start">solo si Bedrock falla</text>
+<polyline points="1260,520 1318,520" fill="none" stroke="#6d6c69" stroke-width="1.5" marker-end="url(#a)"/>
+<text x="1290" y="508" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="11" font-weight="400" fill="#6d6c69" text-anchor="middle">si falla</text>
+<polyline points="920,450 980,450 980,510 1038,510" fill="none" stroke="#6d6c69" stroke-width="1.5" marker-end="url(#a)"/>
+<text x="930" y="442" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="11" font-weight="400" fill="#6d6c69" text-anchor="start">documento → campos</text>
+<rect x="1020" y="640" width="560" height="80" rx="8" fill="#ffffff" stroke="#eaeaea" stroke-width="1"/>
+<text x="1040" y="674" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="14" font-weight="600" fill="#111111" text-anchor="start">Tasas de mercado: Yahoo Finance, open.er-api.com de respaldo</text>
+<text x="1040" y="698" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start">consulta diaria y bajo demanda · se guardan en fx_rates</text>
+<polyline points="1018,680 922,680" fill="none" stroke="#6d6c69" stroke-width="1.5" marker-end="url(#a)"/>
+<text x="930" y="672" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="11" font-weight="400" fill="#6d6c69" text-anchor="start">tasa USD</text>
+<rect x="440" y="800" width="1140" height="200" rx="8" fill="#fbfbfa" stroke="#eaeaea" stroke-width="1"/>
+<text x="460" y="834" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="16" font-weight="600" fill="#111111" text-anchor="start">Salidas</text>
+<rect x="460" y="860" width="340" height="120" rx="8" fill="#ffffff" stroke="#eaeaea" stroke-width="1"/>
+<text x="480" y="894" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="14" font-weight="600" fill="#111111" text-anchor="start">Decisión registrada</text>
+<text x="480" y="918" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start"></text>
+<rect x="480" y="904" width="60" height="22" rx="11" fill="#edf3ec"/>
+<text x="490" y="919" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="11" font-weight="600" fill="#346538" text-anchor="start">PAGAR</text>
+<rect x="560" y="904" width="68" height="22" rx="11" fill="#fdebec"/>
+<text x="570" y="919" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="11" font-weight="600" fill="#9f2f2d" text-anchor="start">FRENAR</text>
+<rect x="648" y="904" width="76" height="22" rx="11" fill="#fbf3db"/>
+<text x="658" y="919" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="11" font-weight="600" fill="#956400" text-anchor="start">ESCALAR</text>
+<text x="480" y="954" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#6d6c69" text-anchor="start">cada control con su valor y umbral</text>
+<rect x="840" y="860" width="340" height="120" rx="8" fill="#ffffff" stroke="#6d6c69" stroke-width="1" stroke-dasharray="6 4"/>
+<text x="860" y="894" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="14" font-weight="600" fill="#111111" text-anchor="start">Escalado por correo (Amazon SES)</text>
+<text x="860" y="918" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start">pregunta concreta + enlace firmado</text>
+<text x="860" y="935" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start">limitado: solo direcciones verificadas</text>
+<text x="860" y="952" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start">(SES en sandbox)</text>
+<rect x="1220" y="860" width="340" height="120" rx="8" fill="#ffffff" stroke="#eaeaea" stroke-width="1"/>
+<text x="1240" y="894" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="14" font-weight="600" fill="#111111" text-anchor="start">Orden de pago</text>
+<text x="1240" y="918" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start">preparada al decidir PAGAR</text>
+<text x="1240" y="935" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#333333" text-anchor="start">no mueve dinero real</text>
+<polyline points="560,740 560,858" fill="none" stroke="#6d6c69" stroke-width="1.5" marker-end="url(#a)"/>
+<text x="570" y="800" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="11" font-weight="400" fill="#6d6c69" text-anchor="start">registra</text>
+<polyline points="860,740 860,858" fill="none" stroke="#6d6c69" stroke-width="1.5" marker-end="url(#a)" stroke-dasharray="6 4"/>
+<text x="850" y="800" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="11" font-weight="400" fill="#6d6c69" text-anchor="end">escala</text>
+<polyline points="900,740 900,780 1360,780 1360,858" fill="none" stroke="#6d6c69" stroke-width="1.5" marker-end="url(#a)"/>
+<text x="1370" y="800" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="11" font-weight="400" fill="#6d6c69" text-anchor="start">prepara</text>
+<text x="40" y="1036" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#6d6c69" text-anchor="start">Fuentes: wrangler.toml, portal/wrangler.toml, src/lib/llm.ts, src/lib/email.ts y README «Arquitectura». Generado por docs/architecture/build_architecture.mjs.</text>
+<text x="40" y="1058" font-family="'SF Pro Display', 'Geist Sans', 'Helvetica Neue', system-ui, sans-serif" font-size="12" font-weight="400" fill="#6d6c69" text-anchor="start">Iconos: Simple Icons 16.34.0 (CC0). Cada logo es marca de su dueño, usado solo para nombrar la herramienta, sin respaldo implícito.</text>
+</svg>

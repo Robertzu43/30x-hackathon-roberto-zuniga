@@ -1,0 +1,22 @@
+Thesaurus · arquitectura (solo lo desplegado o construido; [entre corchetes] = construido y probado, inactivo)
+
+ENTRADAS
+  Portal de proveedores (Worker facturas) --PortalApi, servicio interno--+
+  Carga y chat en la app (Vite + React) ---------------HTTPS /api--------+
+  [Correo entrante: sin dominio, INBOUND_EMAIL_DOMAIN vacío] ---email()---+
+                                                                          |
+                                                                          v
+AGENTE EN CLOUDFLARE WORKERS: Worker 30x-hackathon (Hono), cron cada 5 min y 06:00 Bogotá
+  runAgent: percibe -> lee (IA) -> consulta -> decide -> actúa -> rinde cuentas
+  decide(): 13 controles, solo código; la base rechaza un PAGAR fuera de las reglas
+     |  lee y escribe                 |  documento -> campos          ^  tasa USD
+     v                                v                               |
+DATOS EN SUPABASE                 IA EN AWS BEDROCK                 Tasas de mercado
+  Postgres + RLS (solo adición)     Amazon Nova Lite (us-east-2)      Yahoo Finance,
+  Auth (código por correo)            --si falla--> Workers AI        open.er-api.com
+  Storage (bucket privado)
+
+SALIDAS (el agente registra, escala y prepara)
+  Decisión registrada: PAGAR · FRENAR · ESCALAR
+  [Escalado por correo con Amazon SES: solo direcciones verificadas]
+  Orden de pago: preparada, no mueve dinero real

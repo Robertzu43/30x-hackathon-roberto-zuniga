@@ -74,3 +74,17 @@ test('a manifest with no tracks (an older video.json) plays with no captions ins
   expect(video().getAttribute('src')).toBe('/demo/happy-path.webm');
   expect(document.querySelectorAll('track')).toHaveLength(0);
 });
+
+// R-169: the manifest is the one web change for the film. Workers Static Assets answer no byte ranges (Safari and iPhone refuse such a video),
+// so the film comes from the public Supabase Storage bucket `demo` (scripts/upload-film.mjs). Poster and captions stay same-origin /demo paths: the tracks need no CORS.
+const { readFileSync } = (await import('node:fs' as string)) as { readFileSync(p: string, enc: string): string }; // no @types/node here
+test('video.json: the film is the public bucket URL on the project Supabase host; poster and every track are /demo paths', () => {
+  const host = readFileSync('wrangler.toml', 'utf8').match(/^SUPABASE_URL\s*=\s*"([^"]+)"/m)?.[1];
+  expect(host).toMatch(/^https:\/\/[a-z0-9]+\.supabase\.co$/);
+  const m = JSON.parse(readFileSync('web/public/demo/video.json', 'utf8')) as VideoManifest;
+  expect(m.src).toBe(`${host}/storage/v1/object/public/demo/thesaurus-launch.mp4`);
+  expect(m.type).toBe('video/mp4');
+  expect(m.poster).toMatch(/^\/demo\//);
+  expect(m.tracks?.length).toBeGreaterThan(0);
+  for (const t of m.tracks ?? []) expect(t.src).toMatch(/^\/demo\//);
+});

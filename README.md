@@ -6,14 +6,14 @@
 </p>
 
 <p align="center">
-  <a href="https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo/thesaurus-launch.mp4"><img src="https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo/thesaurus-launch-poster.jpg" alt="Ver el video: la película de lanzamiento de Thesaurus, 150 segundos" width="560"></a>
-  <br><a href="https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo/thesaurus-launch.mp4">▶ Ver el video</a> · <a href="https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo/happy-path.webm">Recorrido completo sin editar</a>
+  <a href="https://dhjumvswohajnusdifim.supabase.co/storage/v1/object/public/demo/thesaurus-launch.mp4"><img src="https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo/thesaurus-launch-poster.jpg" alt="Ver el video: la película de lanzamiento de Thesaurus, 150 segundos" width="560"></a>
+  <br><a href="https://dhjumvswohajnusdifim.supabase.co/storage/v1/object/public/demo/thesaurus-launch.mp4">▶ Ver el video</a> · <a href="https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo/happy-path.webm">Recorrido completo sin editar</a>
 </p>
 
 <p align="center">
   <code><a href="https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo">Demo en vivo ↗</a></code> ·
   <code><a href="https://facturas.30x-hackathon-roberto-zuniga.workers.dev/andina-labs">Portal de proveedores ↗</a></code> ·
-  <code><a href="https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo/thesaurus-launch.mp4">Video ↗</a></code> ·
+  <code><a href="https://dhjumvswohajnusdifim.supabase.co/storage/v1/object/public/demo/thesaurus-launch.mp4">Video ↗</a></code> ·
   <code><a href="docs/LEDGER.md">Registro de decisiones ↗</a></code>
 </p>
 
@@ -298,6 +298,7 @@ Antes de desplegar en otra cuenta, cambia en `wrangler.toml` lo que hoy apunta a
 3. Primer despliegue: `npm run build` y `npx wrangler deploy`. Crea el Worker y registra los dos crones (cada 5 minutos y las tasas diarias). Después, el portal: `npx wrangler deploy -c portal/wrangler.toml` (Worker `facturas`; despliégalo siempre después del principal, y cambia `PORTAL_URL` en `wrangler.toml` por su URL).
 4. Secretos del Worker, ya con el Worker creado: `bash scripts/worker-secrets.sh` sube los que estén definidos en el entorno (`AWS_SES_ACCESS_KEY_ID`, `AWS_SES_SECRET_ACCESS_KEY`, `SES_FROM_EMAIL`, `SUPABASE_SERVICE_ROLE_KEY` y los opcionales) y no imprime valores. Las dos claves de Bedrock no están en ese script: súbelas una por una con `npx wrangler secret put AWS_BEDROCK_ACCESS_KEY_ID` y `npx wrangler secret put AWS_BEDROCK_SECRET_ACCESS_KEY`. `APPROVAL_HMAC_SECRET` se genera una vez con `openssl rand -hex 32 | npx wrangler secret put APPROVAL_HMAC_SECRET`. Los secretos se leen en cada petición: no hace falta volver a desplegar.
 5. `curl <URL>/api/health` debe responder `{"ok":true}`; luego `node scripts/seed-demo-user.mjs <URL>` crea (o repara) el acceso "Entrar como Andina Labs" y el enlace `/andina-labs` del portal.
+6. Película de lanzamiento: `node scripts/upload-film.mjs` la sube al bucket público `demo` de Supabase Storage (necesita `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` en el entorno; crea el bucket si falta y se puede repetir) e imprime la URL pública, que va en `src` de `web/public/demo/video.json`.
 
 ## Cómo conectar SES u otro servicio de correo
 
@@ -320,7 +321,7 @@ Esta lista es honesta a propósito. Cada punto se verificó contra el código o 
 - **Ancho de 2560 px (AC-122).** Las pantallas con banda siguen el diseño de D45; las filas de la puerta para 2560 existen en `scripts/ux-tour.mjs`, pero no están registradas en la puerta.
 - **Salto de diseño al aterrizar (AC-107, AC-109).** En la QA final sobre la versión desplegada, 3 de 17 entradas pasaron del límite de 0,01: puerta de código por correo a 1440 px 0,0632 y a 390 px 0,1753, y prueba gratuita a 390 px 0,2218 (puertas demo y contraseña: 0 en 12 de 12). Causa: «Vence pronto» y la lista de «Actividad del agente» no tienen su altura reservada desde el primer pintado. Arreglo para el equipo de la empresa: reservar ambos bloques a su altura ya cargada desde el primer pintado.
 - **Contador al recargar (AC-107, R-175).** Al recargar durante el primer pase, la rutina se reanuda (POST en menos de 2 s en 6 de 6, cada factura decidida una sola vez, Violaciones 0), pero el denominador de «n de m» cambió a mitad de la corrida en 2 de 3 entradas. Arreglo: fijar m cuando empieza el pase reanudado.
-- **Película de lanzamiento.** Ya está en el repositorio, en `web/public/demo/` (`thesaurus-launch.mp4`, 150 s, con subtítulos en español en la imagen y en inglés en `thesaurus-launch.en.vtt`). El máster en 4K (156 MB) no está en el repositorio. El recorrido completo sin editar sigue en `/demo/happy-path.webm`.
+- **Película de lanzamiento.** El archivo está en el repositorio, en `web/public/demo/` (`thesaurus-launch.mp4`, 150 s, con subtítulos en español en la imagen y en inglés en `thesaurus-launch.en.vtt`), pero se reproduce desde el bucket público `demo` de Supabase Storage (`web/public/demo/video.json` y los enlaces de arriba apuntan allí), porque los Workers Static Assets no responden rangos de bytes: ante `Range: bytes=0-1023` devuelven 200 y el archivo completo, y Safari y el iPhone no reproducen un video así. `node scripts/upload-film.mjs` lo sube. El máster en 4K (156 MB) no está en el repositorio. El recorrido completo sin editar sigue en `/demo/happy-path.webm`, servido por el Worker y con ese mismo límite: sin rangos, puede no reproducirse en Safari ni en el iPhone.
 - **Etiqueta «Leído por IA» por API.** La etiqueta "Leído por IA" de una factura insertada directamente por API la declara quien la inserta; las decisiones no dependen de ella.
 - **El chat tiene topes.** 10 preguntas por usuario y 500 por día en todo el despliegue (ver «Dónde actúa la IA»); al llegar al tope responde con un aviso y no con una respuesta.
 

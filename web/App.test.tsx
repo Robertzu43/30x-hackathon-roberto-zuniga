@@ -215,7 +215,7 @@ test('a signed-out deep link survives sign-in: the code lands on the page asked 
   fireEvent.change(await screen.findByLabelText('Correo'), { target: { value: 'ana@empresa.co' } });
   fireEvent.click(screen.getByRole('button', { name: 'Enviar código' }));
   fireEvent.change(await screen.findByLabelText('Código de 6 dígitos'), { target: { value: '123456' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Entrar' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Verificar código' }));
   expect(await screen.findByRole('heading', { name: 'Periodo', level: 1 })).toBeTruthy();
 });
 
@@ -266,7 +266,7 @@ test('signing out then signing in as someone else opens Bandeja, not the page th
     return { data: {}, error: null };
   });
   fireEvent.change(await screen.findByLabelText('Código de 6 dígitos'), { target: { value: '123456' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Entrar' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Verificar código' }));
   expect(await screen.findByRole('heading', { name: 'Bandeja', level: 1 })).toBeTruthy();
 });
 

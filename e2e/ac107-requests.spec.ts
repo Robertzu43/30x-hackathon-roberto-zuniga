@@ -37,7 +37,7 @@ for (const kind of ['password', 'otp']) test(`deep link to / signed out, then ${
     await page.goto(`${URL_}/`); await page.waitForURL(/\/login/, { timeout: 15000 });
     if (kind === 'password') { await page.getByRole('button', { name: 'Entrar con contraseña' }).click(); await page.getByLabel('Correo').fill(pw[0].email); await page.getByLabel('Contraseña').fill(pw[0].password); }
     else { await page.getByLabel('Correo').fill(otp[2].email); await page.getByRole('button', { name: 'Enviar código' }).click(); await page.getByLabel('Código de 6 dígitos').fill(await adminOtp(otp[2].email)); }
-    await page.waitForTimeout(500); log.length = 0; const t = Date.now(); await page.getByRole('button', { name: 'Entrar', exact: true }).click();
+    await page.waitForTimeout(500); log.length = 0; const t = Date.now(); await page.getByRole('button', { name: kind === 'otp' ? 'Verificar código' : 'Entrar', exact: true }).click();
     await expect(page.locator('h1', { hasText: 'Bandeja' })).toBeVisible({ timeout: 20000 }); await page.waitForTimeout(visit === 1 ? 1500 : 5000);
     if (visit === 1) await page.waitForFunction(() => !document.querySelector('.chip-pending') && !/Decidiendo/.test(document.body.innerText), null, { timeout: 90000 }).catch(() => console.log('  pass did not finish in 90 s'));
     await page.waitForTimeout(1500);

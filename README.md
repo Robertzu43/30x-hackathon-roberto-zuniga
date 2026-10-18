@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <a href="https://dhjumvswohajnusdifim.supabase.co/storage/v1/object/public/demo/thesaurus-launch.mp4"><img src="https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo/thesaurus-launch-poster.jpg" alt="Ver el video: la película de lanzamiento de Thesaurus, 150 segundos" width="560"></a>
+  <a href="https://dhjumvswohajnusdifim.supabase.co/storage/v1/object/public/demo/thesaurus-launch.mp4"><img src="https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo/thesaurus-launch-poster.jpg" alt="Ver el video: la película de lanzamiento de Thesaurus, 107 segundos" width="560"></a>
   <br><a href="https://dhjumvswohajnusdifim.supabase.co/storage/v1/object/public/demo/thesaurus-launch.mp4">▶ Ver el video</a> · <a href="https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo/happy-path.webm">Recorrido completo sin editar</a>
 </p>
 
@@ -321,7 +321,7 @@ Esta lista es honesta a propósito. Cada punto se verificó contra el código o 
 - **Ancho de 2560 px (AC-122).** Las pantallas con banda siguen el diseño de D45; las filas de la puerta para 2560 existen en `scripts/ux-tour.mjs`, pero no están registradas en la puerta.
 - **Salto de diseño al aterrizar (AC-107, AC-109).** En la QA final sobre la versión desplegada, 3 de 17 entradas pasaron del límite de 0,01: puerta de código por correo a 1440 px 0,0632 y a 390 px 0,1753, y prueba gratuita a 390 px 0,2218 (puertas demo y contraseña: 0 en 12 de 12). Causa: «Vence pronto» y la lista de «Actividad del agente» no tienen su altura reservada desde el primer pintado. Arreglo para el equipo de la empresa: reservar ambos bloques a su altura ya cargada desde el primer pintado.
 - **Contador al recargar (AC-107, R-175).** Al recargar durante el primer pase, la rutina se reanuda (POST en menos de 2 s en 6 de 6, cada factura decidida una sola vez, Violaciones 0), pero el denominador de «n de m» cambió a mitad de la corrida en 2 de 3 entradas. Arreglo: fijar m cuando empieza el pase reanudado.
-- **Película de lanzamiento.** El archivo está en el repositorio, en `web/public/demo/` (`thesaurus-launch.mp4`, 150 s, con subtítulos en español en la imagen y en inglés en `thesaurus-launch.en.vtt`), pero se reproduce desde el bucket público `demo` de Supabase Storage (`web/public/demo/video.json` y los enlaces de arriba apuntan allí), porque los Workers Static Assets no responden rangos de bytes: ante `Range: bytes=0-1023` devuelven 200 y el archivo completo, y Safari y el iPhone no reproducen un video así. `node scripts/upload-film.mjs` lo sube. El máster en 4K (156 MB) no está en el repositorio. El recorrido completo sin editar sigue en `/demo/happy-path.webm`, servido por el Worker y con ese mismo límite: sin rangos, puede no reproducirse en Safari ni en el iPhone.
+- **Película de lanzamiento.** El archivo está en el repositorio, en `web/public/demo/` (`thesaurus-launch.mp4`, 107 s, con subtítulos en español en la imagen y en inglés en `thesaurus-launch.en.vtt`), pero se reproduce desde el bucket público `demo` de Supabase Storage (`web/public/demo/video.json` y los enlaces de arriba apuntan allí), porque los Workers Static Assets no responden rangos de bytes: ante `Range: bytes=0-1023` devuelven 200 y el archivo completo, y Safari y el iPhone no reproducen un video así. `node scripts/upload-film.mjs` lo sube. El máster en 4K (156 MB) no está en el repositorio. El recorrido completo sin editar sigue en `/demo/happy-path.webm`, servido por el Worker y con ese mismo límite: sin rangos, puede no reproducirse en Safari ni en el iPhone.
 - **Etiqueta «Leído por IA» por API.** La etiqueta "Leído por IA" de una factura insertada directamente por API la declara quien la inserta; las decisiones no dependen de ella.
 - **El chat tiene topes.** 10 preguntas por usuario y 500 por día en todo el despliegue (ver «Dónde actúa la IA»); al llegar al tope responde con un aviso y no con una respuesta.
 
@@ -373,6 +373,8 @@ Thesaurus es el agente de cuentas por pagar, construido para Blinka en el 30X Ha
 Esto es un prototipo de hackatón hecho para Blinka. No es un producto de Blinka ni usa su logo: el logo que se ve en la app, el portal y los correos es el propio de Thesaurus (`web/public/brand/`).
 
 **Créditos de los íconos.** Los logotipos del diagrama de arquitectura (Cloudflare, Supabase, AWS y otros) son marcas de sus dueños, se usan solo para nombrar la herramienta y no implican respaldo. Los íconos son de [Simple Icons](https://simpleicons.org), copiados sin cambios; la versión fijada y la licencia de cada uno están en [`docs/architecture/icons/README.md`](docs/architecture/icons/README.md).
+
+**Créditos de la película de lanzamiento.** Música: «Life of Riley», de Kevin MacLeod ([incompetech.com](https://incompetech.com)), con licencia [Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/). La voz es sintética (Workers AI, Deepgram Aura-2 en español). El guion y la lista de escenas están en [`docs/demo/launch-film-script.md`](docs/demo/launch-film-script.md).
 
 ## English summary
 

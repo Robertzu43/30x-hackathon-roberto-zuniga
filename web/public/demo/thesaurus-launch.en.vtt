@@ -1,81 +1,53 @@
 WEBVTT
 
 1
-00:00:00.400 --> 00:00:11.204
-Invoices across countries and currencies, reviewed by hand, every month. One payment outside the rules is enough to lose control.
+00:00:00.400 --> 00:00:11.940
+29 invoices. 4 currencies. 1 person reviewing them by hand. 3 should not be paid. 11 need an approval. Which ones?
 
 2
-00:00:11.754 --> 00:00:16.322
-Invoices arrive by email, as PDFs or by chat.
+00:00:13.440 --> 00:00:22.320
+Thesaurus knows in seconds. And explains why. The accounts payable agent that decides with your rules.
 
 3
-00:00:16.872 --> 00:00:23.880
-Someone compares them with what was agreed, asks for approval by chat and creates the payment by hand, in another currency and country.
+00:00:22.870 --> 00:00:39.258
+It receives every invoice, by portal, PDF or email. And AI reads it: payee, amount, currency, account and dates, with its confidence level.
 
 4
-00:00:24.430 --> 00:00:30.262
-It is reconciled in a spreadsheet. Every month. If someone is available.
+00:00:39.808 --> 00:00:45.376
+Code checks 13 rules, with the day's exchange rate.
 
 5
-00:00:30.812 --> 00:00:36.884
-Thesaurus. The accounts payable agent for global companies.
+00:00:45.926 --> 00:00:52.566
+And it decides: PAY, STOP or ESCALATE. PAY is only written when all 13 pass.
 
 6
-00:00:37.434 --> 00:00:44.462
-It receives every invoice: vendor portal, direct upload, pasted text or email.
+00:00:53.116 --> 00:01:00.168
+If something falls outside the rules, it asks a concrete question. A person approves in one click.
 
 7
-00:00:45.012 --> 00:00:53.816
-AI reads it: payee, amount, currency, account and dates, with its confidence level.
+00:01:00.718 --> 00:01:05.590
+Every decision keeps its record. And you can ask it.
 
 8
-00:00:54.366 --> 00:01:01.394
-Code checks 13 rules, from payee to budget, with the day's exchange rate.
-
-9
-00:01:01.944 --> 00:01:09.880
-And it decides: PAY, STOP or ESCALATE. PAY is only written when all 13 rules pass.
-
-10
-00:01:10.430 --> 00:01:17.674
-When something falls outside the rules, it asks a concrete question. A person approves in one click.
-
-11
-00:01:18.224 --> 00:01:26.588
-Every decision keeps its record: what it read, what it decided and the arithmetic. And you can ask it.
-
-12
-00:01:27.138 --> 00:01:33.058
+00:01:06.140 --> 00:01:11.124
 AI reads. Code decides. A person approves.
 
-13
-00:01:33.608 --> 00:01:41.136
-Isolation per company. Immutable record. It never pays outside the rules.
+9
+00:01:11.674 --> 00:01:17.146
+29 sample invoices. 0 payments outside the rules.
 
-14
-00:01:41.686 --> 00:01:47.814
-In production: Andina Labs, a sample company with 29 invoices.
+10
+00:01:17.696 --> 00:01:24.400
+In production: the inbox shows what gets paid, what awaits approval and the agent's autonomy.
 
-15
-00:01:48.364 --> 00:01:53.940
-The inbox: what is due, what awaits approval and the agent's autonomy.
-
-16
-00:01:54.490 --> 00:02:01.146
-On every invoice: what it read, with its confidence, and the 13 rules with their arithmetic.
-
-17
-00:02:01.696 --> 00:02:07.392
+11
+00:01:24.950 --> 00:01:31.966
 When an invoice exceeds the threshold, the question is concrete and the answer is one click.
 
-18
-00:02:07.942 --> 00:02:13.902
-The period reports: 62% autonomy and 0 violations.
-
-19
-00:02:14.452 --> 00:02:20.568
+12
+00:01:32.516 --> 00:01:38.944
 And vendors send their invoices from their own portal, also from a phone.
 
-20
-00:02:21.118 --> 00:02:29.682
-Thesaurus. Ready to connect to Blinka. Try it with your own company.
+13
+00:01:39.494 --> 00:01:45.782
+Thesaurus. Ready to connect to Blinka. Try it today with your own company.

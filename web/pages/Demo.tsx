@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { fetchRetry } from '../api';
 import { prefetchInbox, whenIdle } from '../App';
 import { isDemoUser, useSession } from '../auth';
-import HeroVideo, { type VideoManifest } from '../components/HeroVideo';
+import HeroVideo from '../components/HeroVideo';
 import { useLeaveGuard } from '../components/LeaveTrialWarning';
 import LogoIntro from '../components/LogoIntro';
 import TrialButton from '../components/TrialButton';
@@ -41,7 +41,6 @@ export default function Demo() {
   const [failed, setFailed] = useState(false);
   const [entering, setEntering] = useState(false);
   const [enterFailed, setEnterFailed] = useState(false);
-  const [video, setVideo] = useState<VideoManifest | null | undefined>(undefined); // AC-114: undefined while /demo/video.json loads
   const [asking, setAsking] = useState(false); // AC-71: the shared demo is reset only after an in-place "Reiniciar"
   const run = useRunAgent({ first: '/api/demo/reset', next: '/api/invoices/run' });
   const { guard, warning } = useLeaveGuard(); // AC-94 (R-119): entering the shared demo ends an unsaved trial
@@ -54,9 +53,6 @@ export default function Demo() {
       .then(setData, () => setFailed(true));
   };
   useEffect(() => load(), []);
-  useEffect(() => {
-    fetch('/demo/video.json').then((r) => (r.ok ? (r.json() as Promise<VideoManifest>) : Promise.reject(new Error(String(r.status))))).then(setVideo, () => setVideo(null));
-  }, []);
   useEffect(() => whenIdle(prefetchInbox), []); // R-150 lever 3: once usable; and on a door's hover or focus (the hero)
   // R-78, D14: /demo opens in Spanish unless this tab chose otherwise; whatever another judge picked never carries over.
   useEffect(() => {
@@ -106,7 +102,7 @@ export default function Demo() {
           <div className="demo-actions">
             {/* The shorter busy label keeps the width it had, so the row never re-wraps under the click (AC-109 CLS) */}
             <button type="button" data-door disabled={entering} aria-busy={entering} onClick={(e) => { e.currentTarget.style.minWidth = `${e.currentTarget.offsetWidth}px`; guard(() => void enter()); }}>{t(entering ? 'demo.entering' : 'demo.enter')}</button>
-            <a href={video?.src ?? '/demo/happy-path.webm'}>{t('demo.video')} →</a>
+            <a href="/demo/thesaurus-launch.mp4">{t('demo.video')} →</a>
             <a href={PORTAL}>{t('demo.portal')} →</a>
             {isDemoUser(session?.user, demoEmail) && !entering && ( // signed in mid-click: it would re-wrap the row under the transition
               <button type="button" disabled={run.running || asking} onClick={() => setAsking(true)}>{t('demo.reset')}</button>
@@ -123,7 +119,7 @@ export default function Demo() {
           {enterFailed && <p role="alert" className="error">{t('demo.enter_failed')}</p>}
           <RunProgress run={run} mode="pending" />
         </div>
-        <HeroVideo manifest={video} />
+        <HeroVideo />
       </header>
 
       <section className="demo-loop" data-block aria-labelledby="demo-loop-title">

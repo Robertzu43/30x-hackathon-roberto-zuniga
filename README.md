@@ -1,6 +1,7 @@
 <p align="center">
   <img src="https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/brand/thesaurus-logo.png" alt="Thesaurus" width="320">
-  <br><b>Thesaurus</b>, un agente de pagos construido para Blinka
+  <br><b>Thesaurus</b> · Paga lo que debes. Frena lo que no. Pregunta cuando dudes.
+  <br>El agente de cuentas por pagar que decide con tus reglas. Construido para Blinka.
   <br><em>Lee con IA. Decide con reglas. Nunca paga fuera de ellas.</em>
 </p>
 
@@ -206,7 +207,7 @@ Las facturas en otra moneda se pasan a USD con una tasa de mercado, no con un n�
 
 ## Portal de proveedores
 
-El proveedor no necesita cuenta. La empresa le da su enlace, `https://facturas.30x-hackathon-roberto-zuniga.workers.dev/<enlace de la empresa>` (el de la demo es `/andina-labs`), y el proveedor ve una página de chat con el logo de Thesaurus, un saludo «Hola, soy Thesaurus, el agente de pagos de <empresa>», un selector es/en (abre en español), una caja de mensaje (1 a 20.000 caracteres) y un botón para adjuntar un PDF, PNG o JPEG de hasta 10 MB. La factura queda en esa empresa con origen «portal», la decide el mismo `runAgent` y, si escala, el aprobador recibe la pregunta (nunca en la empresa demo).
+El proveedor no necesita cuenta. La empresa le da su enlace, `https://facturas.30x-hackathon-roberto-zuniga.workers.dev/<enlace de la empresa>` (el de la demo es `/andina-labs`), y el proveedor ve una página de chat con el logo de Thesaurus, un saludo «Hola, soy Thesaurus, el agente de cuentas por pagar de <empresa>», un selector es/en (abre en español), una caja de mensaje (1 a 20.000 caracteres) y un botón para adjuntar un PDF, PNG o JPEG de hasta 10 MB. La factura queda en esa empresa con origen «portal», la decide el mismo `runAgent` y, si escala, el aprobador recibe la pregunta (nunca en la empresa demo).
 
 - **Qué ve el proveedor.** Una respuesta armada con plantillas y valores guardados: lo que se leyó (beneficiario, monto y moneda, número; «no pude leerlo» si falta), el estado en palabras fijas (en revisión, aprobada para pago, requiere aprobación de la empresa, rechazada: duplicada, rechazada: no cumple las condiciones de pago, rechazada por la empresa) y un enlace de estado `/estado/<token>` que puede reabrir y copiar. Si se manda un archivo y un texto, el archivo es la factura y el texto queda como «Mensaje del proveedor» que ningún modelo lee. Si no hay lector disponible, la factura se guarda y se le dice que la empresa la revisará.
 - **Qué nunca ve.** Ninguna razón más allá de esas palabras, ninguna cuenta bancaria (ni la leída ni la registrada), ningún control, titular, valor de la política ni aprobador, y ninguna otra factura. Un enlace desconocido da una página 404 que no lista empresas. El pago siempre va a la cuenta del directorio, no a la que diga el proveedor: si no coincide, la factura se escala como «cuenta cambiada».
@@ -358,7 +359,7 @@ Esta lista es honesta a propósito. Cada punto se verificó contra el código o 
 
 ## Equipo y créditos
 
-Thesaurus es un agente de pagos construido para Blinka en el 30X Hackathon (16 al 18 de octubre de 2026). Lo construyó un equipo de agentes de IA (Claude Code) que dirigió Roberto Zúñiga: Roberto planteó y decidió el problema (`docs/PROBLEM.md`, `docs/DECISIONS.md`); el equipo son un orquestador, producto (dueño de `docs/SPEC.md`), constructores senior y junior, un revisor y QA, definidos en `.claude/agents/`. Cada tarea, cada debate y cada decisión, con su razón en lenguaje claro, están en [`docs/LEDGER.md`](docs/LEDGER.md). Los textos del formulario de entrega están en [`docs/SUBMISSION.md`](docs/SUBMISSION.md).
+Thesaurus es el agente de cuentas por pagar, construido para Blinka en el 30X Hackathon (16 al 18 de octubre de 2026). Lo construyó un equipo de agentes de IA (Claude Code) que dirigió Roberto Zúñiga: Roberto planteó y decidió el problema (`docs/PROBLEM.md`, `docs/DECISIONS.md`); el equipo son un orquestador, producto (dueño de `docs/SPEC.md`), constructores senior y junior, un revisor y QA, definidos en `.claude/agents/`. Cada tarea, cada debate y cada decisión, con su razón en lenguaje claro, están en [`docs/LEDGER.md`](docs/LEDGER.md). Los textos del formulario de entrega están en [`docs/SUBMISSION.md`](docs/SUBMISSION.md).
 
 Esto es un prototipo de hackatón hecho para Blinka. No es un producto de Blinka ni usa su logo: el logo que se ve en la app, el portal y los correos es el propio de Thesaurus (`web/public/brand/`).
 
@@ -366,7 +367,7 @@ Esto es un prototipo de hackatón hecho para Blinka. No es un producto de Blinka
 
 ## English summary
 
-Thesaurus is a payments agent built for Blinka's challenge "Agents that pay on behalf of the company" (30X Hackathon, 16-18 Oct 2026). It reads each invoice, checks it against the company's rules and decides without a person: PAY, STOP (duplicate or over the per-payment limit, final) or ESCALATE (it asks a person one specific question and pays nothing until answered). It moves no real money.
+Thesaurus is an accounts payable agent built for Blinka's challenge "Agents that pay on behalf of the company" (30X Hackathon, 16-18 Oct 2026). It reads each invoice, checks it against the company's rules and decides without a person: PAY, STOP (duplicate or over the per-payment limit, final) or ESCALATE (it asks a person one specific question and pays nothing until answered). It moves no real money.
 - Where the AI acts: it reads each invoice (Amazon Nova Lite on AWS Bedrock, Workers AI as fallback) and answers questions about the record. Where code decides: the 13 rules, the consequence table and the day's exchange rate; only code can write PAY.
 - Safe by design: only a pure function, `decide()`, can output PAY, and only if all 13 checks pass; the database rejects any PAY outside the rules, even for the service key; the log is append-only; approval links are signed, single-use and expire in 48 hours.
 - Try it, no account: https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo, "Probar con mi propia empresa" (a private copy) or "Entrar como Andina Labs" (the shared view).

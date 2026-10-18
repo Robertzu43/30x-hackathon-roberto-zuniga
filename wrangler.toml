@@ -24,6 +24,10 @@ FX_PROVIDER = "yahoo"  # first market-rate provider: "yahoo" or "er-api"; the ot
 [placement]
 mode = "smart"
 
+# R-150: Workers Logs, so an uncaught 500 can be read back after the fact (no secrets are logged)
+[observability]
+enabled = true
+
 [triggers]
 crons = ["*/5 * * * *", "0 11 * * *"]  # the agent decides pending invoices with nobody logged in (D23, AC-62); daily FX at 06:00 Bogotá (AC-73)
 

@@ -99,6 +99,14 @@ TRIM=supabase/migrations/20261018000100_inbox_trim.sql
 trim=$(sed 's/--.*$//' "$TRIM")
 echo "$trim" | grep -qi 'security definer' && fail "the trimmed screen_inbox is security definer (AC-98, R-122)"
 echo "$trim" | grep -qF 'create or replace function public.screen_inbox(p_lang text) returns jsonb' || fail "trim migration lacks screen_inbox's signature (AC-98)"
+# Task 52d (R-150): Periodo's, the profile's and the demo overview's functions trimmed the same way, signatures kept
+PB=supabase/migrations/20261018000200_period_beneficiary_trim.sql
+[ -f "$PB" ] || fail "missing $PB"
+pb=$(sed 's/--.*$//' "$PB")
+echo "$pb" | grep -qi 'security definer' && fail "a trimmed screen function is security definer (AC-98, R-122)"
+echo "$pb" | grep -qiE '\b(drop|delete|truncate)\b' && fail "drop, delete or truncate in the period trim migration (AC-07)"
+for w in 'create or replace function public.screen_period() returns jsonb' 'create or replace function public.screen_demo_overview(p_lang text) returns jsonb' \
+  "set search_path = ''"; do echo "$pb" | grep -qF "$w" || fail "period trim migration lacks: $w (AC-98)"; done
 
 # Task 39c (AC-96 Clarified, R-133; AC-07): the trial invoice cap in the database, one additive security-invoker trigger
 CAP=supabase/migrations/20261017001200_trial_invoice_cap.sql
@@ -399,7 +407,7 @@ inp="(public.screen_inbox('es') -> 'period')"
 UF=a2000000-0000-4000-8000-000000000001   # a decided invoice of A stored without fields: its checks stand in for them
 sql -c "insert into public.invoices (id, company_id, source) values ('$UF', '$CA', 'chat'); insert into public.decisions (company_id, invoice_id, seq, outcome, actor, checks)
   values ('$CA', '$UF', 1, 'FRENAR', 'agent', '[{\"id\":\"lectura\",\"verdict\":\"no_cumple\"}]')" >/dev/null || fail "unread decided invoice fixture"
-expect "$UA" "select $inp - 'decisions' = (public.screen_period() - 'decisions')" '^t$' "screen_inbox lacks Periodo's rows (AC-101)"
+expect "$UA" "select $inp - 'decisions' = (public.screen_period() - 'decisions' - 'explained')" '^t$' "screen_inbox lacks Periodo's rows (AC-101)"
 expect "$UA" "select count(*) from jsonb_array_elements($inp -> 'decisions') e join public.invoices i on i.id = (e ->> 'invoice_id')::uuid where i.archived" '^0$' "screen_inbox carries an archived invoice's decision (R-150)"
 expect "$UA" "select jsonb_array_length($inp -> 'decisions') = (select count(*) from public.decisions d join public.invoices i on i.id = d.invoice_id where d.company_id = '$CA' and not i.archived)" '^t$' "screen_inbox misses a decision of a listed invoice (AC-101)"
 expect "$UA" "select count(*) from jsonb_array_elements($inp -> 'decisions') e join public.decisions d on d.invoice_id = (e ->> 'invoice_id')::uuid and d.seq = (e ->> 'seq')::int
@@ -410,6 +418,18 @@ expect "$UA" "select count(*) from jsonb_array_elements(public.screen_inbox('es'
 expect "$UA" "select count(*) from jsonb_array_elements(public.screen_period() -> 'decisions') e where (e ->> 'created_at')::timestamptz is distinct from
   (select d.created_at from public.decisions d where d.invoice_id = (e ->> 'invoice_id')::uuid and d.seq = (e ->> 'seq')::int)" '^0$' "screen_period decisions lack created_at (AC-103)"
 expect "$UA" "select jsonb_array_length(public.screen_period() -> 'decisions') > 0" '^t$' "screen_period has no decisions to check (AC-103)"
+# Task 52d (R-150, migration 20261018000200): Periodo's rows (also the profile's) are Bandeja's trimmed ones: an archived
+# invoice's decisions stay out, checks only where the invoice has no stored fields, so the Worker's figures are the same;
+# «Decisiones explicadas» is counted in SQL over every decision of the company, archived invoices' included (AC-44)
+AX=a2000000-0000-4000-8000-000000000002   # an archived decided invoice whose decision explains nothing
+sql -c "insert into public.invoices (id, company_id, source, fields) values ('$AX', '$CA', 'chat', '{}'); insert into public.decisions (company_id, invoice_id, seq, outcome, actor, checks)
+  values ('$CA', '$AX', 1, 'FRENAR', 'agent', '[]'); update public.invoices set archived = true where id = '$AX'" >/dev/null || fail "archived decided invoice fixture"
+expect "$UA" "select public.screen_period() - 'decisions' - 'explained' = $inp - 'decisions' and public.screen_period() -> 'decisions' = $inp -> 'decisions'" '^t$' "screen_period's rows differ from Bandeja's trimmed ones (R-150)"
+expect "$UA" "select public.screen_period() -> 'explained' = jsonb_build_object('n', count(*) filter (where jsonb_array_length(checks) > 0), 'm', count(*))
+  and count(*) filter (where jsonb_array_length(checks) = 0) > 0 and bool_or(invoice_id = '$AX') from public.decisions where company_id = '$CA'" '^t$' "screen_period's explained is not every decision's count (AC-44)"
+expect "$UB" "select (select array_agg(k order by k) from jsonb_object_keys(public.screen_demo_overview('es') -> 'invoices' -> 0) k)::text" '^\{headline_en,headline_es,id,outcome\}$' "demo overview rows are not what /demo draws (AC-45, R-150)"
+expect "$UB" "select jsonb_array_length(public.screen_demo_overview('es') -> 'invoices') = (select count(*) from public.invoice_current where company_id = '$CB')
+  and public.screen_demo_overview('en') -> 'period' = public.screen_period()" '^t$' "demo overview misses a row or Periodo's rows (AC-45)"
 BA=$(sql -c "select id from public.beneficiaries where company_id = '$CA' and not archived order by name limit 1")
 AR=$(sql -c "select id from public.beneficiaries where company_id = '$CA' and archived limit 1")
 [ -n "$BA" ] && [ -n "$AR" ] || fail "beneficiary fixtures for screen_beneficiary"

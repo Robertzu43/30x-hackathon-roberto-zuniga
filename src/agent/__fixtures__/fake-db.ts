@@ -59,9 +59,15 @@ export function fakeDb(seed: Record<string, Row[]> = {}) {
     directory: directory(c),
     policy: ((p) => (p ? { version: p.version, rules: p.rules } : null))(sorted(tables.policies!.filter((p) => p.company_id === c), '-version')[0]),
     seeded: tables.invoices!.filter((i) => i.company_id === c && !i.archived && i.expected_outcome != null).map((i) => ({ id: i.id, expected_outcome: i.expected_outcome })),
-    decisions: sorted(tables.decisions!.filter((d) => d.company_id === c), 'seq')
-      .map((d) => ({ invoice_id: d.invoice_id, seq: d.seq, outcome: d.outcome, actor: d.actor, checks: d.checks ?? null, created_at: d.created_at ?? null })),
+    // 20261018000200: only non-archived invoices' decisions, checks only where the invoice has no stored fields; «Decisiones
+    // explicadas» counted over every decision of the company
+    decisions: sorted(tables.decisions!.filter((d) => d.company_id === c && !invoice(d.invoice_id)?.archived), 'seq')
+      .map((d) => ({ invoice_id: d.invoice_id, seq: d.seq, outcome: d.outcome, actor: d.actor, checks: invoice(d.invoice_id)?.fields ? null : d.checks ?? null,
+        created_at: d.created_at ?? null })),
+    explained: ((all) => ({ n: all.filter((d) => Array.isArray(d.checks) && d.checks.length).length, m: all.length }))(
+      tables.decisions!.filter((d) => d.company_id === c)),
   });
+  const invoice = (id: unknown) => tables.invoices!.find((i) => i.id === id);
   const screens: Record<string, (a: Row, c: unknown) => unknown> = {
     screen_inbox: inbox,
     screen_period: (_a, c) => period(c),

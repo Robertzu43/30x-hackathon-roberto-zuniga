@@ -166,6 +166,7 @@ describe('portal/wrangler.toml (AC-85 item 1)', () => {
     expect(code).toMatch(/\[\[services\]\]\s+binding = "MAIN"\s+service = "30x-hackathon"\s+entrypoint = "PortalApi"/);
     expect(code).toMatch(/\[assets\]/);
     expect(code).not.toMatch(/\[vars\]|SUPABASE|KEY|SECRET|supabase\.co/i);
-    expect([...code.matchAll(/^\[+([\w.]+)\]+$/gm)].map((m) => m[1])).toEqual(['assets', 'services']);
+    expect([...code.matchAll(/^\[+([\w.]+)\]+$/gm)].map((m) => m[1])).toEqual(['assets', 'services', 'observability']);
+    expect(code).toMatch(/^\[observability\]\nenabled = true$/m); // R-150: a 500 can be read back later
   });
 });

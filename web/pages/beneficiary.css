@@ -1,0 +1,20 @@
+.beneficiary { max-width: 64rem; display: grid; gap: 1.5rem; }
+.beneficiary a { display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; } /* AC-91 item 2 */
+.beneficiary h1, .beneficiary p { margin: 0; }
+.beneficiary-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 1rem; margin: 0; }
+.beneficiary-facts dt { font-size: var(--text-sm); color: var(--ink-2); }
+.beneficiary-facts dd { margin: 0; overflow-wrap: anywhere; }
+.beneficiary-totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 1rem; }
+.beneficiary table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+.beneficiary th, .beneficiary td { text-align: left; padding: 0.25rem 0.75rem 0.25rem 0; border-bottom: 1px solid var(--line); }
+.beneficiary th { font-weight: 500; color: var(--ink-2); }
+.beneficiary .num { font-family: var(--font-mono); white-space: nowrap; }
+.beneficiary-state { display: grid; gap: 0.5rem; justify-items: start; }
+/* ponytail: web/charts' .chart-sr table grows to its content (a table ignores width: 1px), so its hidden text still overflows the
+   page and overlaps the note under the chart (AC-91 1.scroll/1.offscreen/1.overlap). Scaled to nothing it stays in the a11y tree.
+   Drop this once web/charts/charts.css hides the table itself. */
+.beneficiary .chart-sr { transform: scale(0); }
+.beneficiaries td a { display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; } /* AC-91 item 2: the name opens the profile (AC-104) */
+.beneficiary-body { display: grid; gap: 1.5rem; } /* AC-99: the same box loaded or not, so the skeleton swaps in place */
+.beneficiary .skeleton h1 { background: #f1efe9; border-radius: 4px; width: fit-content; }
+.beneficiary .skeleton :is(.chart-path, .chart-dot) { visibility: hidden; } /* a made-up line must not read as data */

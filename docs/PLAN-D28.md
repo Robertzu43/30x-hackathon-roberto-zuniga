@@ -511,5 +511,147 @@ Then the existing tasks, unchanged except for their start: 33 and 34 (the gates)
   8. AC-101 Bandeja dashboard (Task 47).
   AC-106 goes with the last one cut.
 - What a cut means: the AC becomes SHOULD and its branch stays unmerged. Its page keeps today's screen plus Task 43's loader change, so D40 still holds there.
-- AC-78 (merged) stays unless it fails the gate at checkpoint C.
+- AC-78 (merged) stays unless it fails the gate at checkpoint C. Superseded by D42 (R-143): AC-78 is never cut.
 - A never-cut MUST still open at FREEZE goes to product for re-scope then, not before.
+
+# D42: Tasks 52-54 (product, 17 Oct ~23:00Z)
+
+> These tasks fold Roberto's D42: login speed, the logo intro, and the transition into the app. The ACs are AC-107..AC-109 in `docs/SPEC.md` section 13f, with AC-92 and AC-40 Amended, and AC-42, AC-78, AC-91, AC-97 and AC-99 Clarified. The rulings are R-143..R-149, and Q20 is in `docs/QUESTIONS.md`. Where this section and a ruling differ, the ruling wins. R-149 amends R-126's cut order and clock.
+
+## Binding order and rules
+- The order is 52 (speed), then 53 (intro), then 54 (transition), as D42 (1), (2), (3) say.
+- Task 52 is never cut. It has seat priority over all new work. In-flight fix rounds finish first: 40d, 46b, 46c, and 49, 50 and 51.
+- Task 52 may merge after checkpoint C (02:00Z) as a speed fix, until FREEZE. The video (Task 37) waits for it.
+- Tasks 53 and 54 must be merged, with the gate passed, by 02:00Z, or they are cut (R-149).
+- Every rule at the top of this file still holds:
+  - TDD, then the full suite and `bash scripts/tests/run.sh` green;
+  - no real Auth, model or FX call in tests;
+  - the gate and a reviewer on every touched screen;
+  - builders never deploy.
+- No migration and no Worker route change. All three tasks are web or scripts work. If Task 52 needs R-141's lever, folding the company name into `screen_inbox`, that is the only backend change allowed: a `create or replace` that keeps every existing key.
+- Guardrails that do not move: AC-16 and AC-69 (the web never shows `expected_outcome` as an outcome), R-122, AC-38 and AC-68.
+
+## Tasks
+
+**Task 52: Entry speed: land first, the pass on Bandeja, tour on landing (AC-107, AC-92 Amended, AC-40 Amended, AC-42 Clarified, AC-78 Clarified, AC-99 Clarified).** Seat: senior-builder, first priority, now.
+- What to remove from the login path today. These are the awaits before navigation that AC-107 forbids:
+  - `web/pages/Login.tsx` `signedIn()`: it awaits `updateUser({ data: { lang } })`, then the whole `runUntilDone('/api/invoices/run')` loop, and only then navigates;
+  - `web/trial.ts` `startTrial()`: it awaits the same loop after `signInAnonymously`, and the door button shows «n de m» until it ends.
+  After the change, navigation follows the sign-in call alone. The language write is fired and not awaited, with the language applied locally at once.
+- Files:
+  - New `web/firstRun.tsx`: the app-shell owner of the first-login pass. It holds a tab flag in `sessionStorage`, set by the entry and cleared at the end. It is started by the entry, and resumed after a reload while the flag is set. It exposes the progress and a per-batch signal. It uses the same `runUntilDone` (AC-70), one run per tab. Test file: `web/firstRun.test.tsx`.
+  - `web/pages/Login.tsx`: `signedIn()` sets the flag and navigates. The progress text «Entrando…» shows while the sign-in call runs.
+  - `web/trial.ts` and `web/components/TrialButton.tsx`: `startTrial()` returns after the sign-in. The flag is set. The button reads «Creando tu empresa de prueba…» and no longer shows «n de m».
+  - `web/pages/Demo.tsx`: the busy state «Entrando…» on «Entrar como Andina Labs». The demo email from `/api/config` may be fetched on page load. There is no pass for the demo user.
+  - `web/App.tsx`: one mount line for the first-run provider. This waits for 40d's merge on this file.
+  - `web/pages/Inbox.tsx`:
+    - while the pass runs, RunProgress shows the shell's pass, with AC-107's progress sentence;
+    - «Ejecutar agente» is busy as the same run;
+    - each batch refreshes the screen data (one request in flight) and AgentActivity.
+  - `web/dashboard/Dashboard.tsx` and `web/dashboard/dashboard.css`:
+    - the «todavía está decidiendo <n> facturas» text in place of a misleading empty state while the pass runs;
+    - fixed boxes for the sections that grow (R-145).
+  - `web/dashboard/InvoiceTable.tsx`: rows keep their order and height while the pass runs, and only the chip and headline change.
+  - `web/components/Tour.tsx`: re-measure the spotlight after each batch refresh.
+  - `src/i18n/features/entry.ts`: the new strings in es and en.
+  - Tests: `web/Login.test.tsx`, `web/Trial.test.tsx`, `web/Demo.test.tsx`, `web/Inbox.test.tsx`, `web/AgentActivity.test.tsx` and `web/Tour.test.tsx`, all as AC-107's Evidence lists.
+- R-141's lever is pre-authorised only if the first E5a perf run shows an `entry` row over 2.000 ms caused by `/api/company`. The lever is a parallel request, or the company name folded into `screen_inbox`.
+- Gate: `login`, `login-password`, `demo`, `trial` (through the pass), and `inbox`, as the demo user and as a trial user, at 360, 390 and 1440, in es and en.
+- Merge order:
+  - 40d → 52 on `App.tsx`;
+  - 52 first on `Login.tsx`, `Demo.tsx`, `TrialButton.tsx`, `trial.ts`, `Inbox.tsx`, `Dashboard.tsx`, `InvoiceTable.tsx` and `Tour.tsx`.
+- Deploy E5a by the orchestrator, then the `perf.mjs` entry rows (after 52b) and a QA run on AC-107 through the four doors. The OTP door uses an Admin-API code, and no mail is sent.
+- Estimate: 2 h.
+
+**Task 52b: Perf entry rows and gate timing (AC-97 Clarified targets 5 and 6, AC-91 Clarified).** Seat: junior-builder, next free seat.
+- Files:
+  - `scripts/perf.mjs` and `scripts/perf.test.mjs`. The rows are `entry otp`, `entry password`, `entry trial`, `entry demo` and `entry trial (all decided)`, measured as R-146 sets out:
+    - t0 is the click event's `timeStamp`, from a capture listener;
+    - t1 is the first frame where AC-97's five conditions hold;
+    - for OTP, `/auth/v1/otp` is fulfilled by the script, and the code comes from the Admin API's `generateLink`;
+    - the QA users are created if missing, and never deleted;
+    - the service-role key comes from the environment and is never printed.
+  - `scripts/ux-gate.mjs` and its test:
+    - `trial` measures CLS from landing to the end of the pass;
+    - `login` and `demo` wait for the logo's animations to finish, up to 1.5 s, before the screenshot and axe, and then run a reduced-motion pass;
+    - the new screen id `entry`.
+  - `docs/perf.md` is regenerated by the run and never edited by hand.
+- Dependencies:
+  - `perf.mjs` starts now;
+  - the `ux-gate.mjs` edit starts after 46b and 46c merge, because both edit that file;
+  - the `entry` gate needs 54, and it reports N/A until 54 merges, or permanently if AC-109 is cut.
+- Tests, on fixtures:
+  - the t1 predicate (a busy «Ejecutar agente» counts as usable; a skeleton table does not);
+  - the median;
+  - the 30 s row;
+  - the OTP set-up never sends a request to `/auth/v1/otp` upstream.
+- Estimate: 1.25 h.
+
+**Task 53: Wordmark intro (AC-108).** Seat: junior-builder, next free seat after 52b.
+- New files, started now:
+  - `web/components/LogoIntro.tsx`: inline SVG with the mark and 9 `<tspan>` letters, or spans in the logo's font; the letters are `aria-hidden`, and the logo has one accessible name;
+  - `web/components/logo-intro.css`: keyframes on `transform` and `opacity`, a delay per letter from a CSS index (40-60 ms), the mark last, all done by 1.200 ms, and `@media (prefers-reduced-motion: reduce)` with no animation;
+  - `web/Logo.test.tsx`: AC-108's unit cases.
+- The once-per-tab rule (`sessionStorage`, per screen) lives in `LogoIntro.tsx`.
+- Mount, after 52 merges: one line each in `web/pages/Login.tsx` and `web/pages/Demo.tsx`. `web/components/Logo.tsx` (the top bar) is unchanged, except an optional export of shared dimensions.
+- Gate: `login` and `demo` at five widths, in es and en, after the intro, plus the reduced-motion pass. Screenshots `docs/ux/login-intro-end-1440-es.png` and `docs/ux/demo-intro-end-390-en.png`.
+- Merge: 52 → 53 on `Login.tsx` and `Demo.tsx`.
+- Deploy: E5a, if it is ready with 52, or E5b.
+- Estimate: 1 h.
+
+**Task 54: Transition into the app (AC-109).** Seat: senior-builder, second priority.
+- New files, started now:
+  - `web/transition.ts`: `enterApp(navigate)` wraps the navigation in `document.startViewTransition` when that exists and reduced motion is off, and otherwise navigates at once;
+  - `web/components/transition.css`: the `view-transition-name` rules for the logo, the page and Bandeja, and `::view-transition-*` timing of 300-500 ms, on transform and opacity only;
+  - `web/transition.test.ts`.
+- Mount, after 52 and 53 merge:
+  - `web/pages/Login.tsx`, `web/components/TrialButton.tsx` and `web/pages/Demo.tsx` call `enterApp`;
+  - `web/App.tsx` gives the top-bar logo its `view-transition-name`;
+  - `web/components/LogoIntro.tsx` gives the page logo its `view-transition-name`;
+  - `web/auth.tsx` or `web/App.tsx` starts the tour after the transition's `finished`.
+- Gate: `entry`, from `/login` and from `/demo`, at 390 and 1440, in es and en, with the CLS and console items. Screenshot `docs/ux/entry-mid-1440-es.png`.
+- Merge: last on `App.tsx`, `auth.tsx`, `Login.tsx`, `Demo.tsx`, `TrialButton.tsx` and `LogoIntro.tsx`.
+- Deploy E5b, before 02:00Z.
+- Estimate: 1.5 h.
+
+## Shared files with the tasks in flight (merge in this order; the later task rebases)
+| File | Order |
+|---|---|
+| `web/App.tsx` (top bar, tour start) | 40d → 52 (one mount line) → 54 |
+| `web/pages/Login.tsx`, `web/pages/Demo.tsx` | 52 → 53 (one line each) → 54 |
+| `web/components/TrialButton.tsx`, `web/trial.ts` | 52 → 54 |
+| `web/pages/Inbox.tsx`, `web/dashboard/*`, `web/components/Tour.tsx` | 52 only (47 is merged; Tour.tsx waits for 40d if 40d touches it) |
+| `web/components/LogoIntro.tsx` | 53 → 54 |
+| `web/charts/lazy.tsx` | 46c only. 46c's KPI placeholder fix is a precondition for the `trial` CLS bar, so 52's gate runs after 46c merges |
+| `scripts/ux-gate.mjs` | 46b and 46c → 52b |
+| `scripts/perf.mjs` | 52b only |
+| `scripts/record-happy-path.mjs` | 46c → 37 (the video takes AC-50 Clarified's D42 steps) |
+| `web/pages/Policy.tsx`, `Period.tsx`, `Beneficiary*.tsx` | 49, 50, 51 fix rounds only; no D42 task touches them |
+
+## Deploy points
+- E5a, after 52 merges (and 53, if ready): deploy, then the `perf.mjs` entry rows (52b), then QA on AC-107.
+- E5b, after 54 (and 53, if not in E5a), no later than 02:00Z: deploy, then the gate on `entry`, `login` and `demo`.
+- E6 at checkpoint C, unchanged: the binding perf table. If 52 merges after C, its deploy is E7, and the entry rows of the table run after E7.
+
+## Clock (UTC, target)
+- 17 Oct ~23:00: dispatch 52 (senior). Dispatch 54 (senior, new files) when a senior seat is free. Dispatch 52b (junior) and then 53 (junior, new files) as junior seats free up.
+- ~00:30: 52 merged → E5a. Perf entry rows, then QA AC-107.
+- ~01:00: 53 mounted.
+- ~01:30: 54 mounted.
+- 01:45: E5b.
+- 02:00: checkpoint C. 53 and 54, if not merged with the gate passed, are cut (R-149). 52, if not merged, continues as a speed fix.
+- After C: gates 33 and 34 include the D42 screens, and the video follows as before.
+
+## Cut order (R-149, amends R-126)
+- Never cut: AC-107 (D42 (1)) and AC-78, plus everything already on R-126's list.
+- First to last:
+  1. AC-88;
+  2. AC-81;
+  3. AC-109 (Task 54);
+  4. AC-108 (Task 53);
+  5. AC-105;
+  6. AC-104;
+  7. AC-103;
+  8. AC-102;
+  9. AC-101.
+- A cut AC becomes SHOULD. Its branch stays unmerged, and the ledger says why. The video then shows the product as it is.

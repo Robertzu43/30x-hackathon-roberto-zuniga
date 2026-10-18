@@ -5,6 +5,7 @@ import { screens, useScreen } from '../api';
 import { tu } from '../components/User';
 import { useT } from '../i18n';
 import '../policy.css';
+import './beneficiary.css';
 import { failure, send } from '../withField';
 
 
@@ -101,7 +102,7 @@ export default function Beneficiaries() {
             <tbody>
               {(rows ?? SKELETON).map((b) => (
                 <tr key={b.id}>
-                  <td data-user="">{b.name}</td>
+                  <td><Link to={`/beneficiaries/${b.id}`}><span data-user="">{b.name}</span></Link></td>{/* AC-104; R-131: the marker inside the link */}
                   <td>{b.country ?? '—'}</td>
                   <td>{b.currency ?? '—'}</td>
                   <td>{b.route ?? '—'}</td>

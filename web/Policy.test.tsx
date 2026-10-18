@@ -1,9 +1,14 @@
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { dropCache } from './api';
 import { routes } from './App';
+import { DiffList, RULE_GROUPS, RuleCard, RuleSentence } from './components/PolicyCards';
 import Policy from './pages/Policy';
 import { mockApi, renderAt } from './test/utils';
+
+// the signed-in user, for the loading card (AC-91 item 4); null session: an ordinary company
+const auth = vi.hoisted(() => ({ value: { session: null as unknown, demoEmail: '' } }));
+vi.mock('./auth', async (orig) => ({ ...(await orig<typeof import('./auth')>()), useSession: () => auth.value }));
 
 const rules = {
   per_payment_limit_usd: 5000, approval_threshold_usd: 2500, period_budget_usd: 42000, account_balance_usd: 23000,
@@ -76,7 +81,7 @@ test('saving with a 1000 payment limit puts the rules, shows the version the dat
   const put = f.mock.calls.find(([u, i]) => u === '/api/policy' && i?.method === 'PUT')!;
   expect(body(put[1]!)).toEqual({ rules: { ...rules, per_payment_limit_usd: 1000 } });
   expect(screen.getByText('Si pulsas «Reevaluar pendientes», el agente decidirá 1 factura(s) pendiente(s) y cambiará el resultado de 1 factura(s) escalada(s):')).toBeTruthy();
-  expect(screen.getByText(/Pixel Lab: 4\.200 USD supera el límite/).textContent).toContain('Pendiente → FRENAR');
+  expect(screen.getByText(/Pixel Lab: 4\.200 USD supera el límite/).closest('li')!.textContent).toContain('Pendiente → FRENAR');
 });
 
 test('in English the would-change list uses the English outcome words (R-65)', async () => {
@@ -85,7 +90,7 @@ test('in English the would-change list uses the English outcome words (R-65)', a
   renderAt(<Policy />);
   fireEvent.change(await screen.findByLabelText('Per-payment limit (USD)'), { target: { value: '1000' } });
   fireEvent.click(screen.getByRole('button', { name: /^Save as version/ }));
-  expect((await screen.findByText(/Nube Sur/)).textContent).toContain('ESCALATE → STOP');
+  expect((await screen.findByText(/Nube Sur/)).closest('li')!.textContent).toContain('ESCALATE → STOP');
   expect(document.body.textContent).not.toMatch(/PAGAR|FRENAR|ESCALAR/);
 });
 
@@ -103,7 +108,7 @@ test('a preview with rows ending in PAGAR says above the list how many the agent
   const line = await screen.findByText(PAY_ES);
   expect(line.textContent!.match(PAY_ES)![1]).toBe('1');
   expect(line.compareDocumentPosition(screen.getByText(/Diego Ruiz/)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(screen.getByText(/Diego Ruiz/).textContent).toContain('ESCALAR → PAGAR');
+  expect(screen.getByText(/Diego Ruiz/).closest('li')!.textContent).toContain('ESCALAR → PAGAR');
 });
 
 test('the count comes from will_pay when the API sends it (R-61)', async () => {
@@ -251,7 +256,7 @@ test('only pending rows: the header counts them, the PAGAR sentence follows, and
   expect(header.compareDocumentPosition(pay) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   const rows = screen.getAllByRole('listitem').filter((li) => /^Factura /.test(li.textContent!));
   expect(rows).toHaveLength(29);
-  expect(rows.filter((r) => /Pendiente → PAGAR$/.test(r.textContent!))).toHaveLength(8);
+  expect(rows.filter((r) => /Pendiente → PAGAR(Cumple todas las reglas\.)?$/.test(r.textContent!))).toHaveLength(8);
   expect(rows.filter((r) => /Pendiente → FRENAR$/.test(r.textContent!))).toHaveLength(21);
   expect(document.body.textContent).not.toMatch(/outcome\.|null/);
 });
@@ -289,7 +294,7 @@ test('English: pending-only header, row words, unread row and sentence (R-68)', 
   put({ would_change: [...pending(1, 'PAGAR'), ...pending(1, null)], will_pay: 1, unread_pending: 1 });
   await saveEn();
   expect(await screen.findByText('If you press "Re-evaluate pending", the agent will decide 2 pending invoice(s):')).toBeTruthy();
-  expect(screen.getAllByText(/Factura 0/)[0]!.textContent).toContain('Pending → PAY');
+  expect(screen.getAllByText(/Factura 0/)[0]!.closest('li')!.textContent).toContain('Pending → PAY');
   expect(screen.getByText(/Pending → decided once read$/)).toBeTruthy();
   expect(screen.getByText('1 pending invoice(s) have not been read yet: the agent will read them on re-evaluation, and their result may change that of invoices that arrived later.')).toBeTruthy();
   expect(document.body.textContent).not.toMatch(/outcome\.|null|Pendiente|PAGAR/);
@@ -569,10 +574,10 @@ test('no card is shown until the company and the policy have both answered (UX-0
   renderAt(<Policy />);
   await waitFor(() => expect(screen.getByText('Cargando…')).toBeTruthy());
   await new Promise((r) => setTimeout(r, 20)); // the policy has answered by now
-  expect(screen.queryByRole('heading', { name: 'Reglas de pago' })).toBeNull();
+  expect(screen.queryByRole('heading', { name: 'Límites y aprobación' })).toBeNull();
   expect(screen.queryByRole('heading', { name: 'Empresa' })).toBeNull();
   company_(company);
-  expect(await screen.findByRole('heading', { name: 'Reglas de pago' })).toBeTruthy();
+  expect(await screen.findByRole('heading', { name: 'Límites y aprobación' })).toBeTruthy();
   expect(screen.getByRole('heading', { name: 'Empresa' })).toBeTruthy();
 });
 
@@ -580,4 +585,189 @@ test('CSS: at phone width the «Pagar solo a beneficiarios permitidos» checkbox
   const { readFileSync } = (await import('node:fs' as string)) as { readFileSync(p: string, enc: string): string };
   const phone = readFileSync('web/policy.css', 'utf8').split('@media (max-width: 640px) {')[1] ?? '';
   expect(phone).toMatch(/\.switch input \{[^}]*width: 44px; height: 44px/);
+});
+
+// ---- AC-105: rule cards, one sentence per rule, the diff list. New components, not mounted in the page yet. ----
+const SENTENCES = {
+  per_payment_limit_usd: ['Si una factura supera 10.000 USD, la freno: no se paga.', 'If an invoice is above 10,000 USD, I stop it: it is not paid.'],
+  approval_threshold_usd: ['Desde 10.000 USD te pregunto antes de pagar.', 'From 10,000 USD I ask you before paying.'],
+  period_budget_usd: ['Si con una factura los pagos del mes pasarían de 10.000 USD, la escalo.', 'If an invoice would take the month\'s payments past 10,000 USD, I escalate it.'],
+  account_balance_usd: ['Si el saldo de 10.000 USD no alcanza para una factura, la escalo.', 'If the 10,000 USD balance does not cover an invoice, I escalate it.'],
+  duplicate_window_days: ['Si ya recibí una factura igual en los últimos 10.000 día(s), la freno; si es parecida, la escalo.', 'If I already received an identical invoice in the last 10,000 day(s), I stop it; if it looks similar, I escalate it.'],
+  agreement_tolerance_pct: ['Acepto hasta 10.000 % de diferencia con el monto acordado; si es más, la escalo.', 'I accept up to 10,000 % difference from the agreed amount; beyond that, I escalate it.'],
+  due_grace_days: ['Acepto una factura hasta 10.000 día(s) después de su vencimiento; después, la escalo.', 'I accept an invoice up to 10,000 day(s) after its due date; after that, I escalate it.'],
+} as const;
+const EMPTY = ['Sin valor: no puedo verificar esta regla y escalo la factura.', 'No value: I cannot check this rule, so I escalate the invoice.'];
+
+test.each([['es', 0], ['en', 1]] as const)('each rule gets one sentence with its value, and one for an empty box, in %s (AC-105)', (lang, i) => {
+  localStorage.setItem('lang', lang);
+  for (const [rule, s] of Object.entries(SENTENCES)) {
+    const { unmount } = renderAt(<RuleSentence rule={rule as keyof typeof SENTENCES} value="10000" />);
+    expect(screen.getByText(s[i]!).id).toBe(`${rule}-hint`);
+    unmount();
+    const empty = renderAt(<RuleSentence rule={rule as keyof typeof SENTENCES} value="" />);
+    expect(screen.getByText(EMPTY[i]!)).toBeTruthy();
+    empty.unmount();
+  }
+});
+
+test('the spec examples read exactly, a half-typed value counts as empty, and the switch has its own two sentences (AC-105)', () => {
+  renderAt(<><RuleSentence rule="approval_threshold_usd" value="2500" /><RuleSentence rule="per_payment_limit_usd" value="-" /><RuleSentence rule="allowed_beneficiaries_only" value={true} /><RuleSentence rule="allowed_beneficiaries_only" value={false} /></>);
+  expect(screen.getByText('Desde 2.500 USD te pregunto antes de pagar.')).toBeTruthy();
+  expect(screen.getByText(EMPTY[0]!)).toBeTruthy();
+  expect(screen.getByText('Solo pago a quien está en Beneficiarios; si no está, escalo la factura.')).toBeTruthy();
+  expect(screen.getByText('Pago también a quien no está en Beneficiarios.')).toBeTruthy();
+});
+
+test('the five cards, in order, hold every rule once and Moneda holds the market table and the pins (AC-105)', () => {
+  expect(RULE_GROUPS.map((g) => g.id)).toEqual(['beneficiaries', 'limits', 'budget', 'dates', 'currency']);
+  expect(RULE_GROUPS.flatMap((g) => g.rules).sort()).toEqual(['account_balance_usd', 'agreement_tolerance_pct', 'allowed_beneficiaries_only', 'approval_threshold_usd', 'due_grace_days', 'duplicate_window_days', 'per_payment_limit_usd', 'period_budget_usd'].sort());
+  expect(RULE_GROUPS.at(-1)!.rules).toEqual([]);
+  renderAt(<>{RULE_GROUPS.map((g) => <RuleCard key={g.id} group={g.id}><input aria-label={g.id} /></RuleCard>)}</>);
+  expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Beneficiarios y acuerdos', 'Límites y aprobación', 'Presupuesto y saldo', 'Fechas y duplicados', 'Moneda']);
+  expect(within(screen.getByRole('region', { name: 'Moneda' })).getByLabelText('currency')).toBeTruthy();
+});
+
+test('the cards are named in English too (AC-105)', () => {
+  localStorage.setItem('lang', 'en');
+  renderAt(<>{RULE_GROUPS.map((g) => <RuleCard key={g.id} group={g.id}>x</RuleCard>)}</>);
+  expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Beneficiaries and agreements', 'Limits and approval', 'Budget and balance', 'Dates and duplicates', 'Currency']);
+});
+
+const diff = [
+  { invoice_id: 'i1', headline: 'Pixel Lab: 4.200 USD supera el límite', payee: 'Pixel Lab', amount: 4200, currency: 'USD', reason: 'Supera el límite por pago.', from: null, to: 'FRENAR' as const },
+  { invoice_id: 'i2', headline: 'Diego Ruiz', payee: 'Diego Ruiz', amount: 15000, currency: 'MXN', reason: null, from: 'ESCALAR' as const, to: 'PAGAR' as const },
+  { invoice_id: 'i3', headline: '', from: null, to: null },
+];
+
+test('each diff row shows the invoice link, the payee, the amount, from-chip to to-chip and the reason, then how many do not change (AC-105)', () => {
+  renderAt(<DiffList rows={diff} unchanged={12} />, { at: '/policy' });
+  const rows = screen.getAllByRole('listitem');
+  expect(rows).toHaveLength(3);
+  const a = within(rows[0]!), b = within(rows[1]!);
+  expect(a.getByRole('link', { name: 'Pixel Lab' }).getAttribute('href')).toBe('/invoices/i1');
+  expect(a.getByText('Pixel Lab').hasAttribute('data-user')).toBe(true);
+  expect(a.getByText('4.200 USD').hasAttribute('data-user')).toBe(false);
+  expect(rows[0]!.textContent).toContain('Pendiente → FRENAR');
+  expect(a.getByText('Supera el límite por pago.')).toBeTruthy();
+  expect(b.getByText('15.000 MXN')).toBeTruthy();
+  expect(rows[1]!.textContent).toContain('ESCALAR → PAGAR');
+  expect(b.getByText('Cumple todas las reglas.').hasAttribute('data-user')).toBe(false);
+  expect(screen.getByText('12 facturas no cambian.')).toBeTruthy();
+});
+
+test('a PAGAR row has no blocking motive from the route (reason null), so it says it passes every rule, in English too (AC-105, R-61)', () => {
+  localStorage.setItem('lang', 'en');
+  renderAt(<DiffList rows={[diff[1]!]} />);
+  expect(screen.getByText('Passes every rule.')).toBeTruthy();
+});
+
+test('an unread invoice says it will be decided once read; rows without the new fields fall back to the headline (AC-105, R-68)', () => {
+  renderAt(<DiffList rows={[diff[2]!, { invoice_id: 'i4', headline: 'Nube Sur: pasa', from: 'ESCALAR', to: 'FRENAR' }]} unchanged={1} />);
+  expect(screen.getByText('Pendiente → se decidirá al leerla')).toBeTruthy();
+  expect(screen.getByRole('link', { name: 'Factura sin leer' }).getAttribute('href')).toBe('/invoices/i3');
+  expect(screen.getByRole('link', { name: 'Nube Sur: pasa' }).getAttribute('href')).toBe('/invoices/i4');
+  expect(screen.getByText('1 factura no cambia.')).toBeTruthy();
+});
+
+test('no count from the API: no "no cambian" line; English words and plural (AC-105)', () => {
+  localStorage.setItem('lang', 'en');
+  const { unmount } = renderAt(<DiffList rows={diff.slice(0, 1)} />);
+  expect(document.body.textContent).not.toMatch(/not change|no cambian/);
+  expect(document.body.textContent).toContain('Pending → STOP');
+  unmount();
+  renderAt(<DiffList rows={diff.slice(0, 1)} unchanged={5} />);
+  expect(screen.getByText('5 invoices do not change.')).toBeTruthy();
+});
+
+// ---- AC-105, mounted: the page groups the form into the five cards, one sentence per rule, the diff list after a save ----
+test('the mounted page shows the five cards in order, each rule under its card, Moneda holding the market table and the pins (AC-105)', async () => {
+  setup();
+  renderAt(<Policy />);
+  await limit();
+  const names = ['Beneficiarios y acuerdos', 'Límites y aprobación', 'Presupuesto y saldo', 'Fechas y duplicados', 'Moneda'];
+  const cards = names.map((n) => screen.getByRole('region', { name: n }));
+  expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Empresa', ...names, 'Reevaluar pendientes', 'Versiones']);
+  expect(within(cards[0]!).getByLabelText(/Pagar solo a beneficiarios/)).toBeTruthy();
+  expect(within(cards[0]!).getByLabelText(/Tolerancia del acuerdo/)).toBeTruthy();
+  expect(within(cards[1]!).getByLabelText('Límite por pago (USD)')).toBeTruthy();
+  expect(within(cards[1]!).getByLabelText(/Umbral de aprobación/)).toBeTruthy();
+  expect(within(cards[2]!).getByLabelText(/Presupuesto del periodo/)).toBeTruthy();
+  expect(within(cards[2]!).getByLabelText(/Saldo de la cuenta/)).toBeTruthy();
+  expect(within(cards[3]!).getByLabelText(/Ventana de duplicados/)).toBeTruthy();
+  expect(within(cards[3]!).getByLabelText(/Días de gracia/)).toBeTruthy();
+  expect(within(cards[4]!).getByRole('table', { name: 'Tasas de mercado' })).toBeTruthy();
+  expect(within(cards[4]!).getByRole('group', { name: 'Tasas fijadas por la política' })).toBeTruthy();
+});
+
+test('each rule shows its sentence with its current value, follows typing, and says so when the box is empty, in es and en (AC-105)', async () => {
+  setup();
+  renderAt(<Policy />);
+  const input = await limit();
+  expect(input.getAttribute('aria-describedby')).toBe('per_payment_limit_usd-hint');
+  expect(screen.getByText('Si una factura supera 5.000 USD, la freno: no se paga.').id).toBe('per_payment_limit_usd-hint');
+  expect(screen.getByText('Desde 2.500 USD te pregunto antes de pagar.')).toBeTruthy();
+  expect(screen.getByText('Solo pago a quien está en Beneficiarios; si no está, escalo la factura.')).toBeTruthy();
+  fireEvent.change(input, { target: { value: '1000' } });
+  expect(screen.getByText('Si una factura supera 1.000 USD, la freno: no se paga.')).toBeTruthy();
+  fireEvent.change(input, { target: { value: '' } });
+  expect(within(input.closest('div')!).getByText('Sin valor: no puedo verificar esta regla y escalo la factura.')).toBeTruthy();
+  fireEvent.click(screen.getByLabelText(/Pagar solo a beneficiarios/));
+  expect(screen.getByText('Pago también a quien no está en Beneficiarios.')).toBeTruthy();
+  cleanup();
+  localStorage.setItem('lang', 'en');
+  setup();
+  renderAt(<Policy />);
+  await screen.findByLabelText('Per-payment limit (USD)');
+  expect(screen.getByText('If an invoice is above 5,000 USD, I stop it: it is not paid.')).toBeTruthy();
+  expect(screen.getByRole('region', { name: 'Limits and approval' })).toBeTruthy();
+});
+
+test('after saving, «qué cambiaría» is a diff list: invoice, beneficiary, amount, from-chip to to-chip, reason, then how many do not change (AC-105, 45b)', async () => {
+  const row = { payee: null, amount: null, currency: null, reason: null };
+  setup({
+    'PUT /api/policy': {
+      policy: { ...versions[0], version: 3 }, will_pay: 1, unread_pending: 1, unchanged: 12,
+      would_change: [
+        { invoice_id: 'i1', headline: 'Pixel Lab: 4.200 USD', from: null, to: 'PAGAR', payee: 'Pixel Lab', amount: 4200, currency: 'USD', reason: null },
+        { invoice_id: 'i2', headline: 'Nube Sur', from: 'ESCALAR', to: 'FRENAR', payee: 'Nube Sur', amount: 15000, currency: 'MXN', reason: 'Supera el límite por pago.' },
+        { invoice_id: 'i3', headline: '', from: null, to: null, ...row },
+      ],
+    },
+  });
+  renderAt(<Policy />, { at: '/policy' });
+  await limit();
+  save();
+  await screen.findByText('12 facturas no cambian.');
+  const rows = screen.getAllByRole('listitem').filter((li) => li.closest('ul.diff'));
+  expect(rows).toHaveLength(3);
+  expect(within(rows[0]!).getByRole('link', { name: 'Pixel Lab' })).toBeTruthy();
+  expect(within(rows[0]!).getByText('Pixel Lab').hasAttribute('data-user')).toBe(true);
+  expect(within(rows[0]!).getByText('4.200 USD')).toBeTruthy();
+  expect(rows[0]!.textContent).toContain('Pendiente → PAGAR');
+  expect(within(rows[0]!).getByText('Cumple todas las reglas.')).toBeTruthy();
+  expect(rows[1]!.textContent).toContain('ESCALAR → FRENAR');
+  expect(within(rows[1]!).getByText('15.000 MXN')).toBeTruthy();
+  expect(rows[2]!.textContent).toContain('Pendiente → se decidirá al leerla');
+  expect(screen.getByText('12 facturas no cambian.')).toBeTruthy();
+});
+
+test('«Guardar como versión» is the one primary button on the page (AC-105)', async () => {
+  setup();
+  const { container } = renderAt(<Policy />);
+  await limit();
+  const primary = [...container.querySelectorAll('button.primary')];
+  expect(primary.map((b) => b.textContent)).toEqual(['Guardar como versión 3']);
+});
+
+test('while the screen loads the Empresa card already has the demo and trial notes of the signed-in user, so the answer moves nothing (AC-91 item 4)', () => {
+  setup({ 'GET /api/fx': () => new Promise(() => {}) });
+  auth.value = { session: { user: { email: 'demo@andina-labs.example' } }, demoEmail: 'demo@andina-labs.example' };
+  const demo = renderAt(<Policy />);
+  expect(demo.container.querySelector('section.skeleton .muted')!.textContent).toContain('solo lectura');
+  cleanup();
+  auth.value = { session: { user: { is_anonymous: true } }, demoEmail: 'demo@andina-labs.example' };
+  const trial = renderAt(<Policy />);
+  expect(trial.container.querySelector('section.skeleton #trial-approver')).toBeTruthy();
+  auth.value = { session: null, demoEmail: '' };
 });

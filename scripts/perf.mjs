@@ -1,11 +1,12 @@
-/* global process, console, fetch, URL, Buffer, document, location, localStorage, performance, requestAnimationFrame, setTimeout, window */ // Node script + code that runs in the page
+/* global process, console, fetch, URL, Buffer, document, location, localStorage, performance, requestAnimationFrame, setTimeout, window, addEventListener */ // Node script + code that runs in the page
 // The D40 perf harness (AC-97). Usage:
 //   node scripts/perf.mjs --base <url> [--portal <url>] [--status-token t] [--trial]
-// Read-only: GET requests and one demo sign-in. The cache-miss row waits 61 s before each of its samples (about 3 minutes). No AI call, no write. --trial adds one anonymous sign-in (needs the trial door, AC-92).
+// The cache-miss row waits 61 s before each of its samples (about 3 minutes). The entry rows (AC-97 targets 5 and 6) sign in for real: 3 demo sign-ins, and with --trial 3 anonymous users (never deleted, AC-96's 30 per hour); the OTP and password rows need SUPABASE_SERVICE_ROLE_KEY in the environment (QA users are created if missing, never deleted, the key is never printed) and else are N/A. A first login runs the agent over the QA user's pending invoices.
 // Needs Playwright and Chromium (/opt/pw-browsers/chromium, or GATE_CHROMIUM). Writes docs/perf.md; exits 1 when any row is a FAIL.
 import { writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { randomBytes } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { demoSession, launch, trialSession } from './ux-gate.mjs';
 
@@ -14,7 +15,8 @@ const VIEWPORT = { width: 1440, height: 900 };
 const RUNS = 3; // median of 3 (targets 1 and 2)
 const SAMPLES = 20, WARMUPS = 2; // sequential requests (target 3)
 const SAMPLE_WAIT = 61_000; // the demo overview is cached for 60 s (R-122)
-const T = { load: 2000, head: 100, data: 1000, api: 600, js: 250 };
+const T = { load: 2000, head: 100, data: 1000, api: 600, js: 250, entry: 2000, decided: 30_000 };
+const QA = { otp: 'qa-perf-otp@example.com', password: 'qa-perf-password@example.com' };
 
 // ---- Pure helpers (tested on fixtures) ----
 export const median = (xs) => { const s = [...xs].sort((a, b) => a - b), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
@@ -40,6 +42,49 @@ export async function missRow({ once, wait, n = 3, tries = 3 }) { // once() -> {
   }
   return ms.length < n ? { ...base, value: null, why: `cache header stayed HIT in ${n * tries} samples` } : { ...base, value: Math.round(median(ms)) };
 }
+
+// ---- Entry rows (AC-97 targets 5 and 6, R-146): from the click on an entry button to a usable Bandeja ----
+// One sample: { ms, pending, decided } (pending: rows still «Pendiente» at landing; decided: click to every row decided, trial only) or { error }.
+const kindOf = (ss) => {
+  const first = ss.filter((x) => x.pending > 0).length;
+  return `${first} first login with pending invoices, ${ss.length - first} returning`;
+};
+export function entryRows(screen, who, samples) {
+  const bad = samples.find((x) => x.error);
+  const base = { unit: 'ms', target: T.entry };
+  const note = `${who}; ${kindOf(samples.filter((x) => !x.error))}`;
+  const rows = [{ ...base, screen, metric: `Click to usable Bandeja, median of 3 (${note})`, value: bad ? null : Math.round(median(samples.map((x) => x.ms))), why: bad?.error }];
+  if (screen === 'entry trial') {
+    const none = samples.some((x) => x.decided == null);
+    rows.push({ screen: 'entry trial (all decided)', metric: 'Click to every row decided, median of 3', unit: 'ms', target: T.decided, within: true, value: none ? null : Math.round(median(samples.map((x) => x.decided))), why: bad?.error ?? 'a row was still «Pendiente» after the wait: decided' });
+  }
+  return rows;
+}
+
+// The Admin API, for the QA users and the OTP code. `key` is the service-role key: it only goes in headers, never in a message or a log.
+export function admin(url, key, f = fetch) {
+  const call = async (path, method, body) => {
+    const r = await f(`${url}/auth/v1/admin/${path}`, { method, headers: { apikey: key, authorization: `Bearer ${key}`, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    return { status: r.status, json: await r.json().catch(() => ({})) };
+  };
+  const must = (what, r) => { if (r.status >= 400) throw new Error(`${what}: HTTP ${r.status}`); return r.json; };
+  const link = async (email) => { const j = must('generate_link', await call('generate_link', 'POST', { type: 'magiclink', email })); if (!j.email_otp) throw new Error('generate_link: no code in the answer'); return j; };
+  return {
+    code: async (email) => (await link(email)).email_otp,
+    async ensure(email, password) { // 422: the user exists. Nothing here deletes.
+      const made = await call('users', 'POST', { email, email_confirm: true });
+      if (made.status !== 422) must('create QA user', made);
+      if (password) must('set QA password', await call(`users/${(await link(email)).id}`, 'PUT', { password }));
+    },
+  };
+}
+
+// R-146: the browser's send-code request is answered here with a 200 (no mail leaves), so nothing reaches /auth/v1/otp upstream.
+const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': 'POST, OPTIONS' };
+export const OTP_URL = /\/auth\/v1\/otp(\?|$)/;
+export const otpGuard = (route) => route.request().method() === 'OPTIONS'
+  ? route.fulfill({ status: 204, headers: CORS })
+  : route.fulfill({ status: 200, headers: CORS, contentType: 'application/json', body: '{}' });
 
 // The 17:40Z numbers, measured before D40 and kept as the first row for comparison. The size basis (raw or gzip) was not recorded.
 export const ROW0 = `## Row 0: baseline at 17:40Z, before D40
@@ -117,6 +162,23 @@ export const usable = ({ sel, need }) => { // AC-91 item 7: the heading and the 
   const ok = [...document.querySelectorAll(sel)].some((e) => e.checkVisibility() && !e.disabled);
   return named && h.checkVisibility() && (ok || (!need && !document.querySelector(sel))) ? performance.now() : false;
 };
+// AC-97 target 5's t1: the first frame at which Bandeja is at /, its heading shows, the table is rendered from data (no .skeleton ancestor; a row, or the designed empty state),
+// «Nueva factura» is enabled and no entry transition runs. «Ejecutar agente» counts when enabled and also when busy (first-login pass), so it is not tested for enabled.
+export const entryReady = () => {
+  const vis = (e) => !!e && e.checkVisibility();
+  const sec = document.querySelector('#invoices');
+  const row = sec?.querySelector('table.inbox-list tbody tr');
+  const rendered = sec && !sec.closest('.skeleton') && !row?.closest('.skeleton') && (row || sec.querySelector('p.muted'));
+  const nueva = document.querySelector('[data-tour="new-invoice"]');
+  let moving = (document.getAnimations?.() ?? []).some((a) => a.playState === 'running' && a.effect?.pseudoElement?.startsWith('::view-transition'));
+  try { moving ||= document.documentElement.matches(':active-view-transition'); } catch { /* an older browser has no such selector */ }
+  return location.pathname === '/' && vis(document.querySelector('h1')) && rendered && vis(nueva) && !nueva.disabled && vis(document.querySelector('[data-tour="run-agent"]')) && !moving ? performance.now() : false;
+};
+// AC-97 target 6: every row shows an outcome chip that is not «Pendiente».
+export const allDecided = () => {
+  const rows = [...document.querySelectorAll('#invoices table.inbox-list tbody tr')];
+  return rows.length && rows.every((r) => r.querySelector('.chip:not(.chip-pending)')) ? performance.now() : false;
+};
 const navigate = ({ href, skeleton }) => new Promise((resolve) => { // click a link; time the heading or skeleton, then the data
   const link = [...document.querySelectorAll(`a[href="${href}"]`)].find((a) => a.checkVisibility());
   if (!link) return resolve(null);
@@ -170,6 +232,58 @@ async function navTime(browser, base, screen, session, vars) {
     await page.waitForFunction(() => window.__p.pending === 0);
     return await page.evaluate(navigate, { href: screen.link?.(vars) ?? journey(vars, screen), skeleton: SKELETON });
   } finally { await context.close(); }
+}
+
+// One entry sample, each in a fresh context. Set-up (page load, typing, the OTP code) is not timed; t0 is the click event's own timeStamp, taken by a capture listener added just before the click.
+async function entrySample(browser, base, kind, { cfg, key, password }) {
+  const context = await browser.newContext({ viewport: VIEWPORT, locale: 'es-CO' });
+  try {
+    const page = await context.newPage();
+    await page.addInitScript(INIT, { session: null });
+    if (kind === 'otp') await context.route(OTP_URL, otpGuard);
+    await page.goto(base + (kind === 'trial' || kind === 'demo' ? '/demo' : '/login'), { waitUntil: 'load', timeout: 30_000 });
+    await page.waitForFunction(usable, { sel: PRIMARY, need: true }, { timeout: 15_000, polling: 'raf' });
+    let click;
+    if (kind === 'otp' || kind === 'password') {
+      const email = QA[kind];
+      if (kind === 'password') {
+        await page.getByRole('button', { name: 'Entrar con contraseña' }).click();
+        await page.locator('#login-email').fill(email);
+        await page.locator('#login-password').fill(password);
+        click = page.getByRole('button', { name: 'Entrar', exact: true });
+      } else {
+        await page.locator('#login-email').fill(email);
+        await page.getByRole('button', { name: 'Enviar código' }).click(); // fulfilled by otpGuard
+        await page.locator('#login-code').waitFor();
+        await page.locator('#login-code').fill(await admin(cfg.supabaseUrl, key).code(email));
+        click = page.getByRole('button', { name: 'Entrar', exact: true });
+      }
+    } else click = page.getByRole('button', { name: kind === 'trial' ? 'Probar con mi propia empresa' : 'Entrar como Andina Labs' });
+    await page.evaluate(() => addEventListener('click', (e) => { window.__t0 = e.timeStamp; }, true));
+    await click.click();
+    const t1 = await page.waitForFunction(entryReady, null, { timeout: 15_000, polling: 'raf' }).then((h) => h.jsonValue());
+    const t0 = await page.evaluate(() => window.__t0);
+    const pending = await page.evaluate(() => document.querySelectorAll('#invoices tbody .chip-pending').length);
+    const decided = kind === 'trial' ? await page.waitForFunction(allDecided, null, { timeout: 35_000, polling: 'raf' }).then((h) => h.jsonValue()).catch(() => null) : null;
+    return { ms: t1 - t0, pending, decided: decided == null ? null : decided - t0 };
+  } catch (e) { return { error: e.message.split('\n')[0].replace(/^page\.waitForFunction: /, '').replace(/Timeout \d+ms exceeded.*/, 'not usable in 15 s') }; } finally { await context.close(); }
+}
+
+async function entryAll(browser, base, { trial }) {
+  const cfg = await (await fetch(`${base}/api/config`)).json();
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY, password = randomBytes(18).toString('base64url'); // held in memory only
+  const na = (screen, why) => [{ screen, metric: 'Click to usable Bandeja, median of 3', na: why, unit: 'ms', target: T.entry }];
+  const run = async (kind) => { const out = []; for (let i = 0; i < RUNS; i++) out.push(await entrySample(browser, base, kind, { cfg, key, password })); return out; };
+  const rows = [];
+  for (const kind of ['otp', 'password']) {
+    if (!key) { rows.push(...na(`entry ${kind}`, 'needs SUPABASE_SERVICE_ROLE_KEY in the environment, for the QA users')); continue; }
+    try { await admin(cfg.supabaseUrl, key).ensure(QA[kind], kind === 'password' ? password : undefined); } catch (e) { rows.push(...entryRows(`entry ${kind}`, QA[kind], [{ error: e.message }])); continue; }
+    rows.push(...entryRows(`entry ${kind}`, QA[kind], await run(kind)));
+  }
+  if (trial) rows.push(...entryRows('entry trial', 'a new anonymous user per sample', await run('trial')));
+  else rows.push(...na('entry trial', 'run with --trial (needs the trial door, AC-92)'), ...na('entry trial (all decided)', 'run with --trial (needs the trial door, AC-92)'));
+  rows.push(...entryRows('entry demo', 'the shared demo user', await run('demo')));
+  return rows;
 }
 
 async function apiP95(url, headers) {
@@ -226,6 +340,7 @@ export async function main(argv) {
       rows.push(...navRows(s, ns));
     }
   }
+  rows.push(...(await entryAll(browser, base, { trial: !!trial })));
   await browser.close();
   for (const [url, { headers, screens }] of apis) {
     const r = await apiP95(url, headers);

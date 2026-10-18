@@ -21,7 +21,7 @@ const EMPTY = { invoices: [], last_run: null, portal: null, beneficiaries: [], d
 const INBOX = { 'GET /api/screen/inbox?lang=es': EMPTY, 'GET /api/screen/inbox?lang=en': EMPTY };
 beforeEach(() => mockApi(INBOX));
 
-test('one route per screen, each loading its page on navigation (AC-99), plus the /beneficiaries/:id placeholder for Task 50', async () => {
+test('one route per screen, each loading its page on navigation (AC-99), with /beneficiaries/:id for the profile (AC-104)', async () => {
   expect(routes.map((r) => r.path).sort()).toEqual(
     ['/', '/approve/:token', '/beneficiaries', '/beneficiaries/:id', '/demo', '/invoices/:id', '/login', '/period', '/policy'].sort(),
   );
@@ -63,11 +63,12 @@ test('a nav hover over a screen this tab already holds sends no second request',
   expect(fetchMock.mock.calls.filter(([u]) => u === '/api/screen/policy')).toHaveLength(1);
 });
 
-test('/beneficiaries/:id waits for Task 50: it opens Beneficiarios', async () => {
+test('/beneficiaries/:id opens the beneficiary profile (AC-104)', async () => {
   signedInAs('ana@empresa.co', SEEN);
-  mockApi({ ...INBOX, 'GET /api/screen/beneficiaries': { beneficiaries: [] } });
+  mockApi({ ...INBOX, 'GET /api/screen/beneficiary/b1': { beneficiary: { id: 'b1', name: 'Laura Méndez', country: 'CO', currency: 'USD', bank_account: null, route: null, category: null, agreement: null }, totals: { paid_month_usd: 0, paid_total_usd: 0, invoices: 0 }, history: [], last: [] } });
   renderAt(<App />, { at: '/beneficiaries/b1' });
-  expect(await screen.findByRole('heading', { name: 'Beneficiarios', level: 1 })).toBeTruthy();
+  expect((await screen.findByRole('heading', { level: 1 })).textContent).toBe('Laura Méndez');
+  expect(screen.getByRole('link', { name: 'Volver a Beneficiarios' }).getAttribute('href')).toBe('/beneficiaries');
 });
 
 // AC-100: the cache never shows one user's screen to the next one signed in on this tab.

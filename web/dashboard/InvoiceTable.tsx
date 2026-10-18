@@ -56,7 +56,7 @@ export default function InvoiceTable({ rows, directory, outcome, onOutcome }: {
   const shown = rows
     .filter((r) => (!outcome || (r.outcome ?? 'pending') === outcome) && (!origin || r.origin === origin) && (!payee || keyOf(r) === payee)
       && (!q || [name(r), r.fields?.invoice_number, r.fields?.concept].some((s) => s && fold(s).includes(q))))
-    .sort((a, b) => cmp(value(a, sort.key), value(b, sort.key)));
+    .sort((a, b) => cmp(value(a, sort.key), value(b, sort.key)) || a.id.localeCompare(b.id)); // ties by id: refreshes never reorder (AC-107)
 
   const head = (key: Key, label: string) => (
     <th scope="col" aria-sort={sort.key === key ? (sort.dir === 1 ? 'ascending' : 'descending') : undefined}>
@@ -115,7 +115,7 @@ export default function InvoiceTable({ rows, directory, outcome, onOutcome }: {
                     <td><time dateTime={r.received_at}>{date.format(new Date(r.received_at))}</time></td>
                     <td>{r.fields?.payee_name ? <span data-user="">{r.fields.payee_name}</span> : t('period.unread')}</td>
                     <td>
-                      <Link to={`/invoices/${r.id}`}>
+                      <Link to={`/invoices/${r.id}`} className="dash-headline">
                         {r.headline ?? (r.fields?.payee_name ? tu(t('inbox.pending_headline'), { payee: r.fields.payee_name }) : t('inbox.pending_headline', { payee: t('value.unknown_payee') }))}
                       </Link>
                       {originLabel(t, r) && <small className="muted inbox-origin">{originLabel(t, r)}</small>}

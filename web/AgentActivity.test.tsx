@@ -2,8 +2,11 @@
 // 10 s only while the tab is visible, and plays a run call's new decisions as soon as Bandeja asks (refresh).
 import { act, fireEvent, screen } from '@testing-library/react';
 import { useState } from 'react';
+import { Link, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import AgentActivity from './components/AgentActivity';
+import { FirstRunProvider, markFirstRun } from './firstRun';
+import Inbox from './pages/Inbox';
 import { useT } from './i18n';
 import { mockApi, renderAt, signedInAs } from './test/utils';
 
@@ -148,4 +151,39 @@ test('an answer still in flight when the language switches is dropped', async ()
   await tick(1600);
   expect(shown()).toEqual([]);
   expect(screen.getByText(/When the agent decides an invoice/)).toBeTruthy();
+});
+
+// AC-78 Clarified (D42): the first-login pass is the shell's loop; started before Bandeja mounted, its calls still play there.
+test('a pass started before Bandeja mounted still plays each batch on Bandeja', async () => {
+  markFirstRun('id:ana@empresa.co');
+  let answer: unknown = { items: [] };
+  let release: (v: unknown) => void = () => {};
+  let runs = 0;
+  const f = mockApi({
+    [BASE]: () => answer,
+    'POST /api/invoices/run': () => (runs++ === 0
+      ? { PAGAR: 1, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 1, cursor: 'c1' }
+      : new Promise((r) => (release = r))),
+    'GET /api/screen/inbox?lang=es': { invoices: [], last_run: null, portal: null, beneficiaries: [], dashboard: null },
+  });
+  renderAt(
+    <FirstRunProvider>
+      <Routes>
+        <Route path="/policy" element={<Link to="/">Bandeja</Link>} />
+        <Route path="/" element={<Inbox />} />
+      </Routes>
+    </FirstRunProvider>,
+    { at: '/policy' },
+  );
+  await tick(0); // the pass started here; its first call has answered
+  expect(runs).toBe(2);
+  fireEvent.click(screen.getByRole('link', { name: 'Bandeja' }));
+  await tick(0);
+  expect(activityCalls(f)).toHaveLength(1); // Bandeja's own first load, no replay of the call before it
+  answer = { items: [NEW] };
+  release({ PAGAR: 1, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null });
+  await tick(0);
+  await tick(400);
+  expect(shown()).toEqual(['Leyendo la factura de Laura Méndez con IA…']);
+  expect(activityCalls(f)).toHaveLength(2);
 });

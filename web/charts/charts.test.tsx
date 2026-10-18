@@ -137,10 +137,38 @@ test('charts.css uses only approved palette colours and no animation', async () 
   expect(css).not.toMatch(/animation|transition/);
 });
 
+test('AC-91/AC-103: the sr-only data table is a 1px clipped box, and so is every caption and cell in it (a table grows to its content)', async () => {
+  const { readFileSync } = (await import('node:fs' as string)) as { readFileSync(p: string, enc: string): string };
+  const css = readFileSync('web/charts/charts.css', 'utf8');
+  const table = css.match(/\.chart-sr \{([^}]*)\}/)?.[1] ?? '';
+  const cells = css.match(/\.chart-sr [^{]*\{[^}]*\}/g)?.join('\n') ?? '';
+  expect(table).toMatch(/display:\s*block/);
+  for (const part of [table, cells]) {
+    expect(part).toMatch(/position:\s*absolute/);
+    expect(part).toMatch(/width:\s*1px/);
+    expect(part).toMatch(/height:\s*1px/);
+    expect(part).toMatch(/overflow:\s*hidden/);
+    expect(part).toMatch(/clip:\s*rect\(0 0 0 0\)/);
+  }
+  for (const tag of ['caption', 'th', 'td']) expect(cells).toContain(tag);
+});
+
 test('lazy wrappers load the chart on demand and render it', async () => {
   const { container } = renderAt(<Suspense fallback={null}><lazy.StackedBars title="Facturas por día" unit="facturas" series={series} rows={rows} /></Suspense>);
   expect(await screen.findByRole('figure')).toBeTruthy();
   expect(container.querySelector('.chart-body')).toBeTruthy();
+});
+
+test('the Kpi placeholder is the real tile before it loads: same class, label, hint and min-height, so nothing moves (AC-91 CLS)', async () => {
+  const { container } = renderAt(<lazy.Kpi label="Por pagar hoy" value={1500.5} kind="usd" hint="3 órdenes preparadas hoy" />);
+  const hole = container.querySelector('.chart-kpi') as HTMLElement;
+  expect(hole.getAttribute('role')).toBeNull();
+  expect(hole.textContent).toContain('Por pagar hoy');
+  expect(hole.textContent).toContain('3 órdenes preparadas hoy');
+  expect(hole.textContent).not.toMatch(/1[.,]500/);
+  const placeholder = { cls: hole.className, h: hole.style.minHeight };
+  const real = (await screen.findByRole('group')) as HTMLElement;
+  expect({ cls: real.className, h: real.style.minHeight }).toEqual(placeholder);
 });
 
 test('axe finds no serious or critical violation in any chart state', async () => {

@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- QA e2e file */
 // QA R-119 / AC-107: a trial user who opens /demo mid-pass and enters the demo company must trigger no POST /api/invoices/run with the demo token.
-// QA_URL + QA_LIVE=1. Creates one anonymous trial user per mode (never deleted). Reads the demo user's id from .wrangler/qa-52-53/demo-tok.json.
+// QA_URL + QA_LIVE=1. Creates one anonymous trial user per mode (never deleted). Reads the demo user's id from .wrangler/qa-52-run2/demo-tok.json.
 import fs from 'node:fs';
 import { test, expect, newPage, URL_, DIR } from './qa52-helpers';
 test.skip(process.env.QA_LIVE !== '1', 'creates real trial users: set QA_LIVE=1');

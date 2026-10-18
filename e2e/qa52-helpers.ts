@@ -4,14 +4,14 @@ import { createRequire } from 'node:module';
 export const { test, expect, chromium } = Object.assign({}, createRequire(import.meta.url)('/opt/node22/lib/node_modules/playwright/test'), { chromium: createRequire(import.meta.url)('/opt/node22/lib/node_modules/playwright').chromium });
 
 export const URL_ = process.env.QA_URL!;
-export const DIR = '.wrangler/qa-52-53';
+export const DIR = '.wrangler/qa-52-run2';
 
 // Recorder: arm() before the click; the capture-phase click listener stamps t0; a rAF loop records, per frame, the pressed state,
 // the usable state, row snapshots (order/height/chip), progress text, KPI text, CLS entries, and every Bandeja-data fetch response.
 export const RECORDER = `(() => {
   const q = (window.__qa = { armed: false, t0: null, label: null, busy: null, usable: null, snaps: [], cls: [], fetches: [], doorText: [], runPosts: [], watch: false });
   const epoch = () => performance.timeOrigin + performance.now();
-  q.arm = (watch) => { q.armed = true; q.watch = !!watch; q.t0 = null; q.busy = null; q.usable = null; q.snaps = []; q.doorText = []; };
+  q.arm = (watch) => { q.vtStart = null; q.vtEnd = null; q.vtProps = {}; q.vtDur = 0; q.armed = true; q.watch = !!watch; q.t0 = null; q.busy = null; q.usable = null; q.snaps = []; q.doorText = []; };
   document.addEventListener('click', (e) => {
     if (!q.armed) return; const b = e.target.closest && e.target.closest('button'); if (!b) return;
     q.armed = false; q.t0 = performance.now(); q.t0e = epoch(); q.label = b.textContent; q.btn = b; loop();
@@ -48,12 +48,14 @@ export const RECORDER = `(() => {
       const b = document.querySelector('button[aria-busy="true"][disabled]');
       if (b) q.busy = { ms: dt, text: b.textContent.trim() };
     }
-    if (q.usable === null && location.pathname === '/') {
+    let moving = false; try { const an = (document.getAnimations ? document.getAnimations() : []).filter((a) => a.effect && a.effect.pseudoElement && a.effect.pseudoElement.indexOf('::view-transition') === 0); moving = an.some((a) => a.playState === 'running'); try { moving = moving || document.documentElement.matches(':active-view-transition'); } catch (e) {}
+      if (moving) { if (q.vtStart == null) q.vtStart = dt; q.vtEnd = dt; q.vtProps = q.vtProps || {}; for (const a of an) { try { for (const k of a.effect.getKeyframes()) for (const p of Object.keys(k)) if (!['offset','computedOffset','easing','composite'].includes(p)) q.vtProps[p] = 1; q.vtDur = Math.max(q.vtDur || 0, a.effect.getTiming().duration); } catch (e) {} } } } catch (e) {}
+    if (q.usable === null && location.pathname === '/' && !moving) {
       const h1 = document.querySelector('h1'); const rows = [...document.querySelectorAll('table.inbox-list tbody tr[data-id]')].filter((r) => !/^s\\d+$/.test(r.getAttribute('data-id')));
       const skel = document.querySelectorAll('main .skeleton').length;
       const nf = [...document.querySelectorAll('button, a')].find((x) => ['Nueva factura','New invoice'].includes(x.textContent.trim()));
       if (h1 && /Bandeja|Inbox/.test(h1.textContent) && rows.length > 0 && skel === 0 && nf && !nf.disabled && nf.getAttribute('aria-disabled') !== 'true') {
-        const res = performance.getEntriesByType('resource').filter((e) => /\\/api\\/|\\/auth\\/v1\\//.test(e.name) && performance.timeOrigin + e.startTime >= q.t0e - 5).map((e) => ({ n: new URL(e.name).pathname, start: Math.round(performance.timeOrigin + e.startTime - q.t0e), end: Math.round(performance.timeOrigin + e.responseEnd - q.t0e), dur: Math.round(e.duration), ttfb: Math.round(e.responseStart - e.requestStart) }));
+        const res = performance.getEntriesByType('resource').filter((e) => /\\/api\\/|\\/auth\\/v1\\//.test(e.name) && performance.timeOrigin + e.startTime >= q.t0e - 5).map((e) => ({ n: new URL(e.name).pathname, start: Math.round(performance.timeOrigin + e.startTime - q.t0e), end: Math.round(performance.timeOrigin + e.responseEnd - q.t0e), dur: Math.round(e.duration), ttfb: Math.round(e.responseStart - e.requestStart), st: (e.serverTiming || []).map((x) => x.name + '=' + Math.round(x.duration)).join(','), bytes: e.encodedBodySize, dec: e.decodedBodySize }));
         q.usable = { ms: dt, rows: rows.length, path: location.pathname, res };
       }
     }
@@ -84,7 +86,7 @@ export async function newPage(browser: any, opts: any = {}) {
   });
   return { ctx, page, net };
 }
-export const q = (page: any) => page.evaluate(() => { const x = (window as any).__qa; return { label: x.label, t0e: x.t0e, busy: x.busy, usable: x.usable, doorText: x.doorText, cls: x.cls, snaps: x.snaps, fetches: x.fetches, runPosts: x.runPosts }; });
+export const q = (page: any) => page.evaluate(() => { const x = (window as any).__qa; return { label: x.label, t0e: x.t0e, busy: x.busy, usable: x.usable, doorText: x.doorText, cls: x.cls, snaps: x.snaps, fetches: x.fetches, runPosts: x.runPosts, vt: { start: x.vtStart, end: x.vtEnd, props: Object.keys(x.vtProps || {}), dur: x.vtDur } }; });
 export const median = (a: number[]) => [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)];
 
 export async function adminOtp(email: string): Promise<string> {

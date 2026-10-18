@@ -33,6 +33,10 @@ test('AC-95 save access, errors, password login elsewhere, no warning once saved
   // the pass was running when access was saved: it must still finish
   await pa.waitForFunction(() => !document.querySelector('.chip-pending') && !/Decidiendo/.test(document.body.innerText), null, { timeout: 90000 });
   console.log('pass finished after saving access mid-pass: no Pendiente chip left, rows:', await pa.locator('table.inbox-list tbody tr[data-id]').count());
+  // R-135: reload A (saved trial user): company name and email still in the top bar
+  await pa.reload(); await expect(pa.locator('h1', { hasText: 'Bandeja' })).toBeVisible({ timeout: 20000 }); await pa.waitForTimeout(3000);
+  const bar2 = (await pa.locator('header').first().innerText()).replace(/\s+/g, ' ');
+  console.log('A top bar after RELOAD:', bar2, '| has company:', bar2.includes(company), '| has email:', bar2.includes(email), '| placeholder name:', /tu empresa de prueba/i.test(bar2), '| null/undefined:', /null|undefined/.test(bar2));
   // B: fresh window, password login
   const B = await newPage(browser); const pb = B.page; await pb.goto(`${URL_}/login`);
   await pb.getByRole('button', { name: 'Entrar con contraseña' }).click();
@@ -51,7 +55,8 @@ test('AC-95 save access, errors, password login elsewhere, no warning once saved
   await pb.waitForTimeout(2500);
   const hb = (await pb.locator('header').first().innerText()).replace(/\s+/g, ' ');
   console.log('B top bar:', hb, '| tour dialog present:', await pb.getByRole('dialog').count(), '| rows:', await pb.locator('table.inbox-list tbody tr[data-id]').count(), '| pending chips:', await pb.locator('.chip-pending').count());
-  console.log('B top bar has company name:', hb.includes(company));
+  console.log('B top bar has company name:', hb.includes(company), '| placeholder name:', /tu empresa de prueba/i.test(hb), '| has email:', hb.includes(email));
+  await pb.waitForTimeout(3000); console.log('B top bar 3 s later:', (await pb.locator('header').first().innerText()).replace(/\s+/g, ' '));
   // leaving with saved access: no warning
   await pa.getByRole('button', { name: 'Cerrar sesión' }).click(); await pa.waitForTimeout(1500);
   console.log('A sign-out after saving: warning shown =', await pa.getByText(/Si sales sin guardar/).count(), '; url', pa.url());

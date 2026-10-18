@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- QA e2e file */
-// QA AC-107: click to usable Bandeja through the four doors, three runs each. QA_URL + QA_LIVE=1. Users come from .wrangler/qa-52-53/users-{pw,otp}.json
+// QA AC-107: click to usable Bandeja through the four doors, three runs each. QA_URL + QA_LIVE=1. Users come from .wrangler/qa-52-run2/users-{pw,otp}.json
 // (created through the Admin API, no mail). The OTP request to Supabase is stubbed so no mail is sent; the code comes from the Admin API.
 import fs from 'node:fs';
 import { test, expect, newPage, q, median, adminOtp, URL_, DIR } from './qa52-helpers';
@@ -14,11 +14,11 @@ const RUNS = Number(process.env.QA_RUNS || 3);
 async function report(name: string, i: number, page: any, net: any[], wall: number) {
   const r = await q(page);
   const shown = (r.cls as any[]).filter((c) => c.t >= r.t0e).reduce((s, c) => s + c.v, 0);
-  const row = { run: i + 1, usableMs: r.usable?.ms && Math.round(r.usable.ms), rows: r.usable?.rows, busyMs: r.busy && Math.round(r.busy.ms), busyText: r.busy?.text, doorNdeM: r.doorText, clsSinceClick: +shown.toFixed(4), playwrightWall: wall, res: r.usable?.res };
+  const row = { run: i + 1, usableMs: r.usable?.ms && Math.round(r.usable.ms), rows: r.usable?.rows, busyMs: r.busy && Math.round(r.busy.ms), busyText: r.busy?.text, doorNdeM: r.doorText, clsSinceClick: +shown.toFixed(4), vt: r.vt, playwrightWall: wall, res: r.usable?.res };
   (results[name] ||= []).push(row);
   console.log(`DOOR ${name} run ${i + 1}: ${JSON.stringify(row)}`);
   const auth = (row.res || []).find((x: any) => /\/auth\/v1\//.test(x.n));
-  console.log(`  postAuthMs=${auth ? row.usableMs! - auth.end : 'n/a'} res: ${(row.res || []).map((x: any) => `${x.n}@${x.start}-${x.end}(ttfb ${x.ttfb})`).join(' | ')}`);
+  console.log(`  postAuthMs=${auth ? row.usableMs! - auth.end : 'n/a'} res: ${(row.res || []).map((x: any) => `${x.n}@${x.start}-${x.end}(ttfb ${x.ttfb}${x.st ? ' ST:' + x.st : ''}${x.dec ? ' dec ' + x.dec + 'B enc ' + x.bytes + 'B' : ''})`).join(' | ')}`);
   return row;
 }
 const wait = async (page: any) => { try { await page.waitForFunction(() => (window as any).__qa.usable !== null, null, { timeout: 15000 }); return true; } catch { console.log(`  USABLE NEVER REACHED in 15 s. alerts=${JSON.stringify(await page.getByRole('alert').allInnerTexts().catch(() => []))}`); return false; } };

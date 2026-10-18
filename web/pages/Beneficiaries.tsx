@@ -4,6 +4,7 @@ import type { Beneficiary } from '../../src/engine/types';
 import { screens, useScreen } from '../api';
 import { tu } from '../components/User';
 import { useT } from '../i18n';
+import { StepIcon } from '../components/StepCards';
 import '../policy.css';
 import './beneficiary.css';
 import { failure, send } from '../withField';
@@ -91,7 +92,8 @@ export default function Beneficiaries() {
         {!rows && !loadFailed && <p role="status" className="sr-only">{t('policy.loading')}</p>}
         {loadFailed && <p role="alert" className="error">{t('ben.load_error')}</p>}
         {rows?.length === 0 && (
-          <div className="empty">
+          <div className="empty step-card" data-step-card>
+            <StepIcon name="inbox" />
             <p className="muted">{t('ben.empty')} {t('ben.empty_next')}</p>
             <button type="button" onClick={() => openForm(null)}>{t('ben.add')}</button>
           </div>

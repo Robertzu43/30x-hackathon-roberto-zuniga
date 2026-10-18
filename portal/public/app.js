@@ -29,7 +29,7 @@ function el(tag, attrs = {}, ...children) {
 
 const main = document.getElementById('main');
 const company = boot.company ?? '';
-const messages = [{ from: 'agent', keys: ['portal.greeting', 'portal.hint'] }];
+const messages = [{ from: 'agent', keys: ['portal.greeting'] }]; // the hint is the step cards now (AC-116 b)
 let file = null;
 let ui = null; // the chat page's lasting nodes, built once so a typed message survives a language switch
 
@@ -70,7 +70,26 @@ function bubble(m) {
   return b;
 }
 
+// AC-116 (b): the hints as the web app's step cards (web/components/StepCards.tsx, same markup and look), until the first send.
+const STEP_ICONS = ['M12 16V4 M7 9l5-5 5 5 M4 16v4h16v-4', 'M4 4h11l5 5v11H4z M8 12h8 M8 16h5', 'M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6l-1 1 M14 10a4 4 0 0 0-6 0l-3 3a4 4 0 0 0 6 6l1-1'];
+function stepCards() {
+  return [1, 2, 3].map((n) => {
+    const svg = document.createElementNS(ICON_NS, 'svg');
+    for (const [k, v] of Object.entries({ class: 'step-icon', viewBox: '0 0 24 24', width: '24', height: '24', fill: 'none', stroke: '#111111', 'stroke-width': '1.75', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' })) svg.setAttribute(k, v);
+    const path = document.createElementNS(ICON_NS, 'path');
+    path.setAttribute('d', STEP_ICONS[n - 1]);
+    svg.append(path);
+    return el('li', { class: 'step-card', 'data-step-card': '' },
+      el('span', { class: 'step-head' }, el('span', { class: 'step-n', text: String(n) }), svg),
+      el('span', { class: 'step-title' }, el('strong', { 'data-step-title': '', text: tr(`portal.steps.${n}.title`) })),
+      el('p', { text: tr(`portal.steps.${n}.text`) }));
+  });
+}
+
 const renderLog = () => {
+  ui.steps.replaceChildren(...stepCards());
+  ui.steps.setAttribute('aria-label', tr('portal.steps.label'));
+  ui.steps.hidden = messages.some((m) => m.from === 'me');
   ui.log.replaceChildren(...messages.map(bubble));
   ui.log.lastElementChild?.scrollIntoView?.({ block: 'end' });
 };
@@ -138,7 +157,7 @@ function clip() {
 function buildChat() {
   const fileInput = el('input', { type: 'file', id: 'file', accept: '.pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg', hidden: '' });
   const u = {
-    title: el('h1'), log: el('div', { class: 'log', role: 'log', 'aria-live': 'polite' }), live: el('p', { class: 'sr-only', 'aria-live': 'polite' }), fileInput,
+    title: el('h1'), steps: el('ol', { class: 'step-cards' }), log: el('div', { class: 'log', role: 'log', 'aria-live': 'polite' }), live: el('p', { class: 'sr-only', 'aria-live': 'polite' }), fileInput,
     attach: el('button', { type: 'button', class: 'attach' }, clip()),
     label: el('label', { for: 'msg', class: 'sr-only' }), text: el('textarea', { id: 'msg', rows: '1' }),
     send: el('button', { type: 'submit', class: 'primary' }), chipName: el('span'), remove: el('button', { type: 'button', class: 'remove', text: '×' }),
@@ -154,7 +173,7 @@ function buildChat() {
   });
   u.text.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) u.form.requestSubmit(); });
   u.form.addEventListener('submit', send);
-  main.append(u.title, u.log, u.live, u.form);
+  main.append(u.title, u.steps, u.log, u.live, u.form);
   return u;
 }
 

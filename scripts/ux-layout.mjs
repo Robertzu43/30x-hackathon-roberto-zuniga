@@ -175,9 +175,16 @@ export function tourMeasure() {
   const t = sel && document.querySelector(`[data-tour="${sel}"]`);
   if (!t) return null;
   const r = (e) => { const b = e.getBoundingClientRect(); return { left: b.left, right: b.right, top: b.top, bottom: b.bottom, width: b.width, height: b.height }; };
+  // A target inside its own scroller (a table row on a phone) is measured by the part the scroller shows.
+  const T = r(t);
+  for (let p = t.parentElement; p && p !== document.body; p = p.parentElement) {
+    if (getComputedStyle(p).overflowX === 'visible') continue;
+    const c = r(p);
+    T.left = Math.max(T.left, c.left); T.right = Math.min(T.right, c.right); T.width = Math.max(0, T.right - T.left);
+  }
   const head = t.matches('h1,h2,h3') ? t : t.querySelector('h1,h2,h3');
   const bar = document.querySelector('.topbar');
-  return { step: sel, T: r(t), C: r(c), head: head && r(head), vw: document.documentElement.clientWidth, vh: innerHeight, top: bar ? bar.getBoundingClientRect().bottom : 0 };
+  return { step: sel, T, C: r(c), head: head && r(head), vw: document.documentElement.clientWidth, vh: innerHeight, top: bar ? bar.getBoundingClientRect().bottom : 0 };
 }
 
 const inter = (a, b) => Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) * Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));

@@ -6,6 +6,7 @@ import { Kpi, Sparkline } from '../charts/lazy';
 import { OutcomeChip, type Outcome } from '../components/OutcomeChip';
 import { tu } from '../components/User';
 import { useT } from '../i18n';
+import { StepIcon } from '../components/StepCards';
 import './beneficiary.css';
 
 type Profile = {
@@ -83,7 +84,8 @@ export default function Beneficiary() {
       </div>
 
       {totals.invoices === 0 && history.length === 0 && last.length === 0 ? (
-        <div className="beneficiary-state" data-block>
+        <div className="beneficiary-state step-card" data-step-card data-block>
+          <StepIcon name="upload" />
           <p>{t('ben.p.empty')}</p>
           <p className="muted">{t('ben.p.empty_next')}</p>
           <Link to="/">{t('period.to_inbox')}</Link>

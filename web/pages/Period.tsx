@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { screens, thisMonth, useScreen } from '../api';
 import { useT } from '../i18n';
 import PeriodCharts, { type Charts } from '../period/PeriodCharts';
+import { StepIcon } from '../components/StepCards';
 import './period.css';
 
 
@@ -101,7 +102,8 @@ export default function Period() {
           {charts && <PeriodCharts charts={charts} byBeneficiary={shown.by_beneficiary} />}
           <h2 data-block>{t('period.beneficiaries')}</h2>
           {shown.by_beneficiary.length === 0 ? (
-            <div key="empty" className="period-state empty" data-block>
+            <div key="empty" className="period-state empty step-card" data-step-card data-block>
+              <StepIcon name="record" />
               <p>{t('period.none')}</p>
               <p className="muted">{t('period.none_next')}</p>
               <Link to="/">{t('period.to_inbox')}</Link>

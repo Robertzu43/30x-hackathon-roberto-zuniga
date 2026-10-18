@@ -18,6 +18,11 @@ const ICONS = {
 export type Icon = keyof typeof ICONS;
 export type Step = { title: string; text: string; icon: Icon; extra?: ReactNode };
 
+/** The card's icon alone, for a single-step helper that keeps its own copy and next step (AC-116 c). */
+export const StepIcon = ({ name }: { name: Icon }) => (
+  <svg className="step-icon" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#111111" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{ICONS[name]}</svg>
+);
+
 export default function StepCards({ steps, label }: { steps: Step[]; label?: string }) {
   const numbered = steps.length > 1;
   return (
@@ -26,7 +31,7 @@ export default function StepCards({ steps, label }: { steps: Step[]; label?: str
         <li key={s.title} className="step-card" data-step-card>
           <span className="step-head">
             {numbered && <span className="step-n">{i + 1}</span>}
-            <svg className="step-icon" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#111111" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{ICONS[s.icon]}</svg>
+            <StepIcon name={s.icon} />
           </span>
           <span className="step-title"><strong data-step-title>{s.title}</strong>{s.extra}</span>
           <p>{s.text}</p>

@@ -1,0 +1,37 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:19.500
+/demo: the problem, the agent's loop and where the AI acts.
+
+2
+00:00:19.500 --> 00:00:28.000
+"Sign in as Andina Labs": the tutorial shows the Inbox and "Run agent".
+
+3
+00:00:28.000 --> 00:00:36.000
+The Inbox: every invoice with what the agent decided and why.
+
+4
+00:00:36.000 --> 00:00:48.000
+New invoice: I upload 01.pdf and the agent reads it and decides it.
+
+5
+00:00:48.000 --> 00:01:04.000
+Its record: STOP, exact duplicate; every rule checked.
+
+6
+00:01:04.000 --> 00:01:20.000
+The invoice with the changed account: I reject it.
+
+7
+00:01:20.000 --> 00:01:35.000
+Nube Sur is over the threshold: I approve it and it ends in PAY with its payment order.
+
+8
+00:01:35.000 --> 00:01:59.000
+Policy: I lower a limit, save the version and re-evaluate the pending ones.
+
+9
+00:01:59.000 --> 00:02:08.080
+Period: autonomy, violations and the month's money.

@@ -5,8 +5,8 @@
 </p>
 
 <p align="center">
-  <a href="https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo/happy-path.webm"><img src="https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/brand/thesaurus-logo.svg" alt="Ver el video: el recorrido completo de Thesaurus, de la factura a la decisión" width="560"></a>
-  <br><a href="https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo/happy-path.webm">Ver el video</a> · <a href="https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo/happy-path.webm">Recorrido completo sin editar</a>
+  <a href="https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo/happy-path.webm"><img src="https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo/happy-path-poster.jpg" alt="Ver el video: el recorrido completo de Thesaurus, de la factura a la decisión" width="560"></a>
+  <br><a href="https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo/happy-path.webm">▶ Ver el video</a> · <a href="https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo/happy-path.webm">Recorrido completo sin editar</a>
 </p>
 
 <p align="center">

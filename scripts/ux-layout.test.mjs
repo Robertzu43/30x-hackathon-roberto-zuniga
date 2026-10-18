@@ -100,6 +100,12 @@ describe('tour card (AC-115)', () => {
     await page.setContent(tourPage('over'));
     expect(judgeTour(await page.evaluate(tourMeasure)).status).toBe('fail');
   });
+  it('measures a target inside its own horizontal scroller by the part the scroller shows (a table row at 390)', async () => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.setContent(`<!doctype html><body style="margin:0"><div style="overflow-x:auto;margin:100px 24px 0"><table style="width:640px"><tr data-tour="invoice-row"><td>Fila</td></tr></table></div>
+      <div class="tour-spotlight" style="position:fixed"></div><section class="tour-card" data-tour-step="invoice-row" style="position:fixed;left:12px;bottom:12px;width:366px;height:300px">Paso 4 de 7</section></body>`);
+    expect(judgeTour(await page.evaluate(tourMeasure)).status).toBe('pass');
+  });
   it('a large target passes with its heading clear and at most half covered', () => {
     const big = { step: 'policy', T: { left: 0, right: 1000, top: 100, bottom: 3000, width: 1000, height: 2900 }, head: { left: 0, right: 300, top: 100, bottom: 150 }, vw: 1000, vh: 900, top: 90 };
     expect(judgeTour({ ...big, C: { left: 250, right: 750, top: 600, bottom: 880, width: 500, height: 280 } }).status).toBe('pass');

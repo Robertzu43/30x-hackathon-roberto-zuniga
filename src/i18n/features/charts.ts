@@ -4,9 +4,10 @@ export const es: Record<string, string> = {
   'charts.na': 'Sin datos',
   'charts.sum.stacked': '{title}: {total} {unit} en {n} días, {parts}.',
   'charts.sum.list': '{title}, en {unit}: {parts}.',
-  'charts.sum.line': '{title}: {last} {unit} el {date}, máximo {max} {unit}{ref}.',
+  'charts.sum.line': '{title}: {last} el {date}, máximo {max}{ref}.',
   'charts.sum.ref': ', {label} {value}',
-  'charts.sum.spark': '{title}: {n} valores en {unit}, el último {last}, entre {min} y {max}.',
+  'charts.sum.spark.one': '{title}: 1 valor en {unit}, {last}.',
+  'charts.sum.spark.other': '{title}: {n} valores en {unit}, el último {last}, entre {min} y {max}.',
   'charts.day': 'Día',
 };
 
@@ -15,8 +16,9 @@ export const en: Record<string, string> = {
   'charts.na': 'No data',
   'charts.sum.stacked': '{title}: {total} {unit} over {n} days, {parts}.',
   'charts.sum.list': '{title}, in {unit}: {parts}.',
-  'charts.sum.line': '{title}: {last} {unit} on {date}, highest {max} {unit}{ref}.',
+  'charts.sum.line': '{title}: {last} on {date}, highest {max}{ref}.',
   'charts.sum.ref': ', {label} {value}',
-  'charts.sum.spark': '{title}: {n} values in {unit}, the latest {last}, from {min} to {max}.',
+  'charts.sum.spark.one': '{title}: 1 value in {unit}, {last}.',
+  'charts.sum.spark.other': '{title}: {n} values in {unit}, the latest {last}, from {min} to {max}.',
   'charts.day': 'Day',
 };

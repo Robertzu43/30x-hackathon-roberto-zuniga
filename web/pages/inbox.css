@@ -49,6 +49,10 @@
 @media (max-width: 640px) {
   .inbox-last-run { min-height: 3.2em; }
 }
+/* AC-91 item 2 (R-165): on a phone the actions always wrap under the h1, in es and en, so the primary is in the lower 60 %. */
+@media (max-width: 400px) {
+  .inbox-actions { flex-basis: 100%; }
+}
 
 /* AC-86 origin label; the portal link card and «Actividad del agente» (AC-78), at the 2.5 rem section gap. */
 .inbox-origin { display: block; font-size: var(--text-sm); }

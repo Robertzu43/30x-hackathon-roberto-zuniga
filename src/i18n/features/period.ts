@@ -24,7 +24,7 @@ export const es: Record<string, string> = {
   'period.violations': 'Violaciones {n}',
   'period.violations_why': 'Facturas de ejemplo que el agente mandó a PAGAR contra las reglas. Una aprobación tuya o un cambio de política no lo suben.',
   'period.violations_alert': 'Atención: PAGAR fuera de las reglas en {n} factura(s).',
-  'period.explained': 'Decisiones explicadas {pct}\u00a0%',
+  'period.explained': 'Decisiones explicadas {pct}',
   'period.explained_why': 'Parte de las decisiones que dicen en palabras qué reglas se verificaron y por qué.',
 };
 
@@ -53,6 +53,6 @@ export const en: Record<string, string> = {
   'period.violations': 'Violations {n}',
   'period.violations_why': 'Sample invoices the agent sent to PAY against the rules. Your approval or a policy change never raises it.',
   'period.violations_alert': 'Attention: PAY outside the rules on {n} invoice(s).',
-  'period.explained': 'Decisions explained {pct}\u00a0%',
+  'period.explained': 'Decisions explained {pct}',
   'period.explained_why': 'Share of decisions that say in words which rules were checked and why.',
 };

@@ -7,7 +7,8 @@ const H = 100;
 export default function Line({ title, unit, points, reference, height }: {
   title: string; unit: string; points: { day: string; value: number | null }[]; reference?: { label: string; value: number }; height?: number;
 }) {
-  const { t, n, d } = useFmt();
+  const { t, n, d } = useFmt(unit);
+  const v = (x: number) => (unit === '%' ? n(x) : `${n(x)} ${unit}`); // a percentage carries its own sign (R-164)
   const known = points.flatMap((p, i) => (p.value === null ? [] : [{ ...p, i, value: p.value }]));
   const vals = [...known.map((p) => p.value), reference?.value ?? 0, 0];
   const top = Math.max(...vals);
@@ -25,7 +26,7 @@ export default function Line({ title, unit, points, reference, height }: {
   const dots = [...runs.filter((r) => r.length === 1).flat(), ...(last ? [last] : [])].filter((p, k, a) => a.indexOf(p) === k);
   const summary = last
     ? t('charts.sum.line', {
-        title, unit, last: n(last.value), date: d(last.day), max: n(Math.max(...known.map((p) => p.value))),
+        title, last: v(last.value), date: d(last.day), max: v(Math.max(...known.map((p) => p.value))),
         ref: reference ? t('charts.sum.ref', { label: reference.label, value: n(reference.value) }) : '',
       })
     : '';

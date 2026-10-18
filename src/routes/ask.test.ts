@@ -204,6 +204,17 @@ describe('Bandeja context: the Periodo figures as Periodo shows them (AC-67, AC-
     expect(prompt()[0]!.content).toMatch(/quote a figure only with its label.*never compute a figure or rename one/i);
   });
 
+  it('the autonomy and explained lines print the percentage as Periodo does, through Intl percent (R-164)', async () => {
+    const p = await periodo();
+    const pct = (v: number, locale: string) => new Intl.NumberFormat(locale, { style: 'percent' }).format(v / 100);
+    const es = await contextIn('es');
+    expect(es).toContain(`Decisiones explicadas ${pct(p.explained_pct!, 'es-CO')}`);
+    expect(es.filter((l) => l.startsWith('Autonomía '))).toEqual([expect.stringMatching(`^Autonomía ${p.autonomy_pct === null ? '—' : pct(p.autonomy_pct!, 'es-CO')}: `)]);
+    expect((await ask({ question: 'how much budget is left?' }, 'tok-en')).status).toBe(200);
+    const en = /<registro>\n([\s\S]*)\n<\/registro>/.exec(prompt()[1]!.content)![1]!.split('\n');
+    expect(en).toContain(`Decisions explained ${pct(p.explained_pct!, 'en-US')}`);
+  });
+
   it('en: the English labels and the en-US format, without lang falling back to the stored language', async () => {
     expect((await ask({ question: 'how much budget is left?' }, 'tok-en')).status).toBe(200);
     const lines = /<registro>\n([\s\S]*)\n<\/registro>/.exec(prompt()[1]!.content)![1]!.split('\n');

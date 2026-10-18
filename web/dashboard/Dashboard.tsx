@@ -41,7 +41,7 @@ export default function Dashboard({ data, onMore, deciding = 0 }: { data: Dashbo
           hint={k.autonomy_pct === null ? undefined : t('period.autonomy_of', { n: k.autonomy_n, m: k.autonomy_m })} />
       </div>
 
-      <section className="dash-card dash-approvals" aria-labelledby="dash-approvals">
+      <section className="dash-card dash-wide dash-approvals" aria-labelledby="dash-approvals">
         <h2 id="dash-approvals">{t('dash.approvals.title')}</h2>
         <div className="dash-box">
         {data.approvals.length === 0 ? empty('dash.approvals.empty') : (

@@ -4,6 +4,9 @@ import { Route, Routes } from 'react-router-dom';
 import { beforeEach, expect, test, vi } from 'vitest';
 import Demo from './pages/Demo';
 import { DEMO_EMAIL, fakeAuth, mockApi, renderAt, signedInAs } from './test/utils';
+
+// R-164: Intl's own percent for the tab locale (es-CO), never a hand-typed space.
+const pct = (v: number) => new Intl.NumberFormat('es-CO', { style: 'percent' }).format(v / 100);
 import { enterApp } from './transition';
 import gate from '../scripts/ux-gate.mjs?raw';
 import portalHtml from '../portal/public/index.html?raw';
@@ -46,9 +49,9 @@ test('shows the inbox rows (outcome + one-line reason) and the three Periodo fig
   expect(rows[1]!.textContent).toBe('FRENAR950 USD a Pixel Lab: duplicado exacto de la factura #PX-77');
   expect(rows[3]!.textContent).toContain('Pendiente');
   const figures = screen.getByRole('region', { name: 'El periodo' });
-  expect(within(figures).getByText('90 %')).toBeTruthy();
+  expect(within(figures).getByText(pct(90))).toBeTruthy();
   expect(within(figures).getByText('0')).toBeTruthy();
-  expect(within(figures).getByText('100 %')).toBeTruthy();
+  expect(within(figures).getByText(pct(100))).toBeTruthy();
   expect(screen.getByRole('link', { name: /Ver el recorrido en video/ }).getAttribute('href')).toBe('/demo/happy-path.webm');
   expect(screen.queryByRole('group', { name: /Filtrar/ })).toBeNull();
 });
@@ -61,7 +64,7 @@ test('the problem in three lines, the six-stage loop, the pitch line verbatim an
   expect(stages).toEqual(['percibe', 'lee', 'consulta sus herramientas', 'decide', 'actúa', 'rinde cuentas']);
   expect(screen.getByText('El LLM lee, JEV duda, el código decide, el agente actúa.')).toBeTruthy();
   expect(screen.getByText('JEV, la intuición rápida, es una capa opcional; en esta demo está apagada.')).toBeTruthy();
-  await screen.findByText('90 %');
+  await screen.findByText(pct(90));
 });
 
 test('/demo opens in Spanish whatever this browser showed last (R-78, D14)', async () => {
@@ -86,7 +89,7 @@ test('one overview 503 is retried with the skeleton kept; no message (R-150 leve
   let calls = 0;
   mockApi({ 'GET /api/demo/overview': () => (++calls === 1 ? new Response(JSON.stringify({ error: 'x' }), { status: 503 }) : overview) });
   app();
-  expect(await screen.findByText('90 %')).toBeTruthy();
+  expect(await screen.findByText(pct(90))).toBeTruthy();
   expect(calls).toBe(2);
   expect(screen.queryByRole('alert')).toBeNull();
 });
@@ -99,7 +102,7 @@ test('overview 503 twice: a message and a retry that loads the inbox', async () 
   app();
   expect((await screen.findByRole('alert')).textContent).toMatch(/no está disponible/);
   fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
-  expect(await screen.findByText('90 %')).toBeTruthy();
+  expect(await screen.findByText(pct(90))).toBeTruthy();
 });
 
 test('"Entrar como Andina Labs" signs in with the config demo email and the public password, then opens / (AC-46)', async () => {
@@ -161,7 +164,7 @@ test('a failed sign-in stays on /demo with a message', async () => {
 test('"Reiniciar demo" is hidden for visitors and for other users', async () => {
   mockApi({ 'GET /api/demo/overview': overview });
   app();
-  await screen.findByText('90 %');
+  await screen.findByText(pct(90));
   expect(screen.queryByRole('button', { name: 'Reiniciar demo' })).toBeNull();
 });
 
@@ -169,7 +172,7 @@ test('"Reiniciar demo" is hidden for a member of another company', async () => {
   signedInAs('ana@otra.example');
   mockApi({ 'GET /api/demo/overview': overview });
   app();
-  await screen.findByText('90 %');
+  await screen.findByText(pct(90));
   expect(screen.queryByRole('button', { name: 'Reiniciar demo' })).toBeNull();
 });
 
@@ -238,7 +241,7 @@ test('says where the AI acts and where code decides; "lee" and «Pregúntale a T
   const ask = screen.getByText('Pregúntale a Thesaurus', { selector: 'strong' }).closest('p')!;
   expect(ask.querySelector('.ai-tag')?.textContent).toBe('IA');
   expect(screen.getByText('El LLM lee, JEV duda, el código decide, el agente actúa.')).toBeTruthy(); // AC-66 stays
-  await screen.findByText('90 %');
+  await screen.findByText(pct(90));
 });
 
 test('the AI/code sentence and tags in English (AC-79)', async () => {

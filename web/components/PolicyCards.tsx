@@ -27,10 +27,10 @@ export function RuleCard({ group, skeleton, children }: { group: string; skeleto
 
 // The sentence is the rule's hint: the input points at it with aria-describedby={`${rule}-hint`}. An empty or half-typed box has no value (AC-18).
 export function RuleSentence({ rule, value }: { rule: RuleKey; value: string | boolean }) {
-  const { t, locale } = useT();
+  const { t, locale, pct } = useT();
   const n = typeof value === 'string' && value.trim() !== '' ? Number(value) : NaN;
   const text = typeof value === 'boolean' ? t(`policy.s.${rule}.${value ? 'on' : 'off'}`)
-    : Number.isNaN(n) ? t('policy.s.empty') : t(`policy.s.${rule}`, { v: n.toLocaleString(locale) });
+    : Number.isNaN(n) ? t('policy.s.empty') : t(`policy.s.${rule}`, { v: rule === 'agreement_tolerance_pct' ? pct(n) : n.toLocaleString(locale) });
   return <span id={`${rule}-hint`} className="muted hint">{text}</span>;
 }
 

@@ -55,9 +55,9 @@
 .chart-seg span:first-child { border-radius: 4px 0 0 4px; }
 .chart-seg span:last-child { border-radius: 0 4px 4px 0; }
 
-.chart-kpi { display: flex; flex-direction: column; gap: 0.25rem; padding: 1rem; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.chart-kpi { display: flex; flex-direction: column; gap: 0.25rem; padding: 1rem; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); container-type: inline-size; }
 .chart-kpi-label { font-size: var(--text-sm); color: var(--ink-2); }
-.chart-kpi-value { font-size: var(--text-xl); font-weight: 600; line-height: 1.2; }
+.chart-kpi-value { font-size: min(var(--text-xl), 12cqi); font-weight: 600; line-height: 1.2; }
 .chart-kpi-value .chart-unit { font-size: var(--text-sm); }
 .chart-kpi-na { color: var(--ink-2); font-size: var(--text-base); font-weight: 400; }
 .chart-kpi-hint { font-size: var(--text-sm); color: var(--ink-2); }

@@ -7,16 +7,19 @@ import { useT } from '../i18n';
 const MARK = { cumple: '✓', no_cumple: '✕', no_verificado: '?' } as const;
 const TONE: Record<Verdict, Tone> = { cumple: 'pagar', no_cumple: 'frenar', no_verificado: 'escalar' };
 
-/** "Lo que decidí" (AC-26, AC-102, R-22): a bar «11 de 13 cumplen», then one row per check: mark, verdict, rule name, the API's sentence. */
+/** "Lo que decidí" (AC-26, AC-102, R-22, R-163): a bar «11 de 13 reglas cumplen», then one row per check: mark, verdict, rule name, the API's sentence. */
 export default function RuleChecklist({ explanations, checks }: { explanations: string[]; checks: Check[] }) {
   const { t, locale } = useT();
   const count = (v: Verdict) => checks.filter((c) => c.verdict === v).length;
+  const form = (k: number) => (new Intl.PluralRules(locale).select(k) === 'one' ? 'one' : 'other');
   const n = count('cumple');
-  const title = t(`detail.rules.pass.${new Intl.PluralRules(locale).select(n) === 'one' ? 'one' : 'other'}`, { n, total: checks.length });
+  const title = t(`detail.rules.pass.${form(n)}`, { n, total: checks.length });
+  const rest = (['no_cumple', 'no_verificado'] as const).filter((v) => count(v) > 0).map((v) => t(`trace.count.${v}.${form(count(v))}`, { n: count(v) }));
+  const summary = rest.length ? t('detail.rules.sum', { title, rest: rest.length > 1 ? t('detail.rules.and', { a: rest[0]!, b: rest[1]! }) : rest[0]! }) : t('detail.rules.sum.all', { title });
   return (
     <section>
       <h2>{t('detail.decided')}</h2>
-      <Segments title={title} unit={t('detail.rules.unit')}
+      <Segments title={title} unit="" summary={summary}
         segments={(['cumple', 'no_cumple', 'no_verificado'] as const).map((v) => ({ label: t(`verdict.${v}`), value: count(v), tone: TONE[v] }))} />
       <ul className="checks" aria-label={t('detail.decided')}>
         {explanations.map((s, i) => {

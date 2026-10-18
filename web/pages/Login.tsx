@@ -7,6 +7,7 @@ import LogoIntro from '../components/LogoIntro';
 import { MIN, PasswordField } from '../components/SaveAccess';
 import TrialButton from '../components/TrialButton';
 import { markFirstRun } from '../firstRun';
+import { enterApp } from '../transition';
 import { useT } from '../i18n';
 import type { Lang } from '../../src/i18n';
 import './login.css';
@@ -90,7 +91,7 @@ export default function Login() {
       void supabase().then((sb) => sb.auth.updateUser({ data: { lang: picked } })).catch(() => undefined);
     }
     if (session) markFirstRun(session.user.id); // the shell decides what is pending, in budgeted calls, after landing (AC-70)
-    navigate(typeof from === 'string' ? from : '/', { replace: true });
+    void enterApp(() => navigate(typeof from === 'string' ? from : '/', { replace: true })); // AC-109
   };
 
   return (

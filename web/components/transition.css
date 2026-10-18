@@ -1,0 +1,19 @@
+/* AC-109: the entry transition (web/transition.ts). Names apply only while it runs. Transform and opacity only, 400 ms. */
+.entering .vt-logo { view-transition-name: brand-logo; }
+.entering .vt-bandeja { view-transition-name: bandeja; }
+.entering::view-transition-group(*),
+.entering::view-transition-old(*),
+.entering::view-transition-new(*) { animation-duration: 400ms; animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1); }
+/* The browser's group animation morphs width and height; nothing but the logo moves, and transition.ts moves it by transform. */
+.entering::view-transition-group(*) { animation-name: none; }
+.entering::view-transition-group(brand-logo) { transform-origin: 0 0; }
+/* The browser's own fades also animate mix-blend-mode: these are opacity only. The login card or /demo content (the old
+   root) fades out; Bandeja rises 8 px as it fades in; the logo is not faded, it only moves. */
+.entering::view-transition-old(*) { animation-name: vt-fade-out; }
+.entering::view-transition-new(*) { animation-name: vt-fade-in; }
+.entering::view-transition-new(bandeja) { animation-name: vt-rise; }
+.entering::view-transition-old(brand-logo) { animation-name: none; opacity: 0; }
+.entering::view-transition-new(brand-logo) { animation-name: none; }
+@keyframes vt-fade-out { to { opacity: 0; } }
+@keyframes vt-fade-in { from { opacity: 0; } }
+@keyframes vt-rise { from { opacity: 0; transform: translateY(8px); } }

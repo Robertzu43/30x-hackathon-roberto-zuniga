@@ -154,6 +154,29 @@ test('"Entrar como Andina Labs" starts the tour on Bandeja; skipping it stores n
   expect(fakeAuth.updateUser).not.toHaveBeenCalledWith({ data: { tour_seen: true } });
 });
 
+// AC-109, AC-42 Clarified: a browser with View Transitions; the test holds the transition open, then ends it.
+test('the tour mounts only after the entry transition ends (AC-109)', async () => {
+  let end = () => {};
+  const finished = new Promise<void>((r) => (end = r));
+  const start = vi.fn((update: () => Promise<void>) => {
+    const done = update();
+    return { ready: done, finished: done.then(() => finished), updateCallbackDone: done, skipTransition: () => {} };
+  });
+  Object.defineProperty(document, 'startViewTransition', { value: start, configurable: true });
+  try {
+    renderAt(<App />, { at: '/demo' });
+    await enterAsDemo();
+    await screen.findByRole('navigation', { name: 'Secciones' }); // Bandeja is on screen, under the running transition
+    expect(start).toHaveBeenCalledOnce();
+    await act(() => new Promise((r) => setTimeout(r, 50)));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await act(async () => end());
+    expect(await screen.findByRole('dialog')).toBeTruthy();
+  } finally {
+    delete (document as { startViewTransition?: unknown }).startViewTransition;
+  }
+});
+
 test.each(['/policy', '/period', '/'])('a demo user reloading or deep-linking %s stays there with no tour (R-62)', async (at) => {
   signedInAs(DEMO_EMAIL, SEEN);
   renderAt(<App />, { at });

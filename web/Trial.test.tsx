@@ -13,8 +13,16 @@ import type { StoredDecision } from '../src/agent/trace';
 import TrialButton from './components/TrialButton';
 import { currentSession } from './test/supabase';
 import { DEMO_EMAIL, fakeAuth, mockApi, renderAt, signedInAs } from './test/utils';
+import { enterApp } from './transition';
 import { FIRST_RUN } from './firstRun';
 import { guardLeave, isTrial } from './trial';
+
+// AC-109: the real enterApp runs (jsdom has no View Transitions, so the swap is instant); the spy proves the door uses it.
+vi.mock('./transition', async (load) => {
+  const real = await load<typeof import('./transition')>();
+  return { ...real, enterApp: vi.fn(real.enterApp) };
+});
+beforeEach(() => { vi.mocked(enterApp).mockClear(); }); // braces: a returned function would run as teardown
 
 // The shared fake has no anonymous sign-in: an anonymous session is the fake one with no email and is_anonymous.
 const anonymous = () => {
@@ -72,6 +80,7 @@ test('one click signs in anonymously once, in the page language, then opens Band
   expect(await screen.findByText('Bandeja abierta')).toBeTruthy();
   expect(auth.signInAnonymously).toHaveBeenCalledOnce();
   expect(auth.signInAnonymously).toHaveBeenCalledWith({ options: { data: { lang: 'es' } } });
+  expect(enterApp).toHaveBeenCalledOnce(); // the hand-over into Bandeja (AC-109)
   expect(runCalls(f)).toHaveLength(0); // the shell runs the pass after landing
   expect(sessionStorage.getItem(FIRST_RUN)).toBe('3f9a1c2b-0000-4000-8000-000000000000'); // the trial user's id: their pass, nobody else's
 });
@@ -138,6 +147,7 @@ test.each([
   fireEvent.click(screen.getByRole('button', { name: 'Entrar como Andina Labs' }));
   expect(await screen.findByText('Bandeja abierta')).toBeTruthy();
   expect(fakeAuth.signInWithPassword).toHaveBeenCalledWith({ email: DEMO_EMAIL, password: 'andina-demo-2026' });
+  expect(enterApp).toHaveBeenCalledOnce(); // the demo door hands over too (AC-109)
   expect(sessionStorage.getItem('demo-tour')).toBe('1'); // R-62: the shared demo's tour marker
 });
 
@@ -159,6 +169,7 @@ test('while an anonymous session exists the door reads «Volver a mi empresa de 
   expect(screen.queryByRole('button', { name: 'Probar con mi propia empresa' })).toBeNull();
   fireEvent.click(back);
   expect(await screen.findByText('Bandeja abierta')).toBeTruthy();
+  expect(enterApp).toHaveBeenCalledOnce(); // «Volver…» uses the same transition (AC-109)
   expect(auth.signInAnonymously).not.toHaveBeenCalled();
 });
 

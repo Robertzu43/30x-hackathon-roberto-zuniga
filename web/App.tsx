@@ -8,6 +8,7 @@ import Logo from './components/Logo';
 import Tour from './components/Tour';
 import { FirstRunProvider } from './firstRun';
 import { useT } from './i18n';
+import { entered } from './transition';
 import { isTrial } from './trial';
 
 /**
@@ -115,7 +116,7 @@ function Shell({ onTour, children }: { onTour: () => void; children: ReactNode }
           {nav.map((r) => <NavLink key={r.path} to={r.path} end onMouseEnter={() => warm(r)} onFocus={() => warm(r)}>{t(r.nav!)}</NavLink>)}
         </nav>
       )}
-      <main key={lang}>{children}</main>{/* R-98: a language switch remounts the screen, which re-fetches its record in that language */}
+      <main key={lang} className="vt-bandeja">{children}</main>{/* R-98: a language switch remounts the screen, which re-fetches its record in that language */}
     </>
   );
 }
@@ -130,10 +131,11 @@ export default function App() {
   // One Tour outside <Routes> keeps its step across navigation; it never shows on public pages (/demo, /approve).
   const onPublic = pages.find((p) => matchPath(p.route.path, pathname))?.route.public;
   // R-137: it starts on landing (Bandeja, or a public page whose sign-in is about to land there), never on a deep link: its first step would navigate to `/`.
-  useEffect(() => setTouring(!!user && (onPublic || pathname === '/') && shouldStartTour(user, demoEmail)), [user?.id, demoEmail]); // keyed on the id: USER_UPDATED (tour_seen) must not restart it
+  // It waits for the entry transition (AC-109). Keyed on the id: USER_UPDATED (tour_seen) must not restart it.
+  useEffect(() => void entered().then(() => setTouring(!!user && (onPublic || pathname === '/') && shouldStartTour(user, demoEmail))), [user?.id, demoEmail]);
   // R-62: the demo click may sign in the same user id again, so the marker is also checked when the click navigates.
   useEffect(() => {
-    if (isDemoUser(user, demoEmail) && takeDemoTour()) setTouring(true);
+    if (isDemoUser(user, demoEmail) && takeDemoTour()) void entered().then(() => setTouring(true));
   }, [user?.id, demoEmail, pathname]);
 
   const endTour = () => {

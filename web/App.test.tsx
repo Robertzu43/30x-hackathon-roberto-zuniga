@@ -320,7 +320,7 @@ test('switching the language re-fetches the screen on view with the new X-Lang',
 test('with a stored session that resolves late, /policy shows Política and the address never changes (AC-94, R-137)', async () => {
   signedInAs('ana@empresa.co', SEEN);
   const stored = currentSession();
-  fakeAuth.onAuthStateChange.mockImplementation((cb) => {
+  fakeAuth.onAuthStateChange.mockImplementationOnce((cb) => {
     setTimeout(() => cb('INITIAL_SESSION', stored), 150);
     return { data: { subscription: { unsubscribe: () => true } } };
   });

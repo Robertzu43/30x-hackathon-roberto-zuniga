@@ -1538,6 +1538,185 @@ Trace: D45 (2), D34 (portal), D39 (empty states), AC-66. Rubric: Presentación. 
 
 AC-91 Clarified (D45, R-172): the gate measures every screen and state at a sixth width, 1920 × 1080, at device scale 1, with screenshots `docs/ux/<screen>-1920-<lang>.png`. Items 1 to 7 apply there as at 1440. The new rows are `1.band`, `1.cap`, `1.fill`, `1.measure`, `1.centred`, `1.grid`, `1.hero`, `4.tourcover` and `6.cards`, defined in AC-112 to AC-116. Each has a fixture test in `npx vitest run scripts`. This width stays in the gate for every later run.
 
+## 13i. Roberto's feedback at ~06:10Z, 18 Oct (D47: tour, copy, slogan, KPI run state, width)
+
+Product folded this in on 18 Oct at about 06:30Z. Nobody was asked. D47 is Roberto's decision, and where it differs from an earlier AC or ruling, D47 wins. Rulings R-181..R-188 bind these ACs, and Q24 and Q25 are in docs/QUESTIONS.md. The copy deck is `docs/COPY.md`, written by product (R-181). The tasks are 60, 61 and 62 in `docs/PLAN-D28.md`, section "D47: Tasks 60-62".
+
+All six ACs are MUST. Never cut:
+- AC-117, except its arrow keys;
+- AC-118 and AC-119;
+- AC-120's P1 rows;
+- AC-121 (a);
+- AC-122 on the band screens.
+
+Everything else is cut only in R-188's order.
+
+**AC-117 (MUST; never cut except the arrow keys, R-188; D47 (1))** When the guided tour shows any of its 7 steps, at any gate width (360, 390, 768, 1024, 1440, 1920), in es or en, the system lights exactly that step's element, cuts no text and covers nothing:
+- Targets (R-182). Each step points at one element that contains what its title names:
+  1. Bandeja: the «Facturas» table's header (its title, search and filters);
+  2. the «Nueva factura» button;
+  3. the «Ejecutar agente» button;
+  4. the first invoice row;
+  5. Política: its h1 with the intro line;
+  6. Beneficiarios: its h1 with the intro line;
+  7. Periodo: the «Dinero del mes» block.
+
+  If one of these does not fit beside the card at some width, the builder anchors a smaller element that still contains the named thing, and names it in the report. There is no "large target" case any more: AC-115's «C covers at most 50 % of T» clause is replaced by `4.cover` below.
+- `4.target`: before a step is shown, the page scrolls so that the target's box T is wholly inside the viewport, below the top bar and clear of the card.
+- `4.spot`: the lit area H is T grown by p on every side, with 8 ≤ p ≤ 12 px (± 1), and its corners are rounded (radius 8 to 16 px). H follows T: 300 ms after a scroll, a resize or a data refresh, H again equals T grown by p, ± 2 px.
+- `4.textcut`: H's edge never crosses text. Every visible line box in the viewport, taken from `Range.getClientRects()` for each text node, is wholly inside H or wholly outside it, ± 1 px.
+- `4.dim`: everything outside H is under one dim layer, with one colour and one opacity. The only exception is the top bar, which stays above the dim (R-78).
+  - Exactly one element carries `data-tour-dim`. No other fixed element with a non-transparent background spans the viewport.
+  - In the step's screenshot, take the pixels 6 px outside each edge of H and at the viewport's four corners below the top bar. Where the page under them has the same background, they are the same colour, ± 3 per channel.
+- `4.cover` (tightens AC-115): the card C, buttons included, is wholly inside the viewport, C ∩ H = ∅, and C is at least 8 px from H. This holds at every step, width and language.
+  - The card goes below H, else above, else right, else left, whichever fits first.
+  - At ≤ 480 px the card is pinned to the bottom (R-105), and T is scrolled to sit above it.
+- `4.keys`:
+  - Escape closes the tour, and focus returns to «Ver tutorial».
+  - → goes to the next step and ← to the previous one. ← does nothing on step 1, and → on step 7 does what «Terminar» does.
+  - While the tour is open, Tab and Shift+Tab cycle inside the card only (a focus trap).
+  - Each new step moves focus to the card's heading.
+  - No element under the dim can be focused or clicked.
+- Still in force: AC-115's «Paso n de m» and its dots, R-105, R-78, R-144 and R-161.
+
+Evidence:
+- Gate `tour`, new rows `4.target`, `4.spot`, `4.textcut`, `4.dim`, `4.cover` and `4.keys`: for each of the 7 steps at the six widths, in es and en, every row passes in `docs/ux/gate-finance.md`. Each cell prints p, the intersection area (0) and the gap.
+- Screenshots of every step at 390 × 844, 1440 × 900 and 1920 × 1080, es and en, as `docs/ux/tour-<step>-<width>-<lang>.png`: 42 files, committed.
+- `npx vitest run web/spotlight.test.ts web/Tour.test.tsx` covers:
+  - the geometry: p, clamping to the viewport, the card's placement order, no intersection;
+  - a text line that straddles an edge is detected;
+  - the keys: Escape, the arrows, the focus trap, and focus back on «Ver tutorial».
+- `npx vitest run scripts`: each new row has one fixture page that fails it, and the same page fixed passes. The fixtures are a fixed 600 × 400 hole, a hole whose edge crosses a paragraph, two dim layers, a card over its target, a target out of view, and focus escaping the card.
+- QA on the deployed URL: «Ver tutorial» at 390 × 844 and at 1920 × 1080, es and en. On every step, the lit area hugs one element, its edge cuts no text, the card sits beside it, and the arrows and Escape work.
+
+Trace: D47 (1), D45 (2), D19, AC-42, AC-115. Rubric: Presentación. Tasks: 60.
+
+**AC-118 (MUST; never cut; D47 (2))** When a finance lead reads the tour or any onboarding text, the system talks about their work, benefit first, with no vendor names, model names or jargon. Technology is named only where D47 (2) allows it:
+- The onboarding keys are:
+  - every `tour.*`, `brand.*`, `login.*` and `entry.*` key;
+  - `trial.lead`, `account.lead` and `activity.empty`;
+  - Bandeja's empty-state card keys and the vendor portal's hint keys (AC-116 (b), (c));
+  - `ask.label`.
+- In es and en:
+  - No onboarding value matches `/Bedrock|Nova|AWS|Amazon|Yahoo|Workers AI|Cloudflare|Supabase|\bLLM\b|\bJEV\b|\bmodelo?\b|tabla de consecuencias|consequence table|herramientas|\btools\b|percibe|perceives|→/i`.
+  - Each `tour.<step>.body` is at most 180 characters and at most two sentences.
+  - The tour's copy is `docs/COPY.md` «Guided tour», verbatim.
+- Where technology may be named in the UI:
+  - the «Leído por IA · <proveedor>» line on Detalle;
+  - /demo's «Cómo funciona» section: `demo.loop.*`, `demo.stage.*`, `demo.where`, `demo.pitch`, `demo.jev`, `demo.tag.*` and `demo.ask.text`.
+
+  Outside the UI, README may name it. In both UI dictionaries, no other key's value names Bedrock, Nova, AWS, Amazon, Yahoo, open.er-api, Workers AI, Cloudflare or Supabase.
+- «Pregúntale a Thesaurus» labels each answer «Respuesta generada por IA a partir del registro. Puede equivocarse: el registro manda.» / "AI-generated answer based on the record. It can be wrong: the record prevails." The API still returns the provider, but the label no longer shows it. This amends the label in AC-67 Clarified (D29).
+- Recorded values are data, not copy (Q25, R-183):
+  - the source stored with a rate still shows in Detalle's Moneda line, in the FX card, and in Política's «Fuente» column (AC-74);
+  - the provider stored with a read still shows in «Leído por IA».
+
+Evidence:
+- `npx vitest run src/i18n/onboarding.test.ts` (new, Task 61): the regex over the onboarding keys in both languages, the length and sentence count of the 7 tour bodies, and the allow-list scan over `ui.es` and `ui.en`.
+- `grep -rnE "Bedrock|Nova Lite|Yahoo" src/i18n --include=*.ts | grep -v test` prints lines from `src/i18n/features/demo.ts` only.
+- QA on the deployed URL, es and en:
+  - the 7 tour steps name no vendor;
+  - a question in «Pregúntale a Thesaurus» shows the new label with no provider;
+  - a live-read invoice's Detalle still shows «Leído por IA · Amazon Nova Lite (AWS Bedrock)».
+
+Trace: D47 (2), D29, AC-42, AC-66, AC-67, AC-79. Rubric: Presentación, V. implementación. Tasks: 61.
+
+**AC-119 (MUST; never cut; D47 (3); the wording is provisional, Q24)** When anyone opens /demo, the login screen or any signed-in screen, the system introduces Thesaurus with the new slogan, defined in one place:
+- /demo:
+  - the h1 is «Paga lo que debes. Frena lo que no. Pregunta cuando dudes.» / "Pay what you owe. Stop what you don't. Ask when in doubt.";
+  - the paragraph right after it is «El agente de cuentas por pagar que decide con tus reglas.» / "The accounts payable agent that decides by your rules.";
+  - the footer reads «Thesaurus · Construido para Blinka» / "Thesaurus · Built for Blinka".
+- The top bar's descriptor, next to the logo, is «Agente de cuentas por pagar» / "Accounts payable agent". The login screen's lead is the sub-line.
+- One place: the four strings live only in `src/i18n/features/brand.ts`, under `brand.headline`, `brand.subline`, `brand.descriptor` and `brand.built_for`. Tests read them from that dictionary. A new slogan from Roberto means one edit there, plus README's top lines.
+- In the app, «Construido para Blinka» / "Built for Blinka" appears only in the /demo footer. README carries it in its opening lines.
+- Amended:
+  - AC-53's product line «Thesaurus, un agente de pagos construido para Blinka» becomes «Thesaurus, agente de cuentas por pagar», with «Construido para Blinka» in the /demo footer and README.
+  - AC-80's text descriptor and AC-110 item 14 follow the same change.
+
+Evidence:
+- `grep -rln "Paga lo que debes" src web portal` prints `src/i18n/features/brand.ts` only.
+- `grep -rniE "construido para Blinka|built for Blinka" src web portal | grep -v test` prints the two `brand.built_for` lines only.
+- `sed -n '1,10p' README.md` shows the headline and «Construido para Blinka». `grep -n "agente de pagos\|payments agent" README.md` prints nothing.
+- `npx vitest run web/Demo.test.tsx web/Login.test.tsx web/Logo.test.tsx web/App.test.tsx`: the h1, the sub-line, the footer, the login lead and the top-bar descriptor, in es and en, equal the values in `brand.ts`.
+- QA: `<URL>/demo` in a private window, es and en.
+
+Trace: D47 (3), D21, AC-53, AC-80. Rubric: Presentación. Tasks: 61.
+
+**AC-120 (MUST; the P1 rows are never cut, the P2 rows are cut first, R-188; D47 (4))** When anyone reads any screen, dialog or email, in es or en, the system shows the «after» copy of `docs/COPY.md`, in one voice (the deck's «Voice» rules):
+- Every P1 row is applied. Every P2 row is applied unless the ledger lists it as cut.
+- The task changes copy only. The diff touches dictionaries, tests, README and SUBMISSION, plus the key references in components where a key is added or removed. It changes no logic, layout or CSS.
+- Precedence (R-185): where a UI string quoted in an earlier AC differs from the deck's «after», the deck wins, and QA reads that AC with the deck's text.
+  - Exceptions: the frozen sets in the deck's «Reviewed, unchanged» section. They are the record and email templates, the vendor status words, AC-116's copy, AC-66's stage words, the R-30 pitch line and AC-79's /demo sentence.
+  - AC-42's step names become «Detalle de factura» and «Periodo».
+- The D38 gate's copy items still pass on every screen: `5.locale`, the i18n-key pattern, and R-131's `data-user`.
+
+Evidence:
+- `npx vitest run src/i18n/copy.test.ts` (new, Task 61): it parses every dictionary table in `docs/COPY.md` and checks each row against `ui.es` and `ui.en`. It skips only the P2 rows the ledger names as cut, and the «Owned by Task 60» table, which Task 60's tests check.
+- `npm test`: the full suite is green, with test expectations updated to the new copy.
+- `git diff --stat` over Task 61's commits lists only these files:
+  - `src/i18n/**` and `*.test.*`;
+  - `web/App.tsx`, `web/pages/Demo.tsx`, `web/pages/Login.tsx`, and `web/components/Tour.tsx` (only the removed loop line);
+  - text selectors in `scripts/*.mjs` and `e2e/*`, where they find a changed text;
+  - `README.md` and `docs/SUBMISSION.md`.
+
+  The reviewer confirms that the component changes are key references only.
+- Task 62: the D38 gate on the deployed URL, and a fresh UX reviewer who reads the screenshots against the deck's voice.
+
+Trace: D47 (4), D14, D38. Rubric: Presentación, V. implementación. Tasks: 61, 62.
+
+**AC-121 (MUST; (a) never cut, (b) cut second, R-188; D47 (5))** When the agent is deciding invoices in this tab, the system shows the run's progress instead of figures that are still moving:
+- (a) Bandeja. A run is the first-login pass (AC-107) or «Ejecutar agente» (AC-70).
+  - While a run is in progress, each of the four KPI tiles (Por pagar hoy, Esperando tu aprobación, Frenadas este mes, Autonomía) shows «Decidiendo… n de m» / "Deciding… n of m" in its value slot, with no hint.
+  - n is the number of invoices decided so far in the run, and m is the number of invoices in the run. They are the same numbers as the progress line.
+  - No tile shows a percentage, an amount or a count during the run.
+- When the run ends, whether it finished or an error stopped it, the tiles show the figures from the first screen data loaded after the run's last call. The progress line reads «Decidiendo tus facturas pendientes… n de m. Las cifras aparecen al terminar.» (`docs/COPY.md`, the Task 60 rows).
+- Each tile keeps its box:
+  - its height is the same, ± 1 px, before, during and after the run;
+  - the slow-data `entry` mode's CLS stays ≤ 0.01 (R-176);
+  - its `aria-label` reads «<label>: Decidiendo… n de m» during the run.
+- (b) Periodo. While this tab's run is in progress, Periodo's Autonomía and «Decisiones explicadas» figures show the same «Decidiendo… n de m» instead of a percentage.
+- A cron run outside this tab does not change the tiles.
+
+Evidence:
+- `npx vitest run web/dashboard/Dashboard.test.tsx web/Inbox.test.tsx web/Period.test.tsx`:
+  - with a pass at n = 15 and m = 29, the four tiles read «Decidiendo… 15 de 29» (en "Deciding… 15 of 29"), and their text holds no `%`, no `$` and no digit other than those in 15 and 29;
+  - after the pass, the tiles show the server's figures;
+  - the same holds for «Ejecutar agente»;
+  - for (b), Periodo shows the run state during a pass.
+- The gate's new row `2.kpistate` on `trial` during the first-login pass, at 390 and 1440, es and en:
+  - every tile matches `/^Decidiendo… \d+ de \d+$/` (en `/^Deciding… \d+ of \d+$/`) until the pass ends, and no tile contains «Decidiendo» after it;
+  - tile heights are equal, ± 1 px;
+  - the `entry` slow-data CLS is ≤ 0.01.
+- QA on the deployed URL: «Probar con mi propia empresa» at 1440 × 900. A screenshot taken mid-pass shows the four tiles reading «Decidiendo… n de 29», and the figures appear at the end.
+
+Trace: D47 (5), D42 (1), AC-101, AC-107, AC-70. Rubric: Impacto, Presentación. Tasks: 60.
+
+**AC-122 (MUST; the band screens are never cut, the other screens at 2560 are cut fourth, R-188; D47 (6))** When any screen is shown at 1440, 1920 or 2560 px, in es or en, the system uses D45's layout scale, and Playwright verifies it:
+- The gate gains a seventh width, 2560 × 1440 at device scale 1, for D45's layout rows only.
+  - At 2560, every band screen, with its designed states, passes `1.band`, `1.cap`, `1.fill`, `1.measure` and `1.grid`, and `demo` also passes `1.hero`.
+  - The expected band is 1440 px with 560 px margins on a dashboard screen, and 1280 px with 640 px margins on `demo`, ± 2.
+  - Every other screen passes `1.centred` there: `login`, `login-password`, `approve`, `portal`, `portal-reply`, `portal-error`, `status`, `status-invalid` and the dialogs.
+- The other D38 items do not run again at 2560, because none of them depends on width above 1440 (R-187).
+- Screenshots: `docs/ux/<screen>-<width>-<lang>.png` for every screen and designed state of both experiences, at 1440, 1920 and 2560, es and en, committed.
+- AC-112's rows at 1440 and 1920 do not change.
+
+Evidence:
+- `npm run ux:gate -- --base <URL>` with 2560 in the layout widths, for both experiences: the layout rows pass at 2560 in `docs/ux/gate-finance.md` and `docs/ux/gate-vendor.md`, and each cell prints the band's x and width.
+- `ls docs/ux/*-2560-es.png docs/ux/*-2560-en.png | wc -l` equals twice the number of screens and states in the gate's list.
+- By hand, Chromium DevTools at 2560 × 1440: AC-112's console line prints `[640, 1280]` on `/demo` and `[560, 1440]` on Bandeja.
+- `npx vitest run scripts`: a fixture band 40 px narrower than expected fails at 2560.
+
+Trace: D47 (6), D45 (1), D38. Rubric: Presentación. Tasks: 60 (the width and its rows), 62 (the run on the deployed URL).
+
+Earlier ACs amended by D47. Where they differ, D47 and the ACs above win; this is not a reopening, because Roberto's later decision outranks a ruling:
+- AC-42 Clarified (D47): the step names are Bandeja, Nueva factura, Ejecutar agente, Detalle de factura, Política, Beneficiarios and Periodo.
+- AC-66 Clarified (D47 (2)): the tour no longer names the six stages, and AC-66's «tour: step 1 names the six stages» clause is removed. The `grep -rln "rinde cuentas"` list becomes README, SUBMISSION and the /demo copy. /demo and README keep the stages and the pitch line.
+- AC-79 Clarified (D47 (2)): the «Dónde actúa la IA…» sentence stays on /demo («Cómo funciona») and in README. It leaves the tour.
+- AC-67 Clarified (D29) label: changed by AC-118 (no provider in the label).
+- AC-115: its «large» case is replaced by AC-117's re-anchored targets and `4.cover`. Its label, dots and the rest stay.
+- AC-116 (a): the /demo section heading is «Cómo funciona» / "How it works" (`docs/COPY.md`). The six cards and AC-66's words stay.
+- AC-53, AC-80, AC-110 item 14: see AC-119.
+
 ## 14. SHOULD (only after every MUST passed QA)
 
 **AC-54 (SHOULD)** When AWS SES is configured (identity `HEARTBEAT_EMAIL` verified, scoped sender credentials as Worker secrets and as Supabase custom SMTP), the system delivers to `HEARTBEAT_EMAIL` the 6-digit OTP (valid 10 minutes) and the Spanish escalation email with working approve/reject links. Evidence: log in with `HEARTBEAT_EMAIL` and receive the code; escalate an invoice in a workspace whose approver is `HEARTBEAT_EMAIL`, click the link, "Confirmar". Until then: tests (AC-39) and the ledger.
@@ -2260,6 +2439,106 @@ Re-scope after QA run 2 of 2 on Tasks 52, 52c, 52d, 40d, 53 and 54 (product, 18 
   - Principle: company-can-deploy-Monday (every MUST reaches the deployed URL or is reported honestly), then evidence (a live check exists for each fix).
   - Loser's best argument, verbatim: "fold the CLS fix into Task 58, which rewrites the top bar and Bandeja's blocks anyway; two builders on the same five files three hours before the last deploy invites a bad rebase".
 
+D47 fold-in (product, 18 Oct ~06:30Z; Roberto's D47 of ~06:10Z; nobody was asked; Q24 and Q25 are in docs/QUESTIONS.md):
+- **R-181 Three tasks, the copy deck written by product, and why Task 60 is a new task (AC-117..AC-122).**
+  - Task 60 (senior-builder) builds AC-117 (tour spotlight), AC-121 (KPI run state) and AC-122 (width at 2560).
+    - It is a new task, not an amendment of Task 58. Task 58 is mid-build on never-cut D45 parts that must deploy first, and widening a running brief would put the band and the hero video at risk.
+    - AC-117 tightens what Task 58 builds (AC-115's placement), so Task 60 builds on 58's merge rather than beside it.
+    - To save clock, Task 60 starts at the first free seat. It builds only new files until 59 and 58 merge: `web/components/spotlight.ts`, `scripts/ux-tour.mjs` and their tests.
+    - It rebases onto Task 59 before it touches the KPI files, and onto Task 58 before it touches `Tour.tsx`, the tour anchors and `scripts/ux-gate.mjs`.
+  - The copy deck is written by product, now, as `docs/COPY.md` (06:30Z), in es and en, per screen, with key paths and before/after.
+    - D47 (4) makes product the judge of copy disputes. When the judge writes the deck, nothing is left to dispute.
+    - It also costs no builder seat and no hour of the clock.
+  - Task 61 (junior-builder) applies the deck: keys only, tests updated, no logic.
+  - Task 62 deploys "D47" and verifies it: one fresh QA, one fresh UX reviewer, one fix round. Then the orchestrator writes «PRODUCT READY FOR FILM».
+  - Principle: company-can-deploy-Monday (the never-cut D45 work lands first, and one owner holds each file region at a time), then scope.
+  - Loser's best argument (amend Task 58), verbatim: "the builder who already holds Tour.tsx's placement and the gate's layout file should finish the tour; a second builder on the same component three hours before FREEZE writes the placement twice and invites a bad rebase".
+- **R-182 The tour lights exactly one element, and the large-target case goes (AC-117; D47 (1) replaces R-170's second half).**
+  - Roberto's screenshots show the two failures: a fixed lit rectangle that cuts text in half, and a card over the content it explains.
+  - R-170 let a card cover up to half of a large target. D47 says the card never covers its target.
+  - The only way to honour that on a 390 × 844 screen is that no target is larger than the space beside the card. So the screen-level steps re-anchor on one element that contains what the step's title names: the table header, the h1 with its intro line, the money block. The two buttons and the first row stay as they are.
+  - The padding is 8 to 12 px (D47's numbers). The text cut is measured on line boxes, so it is a test, not a judgement.
+  - There is one dim layer, so the dim is even. The top bar stays above it (R-78), so the reader can always leave or switch language.
+  - D47 names the keys: Escape, the arrows, and a focus trap.
+  - «Paso n de m» and the dots (AC-115) stay.
+  - Principle: the company's actual user (a finance lead who cannot read a step whose text is cut or covered), then evidence.
+  - Loser's best argument (R-170's own), verbatim: "a step about a whole screen should light the whole screen; shrinking Bandeja's step to the table header lights less than the step talks about".
+- **R-183 Where technology is named (AC-118; D47 (2)).**
+  - In the UI, model and vendor names appear only in Detalle's «Leído por IA» line and in /demo's «Cómo funciona». README may name them too.
+  - The tour and onboarding copy (the deck's «Guided tour») drop «Amazon Nova Lite en AWS Bedrock», «la tabla de consecuencias», «consulta sus herramientas» and the «percibe → …» loop.
+  - «Pregúntale a Thesaurus» stops printing the provider in its label. That is a second place D47 does not allow. The API still returns the provider, and the label still says «generada por IA».
+  - AC-66's tour clause and AC-79's tour clause are removed, and both stay on /demo and in README.
+  - A recorded value is data, not copy (Q25):
+    - The rate source stored with a decision (AC-74) keeps showing in the Moneda line, in the FX card and in Política's «Fuente» column. It is the audit fact of which rate paid the invoice, and the record cannot be rewritten.
+    - The sentence `policy.fx.source`, which names Yahoo Finance and open.er-api.com as copy, is rewritten without them.
+  - Principle: scope (Roberto's later words win), then evidence (a decision's record keeps its provenance).
+  - Loser's best arguments, verbatim:
+    - (the label) "naming the model on every AI answer is honest attribution, and AI used with intent is 20 % of the rubric; hiding it in the chat makes the AI less visible to the jury";
+    - (Yahoo) "D47 names Yahoo Finance in its list; the literal reading takes it out of the record and Política too".
+- **R-184 The slogan is provisional and lives in one file (AC-119; D47 (3); Q24).**
+  - The four strings are D47's default:
+    - headline: «Paga lo que debes. Frena lo que no. Pregunta cuando dudes.»;
+    - sub-line: «El agente de cuentas por pagar que decide con tus reglas.»;
+    - descriptor: «Agente de cuentas por pagar»;
+    - «Construido para Blinka».
+  - They live in `src/i18n/features/brand.ts` and nowhere else in `src`, `web` or `portal`. Tests import them, so a slogan from Roberto is one edit there plus README's top lines.
+  - The English is product's translation.
+  - The login lead becomes the sub-line: D47 moves «construido para Blinka» out of every opening line, and the login screen is one.
+  - AC-53, AC-80 and AC-110 item 14 follow.
+  - Principle: scope.
+  - Loser's best argument, verbatim: "keep «construido para Blinka» next to the logo: for Blinka's own jurors it is the strongest line we have".
+- **R-185 The copy deck's rules and precedence (AC-120; D47 (4)).**
+  - Voice: «tú»; Thesaurus in the first person singular; short sentences, verb first; one name for each outcome and each screen; "beneficiary" in finance English.
+  - P1 rows are never cut; P2 rows are cut first.
+  - Precedence: the deck's «after» wins over any UI string an earlier AC quotes, except the frozen sets: the record and email templates (D24 and D25 verbatim, append-only records), the vendor status words (R-90), AC-116's copy, AC-66's stage words, the R-30 pitch line and AC-79's /demo sentence.
+  - `src/i18n/copy.test.ts` checks every row of the deck, so "applied" is a test, not a reading.
+  - Not changed, and listed in docs/IDEAS.md:
+    - plural selection for «factura(s)» (logic, not copy);
+    - one English contraction style (es-CO is the working language).
+  - Principle: evidence, then scope.
+  - Loser's best argument, verbatim: "rewrite the record templates too; they are the text a finance lead reads most, and «tablero» there still disagrees with «Bandeja» on the screen".
+- **R-186 KPI tiles show the run, not moving figures (AC-121; D47 (5)).**
+  - The runs are the two that happen in the tab: the first-login pass and «Ejecutar agente».
+  - n of m is the same pair the progress line already shows, so the tile and the line never disagree.
+  - Hints go too, because «5 órdenes preparadas hoy» moves as well.
+  - The tile keeps its box, so R-176's CLS proof holds.
+  - A run that stops on an error shows the figures as they are: they are true for what was decided, and the error line already says the rest.
+  - Periodo's percentages get the same treatment as part (b). Tour step 7 takes a juror to Periodo while the pass may still run.
+  - A cron run is invisible to the tab and changes nothing.
+  - Principle: the company's actual user (a «21 %» autonomy mid-run reads as a failing agent).
+  - Loser's best argument, verbatim: "let the figures count up; a live number is the most convincing proof the agent is working, and the progress line already says it is not finished".
+- **R-187 Width at 1440, 1920 and 2560 (AC-122; D47 (6)).**
+  - D45's scale applies unchanged. 2560 × 1440 joins the gate for the layout rows only, on every screen and state of both experiences, with screenshots at 1440, 1920 and 2560 in both languages.
+  - The rest of D38 is width-independent above 1440, so it does not run again there.
+  - Principle: evidence (Roberto's "use Playwright"), then scope.
+  - Loser's best argument, verbatim: "run the whole D38 gate at 2560; an overflow or contrast defect could show only on a wide screen".
+- **R-188 Clock, seats, cut order and «PRODUCT READY FOR FILM» (restates R-173's times for D47).**
+  - D45's deploy (Tasks 58 and 59, target ~09:00Z) does not change.
+  - R-173's «10:30Z last product deploy» becomes the following:
+    - the last product merge is 10:45Z;
+    - the "D47" deploy follows right away, before 11:00Z (deploy is allowed in FREEZE);
+    - after 11:00Z, only Task 62's fixes for failing gate rows or failing QA items, README, demo data and deploys.
+  - Seats: at most 3 agents. Priority: 58 and its reviews, then 59, then 60, then 61. Task 62 starts after the deploy.
+  - Cut order:
+    1. AC-120's P2 rows, at 10:15Z for any not yet built;
+    2. AC-121 (b), Periodo;
+    3. AC-117's arrow keys (Escape and the focus trap stay);
+    4. AC-122 at 2560 for the screens that are not band screens.
+    - At 09:45Z, if Task 58 has not merged, Task 60 takes cuts 2 and 3 at once.
+  - Never cut:
+    - AC-117: its targets, `4.target`, `4.spot`, `4.textcut`, `4.dim`, `4.cover`, Escape, the focus trap, and the 42 screenshots;
+    - AC-118 and AC-119;
+    - AC-120's P1 rows;
+    - AC-121 (a);
+    - AC-122 on the band screens.
+  - A never-cut part that is not merged by 10:45Z comes to product. It is not relaxed: it stays an open FAIL in README «Lo que no está hecho» and in the ledger. Whether its fix counts as a failing-test fix allowed in FREEZE is the orchestrator's process call.
+  - «PRODUCT READY FOR FILM»: the orchestrator writes this ledger line when the D47 deploy has passed Task 62, or Task 62's open items are ledgered as FAIL. Target 12:00Z, hard 12:30Z: at 12:30Z the film's walkthrough is captured from whatever is deployed.
+  - Task 37's re-record and the film's 30-45 s walkthrough capture (D46) move after that line. The film's other parts are not blocked.
+  - R-173's film cut times (12:00Z and 13:00Z) are superseded by D46 and by this ruling.
+  - Task 38's final QA happy path and the merge to main aim at ~15:00Z, and at the latest 16:00Z. The 17:00Z upload deadline bounds what is submitted.
+  - Principle: company-can-deploy-Monday (a deployed, verified product before the film), then scope.
+  - Loser's best argument, verbatim: "Roberto ordered the film to wait for D47 and the merge to main 'when ready, whatever the hour', so the product work could run past FREEZE to 13:00Z instead of squeezing four hours of UI into three".
+
 ---
 
 ## Task to AC map
@@ -2341,6 +2620,9 @@ Re-scope after QA run 2 of 2 on Tasks 52, 52c, 52d, 40d, 53 and 54 (product, 18 
 | 58 D45 layout band, /demo hero video, step cards, tour card, gate at 1920 | AC-112, AC-113, AC-114, AC-115, AC-116, AC-91 Clarified (D45, R-172), AC-110 item 2 (README thumbnail = poster), AC-42 / AC-45 / AC-66 / AC-108 (regressions), AC-107 / AC-109 CLS slow-data mode kept green on the new layout (R-176, R-180) |
 | 59 QA run 2 fixes: reload resume, late-data CLS, prefetch single-flight, OTP label (R-175..R-180) | AC-107 Clarified (R-175, R-176, R-179), AC-109 (CLS, R-176), AC-98 Clarified (R-177), AC-100 (fallback cut only, R-180), AC-108 (no code; R-178 evidence wording) |
 | 37 (from D45) | AC-114 (re-records `happy-path.webm` in place with its poster and es/en `.vtt`, R-169) |
+| 60 D47 tour spotlight, KPI run state, width at 2560 | AC-117, AC-121, AC-122, AC-115 (the large case replaced; label and dots kept), AC-107 / AC-109 slow-data CLS kept ≤ 0.01 (R-176) |
+| 61 D47 copy deck applied (keys only) | AC-118, AC-119, AC-120, AC-42 / AC-66 / AC-79 / AC-67 label Clarified (D47), AC-53 / AC-80 / AC-110 item 14 (descriptor) |
+| 62 D47 deploy, QA, fresh UX review, one fix round | AC-117..AC-122 on the deployed URL, AC-91 (D38 gate, both experiences), regressions AC-42, AC-45, AC-107 entry rows, AC-112, AC-114 |
 | 52 D42 entry speed: land first, the pass on Bandeja | AC-107, AC-92 Amended, AC-40 Amended, AC-42 Clarified (tour on landing, stable anchors), AC-78 Clarified, AC-99 Clarified, AC-91 (gate: `login`, `login-password`, `demo`, `trial`, `inbox`) |
 | 52c Demo door under 2 s (R-150) + QA E5a defects | AC-107 Clarified, AC-97 target 5, AC-98, AC-99 Clarified, AC-91 item 4, AC-95 (R-135), AC-109 (CLS) |
 | 52b D42 perf entry rows + gate timing | AC-97 Clarified (targets 5 and 6), AC-91 Clarified (`trial` through the pass, `login`/`demo` after the intro, `entry`) |
@@ -2439,4 +2721,14 @@ Cut order inside AC-111 (R-159 as restated by R-160): at 08:30Z the animated arc
 |---|---|---|---|---|---|---|
 | 58 | Layout band, /demo hero video, step cards, tour card, gate at 1920 | senior | AC-112..AC-116, AC-91 Cl. (D45) | Task 57 merged (06:30Z fallback, R-173) | 57 → 58 on `Demo.tsx`, `inbox.css`, `dashboard.css`, `charts.css`, `Period.tsx`, i18n; 57b ↔ 58 on `ux-gate.mjs` (second rebases); 58 → 37 → 56 on `web/public/demo/happy-path*`, `video.json`, `README.md` video lines | deploy "D45": main Worker and `facturas` portal, by 10:30Z at the latest (target ~08:00-08:30Z) |
 
-Then Task 37 (re-record), Task 56 phase B, Task 38. Cut order (R-173): AC-116 (c), AC-116 (b), AC-113, AC-116 (a) icons, AC-115 dots. Never cut: AC-112, AC-114, AC-115's label and never-covers rule.
+Then Task 37 (re-record), Task 56 phase B, Task 38. Cut order (R-173): AC-116 (c), AC-116 (b), AC-113, AC-116 (a) icons, AC-115 dots. Never cut: AC-112, AC-114, AC-115's label and never-covers rule. (From D47, R-188: Task 37 and the film's walkthrough wait for «PRODUCT READY FOR FILM».)
+
+### Tasks D47 (18 Oct ~06:30Z; full briefs, shared files, seats and clock in `docs/PLAN-D28.md`, section "D47: Tasks 60-62")
+
+| # | Task | Seat | ACs | Depends on | Merge order on shared files | Deploy |
+|---|---|---|---|---|---|---|
+| 60 | Tour spotlight, KPI run state, width at 2560 | senior | AC-117, AC-121, AC-122 | first free seat (~06:30-06:45Z); new files first; rebases onto 59 before the KPI files and onto 58 before `Tour.tsx` | 58 → 60 on `Tour.tsx`, tour anchors, `ux-gate.mjs`; 59 → 60 on `Kpi.tsx`, `Dashboard.tsx`, `Inbox.tsx`, `firstRun.tsx` (read only); 60 ↔ 61 on `Tour.tsx`, `App.tsx`, `src/i18n/features/dashboard.ts`, `web/Tour.test.tsx` (second rebases) | "D47", last product merge 10:45Z |
+| 61 | Copy deck applied (`docs/COPY.md`), keys only | junior | AC-118, AC-119, AC-120 | 58 and 59 merged (or a free seat earlier, rebasing onto both) | after 58 and 59 on `src/i18n/*`, `Demo.tsx`, `Login.tsx`, `App.tsx`; 60 ↔ 61 as above; `README.md` after 35b | "D47" (main Worker; `facturas` too if the portal P2 row is in) |
+| 62 | "D47" deploy, fresh QA, fresh UX reviewer, one fix round, «PRODUCT READY FOR FILM» | qa + UX reviewer; senior for the fix | AC-117..AC-122 deployed, AC-91 | 60 and 61 merged, full suite green | fix round only on failing rows | redeploy after the fix |
+
+Then Task 37 (re-record), the film's walkthrough capture (D46), Task 38 and the merge to main (~15:00Z). Cut order (R-188): AC-120 P2 rows, AC-121 (b), AC-117's arrow keys, AC-122 at 2560 for non-band screens. Never cut: AC-117's geometry, Escape, focus trap and screenshots; AC-118; AC-119; AC-120 P1; AC-121 (a); AC-122 on band screens.

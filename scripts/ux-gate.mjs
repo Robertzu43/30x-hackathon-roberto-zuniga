@@ -34,6 +34,9 @@ const FX_STATES = ['fx-empty', 'fx-error']; // policy: only GET /api/fx is force
 // "Unread": the agent has not decided the invoice, or the reader could not read it. The demo may have none: then the screen is N/A, not a failure.
 export const unreadId = (invoices) => invoices?.find((i) => i.outcome == null || i.fields?.read_error)?.id;
 export const EMPTY_BODY = { '/api/period': { budget_usd: null, balance_usd: null, paid_usd: 0, committed_usd: 0, available_usd: null, count_by_outcome: { PAGAR: 0, FRENAR: 0, ESCALAR: 0 }, by_beneficiary: [], autonomy: { n: 0, m: 0 }, autonomy_pct: null, violations: 0, explained_pct: 0 }, '/api/agent/last-run': null, '/api/screen/beneficiaries': { beneficiaries: [] }, '/api/screen/period': { period: { budget_usd: null, balance_usd: null, paid_usd: 0, committed_usd: 0, available_usd: null, count_by_outcome: { PAGAR: 0, FRENAR: 0, ESCALAR: 0 }, by_beneficiary: [], autonomy: { n: 0, m: 0 }, autonomy_pct: null, violations: 0, explained_pct: 0 } } };
+// R-165: an empty state is the screen's REAL response, patched (as beneficiary-empty does), never a body the screen cannot read.
+export const EMPTY_PATCH = { '/api/screen/inbox': (j) => ({ ...j, invoices: [] }) };
+const ERROR_PAGE = /No pude abrir esta pantalla|I could not open this screen/; // the app's generic error page (app.chunk_error): never an empty state
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
 // Typed into composers: vendor data, but in the tab's language so it cannot trip 5.mixed or 5.locale (Task 32b).
 export const MSG = { es: 'Factura AS-0087 de Ana Souza, 10.000,00 BRL', en: 'Invoice AS-0087 from Ana Souza, 10,000.00 BRL' };
@@ -41,7 +44,7 @@ const newInvoice = (i, text) => async (page, o) => {
   await page.locator('[data-tour="new-invoice"]').click();
   await page.locator('[role="tab"]').nth(i).click();
   if (text) await page.locator('form.new-invoice textarea').fill(MSG[o.lang]);
-  else await page.locator('form.new-invoice input[type="file"]').setInputFiles({ name: 'factura.png', mimeType: 'image/png', buffer: PNG });
+  else await page.locator('form.new-invoice input[type="file"]').setInputFiles({ name: 'Factura AS-0087.png', mimeType: 'image/png', buffer: PNG });
 };
 // Types the harness message and sends it; the gate answers the POST itself (REPLY, below), so no invoice is read and none is created (AC-85).
 const sendPortal = async (page, o) => {
@@ -65,7 +68,7 @@ export const SCREENS = [
   { id: 'detail-frenar', exp: 'finance', path: (v) => `/invoices/${v.invoice('FRENAR')}` },
   { id: 'detail-escalar', exp: 'finance', path: (v) => `/invoices/${v.invoice('ESCALAR')}` },
   { id: 'detail-unread', exp: 'finance', path: (v) => `/invoices/${v.unread}`, needs: 'unread', na: 'the demo has no undecided or unreadable invoice' },
-  { id: 'ask', exp: 'finance', path: '/ask' }, // Task 24 owns the route; override with --route ask=/path
+  { id: 'ask', exp: 'finance', path: '/' }, // the ask box lives on Bandeja
   { id: 'policy', exp: 'finance', path: '/policy', states: FX_STATES },
   { id: 'beneficiaries', exp: 'finance', path: '/beneficiaries', states: STATES },
   { id: 'period', exp: 'finance', path: '/period', states: STATES },
@@ -173,6 +176,17 @@ function measure(o) {
       if (!hits.length) continue;
       (hidden(a, b, hits) || hidden(b, a, hits) ? occluded : overlaps).push(`"${a.text.slice(0, 20)}" over "${b.text.slice(0, 20)}"`);
     }
+  // R-165: a text run whose right edge passes the edge of its nearest ancestor with a border or a background is clipped or painted over, even without overflow:hidden.
+  // An ancestor that scrolls its own content (overflow-x auto or scroll) between the run and that card keeps the text reachable.
+  const card = (el) => {
+    for (let p = el; p && p !== document.body && p !== document.documentElement; p = p.parentElement) {
+      const cs = getComputedStyle(p);
+      if (/auto|scroll/.test(cs.overflowX)) return null;
+      if (cs.backgroundColor !== 'rgba(0, 0, 0, 0)' || ['Top', 'Right', 'Bottom', 'Left'].some((s) => parseFloat(cs[`border${s}Width`]) > 0 && cs[`border${s}Style`] !== 'none')) return p;
+    }
+    return null;
+  };
+  out.edge = sample(runs.flatMap((r) => { const c = card(r.el), box = c?.getBoundingClientRect(); return box && r.rects.some((x) => x.right > box.right + 1) ? [`"${r.text.slice(0, 24)}" past ${name(c)}`] : []; }));
   out.overlaps = sample(overlaps);
   out.occluded = sample(occluded);
   out.texts = runs.map((r) => r.text);
@@ -250,6 +264,7 @@ const LOCALE = {
 };
 const ISO_DATE = /\b\d{4}-\d{2}-\d{2}\b/;
 const NEXT_STEP = /reintent|recarg|vuelve|int[eé]ntalo|intenta|usa |sube|crea|agrega|a[ñn]ade|revisa|comprueba|conecta|p[ií]dele|retry|reload|try again|go back|check|use |upload|add |create|connect|refresh|\bask\b/i;
+const TOUR_BUSY = 'el paso cambia al instante, sin petición (R-161)'; // the tour steps in place: no request, so no busy state to wait for
 const BY_DESIGN = 'sin acción por diseño (R-103)'; // the two designed 404 pages have no action on purpose
 const EXCLUDED_LAYER = 'excluded: occluded by sticky/fixed layer'; // R-114
 const EXCLUDED_LINK = 'excluded: expected 404 (invalid link)'; // R-112
@@ -303,6 +318,7 @@ function judge(m, c) {
   rs.push(P('1.scroll', m.scroll.sw > m.scroll.iw, Math.max(0, m.scroll.sw - m.scroll.iw), `scrollWidth ${m.scroll.sw} vs innerWidth ${m.scroll.iw}`));
   rs.push(P('1.offscreen', m.offscreen.count > 0, m.offscreen.count, `${m.offscreen.count} elements outside the viewport${m.offscreen.count ? ': ' + list(m.offscreen) : ''}`));
   rs.push(P('1.clip', m.clipped.count > 0, m.clipped.count, `${m.clipped.count} clipped text elements${m.clipped.count ? ': ' + list(m.clipped) : ''}`));
+  rs.push(P('1.edge', m.edge.count > 0, m.edge.count, `${m.edge.count} text runs past the edge of their card${m.edge.count ? ': ' + list(m.edge) : ''}`));
   rs.push(P('1.overlap', m.overlaps.count > 0, m.overlaps.count, `${m.overlaps.count} overlapping text boxes${m.overlaps.count ? ': ' + list(m.overlaps) : ''}${m.occluded.sample.map((p) => `; ${EXCLUDED_LAYER} (${p})`).join('')}`));
   rs.push(width > 768 ? R('1.tables', 'na', 0, 'only checked at 768 px and below') : P('1.tables', m.tables.count > 0, m.tables.count, `${m.tables.count} wide tables without their own scroll${m.tables.count ? ': ' + list(m.tables) : ''}`));
   if (width <= 390) {
@@ -391,6 +407,10 @@ const isLocal = (base) => /^https?:\/\/(127\.0\.0\.1|localhost)[:/]?/.test(base)
 
 function installRoutes(page, base, { state, guard, delayGets, gate, fake }) {
   const origin = new URL(base).origin;
+  const patched = async (route, patch) => {
+    try { return await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(patch(await (await route.fetch()).json())) }); }
+    catch { return route.abort().catch(() => {}); } // the context closed (or the origin dropped) while the request was in flight: nothing left to answer
+  };
   return page.route('**/*', async (route) => {
     const req = route.request();
     const data = ['fetch', 'xhr'].includes(req.resourceType()) && req.url().startsWith(origin);
@@ -400,12 +420,10 @@ function installRoutes(page, base, { state, guard, delayGets, gate, fake }) {
     if (data && path === '/api/fx' && req.method() === 'GET' && state === 'fx-empty') return route.fulfill({ status: 200, contentType: 'application/json', body: '{"provider":"gate","rates":[]}' });
     if (data && path === '/api/fx' && req.method() === 'GET' && state === 'fx-error') return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"gate"}' });
     if (data && !config && state === 'error') return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"gate"}' });
+    if (data && state === 'empty' && req.method() === 'GET' && path in EMPTY_PATCH) return patched(route, EMPTY_PATCH[path]);
     if (data && !config && state === 'empty' && req.method() === 'GET') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(path in EMPTY_BODY ? EMPTY_BODY[path] : []) });
     if (fake?.post && data && req.method() === 'POST') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fake.post) });
-    if (fake?.path && data && req.method() === 'GET' && path.startsWith(fake.path)) {
-      try { return await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fake.patch(await (await route.fetch()).json())) }); }
-      catch { return route.abort().catch(() => {}); } // the context closed (or the origin dropped) while the request was in flight: nothing left to answer
-    }
+    if (fake?.path && data && req.method() === 'GET' && path.startsWith(fake.path)) return patched(route, fake.patch);
     if (guard && req.method() !== 'GET' && req.method() !== 'OPTIONS') {
       const held = sleep(600).then(() => route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' })).catch(() => {}); // answered here, never sent to the origin
       gate.held.push(held);
@@ -543,7 +561,8 @@ export async function runCell(browser, job) {
       // A designed 404 page needs no control: its sentence is the next step.
       const t = screen.notFound ? m.message.text || m.main : m.message.text, ok = t.length >= 10 && ((!screen.notFound && m.message.next > 0) || NEXT_STEP.test(t));
       const what = state ?? '404';
-      add(P('4.state', !ok, ok ? 0 : 1, ok ? `${what}: "${t.slice(0, 50)}", ${m.message.next} next-step controls` : `${what}: ${t ? `"${t.slice(0, 50)}"` : 'nothing shown'} and ${m.message.next} next-step controls`));
+      if (state === 'empty' && ERROR_PAGE.test(`${m.message.text} ${m.main}`)) add(R('4.state', 'fail', 1, `empty: the generic error page is showing, not an empty state: "${t.slice(0, 50)}"`));
+      else add(P('4.state', !ok, ok ? 0 : 1, ok ? `${what}: "${t.slice(0, 50)}", ${m.message.next} next-step controls` : `${what}: ${t ? `"${t.slice(0, 50)}"` : 'nothing shown'} and ${m.message.next} next-step controls`));
     }
     if (!state) {
       // Exactly one line may be excluded: R-103, the browser's own 404 for the main document of a designed 404 page; R-112, the expected 404 of an invalid approval link.
@@ -648,9 +667,12 @@ async function dynamic(page, screen, primarySel, add, noAction, lang) {
   }
   const ring = await page.evaluate(() => { const cs = getComputedStyle(document.activeElement); return { outline: `${cs.outlineStyle} ${cs.outlineWidth}`, ok: (cs.outlineStyle !== 'none' && parseFloat(cs.outlineWidth) > 0) || cs.boxShadow !== 'none' }; });
   add(P('3.focus', !ring.ok, ring.ok ? 0 : 1, `focus indicator: outline ${ring.outline}`));
-  await page.evaluate(() => {
+  await page.evaluate((tour) => {
     window.__act = { clicks: 0, busy: null };
+    const step = () => document.querySelector('.tour-card header p')?.textContent ?? null; // R-161: the tour's «n de 7» counter; null once the tour has closed
+    const step0 = step();
     const isBusy = () => {
+      if (tour) return step() !== step0; // here "busy" means the step changed
       const p = document.querySelector('[data-gate-primary]');
       return !!(p && (p.disabled || p.getAttribute('aria-busy') === 'true')) || [...document.querySelectorAll('[aria-busy="true"],progress,[role="progressbar"]')].some((e) => e.checkVisibility());
     };
@@ -664,12 +686,13 @@ async function dynamic(page, screen, primarySel, add, noAction, lang) {
       };
       poll();
     }, true);
-  });
+  }, !!screen.tour);
   await page.keyboard.press('Enter'); // Enter on a button is a click event: one activation answers both questions
   await sleep(250);
   const a = await page.evaluate(() => window.__act);
   add(P('3.enter', a.clicks === 0, a.clicks ? 0 : 1, a.clicks ? 'Enter activated the primary action' : 'Enter did not activate the primary action'));
   const ms = a.busy === null ? 99_999 : Math.round(a.busy);
+  if (screen.tour) return add(!a.clicks || (a.busy !== null && a.busy <= 100) ? R('4.busy', 'na', 0, a.clicks ? TOUR_BUSY : 'no activation to measure') : R('4.busy', 'fail', ms, `the «n de 7» counter and the tour's closing did not change within 100 ms of the click on «Siguiente»${a.busy === null ? '' : ` (${ms} ms)`}`));
   add(P('4.busy', a.clicks === 0 || a.busy === null || a.busy > 100, ms, a.clicks === 0 ? 'no activation to measure' : a.busy === null ? 'no disabled, aria-busy or progress state within 150 ms' : `busy after ${ms} ms (limit 100)`));
 }
 
@@ -693,7 +716,7 @@ export function aggregate(rows) {
     return { screen: g[0].screen, id: g[0].id, status, value: worst.value, measured: `${worst.measured} @${worst.width}/${worst.lang}`, cells: g.length, failing: failing.length, ...(Object.keys(users).length && { users }) };
   }).sort((a, b) => order(a.id).localeCompare(order(b.id)));
 }
-const WHAT = { '0.reach': 'screen opens', '1.scroll': 'no horizontal scroll', '1.offscreen': 'nothing off-screen', '1.clip': 'no clipped text', '1.overlap': 'no overlapping text', '1.tables': 'tables reflow or scroll', '2.targets': '44 px targets', '2.inputs': '16 px inputs', '2.primary': 'primary action in the lower 60%', '3.axe': 'axe: 0 serious or critical', '3.contrast': 'contrast AA', '3.focus': 'visible focus ring', '3.enter': 'Enter activates', '3.labels': 'inputs have labels', '3.lang': 'lang follows the language', '4.busy': 'busy within 100 ms', '4.loading': 'no blank while loading', '4.cls': 'CLS 0.01 or less', '4.state': 'designed state with next step', '5.words': 'no developer words', '5.mixed': 'one language per screen', '5.locale': 'numbers and dates in locale', '5.marker': 'data-user used for user data only', '6.palette': 'approved palette', '6.fonts': 'approved fonts', '6.logo': 'logo present', '6.reduced': 'logo at rest at first paint (reduced motion)', '6.console': 'no console errors', '6.images': 'SVG or 2x images', '6.primary_count': 'one primary button (reviewer)', '7.usable': 'usable in under 2 s', '7.longtask': 'no task over 300 ms' };
+const WHAT = { '0.reach': 'screen opens', '1.scroll': 'no horizontal scroll', '1.offscreen': 'nothing off-screen', '1.clip': 'no clipped text', '1.edge': 'text inside its card', '1.overlap': 'no overlapping text', '1.tables': 'tables reflow or scroll', '2.targets': '44 px targets', '2.inputs': '16 px inputs', '2.primary': 'primary action in the lower 60%', '3.axe': 'axe: 0 serious or critical', '3.contrast': 'contrast AA', '3.focus': 'visible focus ring', '3.enter': 'Enter activates', '3.labels': 'inputs have labels', '3.lang': 'lang follows the language', '4.busy': 'busy within 100 ms', '4.loading': 'no blank while loading', '4.cls': 'CLS 0.01 or less', '4.state': 'designed state with next step', '5.words': 'no developer words', '5.mixed': 'one language per screen', '5.locale': 'numbers and dates in locale', '5.marker': 'data-user used for user data only', '6.palette': 'approved palette', '6.fonts': 'approved fonts', '6.logo': 'logo present', '6.reduced': 'logo at rest at first paint (reduced motion)', '6.console': 'no console errors', '6.images': 'SVG or 2x images', '6.primary_count': 'one primary button (reviewer)', '7.usable': 'usable in under 2 s', '7.longtask': 'no task over 300 ms' };
 const word = { pass: 'PASS', fail: 'FAIL', info: 'INFO', na: 'N/A' };
 // R-131: every text 5.mixed and 5.locale skipped, for the UX reviewer. Any listed product copy is a blocking finding.
 const excludedList = (users = {}) => LANGS.filter((l) => users[l]?.n).length

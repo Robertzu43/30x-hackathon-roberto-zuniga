@@ -36,6 +36,9 @@ const page = (bad, lang) => {
   ${{
     '1.scroll': '.x{width:2000px;height:10px}',
     '1.clip': '.clip{width:50px;overflow:hidden;white-space:nowrap}',
+    '1.edge': '.card{width:60px;border:1px solid #eaeaea;padding:4px}.card span{white-space:nowrap}',
+    '1.edge:fit': '.card{width:200px;border:1px solid #eaeaea;padding:4px}.card span{white-space:nowrap}',
+    '1.edge:scroll': '.card{width:60px;border:1px solid #eaeaea;padding:4px;overflow-x:auto}.card span{white-space:nowrap}',
     '1.overlap': '.ov{position:relative;top:-2.6em}',
     '2.targets': '.tiny{width:20px;height:20px;min-height:0;min-width:0;padding:0}',
     '2.inputs': 'input{font-size:12px}',
@@ -60,6 +63,7 @@ const page = (bad, lang) => {
   ${bad === '1.scroll' ? '<div class="x"></div>' : ''}
   ${bad === '1.offscreen' ? '<div style="position:absolute;left:150vw;top:0">fuera</div>' : ''}
   ${bad === '1.clip' ? '<div class="clip">Un texto bastante largo que no cabe</div>' : ''}
+  ${bad.startsWith('1.edge') ? '<div class="card"><span>1.234.567.890,00 USD</span></div>' : ''}
   ${bad === '1.overlap' ? '<p>Primera línea</p><p class="ov">Segunda línea encima</p>' : ''}
   ${bad === '1.tables' ? '<div><table style="width:900px"><tr><td>a</td><td>b</td></tr></table></div>' : '<div style="overflow-x:auto"><table><tr><th>A</th><td>1</td></tr></table></div>'}
   ${bad === '2.targets' ? '<button class="tiny" type="button" aria-label="x">x</button>' : ''}
@@ -202,6 +206,23 @@ const beneficiariesPage = (url = '/api/screen/beneficiaries') => `<!doctype html
   fetch('${url}').then((r) => r.json()).then((d) => { document.getElementById('m').textContent = d.beneficiaries.length ? d.beneficiaries.length + ' beneficiarios' : 'Todavía no hay beneficiarios.'; }).catch(() => {});
   </script></body></html>`;
 
+// R-165: Bandeja as the real one reads GET /api/screen/inbox. Without an invoices array it falls into the error page (the app's generic «No pude abrir esta pantalla…»).
+const inboxPage = () => `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>i</title></head><body><main><h1>Bandeja</h1><div id="m"></div></main><script>
+  fetch('/api/screen/inbox?lang=es').then((r) => r.json()).then((d) => {
+    if (location.search.includes('broken')) throw new Error('boundary');
+    document.getElementById('m').innerHTML = d.invoices.length ? '<p>' + d.invoices.length + ' facturas</p>' : '<p role="status">Todavía no hay facturas.</p><a href="#sube">Sube una factura</a>';
+  }).catch(() => { document.getElementById('m').innerHTML = '<p role="alert" class="error">No pude abrir esta pantalla. Revisa tu conexión e intenta de nuevo.</p><button type="button">Reintentar</button>'; });
+  </script></body></html>`;
+// R-161: the tour card. ?v=instant moves «n de 7» in the click, slow 300 ms later, none never; ?last starts on step 7, where «Siguiente» closes the tour.
+const tourPage = (u) => `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>t</title></head><body><main><h1>Bandeja</h1><div id="t"></div></main><script>
+  const v = ${JSON.stringify(u.searchParams.get('v'))}; let n = ${u.searchParams.has('last') ? 7 : 1}; const t = document.getElementById('t');
+  const draw = () => { t.innerHTML = n > 7 ? '' : '<section class="tour-card"><header><p class="muted">' + n + ' de 7</p></header><button type="button" class="primary">Siguiente</button></section>'; t.querySelector('button')?.addEventListener('click', go); t.querySelector('button')?.focus(); };
+  const go = () => { n++; if (v === 'instant') draw(); else if (v === 'slow') setTimeout(draw, 300); };
+  draw();
+  </script></body></html>`;
+// R-162: the new-invoice form as Bandeja opens it, with the tab that takes a file.
+const newInvoicePage = () => `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>n</title></head><body><main><h1>Bandeja</h1><button data-tour="new-invoice" type="button" onclick="document.querySelector('form').hidden=false">Nueva factura</button><form class="new-invoice" hidden><button role="tab" type="button">Subir</button><button role="tab" type="button">Correo</button><button role="tab" type="button">Chat</button><input type="file"></form></main></body></html>`;
+
 let server, base, browser;
 const seen = [];
 beforeAll(async () => {
@@ -222,6 +243,10 @@ beforeAll(async () => {
     if (u.pathname === '/chart-sr') return void res.writeHead(200, { 'content-type': 'text/html' }).end(chartPage());
     if (u.pathname === '/bn') return void res.writeHead(200, { 'content-type': 'text/html' }).end(beneficiariesPage(u.searchParams.has('drop') ? '/api/reset' : undefined));
     if (u.pathname === '/api/screen/beneficiaries') return void res.writeHead(200, { 'content-type': 'application/json' }).end('{"beneficiaries":[{"id":"b1"}]}');
+    if (u.pathname === '/ib') return void res.writeHead(200, { 'content-type': 'text/html' }).end(inboxPage());
+    if (u.pathname === '/tf') return void res.writeHead(200, { 'content-type': 'text/html' }).end(tourPage(u));
+    if (u.pathname === '/ni') return void res.writeHead(200, { 'content-type': 'text/html' }).end(newInvoicePage());
+    if (u.pathname === '/api/screen/inbox') return void res.writeHead(200, { 'content-type': 'application/json' }).end('{"invoices":[{"id":"a"},{"id":"b"}],"dashboard":{}}');
     if (u.pathname === '/api/reset') return void req.socket.destroy(); // the origin drops the connection: route.fetch() rejects
     if (u.pathname === '/api/demo/overview') return void res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(server.overview ?? { invoices: [] }));
     if (u.pathname === '/auth/v1/admin/users') { let b = ''; req.on('data', (c) => (b += c)); return void req.on('end', () => { server.admin = { key: req.headers.apikey, auth: req.headers.authorization, body: JSON.parse(b) }; res.writeHead(200, { 'content-type': 'application/json' }).end('{"id":"u1"}'); }); }
@@ -312,7 +337,7 @@ describe('clean fixture', () => {
 });
 
 describe('one known violation per item', () => {
-  const stat = ['0.reach', '1.scroll', '1.offscreen', '1.clip', '1.overlap', '1.tables', '2.targets', '2.inputs', '2.primary', '3.axe', '3.contrast', '3.labels', '3.lang', '4.cls', '5.words', '5.mixed', '5.locale', '6.palette', '6.fonts', '6.logo', '6.console', '6.images', '7.usable', '7.longtask'];
+  const stat = ['0.reach', '1.scroll', '1.offscreen', '1.clip', '1.edge', '1.overlap', '1.tables', '2.targets', '2.inputs', '2.primary', '3.axe', '3.contrast', '3.labels', '3.lang', '4.cls', '5.words', '5.mixed', '5.locale', '6.palette', '6.fonts', '6.logo', '6.console', '6.images', '7.usable', '7.longtask'];
   it.each(stat)('%s', async (id) => {
     const lang = id === '5.mixed' ? 'en' : 'es';
     const rs = await cell(id, { lang });
@@ -843,4 +868,66 @@ describe('a state label never equals a screen id (Task 34b, AC-91)', () => {
   it('makes every screen and state label unique, so the table never merges two screens', () => {
     expect(new Set(labels).size).toBe(labels.length);
   });
+});
+
+describe('R-165 F1: a text run past the edge of its card (AC-91 item 1)', () => {
+  it.each(['390', '1440'])('fails when a number overflows its bordered card, at %s px', async (w) => {
+    const rs = await cell('1.edge', { width: +w });
+    expect(status(rs, '1.edge'), JSON.stringify(rs.find((r) => r.id === '1.edge'))).toBe('fail');
+    expect(status(rs, '1.clip'), 'no overflow:hidden here, so only the new item catches it').toBe('pass');
+  }, 60_000);
+  it('passes when the number fits its card', async () => {
+    expect(status(await cell('1.edge:fit'), '1.edge')).toBe('pass');
+  }, 60_000);
+  it('passes when the card scrolls its own content', async () => {
+    expect(status(await cell('1.edge:scroll'), '1.edge')).toBe('pass');
+  }, 60_000);
+});
+
+describe('R-165 F2: inbox-empty patches the real response, never the error page (AC-91 item 4)', () => {
+  const inbox = (extra = {}) => ({ id: 'inbox', exp: 'test', path: '/ib', primary: ':not(*)', states: ['empty'], ...extra });
+  it('shows the empty message of the real shape, not the generic error page', async () => {
+    const r = (await run(inbox(), { state: 'empty' })).find((x) => x.id === '4.state');
+    expect(r.status, JSON.stringify(r)).toBe('pass');
+    expect(r.measured).toContain('Todavía no hay facturas');
+  }, 60_000);
+  it('FAILs 4.state when the page shows «No pude abrir esta pantalla», next step or not', async () => {
+    const r = (await run(inbox({ path: '/ib?broken=1' }), { state: 'empty' })).find((x) => x.id === '4.state');
+    expect(r.status, JSON.stringify(r)).toBe('fail');
+    expect(r.measured).toContain('error page');
+  }, 60_000);
+});
+
+describe('R-161: the tour changes in place, so 4.busy is N/A unless the step did not change within 100 ms', () => {
+  const tour = (q) => ({ id: 'tour', exp: 'test', path: `/tf?${q}`, tour: true, primary: '.tour-card button.primary' });
+  const busy = async (q) => (await run(tour(q), { kind: 'dynamic' })).find((x) => x.id === '4.busy');
+  const REASON = 'el paso cambia al instante, sin petición (R-161)';
+  it('is N/A with the printed reason when «n de 7» changes at once', async () => {
+    const r = await busy('v=instant');
+    expect([r.status, r.measured]).toEqual(['na', REASON]);
+  }, 60_000);
+  it('is N/A when «Siguiente» on the last step closes the tour at once', async () => {
+    expect((await busy('v=instant&last')).status).toBe('na');
+  }, 60_000);
+  it.each(['slow', 'none'])('FAILs when the counter does not change within 100 ms (%s)', async (v) => {
+    const r = await busy(`v=${v}`);
+    expect(r.status, JSON.stringify(r)).toBe('fail');
+    expect(r.measured).toContain('100 ms');
+  }, 60_000);
+  it('the real tour screen is flagged tour, so the rule applies to it', () => expect(SCREENS.find((s) => s.id === 'tour').tour).toBe(true));
+});
+
+describe('R-162: the gate uploads «Factura AS-0087.png», never «factura.png»', () => {
+  it('names the file of new-invoice-file', async () => {
+    const ctx = await browser.newContext();
+    const p = await ctx.newPage();
+    await p.goto(`${base}/ni`);
+    await SCREENS.find((s) => s.id === 'new-invoice-file').prepare(p, { lang: 'es' });
+    expect(await p.locator('input[type="file"]').evaluate((i) => i.files[0].name)).toBe('Factura AS-0087.png');
+    await ctx.close();
+  }, 30_000);
+});
+
+describe('the ask box lives on Bandeja', () => {
+  it('defaults the ask screen to "/", with no --route ask=/ needed', () => expect(SCREENS.find((s) => s.id === 'ask').path).toBe('/'));
 });

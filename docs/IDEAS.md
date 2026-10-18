@@ -15,3 +15,6 @@ One line per idea, who had it, which AC it would serve. Nothing here gets built 
 - Show the six /demo agent-loop stages as one row of 6 at ≥ 1440 px, the way the README diagram draws the loop. R-171 chose 3 across (product, AC-116 / R-171).
 - On any landing, in any tab, start an agent pass whenever the company has pending invoices, not only to resume the tab's own first-login pass. R-175 keys the resume on the tab's flag instead (orchestrator's option (a) as proposed, AC-107 / R-175).
 - Add a play glyph to the README video thumbnail with an ffmpeg overlay. Today «▶ Ver el video» sits under a plain poster (product, AC-114 / R-169).
+- Real plural keys (`.one` / `.other`) instead of «factura(s)» in `policy.header_*`, `policy.unread_pending`, `run.errors_*` and `period.violations_alert`. It needs plural selection in the components, which is logic, so the copy deck leaves it (product, AC-120 / R-185).
+- One English contraction style ("I couldn't" everywhere) across the error strings; es-CO is the working language, so the deck leaves it (product, AC-120 / R-185).
+- Rewrite the record's «en el tablero» to «en la Bandeja» in a new template version for new decisions only, so screen and record use one name (product, AC-120 / R-185's rejected option).

@@ -34,7 +34,7 @@ async function walk(page: any, tr: any, label: string) {
     ['Periodo', async () => { await link('Periodo').click(); await expect(page.locator('h1')).toContainText(/Periodo/); }],
     ['Beneficiarios', async () => { await link(/Beneficiarios/).click(); await expect(page.locator('h1')).toContainText(/Beneficiarios/); }],
     ['Política', async () => { await link('Política').click(); await expect(page.locator('h1')).toContainText(/Pol/); }],
-    ['Bandeja', async () => { await link('Bandeja').click(); await expect(page.locator('h1')).toContainText('Bandeja'); await page.locator('.inbox-list li').first().waitFor(); }],
+    ['Bandeja', async () => { await link('Bandeja').click(); await expect(page.locator('h1')).toContainText('Bandeja'); await page.locator('.inbox-list tbody tr').first().waitFor(); }],
   ];
   for (const pass of ['visit1', 'visit2']) {
     for (const [name, go] of screens) {
@@ -45,11 +45,11 @@ async function walk(page: any, tr: any, label: string) {
       console.log(`   ${label} ${pass} ${name}: heading visible in ${Date.now() - t}ms (includes 1.5 s settle)`);
     }
     tr.set(`${label} ${pass} Detalle`);
-    await page.locator('.inbox-list li a, .inbox-list li').first().click();
+    await page.locator('.inbox-list tbody tr a, .inbox-list tbody tr').first().click();
     await expect(page.getByRole('heading', { name: 'Lo que hice' })).toBeVisible({ timeout: 15000 });
     await page.waitForTimeout(1500);
     await page.getByRole('link', { name: 'Volver a la bandeja' }).first().click();
-    await page.locator('.inbox-list li').first().waitFor();
+    await page.locator('.inbox-list tbody tr').first().waitFor();
   }
 }
 
@@ -85,9 +85,9 @@ test('AC-98 trial user: requests per screen + door timing (D41)', async ({ brows
   console.log('DOOR top bar:', (await page.locator('header').first().innerText()).replace(/\s+/g, ' '));
   await page.screenshot({ path: '.wrangler/qa-39c/door-bandeja.png' });
   await dialog.getByRole('button', { name: 'Saltar' }).click();
-  await page.locator('.inbox-list li').first().waitFor();
+  await page.locator('.inbox-list tbody tr').first().waitFor();
   await page.waitForTimeout(1500);
-  const rows = await page.locator('.inbox-list li').count();
+  const rows = await page.locator('.inbox-list tbody tr').count();
   console.log('DOOR Bandeja rows:', rows);
   await walk(page, tr, 'trial');
   // deep-link (full load) per screen
@@ -111,7 +111,7 @@ test('AC-98 demo user: requests per screen', async ({ browser }: any) => {
   const dialog = page.getByRole('dialog');
   await dialog.waitFor({ timeout: 20000 });
   await dialog.getByRole('button', { name: 'Saltar' }).click();
-  await page.locator('.inbox-list li').first().waitFor();
+  await page.locator('.inbox-list tbody tr').first().waitFor();
   await page.waitForTimeout(1500);
   await walk(page, tr, 'demo');
   for (const [p, n] of [['/', 'Bandeja'], ['/period', 'Periodo'], ['/beneficiaries', 'Beneficiarios'], ['/policy', 'Política']] as const) {
@@ -132,7 +132,7 @@ test('AC-98/AC-100 demo user: second visit shows cached data at once (screen API
   const dialog = page.getByRole('dialog');
   await dialog.waitFor({ timeout: 20000 });
   await dialog.getByRole('button', { name: 'Saltar' }).click();
-  await page.locator('.inbox-list li').first().waitFor();
+  await page.locator('.inbox-list tbody tr').first().waitFor();
   const marks: Record<string, any> = {
     Periodo: page.getByText(/Violaciones/).first(),
     Beneficiarios: page.getByRole('table').or(page.locator('li, tr').filter({ hasText: /Forma Studio/ })).first(),
@@ -143,7 +143,7 @@ test('AC-98/AC-100 demo user: second visit shows cached data at once (screen API
     await page.getByRole('link', { name: nav[n] }).first().click();
     await marks[n].waitFor({ timeout: 15000 });
     await page.getByRole('link', { name: 'Bandeja' }).first().click();
-    await page.locator('.inbox-list li').first().waitFor();
+    await page.locator('.inbox-list tbody tr').first().waitFor();
   }
   await page.route('**/api/screen/**', async (route: any) => { await new Promise((r) => setTimeout(r, 4000)); await route.continue(); });
   const reqs: string[] = [];
@@ -157,7 +157,7 @@ test('AC-98/AC-100 demo user: second visit shows cached data at once (screen API
   }
   const t = Date.now();
   await page.getByRole('link', { name: 'Bandeja' }).first().click();
-  await page.locator('.inbox-list li').first().waitFor({ timeout: 15000 });
+  await page.locator('.inbox-list tbody tr').first().waitFor({ timeout: 15000 });
   console.log(`CACHE visit2 Bandeja: rows visible after ${Date.now() - t}ms (API delayed 4000ms)`);
   console.log('screen requests during delayed visit2:', reqs.length, reqs.join(' | '));
   await ctx.close();

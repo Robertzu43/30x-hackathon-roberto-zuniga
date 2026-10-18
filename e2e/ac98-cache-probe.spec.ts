@@ -8,7 +8,7 @@ test('probe: text on screen 300 ms after click, first visit (delayed API) vs sec
   await page.goto(`${URL}/demo`);
   await page.getByRole('button', { name: 'Entrar como Andina Labs' }).click();
   const d = page.getByRole('dialog'); await d.waitFor({ timeout: 20000 }); await d.getByRole('button', { name: 'Saltar' }).click();
-  await page.locator('.inbox-list li').first().waitFor();
+  await page.locator('.inbox-list tbody tr').first().waitFor();
   await page.route('**/api/screen/**', async (route: any) => { await new Promise((r) => setTimeout(r, 3000)); await route.continue(); });
   for (const [n, re] of [['Periodo', /^Periodo$/], ['Política', /^Política$/]] as const) {
     for (const visit of [1, 2]) {

@@ -11,14 +11,14 @@ test('Bandeja chat counts match the page (demo user)', async ({ browser }: any) 
   await page.goto(`${URL}/demo`);
   await page.getByRole('button', { name: 'Entrar como Andina Labs' }).click();
   const d = page.getByRole('dialog'); await d.waitFor({ timeout: 20000 }); await d.getByRole('button', { name: 'Saltar' }).click();
-  await page.locator('.inbox-list li').first().waitFor();
+  await page.locator('.inbox-list tbody tr').first().waitFor();
   await page.waitForTimeout(1500);
   const body = await page.locator('main').innerText();
   const m = body.match(/(\d+)\s*PAGAR\s*·\s*(\d+)\s*FRENAR\s*·\s*(\d+)\s*ESCALAR/);
   console.log('PAGE counts line:', m?.[0]);
-  const rows = await page.locator('.inbox-list li').count();
+  const rows = await page.locator('.inbox-list tbody tr').count();
   const chips: Record<string, number> = {};
-  for (const t of await page.locator('.inbox-list li').allInnerTexts()) { const k = (t.match(/\b(PAGAR|FRENAR|ESCALAR|Pendiente)\b/) || ['?'])[0]; chips[k] = (chips[k] || 0) + 1; }
+  for (const t of await page.locator('.inbox-list tbody tr').allInnerTexts()) { const k = (t.match(/\b(PAGAR|FRENAR|ESCALAR|Pendiente)\b/) || ['?'])[0]; chips[k] = (chips[k] || 0) + 1; }
   console.log('PAGE rows:', rows, 'row chips tally:', JSON.stringify(chips));
   const box = page.getByRole('textbox').filter({ has: page.locator(':scope') }).first();
   const ask = page.locator('section, div, form').filter({ hasText: 'Pregúntale a Thesaurus' }).last();

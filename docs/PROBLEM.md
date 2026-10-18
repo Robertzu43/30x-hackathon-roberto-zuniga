@@ -42,7 +42,7 @@ Email/PDF/chat inbox -> manual check against the agreement -> look up the payee'
 - "El agente nunca aprueba un pago fuera de las reglas sin aprobación humana."
 - Free choice of model, language and framework.
 - The challenge is in Spanish; Blinka's product is in English and its customers are LATAM companies with US entities: the product must work in both languages.
-- Mentor/judge expectation (inferred, see docs/DECISIONS.md): they will create a trap invoice live, change a rule live and re-run, and read one decision record without help.
+- Mentor/judge expectation (inferred, see docs/DECISIONS-SUMMARY.md): they will create a trap invoice live, change a rule live and re-run, and read one decision record without help.
 
 ## Existing systems we may need to understand
 None. Blinka's app is behind login and has no public API; the challenge explicitly excludes connecting to it. No REA analysis task.

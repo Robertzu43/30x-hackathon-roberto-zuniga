@@ -39,8 +39,20 @@ async function sendEmail(email = 'ana@empresa.co') {
 }
 const enterCode = (code: string) => {
   fireEvent.change(screen.getByLabelText('Código de 6 dígitos'), { target: { value: code } });
-  fireEvent.click(screen.getByRole('button', { name: 'Entrar' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Verificar código' }));
 };
+
+test.each([
+  ['es', 'Correo', 'Enviar código', 'Código de 6 dígitos', 'Verificar código'],
+  ['en', 'Email', 'Send code', '6-digit code', 'Verify code'],
+])('in %s the code step\'s button reads «Verificar código» / "Verify code" (AC-107 Clarified, R-179)', async (lang, email, send, code, verify) => {
+  localStorage.setItem('lang', lang);
+  setup();
+  fireEvent.change(screen.getByLabelText(email), { target: { value: 'ana@empresa.co' } });
+  fireEvent.click(screen.getByRole('button', { name: send }));
+  await screen.findByLabelText(code);
+  expect(screen.getAllByRole('button').filter((b) => b.className === 'primary').map((b) => b.textContent)).toEqual([verify]);
+});
 
 test('/login is public and full-bleed', () => expect(routes.find((r) => r.path === '/login')).toMatchObject({ public: true, fullBleed: true }));
 
@@ -90,7 +102,7 @@ test('a valid code opens Bandeja at once and leaves the first-run flag; the logi
   expect(sessionStorage.getItem(FIRST_RUN)).toBe('id:ana@empresa.co'); // the flag names whose pass it is
 });
 
-test('«Entrar» is disabled, aria-busy and reads «Entrando…» while the code is checked (AC-107, AC-91 item 4)', async () => {
+test('«Verificar código» is disabled, aria-busy and reads «Entrando…» while the code is checked (AC-107, AC-91 item 4)', async () => {
   let release: (v: { data: unknown; error: Error | null }) => void = () => {};
   fakeAuth.verifyOtp.mockImplementationOnce(() => new Promise((r) => (release = r)));
   setup();
@@ -115,7 +127,7 @@ test.each([
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'ana@empresa.co' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send code' }));
     fireEvent.change(await screen.findByLabelText('6-digit code'), { target: { value: '123456' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Verify code' }));
   }],
   ['the password door', async () => {
     fakeAuth.signInWithPassword.mockImplementationOnce(returning);
@@ -148,7 +160,7 @@ test('after sign-in the language picked on the login screen is stored on the use
   fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'ana@empresa.co' } });
   fireEvent.click(screen.getByRole('button', { name: 'Send code' }));
   fireEvent.change(await screen.findByLabelText('6-digit code'), { target: { value: '123456' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Verify code' }));
   await waitFor(() => expect(fakeAuth.updateUser).toHaveBeenCalledWith({ data: { lang: 'en' } }));
   expect(fakeAuth.updateUser).toHaveBeenCalledTimes(1);
 });

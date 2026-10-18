@@ -286,13 +286,13 @@ test('the door on /demo starts the trial and opens Bandeja (AC-92)', async () =>
   expect(auth.signInAnonymously).toHaveBeenCalledOnce();
 });
 
-test('on the code step the user chose email: «Entrar» is the one primary (AC-40 unchanged)', async () => {
+test('on the code step the user chose email: «Verificar código» is the one primary (AC-40 unchanged)', async () => {
   mockApi();
   page('/login');
   fireEvent.change(screen.getByLabelText('Correo'), { target: { value: 'ana@empresa.co' } });
   fireEvent.click(screen.getByRole('button', { name: 'Enviar código' }));
   await screen.findByLabelText('Código de 6 dígitos');
-  expect(primaries()).toEqual(['Entrar']);
+  expect(primaries()).toEqual(['Verificar código']);
 });
 
 test.each([
@@ -339,7 +339,7 @@ test.each([
     fireEvent.change(await screen.findByLabelText('Correo'), { target: { value: 'ana@empresa.co' } });
     fireEvent.click(screen.getByRole('button', { name: 'Enviar código' }));
     fireEvent.change(await screen.findByLabelText('Código de 6 dígitos'), { target: { value: '123456' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Entrar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Verificar código' }));
   }, () => fakeAuth.verifyOtp],
   ['«Entrar» in «Entrar con contraseña»', '/login', async () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Entrar con contraseña' }));

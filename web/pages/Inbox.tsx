@@ -32,6 +32,7 @@ const SKELETON_DASH: DashboardData = {
   due_soon: [{ ...brief, amount_usd: 1200, due_date: '2026-10-20', outcome: null }], due_soon_total: 1,
   approvals: [{ ...brief, question_es: '¿Apruebo 1.200 USD a Nubia Diseño?', question_en: 'Do I approve 1,200 USD to Nubia Diseño?', decided_at: null }], approvals_total: 1,
 };
+const SKELETON_LINK: PortalLink = { portal_url: 'https://facturas.example/p-000000000000', email_address: null };
 const hidden = { className: 'skeleton', 'aria-hidden': true, inert: true } as const;
 const nothing = () => {};
 
@@ -113,7 +114,13 @@ export default function Inbox() {
       ) : !d ? (
         <>
           <p role="status" className="sr-only">{t('inbox.loading')}</p>
-          <div {...hidden}><Dashboard data={SKELETON_DASH} onMore={nothing} /></div>
+          <div {...hidden}>{/* R-176: every block that fills from data holds its loaded box from first paint */}
+            <Dashboard data={SKELETON_DASH} onMore={nothing} />
+            <PortalLinkCard link={SKELETON_LINK} />
+            <div className="activity-box">
+              <section className="activity"><h2>{t('activity.title')}</h2><p className="muted">{t('activity.label')}</p><p className="muted">{t('activity.loading')}</p></section>
+            </div>
+          </div>
         </>
       ) : (
         <>

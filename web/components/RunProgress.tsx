@@ -16,7 +16,7 @@ import { useRef, useState } from 'react';
 import { useT } from '../i18n';
 import { runUntilDone, type Progress, type RunResult } from '../runAgent';
 
-type Opts = Pick<Parameters<typeof runUntilDone>[0], 'first' | 'next' | 'onBatch' | 'stop'>;
+type Opts = Pick<Parameters<typeof runUntilDone>[0], 'first' | 'next' | 'onBatch' | 'stop' | 'busyWait'>;
 export type RunAgent = { start: () => Promise<RunResult | undefined>; running: boolean; progress: Progress | null; result: RunResult | null };
 
 export function useRunAgent(opts: Opts): RunAgent {

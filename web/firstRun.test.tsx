@@ -54,13 +54,13 @@ test('no flag, no pass', async () => {
   expect(runCalls(f)).toHaveLength(0);
 });
 
-test('a flag with no session runs nothing', async () => {
+test('a flag with no session runs nothing, and signed out the flag is cleared (R-175)', async () => {
   markFirstRun(ANA);
   const f = mockApi({ 'POST /api/invoices/run': batch() });
   app();
   await new Promise((r) => setTimeout(r, 50));
   expect(runCalls(f)).toHaveLength(0);
-  expect(sessionStorage.getItem(FIRST_RUN)).toBe(ANA);
+  expect(sessionStorage.getItem(FIRST_RUN)).toBeNull();
 });
 
 test('moving to another screen neither stops nor restarts the pass', async () => {
@@ -95,7 +95,7 @@ test('a reload (a fresh mount) while the flag is set resumes the pass', async ()
 test('a failed call stops the pass with the response text and clears the flag (the cron decides the rest)', async () => {
   signedInAs('ana@empresa.co');
   markFirstRun(ANA);
-  mockApi({ 'POST /api/invoices/run': new Response(JSON.stringify({ error: 'El agente no está disponible ahora.' }), { status: 503 }) });
+  mockApi({ 'POST /api/invoices/run': new Response(JSON.stringify({ error: 'El agente no está disponible ahora.' }), { status: 500 }) });
   app();
   expect(await screen.findByText('done 0 El agente no está disponible ahora. · lotes 0')).toBeTruthy();
   expect(sessionStorage.getItem(FIRST_RUN)).toBeNull();
@@ -132,6 +132,61 @@ test('sign-out mid-pass, then another person enters: the first pass makes no mor
   expect(await screen.findByText('done 0 · lotes 1')).toBeTruthy(); // Luis's pass: one call, nothing of Ana's
   expect(bearers(f)).toEqual(['Bearer jwt:ana@empresa.co', 'Bearer jwt:luis@empresa.co']);
   expect(runCalls(f)[1]![1]?.body).toBeUndefined(); // Luis's first call carries no cursor of Ana's company
+  expect(sessionStorage.getItem(FIRST_RUN)).toBeNull();
+});
+
+// R-175 (AC-107 Clarified): a reload during the pass resumes it from the tab's flag.
+test('a reload mid-call: the call the page cut off does not clear the flag, and the reloaded tab starts exactly one POST', async () => {
+  signedInAs('ana@empresa.co');
+  markFirstRun(ANA);
+  let cut: (e: Error) => void = () => {};
+  const f = mockApi({ 'POST /api/invoices/run': () => new Promise((_, no) => (cut = no)) });
+  const first = app();
+  await waitFor(() => expect(runCalls(f)).toHaveLength(1));
+  window.dispatchEvent(new Event('pagehide')); // the reload: the page leaves, then the browser aborts its fetch
+  cut(new TypeError('Failed to fetch'));
+  await new Promise((r) => setTimeout(r, 20));
+  expect(sessionStorage.getItem(FIRST_RUN)).toBe(ANA);
+  first.unmount();
+  const g = mockApi({ 'POST /api/invoices/run': batch({ PAGAR: 4 }) });
+  app();
+  expect(await screen.findByText('done 4 · lotes 1')).toBeTruthy();
+  expect(runCalls(g)).toHaveLength(1);
+  expect(sessionStorage.getItem(FIRST_RUN)).toBeNull();
+});
+
+test('the demo user never gets a pass, even with a flag set (AC-107)', async () => {
+  signedInAs(DEMO_EMAIL);
+  markFirstRun(`id:${DEMO_EMAIL}`);
+  const f = mockApi({ 'POST /api/invoices/run': batch() });
+  app();
+  await new Promise((r) => setTimeout(r, 50));
+  expect(runCalls(f)).toHaveLength(0);
+  expect(screen.getByText('idle · lotes 0')).toBeTruthy();
+});
+
+test('sign-out clears the flag (R-175)', async () => {
+  signedInAs('ana@empresa.co');
+  markFirstRun(ANA);
+  mockApi({ 'POST /api/invoices/run': () => new Promise(() => {}) });
+  app();
+  await screen.findByText('running 0 de … · lotes 0');
+  await act(async () => void (await fakeAuth.signOut()));
+  expect(sessionStorage.getItem(FIRST_RUN)).toBeNull();
+});
+
+test('a "busy" answer (503) is waited out and retried, not shown; the pass goes on (R-175)', async () => {
+  signedInAs('ana@empresa.co');
+  markFirstRun(ANA);
+  const busy = () => new Response(JSON.stringify({ error: 'ocupado' }), { status: 503 });
+  const f = mockApi({ 'POST /api/invoices/run': () => (runCalls(f).length === 1 ? busy() : batch({ PAGAR: 3 })) });
+  app();
+  await waitFor(() => expect(runCalls(f)).toHaveLength(1));
+  await new Promise((r) => setTimeout(r, 1500));
+  expect(runCalls(f)).toHaveLength(1); // about 2 s before the retry
+  expect(screen.getByText('running 0 de … · lotes 0')).toBeTruthy(); // the busy answer is not shown
+  expect(await screen.findByText('done 3 · lotes 1', undefined, { timeout: 2000 })).toBeTruthy();
+  expect(runCalls(f)).toHaveLength(2);
   expect(sessionStorage.getItem(FIRST_RUN)).toBeNull();
 });
 

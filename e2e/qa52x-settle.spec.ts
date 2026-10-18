@@ -20,7 +20,7 @@ test('settle otp users', async ({ browser }: any) => {
   for (const u of otp) {
     const { ctx, page } = await newPage(browser); await page.route('**/auth/v1/otp*', (r: any) => r.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
     await page.goto(`${URL_}/login`); await page.getByLabel('Correo').fill(u.email); await page.getByRole('button', { name: 'Enviar código' }).click();
-    await page.getByLabel('Código de 6 dígitos').fill(await adminOtp(u.email)); await page.getByRole('button', { name: 'Entrar', exact: true }).click();
+    await page.getByLabel('Código de 6 dígitos').fill(await adminOtp(u.email)); await page.getByRole('button', { name: 'Verificar código', exact: true }).click();
     await expect(page.locator('h1', { hasText: 'Bandeja' })).toBeVisible({ timeout: 20000 }); await done(page); await page.waitForTimeout(1500); console.log('settled', u.email.slice(-14)); await ctx.close();
   }
 });

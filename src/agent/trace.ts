@@ -54,7 +54,7 @@ export function recordedFields(fields: InvoiceFields | null, checks: Check[] | n
 export interface TraceStep { stage: 'lee' | 'consulta' | 'decide' | 'actua'; text: string }
 
 // The channel it came through (AC-86): invoices.origin and sender, as invoice_current carries them.
-export type TraceInvoice = Invoice & { origin?: 'app' | 'portal' | 'email'; sender?: string | null };
+type TraceInvoice = Invoice & { origin?: 'app' | 'portal' | 'email'; sender?: string | null };
 
 export interface TraceArgs {
   invoice: TraceInvoice;

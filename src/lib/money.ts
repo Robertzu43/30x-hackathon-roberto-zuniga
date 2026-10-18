@@ -1,7 +1,7 @@
 // Money (D6, AC-14, AC-22). Amounts are numbers with 2 decimals; USD = round2(amount × policy rate).
 
 // Half-up at 2 decimals; toPrecision(12) drops float noise (1.005 * 100 = 100.4999…).
-export const round2 = (n: number): number => Math.round(Number((n * 100).toPrecision(12))) / 100;
+export const round2 = (n: number): number => (Number.isFinite(n) ? Math.round(Number((n * 100).toPrecision(12))) / 100 : NaN);
 
 const grouped = (s: string, sep: string) => new RegExp(`^\\d{1,3}(\\${sep}\\d{3})+$`).test(s);
 
@@ -24,6 +24,7 @@ export const MAX_AMOUNT = 1e11;
 // finite or above MAX_AMOUNT (R-71).
 export function toUsd(amount: number, currency: string, rates: Record<string, number>): number | null {
   const rate = currency === 'USD' ? 1 : rates[currency];
-  const usd = rate !== undefined && rate > 0 ? round2(amount * rate) : null;
-  return usd !== null && usd <= MAX_AMOUNT ? usd : null;
+  if (typeof rate !== 'number' || !(rate > 0) || !Number.isFinite(rate) || !Number.isFinite(amount)) return null;
+  const usd = round2(amount * rate);
+  return Number.isFinite(usd) && usd <= MAX_AMOUNT ? usd : null;
 }

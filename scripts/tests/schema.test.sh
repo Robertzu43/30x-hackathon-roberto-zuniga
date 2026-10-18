@@ -108,6 +108,15 @@ echo "$pb" | grep -qiE '\b(drop|delete|truncate)\b' && fail "drop, delete or tru
 for w in 'create or replace function public.screen_period() returns jsonb' 'create or replace function public.screen_demo_overview(p_lang text) returns jsonb' \
   "set search_path = ''"; do echo "$pb" | grep -qF "$w" || fail "period trim migration lacks: $w (AC-98)"; done
 
+# AC-69: a later guard requires the 13 engine check ids, so 13 copies of one id cannot PAGAR
+PAGAR_IDS=supabase/migrations/20261018000300_pagar_check_ids.sql
+[ -f "$PAGAR_IDS" ] || fail "missing $PAGAR_IDS"
+ids=$(sed 's/--.*$//' "$PAGAR_IDS")
+echo "$ids" | grep -q 'create or replace function public.decisions_guard()' || fail "pagar-id migration does not replace decisions_guard"
+echo "$ids" | grep -q 'PAGAR_OUTSIDE_RULES' || fail "pagar-id migration lacks PAGAR_OUTSIDE_RULES"
+for id in lectura beneficiario_permitido beneficiario_cuenta acuerdo duplicado_exacto duplicado_probable limite_pago umbral_aprobacion presupuesto_periodo saldo_cuenta vencimiento periodo moneda; do
+  echo "$ids" | grep -q "'$id'" || fail "pagar-id migration lacks check id $id"; done
+
 # Task 39c (AC-96 Clarified, R-133; AC-07): the trial invoice cap in the database, one additive security-invoker trigger
 CAP=supabase/migrations/20261017001200_trial_invoice_cap.sql
 [ -f "$CAP" ] || fail "missing $CAP"
@@ -160,7 +169,8 @@ expect "$UA" "update public.invoices set expected_outcome = 'PAGAR' where id = '
 expect "$UA" "update public.invoices set archived = false where id = '${I}1' returning archived" '^f$' "archived not updatable (AC-06)"
 dec(){ printf "select seq from public.insert_decision('%s', %s, '%s', %s)" "$1" "$2" "$3" "$4"; }
 ESC='{"outcome":"ESCALAR","actor":"agent","amount_usd":100,"checks":[],"question_es":"¿La pago?","question_en":"Pay it?"}'
-OK=$(printf '{"id":"c%s","verdict":"cumple"},' $(seq 1 13)); OK="[${OK%,}]"          # 13 checks, all cumple
+IDS='lectura beneficiario_permitido beneficiario_cuenta acuerdo duplicado_exacto duplicado_probable limite_pago umbral_aprobacion presupuesto_periodo saldo_cuenta vencimiento periodo moneda'
+OK=$(for id in $IDS; do printf '{"id":"%s","verdict":"cumple"},' "$id"; done); OK="[${OK%,}]"   # the 13 engine ids, all cumple
 PAY='{"outcome":"PAGAR","actor":"agent","amount_usd":100,"checks":'$OK'}'
 HUM='{"outcome":"PAGAR","actor":"human","actor_email":"juan.perez@andina.co","channel":"dashboard","amount_usd":100,"checks":'$OK'}'
 expect svc "$(dec "${I}1" 0 "$ESC" 0)" '^1$' "first decision gets seq 1"
@@ -186,13 +196,15 @@ as svc "begin; $(dec "${I}4" 300 "$PAY" 0); select pg_sleep(1.5); commit;" >"$D/
 sleep 0.5; expect svc "$(dec "${I}5" 300 "$PAY" 0)" 'STALE_PERIOD' "concurrent decision ignored the lock (AC-24)"
 wait; grep -q '^1$' "$D/s1" || fail "locked session did not commit: $(cat "$D/s1")"
 # AC-69/R-33 through the service role (committed is 400 here; amount 0 keeps it there). Error order is unchanged.
-one(){ printf '%s' "${OK%\]}" | sed "s/{\"id\":\"c13\",\"verdict\":\"cumple\"}$/$1]/"; }   # 12 cumple + $1
-NC='{"id":"c13","verdict":"no_cumple"}'
+one(){ id=$(printf '%s' "$1" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p'); printf '%s' "$OK" | sed "s/{\"id\":\"${id}\",\"verdict\":\"cumple\"}/${1}/"; }
+NC='{"id":"lectura","verdict":"no_cumple"}'
+DUP=$(printf '{"id":"lectura","verdict":"cumple"},%.0s' {1..13}); DUP="[${DUP%,}]"
 OV(){ printf '{"id":"%s","verdict":"no_cumple","overridden":{"by":"juan.perez@andina.co","channel":"dashboard"}}' "$1"; }
 AG(){ printf '{"outcome":"PAGAR","actor":"agent","amount_usd":0,"checks":%s}' "$1"; }
 HU(){ printf '{"outcome":"PAGAR","actor":"human","actor_email":"juan.perez@andina.co","channel":"dashboard","amount_usd":0,"checks":%s}' "$1"; }
 expect svc "$(dec "${I}6" 400 "$(AG "$(one "$NC")")" 0)" 'PAGAR_OUTSIDE_RULES' "agent PAGAR with a no_cumple check (AC-69a)"
 expect svc "$(dec "${I}6" 400 "$(AG '[]')" 0)" 'PAGAR_OUTSIDE_RULES' "agent PAGAR with no checks (AC-69d)"
+expect svc "$(dec "${I}6" 400 "$(AG "$DUP")" 0)" 'PAGAR_OUTSIDE_RULES' "agent PAGAR repeating one check id (AC-69)"
 expect svc "$(dec "${I}6" 400 "$(AG "$(one "$(OV acuerdo)")")" 0)" 'PAGAR_OUTSIDE_RULES' "agent PAGAR with an override (AC-69)"
 expect svc "$(dec "${I}5" 400 "$(AG "$OK")" 0)" '^1$' "agent PAGAR with 13 cumple (AC-69)"
 expect svc "$(dec "${I}6" 400 '{"outcome":"ESCALAR","actor":"agent","amount_usd":0,"checks":['"$NC"']}' 0)" '^1$' "ESCALAR unaffected (AC-69)"

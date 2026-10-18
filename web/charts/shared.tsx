@@ -14,7 +14,7 @@ export function useFmt(unit = '') {
   return { t, locale, n: unit === '%' ? pct : (v: number) => num.format(v), d: (s?: string) => (s ? day.format(new Date(`${s}T00:00:00Z`)) : '') };
 }
 
-export const DEFAULT_HEIGHT = 160;
+const DEFAULT_HEIGHT = 160;
 
 /** Title + unit, one-sentence summary (visible and the aria-label), a body that keeps its height, and an optional text table. */
 export function Frame({ title, unit, summary, summaryNode, empty, height = DEFAULT_HEIGHT, legend, table, children }: {

@@ -8,4 +8,3 @@ export function OutcomeChip({ outcome }: { outcome: Outcome | null }) {
   const { t } = useT();
   return <span className={`chip chip-${outcome ?? 'pending'}`}>{t(outcome ? `outcome.${outcome}` : 'inbox.pending')}</span>;
 }
-export default OutcomeChip;

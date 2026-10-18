@@ -165,6 +165,17 @@ describe('field contract: unknown is never cumple (AC-16, R-71)', () => {
     for (const id of ['beneficiario_cuenta', 'duplicado_probable', 'vencimiento'] as const) expect(check(d, id).verdict).toBe('no_verificado');
     expect(d.payment).toBeNull();
   });
+  it('a payee below 0.8 confidence does not select its directory beneficiary', () => {
+    const d = bad({ confidence: { ...FULL_CONFIDENCE, payee_name: 0.79 } });
+    expect(d.outcome).toBe('ESCALAR');
+    expect(d.payment).toBeNull();
+    for (const id of ['acuerdo', 'beneficiario_cuenta', 'beneficiario_permitido'] as const) expect(check(d, id).verdict).toBe('no_verificado');
+    const approved = decideWithOverrides(
+      d.checks.filter((c) => c.verdict !== 'cumple').map((c) => c.id), BY, inv({ confidence: { ...FULL_CONFIDENCE, payee_name: 0.79 } }),
+      findBeneficiary('Laura Méndez', DIRECTORY), RULES, EMPTY, NOW,
+    );
+    expect([approved.outcome, approved.payment]).toEqual(['ESCALAR', null]);
+  });
   it('a missing or non-numeric confidence entry makes only that field unknown', () => {
     const noBank = Object.fromEntries(Object.entries(FULL_CONFIDENCE).filter(([k]) => k !== 'bank_account'));
     expect(failing(bad({ confidence: noBank }))).toEqual(['beneficiario_cuenta']);
@@ -290,6 +301,7 @@ describe('account comparison (AC-19, R-73)', () => {
     ['#15 Nequi instead of Bancolombia', 'Laura Méndez', 'Nequi 300-555-7310', undefined],
     ['a Pix key that differs', 'Ana Souza', 'Pix ana@souza.com', 'Pix ana@souza.com.br'],
     ['no digits at all', 'Laura Méndez', 'Bancolombia ahorros', undefined],
+    ['the same digits split by a word', 'Laura Méndez', '00123456 cuenta 4821', undefined],
   ])('%s -> no_cumple, cuenta cambiada', (_, payee, line, dir) => {
     expect(acct(payee, line, dir)).toMatchObject({ verdict: 'no_cumple', values: { reason: 'cuenta cambiada' } });
   });
@@ -354,6 +366,10 @@ describe('agreement, due date, period (AC-21)', () => {
     const at = run(diego, { period: { previous: [diegoPrev(2514)] } }); // 2.514 + 486 = 3.000
     expect([at.outcome, check(at, 'acuerdo').values.month_total_usd]).toEqual(['PAGAR', 3000]);
     expect(check(run(diego, { period: { previous: [diegoPrev(2514.01)] } }), 'acuerdo').verdict).toBe('no_cumple');
+  });
+  it('hourly: an earlier invoice with no USD amount is not zero -> no_verificado, never PAGAR', () => {
+    const d = run(diego, { period: { previous: [diegoPrev(0, { amount_usd: null, invoice_number: 'DR-0' })] } });
+    expect([d.outcome, check(d, 'acuerdo').verdict, d.payment]).toEqual(['ESCALAR', 'no_verificado', null]);
   });
   it('hourly: last month and FRENAR invoices do not count toward the cap', () => {
     const d = run(diego, { period: { previous: [diegoPrev(2600, { received_at: '2026-09-20T15:00:00Z' }), diegoPrev(2600, { invoice_number: 'DR-2', outcome: 'FRENAR' })] } });
@@ -431,6 +447,13 @@ describe('rate pick (AC-74)', () => {
   });
   it('a pin that is not a positive number is no pin: the market rate is used', () => {
     expect(check(pick({ ...NO_PINS, fx_rates: { COP: 0 } }, { COP: market('COP', 0.000245, 1) }), 'moneda').values.rate_source).toBe('Yahoo Finance');
+  });
+  it('a non-finite market rate is no rate: Moneda no_verificado, never throws, never PAGAR', () => {
+    const m = market('COP', Number.POSITIVE_INFINITY, 1);
+    let d: Decision | undefined;
+    expect(() => { d = pick(NO_PINS, { COP: m }); }).not.toThrow();
+    expect([d!.outcome, d!.payment, check(d!, 'moneda').verdict]).toEqual(['ESCALAR', null, 'no_verificado']);
+    expect(check(d!, 'moneda').values).toMatchObject({ rate: null, rate_source: 'Yahoo Finance', amount_usd: null });
   });
   it('approving a stale-rate ESCALAR re-escalates: Moneda is never overridable (R-21)', () => {
     const i = inv(contadores);

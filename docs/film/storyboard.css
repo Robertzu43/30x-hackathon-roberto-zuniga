@@ -21,6 +21,7 @@ p, h1, h2 { margin: 0; font-weight: 400; }
 
 /* Timing primitives */
 .part { position: absolute; inset: 0; animation: f-in .8s ease-out var(--in) both, out .6s ease-in calc(var(--out) - .6s) forwards; }
+/* --drift (set per part in storyboard.html) is a slow push-in big enough that no hold reads as a repeated frame (mpdecimate, R-155) */
 .drift { position: absolute; inset: 0; animation: drift calc(var(--out) - var(--in)) linear var(--in) both; }
 .t { animation: rise 1.4s var(--ease) calc(var(--in) + var(--lag, 0s)) both, out .6s ease-in calc(var(--out) - .6s) forwards; }
 @keyframes f-in { from { opacity: 0; } }
@@ -66,7 +67,7 @@ p, h1, h2 { margin: 0; font-weight: 400; }
 .phone .screen { width: 276px; height: 598px; border-radius: 40px; }
 .phone .screen::after { content: ''; position: absolute; left: 50%; top: 12px; width: 84px; height: 24px; margin-left: -42px; border-radius: 12px; background: var(--ink); }
 .group { position: absolute; inset: 0; animation: f-in .8s ease-out var(--in) both, out .01s linear calc(var(--out) + .8s) forwards; }
-.shot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top; transform-origin: var(--o, 50% 20%);
+.shot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top; transform-origin: var(--o, 0% 0%);
   animation: f-in .8s ease-out var(--in) both, kb calc(var(--out) - var(--in)) linear var(--in) both, out .01s linear var(--out) forwards; }
 @keyframes kb { from { transform: scale(var(--z0, 1)); } to { transform: scale(var(--z1, 1.16)); } }
 
@@ -74,10 +75,10 @@ p, h1, h2 { margin: 0; font-weight: 400; }
 .p5 { background: var(--surface); }
 .p5 .drift { display: grid; place-content: center; }
 .flow { display: flex; align-items: center; }
-.node { width: 264px; min-height: 196px; padding: 32px 28px; border: 1px solid var(--line); border-radius: 12px; background: var(--canvas); display: grid; align-content: start; gap: 20px; }
+.node { width: 264px; height: 280px; padding: 32px 28px; border: 1px solid var(--line); border-radius: 12px; background: var(--canvas); display: grid; align-content: start; gap: 20px; }
 .node p { font-size: 28px; line-height: 1.25; letter-spacing: -0.01em; }
 .node i { display: block; width: 40px; height: 40px; background: var(--brand); -webkit-mask: var(--icon) center / contain no-repeat; mask: var(--icon) center / contain no-repeat; }
-.node i.none { background: none; border: 1px solid var(--line); border-radius: 8px; }
+.node i.none { visibility: hidden; } /* architecture.svg draws no icon for this zone; the slot keeps the labels aligned */
 .arrow { width: 72px; height: 24px; overflow: visible; }
 .arrow path { fill: none; stroke: var(--ink-2); stroke-width: 2; stroke-dasharray: 80; animation: draw .7s var(--ease) calc(var(--in) + var(--lag)) both; }
 @keyframes draw { from { stroke-dashoffset: 80; } to { stroke-dashoffset: 0; } }
@@ -85,7 +86,7 @@ p, h1, h2 { margin: 0; font-weight: 400; }
 /* 6. Metrics: at most four numbers, each with its scope */
 .p6 .drift { display: grid; grid-template-columns: repeat(4, 1fr); gap: 56px; align-content: center; padding: 0 144px; }
 .metric b { display: block; font: 400 136px / 1 var(--font-serif); letter-spacing: -0.04em; }
-.metric span { display: block; margin-top: 24px; font-size: 30px; font-weight: 500; }
+.metric span { display: block; min-height: 2.9em; margin-top: 24px; font-size: 30px; font-weight: 500; }
 .metric small { display: block; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 22px; line-height: 1.45; color: var(--ink-2); }
 
 /* 7. Close, on the approved bone: logo, claim, URL, the door */

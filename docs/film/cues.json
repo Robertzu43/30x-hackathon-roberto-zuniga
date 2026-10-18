@@ -28,7 +28,7 @@
   {"id": "metrica-autonomia", "part": 6, "scene": "metricas", "role": "metric", "start": 120.5, "end": 133, "es": "62 %\nde autonomía\n18 de las 29 facturas, resueltas por el agente sin una persona", "en": "62%\nautonomy\n18 of the 29 invoices, resolved by the agent without a person"},
   {"id": "metrica-violaciones", "part": 6, "scene": "metricas", "role": "metric", "start": 121.0, "end": 133, "es": "0\nviolaciones\nningún PAGAR fuera de las reglas en las 29 facturas", "en": "0\nviolations\nno PAY outside the rules across the 29 invoices"},
   {"id": "metrica-pruebas", "part": 6, "scene": "metricas", "role": "metric", "start": 121.5, "end": 133, "es": "2.283\npruebas automáticas\nen 62 archivos, todas pasan", "en": "2,283\nautomated tests\nin 62 files, all passing"},
-  {"id": "cierre-blinka", "part": 7, "scene": "cierre", "role": "claim", "start": 133.8, "end": 144, "es": "Listo para conectarse a Blinka", "en": "Ready to connect to Blinka"},
+  {"id": "cierre-blinka", "part": 7, "scene": "cierre", "role": "claim", "start": 133, "end": 144, "es": "Listo para conectarse a Blinka", "en": "Ready to connect to Blinka"},
   {"id": "cierre-url", "part": 7, "scene": "cierre", "role": "url", "start": 134.4, "end": 144, "es": "30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo", "en": "30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo"},
   {"id": "cierre-boton", "part": 7, "scene": "cierre", "role": "button", "start": 135, "end": 144, "es": "Probar con mi propia empresa", "en": "Try it with my own company"}
  ]

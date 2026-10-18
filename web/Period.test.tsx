@@ -1,7 +1,8 @@
-import { screen, fireEvent, within } from '@testing-library/react';
+import { screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { beforeEach, expect, test } from 'vitest';
+import { FirstRunProvider, markFirstRun } from './firstRun';
 import Period from './pages/Period';
-import { mockApi, renderAt } from './test/utils';
+import { mockApi, renderAt, signedInAs } from './test/utils';
 
 // R-164: Intl's own output for the tab locale, never a hand-typed space.
 const pct = (v: number, locale = 'es-CO') => new Intl.NumberFormat(locale, { style: 'percent' }).format(v / 100);
@@ -247,4 +248,24 @@ test('while loading, the chart section is part of the skeleton, hidden from assi
   expect(readFileSync('web/pages/period.css', 'utf8')).toMatch(/\.period-charts \.chart-sr \{ display: block; width: 1px/);
   expect(readFileSync('web/pages/period.css', 'utf8')).toMatch(/\.chart-sr :is\(caption, th, td\) \{ position: absolute; width: 1px/);
   expect(readFileSync('web/pages/period.css', 'utf8')).toMatch(/\.skeleton \.chart-body > \*[^{]*\{ visibility: hidden/);
+});
+
+// AC-121 (b): while this tab's first-login pass runs, Autonomía and «Decisiones explicadas» show the run, then the figures.
+test('during the tab\'s pass the two percentages read «Decidiendo… n de m»; after it, the figures from a fresh load (AC-121)', async () => {
+  signedInAs('ana@empresa.co');
+  markFirstRun('id:ana@empresa.co');
+  let release: (v: unknown) => void = () => {};
+  let runs = 0;
+  mockApi({
+    [`GET /api/screen/period?month=${month}`]: scr(body),
+    'POST /api/invoices/run': () => (runs++ === 0 ? { PAGAR: 15, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 14, cursor: 'c1' } : new Promise((r) => (release = r))),
+  });
+  renderAt(<FirstRunProvider><Period /></FirstRunProvider>, { at: '/period' });
+  await waitFor(() => expect(screen.getAllByText('Decidiendo… 15 de 29')).toHaveLength(2));
+  expect(screen.queryByText(`Autonomía ${pct(75)}`)).toBeNull();
+  expect(screen.queryByText(`Decisiones explicadas ${pct(100)}`)).toBeNull();
+  release({ PAGAR: 14, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null });
+  expect(await screen.findByText(`Autonomía ${pct(75)}`)).toBeTruthy();
+  expect(screen.getByText(`Decisiones explicadas ${pct(100)}`)).toBeTruthy();
+  expect(screen.queryByText(/Decidiendo…/)).toBeNull();
 });

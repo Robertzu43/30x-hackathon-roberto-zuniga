@@ -121,6 +121,14 @@ test('Kpi formats by locale and kind, and has a name', () => {
   expect(screen.getByText('3 órdenes preparadas hoy')).toBeTruthy();
 });
 
+test('Kpi busy text replaces the value and the hint in the same tile; its name carries it; the hint only holds the box (AC-121)', () => {
+  const { container } = renderAt(<Kpi label="Por pagar hoy" value={1500.5} kind="usd" hint="3 órdenes preparadas hoy" busy="Decidiendo… 15 de 29" />);
+  const tile = screen.getByRole('group', { name: 'Por pagar hoy: Decidiendo… 15 de 29' });
+  expect(tile.textContent).toBe('Por pagar hoyDecidiendo… 15 de 29');
+  expect(container.querySelector('.chart-kpi-hint')).toBeNull();
+  expect(container.querySelector('.chart-kpi-hold')?.getAttribute('data-hint')).toBe('3 órdenes preparadas hoy');
+});
+
 test('Kpi without a value says so instead of printing a placeholder number', () => {
   renderAt(<Kpi label="Autonomía" value={null} kind="pct" />);
   expect(screen.getByText('Sin datos')).toBeTruthy();

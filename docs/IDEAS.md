@@ -7,3 +7,8 @@ One line per idea, who had it, which AC it would serve. Nothing here gets built 
 - Open Bandeja instantly for a new trial and let the activity panel show the agent deciding in the background (product, AC-92 / R-120's rejected option; proposed again by the launcher at 21:42Z with QA's 14.6-18.4 s, R-139).
 - ux-gate item 7 `7.usable`: count a busy (disabled, aria-busy) «Ejecutar agente» as usable like AC-97 target 5 does, or the trial screen fails 7.usable while the first-login pass runs once Task 52 lands Bandeja first (builder 52b, AC-91 item 7 / R-143).
 - screen_period and screen_beneficiary still carry every decision ever with its checks (2.1 MB for the demo, archived invoices included), the same statement-timeout risk 20261018000100 removed from screen_inbox; the same join trims them, and `[observability] enabled = true` in wrangler.toml would keep 5xx causes readable (builder 52c, AC-97 target 3 / AC-98).
+- One money form across the beneficiary page: the KPI tiles show "$1,800.00", while the agreement line and the table show "1,800 USD" (Task 33 gate, AC-104 / R-166).
+- A hide flag for test policy versions, such as «QA21 vacía», in the demo company's history. Policies stay append-only. Today the rule is that QA writes go to a trial workspace (Task 33 gate, AC-30 / R-166).
+- Before saying «No encontré este valor literal», match a date the document prints in another format, such as "Oct 18, 2026" (Task 33 gate, AC-77 / R-107 / R-166).
+- Plainer words than «LLM» and «JEV» in the /demo pitch copy, for finance readers (Task 33 gate, AC-79 / R-166).
+- A shorter top bar at 360 and 390 px. Today the bar takes about 275 px before the h1 (Task 33 gate, AC-91 / R-166).

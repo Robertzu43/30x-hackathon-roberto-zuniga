@@ -3,7 +3,7 @@ import { useState, type FormEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '../api';
 import { useLeaveGuard } from '../components/LeaveTrialWarning';
-import Logo from '../components/Logo';
+import LogoIntro from '../components/LogoIntro';
 import { PasswordField } from '../components/SaveAccess';
 import TrialButton from '../components/TrialButton';
 import { markFirstRun } from '../firstRun';
@@ -95,7 +95,7 @@ export default function Login() {
   return (
     <div className="login">
       <section className="login-intro">
-        <h1><Logo /></h1>{/* the logo is the wordmark: the name is shown once (AC-80) */}
+        <h1><LogoIntro screen="login" /></h1>{/* the logo is the wordmark: the name is shown once (AC-80) */}
         <p className="login-lead">{t('login.lead')}</p>
       </section>
       <section className="login-form">

@@ -1,5 +1,5 @@
 // AC-94 (R-119): an action that would end an unsaved trial session warns first, in place.
-import { useState, type ReactNode } from 'react';
+import { useLayoutEffect, useState, type ReactNode } from 'react';
 import { useSession } from '../auth';
 import { useT } from '../i18n';
 import { guardLeave, useTrialCompany } from '../trial';
@@ -32,6 +32,11 @@ export function useLeaveGuard(): { guard: (leave: () => void) => void; save: () 
   const [saving, setSaving] = useState(false);
   const guard = (leave: () => void) => guardLeave(user, leave, (go) => setPending(() => go));
   const save = () => { setPending(null); setSaving(true); };
+  const open = saving || !!pending;
+  useLayoutEffect(() => { // AC-91 item 6 (R-197): the one switch; styles.css turns the page's primaries into secondaries while it is on
+    document.body.classList.toggle('panel-open', open);
+    return () => document.body.classList.remove('panel-open');
+  }, [open]);
   const warning = saving ? <SaveAccess onClose={() => setSaving(false)} /> : pending && (
     <LeaveTrialWarning
       company={company}

@@ -188,3 +188,40 @@ test('a user with an email signs out at once, with the email in the top bar (AC-
   await waitFor(() => expect(fakeAuth.signOut).toHaveBeenCalledOnce());
   expect(screen.queryByRole('alertdialog')).toBeNull();
 });
+
+// AC-91 item 6 (R-197): while «Guardar mi acceso» or the leave warning is open, the panel holds the view's one filled primary.
+// jsdom applies no stylesheet on its own, so the real one is attached and "filled" is read from the computed background.
+const { readFileSync } = (await import('node:fs' as string)) as { readFileSync(p: string, enc: string): string }; // no @types/node here
+const css = () => {
+  const style = document.createElement('style');
+  const text = ['web/styles.css', 'web/components/trial.css'].map((p) => readFileSync(p, 'utf8')).join('\n');
+  const vars = Object.fromEntries([...text.matchAll(/(--[\w-]+):\s*([^;]+);/g)].map((m) => [m[1], m[2]])); // jsdom does not resolve var()
+  style.textContent = text.replace(/var\((--[\w-]+)\)/g, (_, v) => vars[v] ?? '');
+  document.head.appendChild(style);
+};
+const filled = () => [...document.querySelectorAll<HTMLElement>('button.primary')]
+  .filter((b) => getComputedStyle(b).backgroundColor === 'rgb(17, 17, 17)').map((b) => b.textContent);
+const run = () => screen.getByRole('button', { name: 'Ejecutar agente' }) as HTMLButtonElement;
+
+test.each([
+  ['«Guardar mi acceso»', async () => { fireEvent.click(await screen.findByRole('button', { name: 'Guardar mi acceso' })); return dialog(); },
+    (d: HTMLElement) => fireEvent.click(within(d).getByRole('button', { name: 'Cancelar' }))],
+  ['the leave warning', async () => { fireEvent.click(await screen.findByRole('button', { name: 'Cerrar sesión' })); return screen.findByRole('alertdialog'); },
+    (d: HTMLElement) => fireEvent.keyDown(d, { key: 'Escape' })],
+])('with %s open the page behind it has no filled primary, «Ejecutar agente» still fires, and it is filled again after (AC-91 item 6, R-197)', async (_, open, close) => {
+  css();
+  anonymous();
+  mockApi({ 'GET /api/company': COMPANY, 'GET /api/invoices': [], 'GET /api/agent/last-run': null, 'POST /api/invoices/run': { PAGAR: 0, remaining: 0, cursor: null } });
+  const f = renderAt(<App />);
+  await screen.findByRole('button', { name: 'Ejecutar agente' });
+  expect(filled()).toEqual(['Ejecutar agente']);
+  const d = await open();
+  expect(filled()).toEqual(['Guardar mi acceso']); // the panel's own, nothing else
+  expect(run().disabled).toBe(false);
+  expect(run().hasAttribute('aria-busy')).toBe(false);
+  fireEvent.click(run());
+  await waitFor(() => expect((fetch as Mock).mock.calls.some(([u]) => String(u).endsWith('/api/invoices/run'))).toBe(true));
+  close(d);
+  await waitFor(() => expect(filled()).toEqual(['Ejecutar agente']));
+  f.unmount();
+});

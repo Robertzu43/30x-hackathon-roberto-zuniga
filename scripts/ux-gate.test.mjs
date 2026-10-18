@@ -7,7 +7,7 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { aggregate, cellLabel, EMPTY_BODY, entryCls, FONTS, launch, logoSettled, main, MSG, PALETTE, renderGate, runCell, SCREENS, unreadId, writeGate } from './ux-gate.mjs';
+import { adminUser, aggregate, cellLabel, EMPTY_BODY, entryCells, entryCls, FONTS, launch, logoSettled, main, MSG, PALETTE, renderGate, runCell, SCREENS, unreadId, writeGate } from './ux-gate.mjs';
 
 const DICTS = {
   es: { 'f.approve': 'Aprobar', 'f.hello': 'Hola {name}', 'f.title': 'Bandeja', 'f.empty': 'Todavía no hay facturas.', 'f.retry': 'Reintentar', 'f.send': 'Enviar', 'f.save': 'Guardar cambios', 'f.err': 'No pude cargar los datos. Inténtalo de nuevo.', 'f.decide': 'decide', 'f.nopay': 'No puedo mostrar este pago', 'f.nopay.next': 'Pídele a quien te lo envió que lo reenvíe.', 'f.offline': 'Sin conexión. Revisa tu conexión e inténtalo de nuevo.', 'f.failed': 'No se pudo enviar. Inténtalo de nuevo.' },
@@ -187,6 +187,10 @@ const entryPage = (v) => `<!doctype html><html lang="es"><head><meta charset="ut
     document.getElementById('app').innerHTML = '<h1>Bandeja</h1><button class="primary" type="button">Nueva factura</button><p>cuerpo</p>';
     if (${JSON.stringify(v)} === 'shift') setTimeout(() => document.getElementById('app').prepend(Object.assign(document.createElement('div'), { style: 'height:150px' })), 100);
     if (${JSON.stringify(v)} === 'console') console.error('boom');
+    if (${JSON.stringify(v)} === 'late' || ${JSON.stringify(v)} === 'reserved') { // R-176: a top bar whose name arrives late, in a reserved slot or not
+      document.getElementById('app').insertAdjacentHTML('afterbegin', '<nav><span id="name" style="display:block;line-height:200px' + (${JSON.stringify(v)} === 'reserved' ? ';height:200px' : '') + '"></span><button type="button">Salir</button></nav>');
+      fetch('/api/company').then((r) => r.json()).then((c) => { document.getElementById('name').textContent = c.name; });
+    }
   };
   document.getElementById('go').onclick = () => (${JSON.stringify(v)} === 'instant' ? swap() : document.startViewTransition(swap));
   </script></body></html>`;
@@ -220,6 +224,8 @@ beforeAll(async () => {
     if (u.pathname === '/api/screen/beneficiaries') return void res.writeHead(200, { 'content-type': 'application/json' }).end('{"beneficiaries":[{"id":"b1"}]}');
     if (u.pathname === '/api/reset') return void req.socket.destroy(); // the origin drops the connection: route.fetch() rejects
     if (u.pathname === '/api/demo/overview') return void res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(server.overview ?? { invoices: [] }));
+    if (u.pathname === '/auth/v1/admin/users') { let b = ''; req.on('data', (c) => (b += c)); return void req.on('end', () => { server.admin = { key: req.headers.apikey, auth: req.headers.authorization, body: JSON.parse(b) }; res.writeHead(200, { 'content-type': 'application/json' }).end('{"id":"u1"}'); }); }
+    if (u.pathname === '/api/company') return void res.writeHead(200, { 'content-type': 'application/json' }).end('{"name":"Andina Labs"}');
     if (u.pathname === '/api/fx') return void res.writeHead(200, { 'content-type': 'application/json' }).end('{"provider":"gate","rates":[{"c":"USD"}]}');
     if (u.pathname === '/api/data') return void res.writeHead(200, { 'content-type': 'application/json' }).end('["Factura A","Factura B"]');
     res.writeHead(404).end();
@@ -740,8 +746,36 @@ describe('entry: the hand-over into Bandeja (AC-109, AC-91 Clarified)', () => {
   it('is a finance screen with a login and a demo door', () => {
     const s = SCREENS.find((x) => x.id === 'entry');
     expect(s.exp).toBe('finance');
-    expect(Object.keys(s.doors)).toEqual(['login', 'demo']);
+    expect(Object.keys(s.doors)).toEqual(['login', 'demo', 'trial']);
   });
+  // R-176: the slow-data mode holds /api/company 1.500 ms and /api/screen/inbox 800 ms, and reads CLS until that data is in.
+  it('slow mode: the password, trial and demo doors at 390 and 1440, in es, 3 runs each', () => {
+    const s = SCREENS.find((x) => x.id === 'entry');
+    const cells = entryCells(s, true);
+    expect(cells).toHaveLength(18);
+    expect(new Set(cells.map((c) => `${c.door} ${c.width} ${c.lang}`)).size).toBe(6);
+    expect([...new Set(cells.map((c) => c.lang))]).toEqual(['es']);
+    expect(entryCells(s, false)).toHaveLength(12); // the normal mode: every door at 390 and 1440, in es and en, once
+  });
+  it('slow mode: the password door signs in a fresh confirmed Admin-API user, so the company name is real (not the demo user)', async () => {
+    const u = await adminUser(base, 'service-key');
+    expect(server.admin.key).toBe('service-key');
+    expect(server.admin.auth).toBe('Bearer service-key');
+    expect(server.admin.body).toEqual({ email: u.email, password: u.password, email_confirm: true, user_metadata: { tour_seen: true } });
+    expect(u.email).toMatch(/^gate-r176-[a-z0-9]+-cuentas-por-pagar@example\.com$/);
+    expect(u.password.length).toBeGreaterThanOrEqual(8);
+  });
+  it('slow mode fails a top bar that grows when the held company name arrives, and names the element that moved', async () => {
+    const rs = await run(entry('late'), { kind: 'entry', door: 'login', width: 390, opts: { dicts: DICTS, shots: false, slow: true } });
+    const cls = rs.find((r) => r.id === '4.cls');
+    expect(cls?.status, JSON.stringify(rs)).toBe('fail');
+    expect(cls.measured).toMatch(/slow data/);
+    expect(cls.measured).toMatch(/button/); // the layout-shift source: the action that dropped
+  }, 60_000);
+  it('slow mode passes the same bar when the name slot is reserved from first paint', async () => {
+    const rs = await run(entry('reserved'), { kind: 'entry', door: 'login', width: 390, opts: { dicts: DICTS, shots: false, slow: true } });
+    expect(status(rs, '4.cls'), JSON.stringify(rs)).toBe('pass');
+  }, 60_000);
   it('is N/A, never a pass or a fail, while no transition exists', async () => {
     const rs = await go('instant');
     expect(rs.map((r) => [r.id, r.status])).toEqual([['4.cls', 'na'], ['6.console', 'na']]);

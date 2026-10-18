@@ -85,3 +85,10 @@ test('without busyWait a 503 stops the run at once', async () => {
   expect(await runUntilDone({ first: '/api/invoices/run' })).toMatchObject({ calls: 1, error: 'ocupado' });
   expect(post).toHaveBeenCalledTimes(1);
 });
+
+test('busyWait: a sign-out during the wait ends the run, the retry is never sent', async () => {
+  post.mockRejectedValueOnce(new ApiError('ocupado', 503));
+  const stop = vi.fn().mockReturnValueOnce(false).mockReturnValue(true);
+  await runUntilDone({ first: '/api/invoices/run', busyWait: 1, stop });
+  expect(post).toHaveBeenCalledTimes(1);
+});

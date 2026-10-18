@@ -7,7 +7,7 @@
  *     next        endpoint of every later call, body {cursor}; default = first (reset: '/api/invoices/run')
  *     onProgress  after each answered call: n = decided + errors so far, m = n + remaining, done = last call
  *     onBatch     after each answered call, with the raw answer (e.g. reload the list)
- *     stop        asked before each call; true ends the run there (the first-login pass: the user changed, R-119)
+ *     stop        asked before each call; true ends the run there, and after each busy wait (the first-login pass: the user changed, R-119)
  *     busyWait    ms to wait before asking again after a 503 (the company's run is busy, R-175), up to 3 times; unset: a 503 fails
  *   Stops on a null cursor, on a repeated cursor, on any non-2xx (error = its text) or after 20 calls.
  *   Never throws: counts so far are always returned. UI wiring: useRunAgent in components/RunProgress.tsx.
@@ -42,6 +42,7 @@ export async function runUntilDone(o: {
       } catch (e) {
         if (o.busyWait !== undefined && busy < BUSY_TRIES && e instanceof ApiError && e.status === 503) {
           await new Promise((ok) => setTimeout(ok, o.busyWait));
+          if (o.stop?.()) return r;
           continue;
         }
         r.error = e instanceof Error ? e.message : String(e);

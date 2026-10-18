@@ -40,7 +40,8 @@ export default function Dashboard({ data, onMore, deciding = 0, run = null }: { 
         <Kpi label={t('dash.kpi.awaiting')} value={k.awaiting_count} kind="count" busy={busy} hint={t('dash.kpi.awaiting_hint', { usd: usd(k.awaiting_usd) })} />
         <Kpi label={t('dash.kpi.stopped')} value={k.stopped_month_count} kind="count" busy={busy} />
         <Kpi label={t('dash.kpi.autonomy')} value={k.autonomy_pct} kind="pct" busy={busy}
-          hint={k.autonomy_pct === null ? undefined : t('period.autonomy_of', { n: k.autonomy_n, m: k.autonomy_m })} />
+          hint={run ? t('period.autonomy_of', { n: run.m, m: run.m }) // the held lines: this hint wraps by its digits, so hold the final n = m
+            : k.autonomy_pct === null ? undefined : t('period.autonomy_of', { n: k.autonomy_n, m: k.autonomy_m })} />
       </div>
 
       <section className="dash-card dash-wide dash-approvals" aria-labelledby="dash-approvals">

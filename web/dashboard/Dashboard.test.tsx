@@ -51,6 +51,12 @@ test('during a run the four tiles read «Decidiendo… n de m» and no figure; w
   expect(await screen.findByRole('group', { name: 'Frenadas este mes: 3' })).toBeTruthy();
 });
 
+test('during a run the Autonomía tile holds the hint\'s lines for its final width, n = m: the hint wraps by its digits (AC-121, R-176)', async () => {
+  const { container } = renderAt(<Dashboard data={{ ...DATA, kpis: { ...DATA.kpis, autonomy_pct: null, autonomy_n: 0, autonomy_m: 0 } }} onMore={() => {}} run={{ n: 7, m: 29 }} />);
+  await screen.findByRole('group', { name: 'Autonomía: Decidiendo… 7 de 29' });
+  expect([...container.querySelectorAll('.chart-kpi-hold')].map((h) => h.getAttribute('data-hint')).pop()).toBe('29 de 29 facturas decididas solas y correctamente');
+});
+
 test('in English the tiles read «Deciding… n of m» (AC-121)', async () => {
   localStorage.setItem('lang', 'en');
   renderAt(<Dashboard data={DATA} onMore={() => {}} run={{ n: 15, m: 29 }} />);

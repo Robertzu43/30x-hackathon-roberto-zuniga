@@ -51,7 +51,7 @@ a { color: var(--ink); text-underline-offset: 3px; } /* UX-11: never the browser
   flex-wrap: wrap;
 }
 .topbar .logo { align-self: center; }
-.topbar-actions { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; font-size: var(--text-sm); min-width: 0; }
+.topbar-actions { margin-left: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 0.5rem 0.75rem; font-size: var(--text-sm); min-width: 0; } /* AC-112: every wrapped row, so the last control, ends on the band's right edge */
 .topbar-actions .muted { overflow-wrap: anywhere; }
 .topbar .lang { display: flex; gap: 0.25rem; }
 
@@ -99,7 +99,7 @@ main { max-width: calc(var(--M) + 2 * var(--P)); margin: 0 auto; padding: 6rem v
 /* AC-72 (R-67): at phone width the chrome tightens so nothing scrolls sideways. */
 @media (max-width: 640px) {
   .topbar { padding-top: 0.75rem; padding-bottom: 0.75rem; } /* AC-91 item 1 (UX-03): the trial bar (5 buttons, 3 rows) was 245 px = 29% of 390x844 */
-  .topbar-actions { margin-left: 0; flex-basis: 100%; justify-content: flex-end; } /* AC-112: the last control ends on the band's right edge */
+  .topbar-actions { margin-left: 0; flex-basis: 100%; }
   .screens a { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; }
   button, select { min-height: 44px; min-width: 44px; } /* AC-72 (R-79), AC-91 item 2 (UX-05): tap targets */
   main { padding-top: 3rem; padding-bottom: 3rem; }

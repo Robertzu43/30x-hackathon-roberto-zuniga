@@ -415,6 +415,10 @@ function installRoutes(page, base, { state, guard, delayGets, gate, fake }) {
     const path = new URL(req.url()).pathname;
     const config = path === '/api/config';
     if (state === 'offline' && data && !config) { await gate.release; return route.continue(); }
+    // AC-98 (R-132): Política reads its rates inside GET /api/screen/policy, so an fx state is forced there too; with no rates the
+    // screen's answer is empty of rates, and a failed rate read is the screen's own failed read.
+    if (data && path === '/api/screen/policy' && req.method() === 'GET' && state === 'fx-empty') return patched(route, (j) => ({ ...j, fx: { ...j.fx, rates: [] } }));
+    if (data && path === '/api/screen/policy' && req.method() === 'GET' && state === 'fx-error') return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"gate"}' });
     if (data && path === '/api/fx' && req.method() === 'GET' && state === 'fx-empty') return route.fulfill({ status: 200, contentType: 'application/json', body: '{"provider":"gate","rates":[]}' });
     if (data && path === '/api/fx' && req.method() === 'GET' && state === 'fx-error') return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"gate"}' });
     if (data && !config && state === 'error') return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"gate"}' });
@@ -669,9 +673,10 @@ async function dynamic(page, screen, primarySel, add, noAction, lang) {
     window.__act = { clicks: 0, busy: null };
     const step = () => document.querySelector('.tour-card header p')?.textContent ?? null; // R-161: the tour's «n de 7» counter; null once the tour has closed
     const step0 = step();
+    const p = document.querySelector('[data-gate-primary]'); // kept: the action may replace it
     const isBusy = () => {
       if (tour) return step() !== step0; // here "busy" means the step changed
-      const p = document.querySelector('[data-gate-primary]');
+      if (p && !p.isConnected) return true; // the action replaced its own view at once (a dialog opened in its place): that is the response
       return !!(p && (p.disabled || p.getAttribute('aria-busy') === 'true')) || [...document.querySelectorAll('[aria-busy="true"],progress,[role="progressbar"]')].some((e) => e.checkVisibility());
     };
     addEventListener('click', () => {
@@ -814,7 +819,7 @@ export async function main(argv) {
   const cells = [];
   for (const s of picked.map((x) => ({ ...x, path: a.route[x.id] ?? x.path }))) {
     if (s.needs && !vars[s.needs]) {
-      if (s.na) { console.log(`ux-gate: ${s.id} N/A (${s.na})`); rows.push({ screen: s.id, width: 390, lang: 'es', ...R('0.reach', 'na', 0, s.na) }); } else console.log(`ux-gate: ${s.id} skipped (needs --${s.needs.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase())})`);
+      if (typeof s.na === 'string') { console.log(`ux-gate: ${s.id} N/A (${s.na})`); rows.push({ screen: s.id, width: 390, lang: 'es', ...R('0.reach', 'na', 0, s.na) }); } else console.log(`ux-gate: ${s.id} skipped (needs --${s.needs.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase())})`);
       continue;
     }
     if (s.entry) { for (const door of Object.keys(s.doors)) for (const lang of LANGS) for (const width of [390, 1440]) cells.push({ screen: s, state: null, width, lang, kind: 'entry', door }); continue; }

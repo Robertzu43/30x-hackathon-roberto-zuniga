@@ -413,11 +413,14 @@ test('a rate ≤ 0 pin is refused with the API text and marks the pin inputs (AC
   expect(screen.getByLabelText('1 COP en USD').getAttribute('aria-invalid')).toBe('true');
 });
 
-test('no rates yet: a designed empty message, and no table (AC-91)', async () => {
-  setup({ 'GET /api/fx': { provider: 'yahoo', rates: [] } });
+test('no rates yet: a designed empty message with a «Reintentar» next step that refetches, and no table (AC-91 item 4)', async () => {
+  let calls = 0;
+  setup({ 'GET /api/fx': () => (++calls === 1 ? { provider: 'yahoo', rates: [] } : fx) });
   renderAt(<Policy />);
-  expect(await screen.findByText(/Todavía no hay tasas de mercado/)).toBeTruthy();
+  expect((await screen.findByText(/Todavía no hay tasas de mercado/)).getAttribute('role')).toBe('status');
   expect(screen.queryByRole('table')).toBeNull();
+  fireEvent.click(within(document.querySelector('.fx-slot') as HTMLElement).getByRole('button', { name: 'Reintentar' }));
+  expect(await screen.findByRole('table', { name: 'Tasas de mercado' })).toBeTruthy();
 });
 
 test('the screen fails: a designed message with a «Reintentar» next step that refetches, in both languages, no status code (AC-91, AC-98)', async () => {

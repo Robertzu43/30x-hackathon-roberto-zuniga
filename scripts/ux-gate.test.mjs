@@ -99,9 +99,10 @@ const page = (bad, lang) => {
   const list = document.getElementById('list');
   const show = (rows) => { list.innerHTML = rows.length ? rows.map((r) => '<p>' + r + '</p>').join('') : bad === '4.state' ? '' : '<p role="status">' + T['f.empty'] + '</p><a class="btn" href="#sube">' + T['f.retry'] + '</a>'; };
   const fail = () => { list.innerHTML = bad === '4.state' ? '' : '<p class="err" role="alert">' + T['f.err'] + '</p><button type="button">' + T['f.retry'] + '</button>'; };
-  fetch(bad === 'fx' ? '/api/fx' : '/api/data').then((r) => { if (!r.ok) throw new Error('x'); return r.json(); }).then((d) => show(bad === 'fx' ? d.rates.map((x) => x.c) : d), fail);
+  fetch(bad === 'fx' ? '/api/fx' : bad === 'fxscreen' ? '/api/screen/policy' : '/api/data').then((r) => { if (!r.ok) throw new Error('x'); return r.json(); }).then((d) => show(bad === 'fx' ? d.rates.map((x) => x.c) : bad === 'fxscreen' ? d.fx.rates.map((x) => x.c) : d), fail);
   document.getElementById('go').addEventListener('click', (e) => {
     if (bad === 'compose' && !document.getElementById('msg').value.trim()) return;
+    if (bad === 'swap') return e.currentTarget.replaceWith(Object.assign(document.createElement('div'), { role: 'dialog', textContent: T['f.title'] })); // the action opens a dialog in place of its button
     if (bad !== '4.busy') { e.currentTarget.disabled = true; e.currentTarget.setAttribute('aria-busy', 'true'); }
     fetch('/api/act', { method: 'POST' });
   });
@@ -246,6 +247,7 @@ beforeAll(async () => {
     if (u.pathname === '/api/screen/inbox') return void res.writeHead(200, { 'content-type': 'application/json' }).end('{"invoices":[{"id":"a"},{"id":"b"}],"dashboard":{}}');
     if (u.pathname === '/api/reset') return void req.socket.destroy(); // the origin drops the connection: route.fetch() rejects
     if (u.pathname === '/api/demo/overview') return void res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(server.overview ?? { invoices: [] }));
+    if (u.pathname === '/api/screen/policy') return void res.writeHead(200, { 'content-type': 'application/json' }).end('{"versions":[],"fx":{"provider":"gate","rates":[{"c":"USD"}]}}');
     if (u.pathname === '/api/fx') return void res.writeHead(200, { 'content-type': 'application/json' }).end('{"provider":"gate","rates":[{"c":"USD"}]}');
     if (u.pathname === '/api/data') return void res.writeHead(200, { 'content-type': 'application/json' }).end('["Factura A","Factura B"]');
     res.writeHead(404).end();
@@ -352,6 +354,12 @@ describe('one known violation per item', () => {
   }, 60_000);
 });
 
+describe('4.busy: an action that replaces its own button at once has answered (leave-trial «Guardar mi acceso» opens its dialog, AC-91 item 4)', () => {
+  it('passes when the primary is replaced by a dialog within 100 ms', async () => {
+    expect(status(await cell('swap', { kind: 'dynamic' }), '4.busy')).toBe('pass');
+  }, 60_000);
+});
+
 describe('an empty live region is not the designed message (AC-112 layout moved RunProgress into a block)', () => {
   it.each(['empty', 'error'])('4.state (%s) reads the real message after an empty role=status', async (state) => {
     expect(status(await cell('quiet', { state }), '4.state')).toBe('pass');
@@ -397,6 +405,14 @@ describe('policy forced states (AC-91)', () => {
   }, 60_000);
 });
 
+describe('policy forced states reach GET /api/screen/policy, where the rates ride since AC-98 (R-132)', () => {
+  it.each([['fx-empty', 'f.empty'], ['fx-error', 'f.err']])('%s shows its message and next step', async (state, key) => {
+    const rs = await cell('fxscreen', { state });
+    expect(status(rs, '4.state'), JSON.stringify(rs.find((r) => r.id === '4.state'))).toBe('pass');
+    expect(rs.find((r) => r.id === '4.state').measured).toContain(DICTS.es[key].slice(0, 12));
+  }, 60_000);
+});
+
 describe('detail-unread (AC-91)', () => {
   const inv = [{ id: 'a', outcome: 'PAGAR', fields: {} }, { id: 'b', outcome: 'ESCALAR', fields: { read_error: 'lector_no_disponible' } }, { id: 'c', outcome: null }];
   it('opens an invoice the agent has not decided or could not read', () => {
@@ -416,6 +432,17 @@ describe('detail-unread (AC-91)', () => {
       server.overview = undefined;
     }
     expect(lines.join('\n')).toMatch(/detail-unread N\/A/);
+  }, 60_000);
+  it('status without --status-token is skipped by name, never N/A with its per-state reasons printed as [object Object]', async () => {
+    const lines = [];
+    const log = console.log;
+    console.log = (l) => lines.push(l);
+    try {
+      expect(await main(['--base', base, '--screens', 'status', '--only', '0.reach'])).toBe(0);
+    } finally {
+      console.log = log;
+    }
+    expect(lines.join('\n')).toMatch(/status skipped \(needs --status-token\)/);
   }, 60_000);
 });
 

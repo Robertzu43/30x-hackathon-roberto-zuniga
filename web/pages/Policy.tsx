@@ -88,7 +88,7 @@ function CompanySection({ initial, skeleton }: { initial: Company; skeleton: boo
 }
 
 // AC-76: the market rates the agent uses, read-only. Staleness comes from the API (R-85.3), never computed here.
-function MarketRates({ pins, rates }: { pins: string[]; rates: Rate[] | null }) {
+function MarketRates({ pins, rates, onRetry }: { pins: string[]; rates: Rate[] | null; onRetry: () => void }) {
   const { t, locale } = useT();
   // es-CO prints «17 de oct de 2026»; AC-76 shows «17 oct 2026» (the replace below)
   const day = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Bogota' });
@@ -99,7 +99,10 @@ function MarketRates({ pins, rates }: { pins: string[]; rates: Rate[] | null }) 
     <div className="fx-market">
       <h3 id="fx-market-h">{t('policy.fx.market')}</h3>
       <div className="fx-slot">
-        {rates && !rates.length && <p className="muted">{t('policy.fx.empty')}</p>}
+        {rates && !rates.length && <>{/* AC-91 item 4: the designed empty state and its next step */}
+          <p className="muted" role="status">{t('policy.fx.empty')}</p>
+          <button type="button" onClick={onRetry}>{t('policy.fx.retry')}</button>
+        </>}
         {shown.length > 0 && (
           // scrolls inside its own container (AC-91 item 1); cards at phone width (policy.css)
           <div className="fx-scroll" role={rates ? 'region' : undefined} aria-labelledby={rates ? 'fx-market-h' : undefined} tabIndex={rates ? 0 : undefined} aria-hidden={rates ? undefined : true}>
@@ -246,7 +249,7 @@ export default function Policy() {
             <div className="grid">{numRule('duplicate_window_days')}{numRule('due_grace_days')}</div>
           </RuleCard>
           <RuleCard group="currency" skeleton={!d}>
-            <MarketRates pins={pins} rates={d?.fx.rates ?? null} />
+            <MarketRates pins={pins} rates={d?.fx.rates ?? null} onRetry={() => void screen.reload()} />
             <fieldset>
               <legend>{t('policy.fx.title')}</legend>
               <p className="muted hint">{t('policy.fx.hint')}</p>

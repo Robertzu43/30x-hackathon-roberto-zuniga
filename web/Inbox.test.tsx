@@ -127,6 +127,7 @@ test('empty state: three numbered step cards and one primary (AC-116 c)', async 
     ['3', 'Revisa la decisión', 'Cada factura muestra qué decidió el agente y por qué.'],
   ]);
   expect(document.querySelectorAll('.primary')).toHaveLength(1);
+  expect(document.querySelectorAll('.empty [data-step-card]')).toHaveLength(3); // marked as the designed empty state (AC-91 item 4)
 });
 
 test('empty state in English (AC-116 c)', async () => {

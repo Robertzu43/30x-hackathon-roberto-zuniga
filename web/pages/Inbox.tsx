@@ -120,7 +120,8 @@ export default function Inbox() {
       ) : (
         <>
           {d.dashboard && <Dashboard data={d.dashboard} onMore={() => setOutcome('ESCALAR')} deciding={pass.running ? d.invoices.filter((r) => !r.outcome).length : 0} />}
-          {link && <div data-block><PortalLinkCard link={link} /></div>}
+          {/* keyed: a reused div would carry the skeleton dashboard's box into the card's place, a layout shift (AC-91 item 4) */}
+          {link && <div key="portal" data-block><PortalLinkCard link={link} /></div>}
           <div className="activity-box" data-block tabIndex={held ? 0 : undefined}>{/* held: it scrolls inside, so it takes focus (axe) */}
             <AgentActivity refresh={batches + pass.batches - base} />
           </div>
@@ -128,8 +129,8 @@ export default function Inbox() {
       )}
       <div data-block><AskThesaurus /></div>
       {!failed && (d
-        ? <div data-block><InvoiceTable rows={d.invoices} directory={d.beneficiaries} outcome={outcome} onOutcome={setOutcome} /></div>
-        : <div data-block {...hidden}><InvoiceTable rows={SKELETON} directory={[]} outcome="" onOutcome={nothing} /></div>)}
+        ? <div key="table" data-block><InvoiceTable rows={d.invoices} directory={d.beneficiaries} outcome={outcome} onOutcome={setOutcome} /></div>
+        : <div key="table-skeleton" data-block {...hidden}><InvoiceTable rows={SKELETON} directory={[]} outcome="" onOutcome={nothing} /></div>)}
     </section>
   );
 }

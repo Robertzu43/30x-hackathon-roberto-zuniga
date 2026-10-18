@@ -1,4 +1,4 @@
-/* global process, console, fetch, Buffer, URL, setTimeout, SVGElement, addEventListener, document, window, performance, getComputedStyle, innerWidth, innerHeight, NodeFilter, PerformanceObserver, requestAnimationFrame, location, sessionStorage, localStorage, axe */ // Node script + code that runs in the page
+/* global process, console, fetch, Buffer, URL, setTimeout, SVGElement, DOMRect, addEventListener, document, window, performance, getComputedStyle, innerWidth, innerHeight, NodeFilter, PerformanceObserver, requestAnimationFrame, location, sessionStorage, localStorage, axe */ // Node script + code that runs in the page
 // The D38 UX gate (AC-91). Usage:
 //   node scripts/ux-gate.mjs --base <url> [--screens inbox,policy|all] [--only 6.palette] [--palette]
 //                            [--mutate] [--route id=/path] [--approve-token t] [--status-token t]
@@ -145,7 +145,14 @@ function measure(o) {
     if (!el || !live.has(el) || inSrOnly(el) || !n.textContent.trim()) continue;
     const range = document.createRange();
     range.selectNodeContents(n);
-    const rects = [...range.getClientRects()].filter((r) => r.width > 1 && r.height > 1);
+    // AC-115: the part of a run that its own scroller hides (a tour card body over its buttons) is not painted, so it cannot overlap.
+    let rects = [...range.getClientRects()].filter((r) => r.width > 1 && r.height > 1);
+    for (let p = el; p && p !== document.body && rects.length; p = p.parentElement) {
+      const cs = getComputedStyle(p);
+      if (cs.overflowX === 'visible' && cs.overflowY === 'visible') continue;
+      const c = p.getBoundingClientRect();
+      rects = rects.map((r) => { const l = Math.max(r.left, c.left), t = Math.max(r.top, c.top), rt = Math.min(r.right, c.right), b = Math.min(r.bottom, c.bottom); return new DOMRect(l, t, rt - l, b - t); }).filter((r) => r.width > 1 && r.height > 1);
+    }
     if (rects.length) runs.push({ el, text: n.textContent.trim().replace(/\s+/g, ' '), rects, modal: !!el.closest('[aria-modal="true"],[role="dialog"]'), user: !!el.closest('[data-user]') });
   }
   // R-114: x is hidden under an opaque sticky or fixed layer when all four hold: (a) the layer is sticky or fixed and a background
@@ -232,7 +239,7 @@ function measure(o) {
   out.primaryCount = els.filter((el) => el.matches('.primary,[data-primary]')).length;
 
   // A designed state marks its message (role alert or status, or class error, empty, state); its container holds the next step.
-  const msg = els.find((el) => el.matches('[role="alert"],[role="status"],.error,.empty,.state,[data-state]') && !el.closest('[aria-busy="true"]'));
+  const msg = els.find((el) => el.matches('[role="alert"],[role="status"],.error,.empty,.state,[data-state]') && !el.closest('[aria-busy="true"]') && el.innerText.trim()); // an empty live region says nothing
   const root = msg && msg.parentElement && !msg.parentElement.matches('main,body') ? msg.parentElement : msg;
   out.message = root ? { text: root.innerText.trim().slice(0, 300), next: els.filter((el) => root.contains(el) && !el.closest('header,nav,.lang,.lang-switch') && el.matches('button,a[href],[role="button"]')).length } : { text: '', next: 0 };
 

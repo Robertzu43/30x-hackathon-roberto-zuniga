@@ -57,6 +57,7 @@ const page = (bad, lang) => {
   <h1 id="h">${bad.startsWith('intro') ? '<span class="lg">' + ['The', 'sau', 'rus'].map((c) => `<span>${c}</span>`).join('') + '</span>' : t['f.title']}</h1>
   ${bad === 'pass' ? '<section id="invoices"><table class="inbox-list"><tbody><tr><td><span class="chip chip-pending">Pendiente</span></td></tr></tbody></table></section>' : ''}
   <span class="sr-only">Texto solo para lectores de pantalla</span>
+  ${bad === 'quiet' ? '<div><div role="status"></div><p>Sin mensaje aquí</p></div>' : ''}
   <div id="list"></div>
   <p>${lang === 'es' ? '1.234,50 COP' : '1,234.50 COP'}</p>
   <p>160 USD</p><p><span>160</span> USD</p>
@@ -145,7 +146,7 @@ const overlapPage = (mode) => `<!doctype html><html lang="es"><head><meta charse
   header{position:sticky;top:0;z-index:2;height:${mode === 'outside' ? 20 : 56}px;padding:0 16px;background:${mode === 'translucent' ? 'rgba(255,255,255,0.5)' : '#ffffff'}}
   header span{position:absolute;left:16px;top:0}
   p{margin:0;padding:0 16px;${mode === 'above' ? 'position:relative;z-index:5' : ''}}
-  </style></head><body><header><span>Cabecera fija</span>${mode === 'same' ? '<span style="top:6px">Otra marca de cabecera</span>' : ''}</header><p>Contenido que pasa por debajo</p>${mode === 'srtable' ? '<div style="position:absolute;top:80px;left:0;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)"><table><tr><td style="position:absolute;top:0;left:0">Dato uno</td><td style="position:absolute;top:0;left:0">Dato dos</td></tr></table></div>' : ''}<div style="height:2000px"></div><script>scrollTo(0,${mode === 'outside' ? 12 : 56})</script></body></html>`;
+  </style></head><body><header><span>Cabecera fija</span>${mode === 'same' ? '<span style="top:6px">Otra marca de cabecera</span>' : ''}</header><p>Contenido que pasa por debajo</p>${mode === 'scroller' ? '<section style="position:fixed;left:0;bottom:0;width:300px;background:#ffffff"><div style="height:40px;overflow-y:auto"><p>Primera línea del cuerpo</p><p>Segunda línea que sigue</p><p>Tercera línea escondida</p><p>Cuarta línea escondida</p></div><button type="button">Siguiente</button></section>' : ''}${mode === 'srtable' ? '<div style="position:absolute;top:80px;left:0;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)"><table><tr><td style="position:absolute;top:0;left:0">Dato uno</td><td style="position:absolute;top:0;left:0">Dato dos</td></tr></table></div>' : ''}<div style="height:2000px"></div><script>scrollTo(0,${mode === 'outside' ? 12 : 56})</script></body></html>`;
 // Vendor pages for the forced states: the portal chat (POST answers a bubble) and the server-rendered status page (offline notice).
 const portalFixture = (bare) => `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>p</title></head><body><main><h1>Portal</h1><div class="log"></div><form id="f"><label for="m">Mensaje</label><textarea id="m" style="font-size:16px"></textarea><button type="submit" class="primary">Enviar</button></form></main><script>
   const log = document.querySelector('.log');
@@ -348,6 +349,12 @@ describe('one known violation per item', () => {
   }, 60_000);
   it.each(['empty', 'error', 'offline'])('4.state (%s)', async (state) => {
     expect(status(await cell('4.state', { state }), '4.state')).toBe('fail');
+  }, 60_000);
+});
+
+describe('an empty live region is not the designed message (AC-112 layout moved RunProgress into a block)', () => {
+  it.each(['empty', 'error'])('4.state (%s) reads the real message after an empty role=status', async (state) => {
+    expect(status(await cell('quiet', { state }), '4.state')).toBe('pass');
   }, 60_000);
 });
 
@@ -592,6 +599,10 @@ describe('1.overlap: text under an opaque sticky or fixed layer (R-114)', () => 
   }, 60_000);
   it('skips text inside an sr-only table, not only text whose direct parent is sr-only', async () => {
     const r = one(await ov('srtable'));
+    expect(r.status, JSON.stringify(r)).toBe('pass');
+  }, 60_000);
+  it('skips the part of a text run its own scroller hides (the tour card body over its buttons, AC-115)', async () => {
+    const r = one(await ov('scroller'));
     expect(r.status, JSON.stringify(r)).toBe('pass');
   }, 60_000);
   it.each([['a translucent header', 'translucent'], ['two texts inside the header', 'same'], ['a rectangle outside the layer box', 'outside'], ['content drawn above the header', 'above']])('still fails %s', async (_, mode) => {

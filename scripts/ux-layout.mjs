@@ -105,7 +105,7 @@ export function judgeLayout(m, { id, width }) {
       rs.push(P('1.fill', bad > 0, bad, `${m.blocks.length} blocks in ${rows.length} rows; ${short.length} rows short of the band${short.length ? ': ' + short.slice(0, 3).map((r) => r.map((x) => `${x.n} ${Math.round(x.left)}-${Math.round(x.right)}`).join(' + ')).join('; ') : ''}; ${m.unmarked.length} unmarked children${m.unmarked.length ? ': ' + m.unmarked.slice(0, 3).join('; ') : ''}`));
       const wide = m.prose.filter((p) => p.width > p.max);
       rs.push(P('1.measure', wide.length > 0, wide.length, `${wide.length} of ${m.prose.length} long texts wider than 70ch${wide.length ? ': ' + wide.slice(0, 3).map((p) => `${p.n} ${Math.round(p.width)} > ${Math.round(p.max)}`).join('; ') : ''}`));
-      if (GRID.includes(base) && !id.endsWith('-empty')) {
+      if (GRID.includes(base) && !/-(empty|error|offline)$/.test(id)) {
         const most = Math.max(0, ...rows.map((r) => r.length));
         rs.push(width >= 1440 ? P('1.grid', most < 2, most, `at most ${most} blocks in one row`) : R('1.grid', 'na', most, 'checked at 1440 and 1920'));
       }

@@ -103,7 +103,7 @@ export default function InvoiceTable({ rows, directory, outcome, onOutcome }: {
         </label>
       </div>
 
-      {rows.length === 0 ? <StepCards steps={EMPTY.map((icon, i) => ({ icon, title: t(`inbox.empty.${i + 1}.title`), text: t(`inbox.empty.${i + 1}.text`) }))} />
+      {rows.length === 0 ? <div className="empty"><StepCards steps={EMPTY.map((icon, i) => ({ icon, title: t(`inbox.empty.${i + 1}.title`), text: t(`inbox.empty.${i + 1}.text`) }))} /></div>
         : shown.length === 0 ? <p className="muted">{t('inbox.no_match')}</p>
         : (
           <div className="table-wrap">

@@ -69,6 +69,9 @@ describe('band screens (AC-112, AC-113, AC-116)', () => {
   it('a band screen with no [data-band] fails its band rows', async () => {
     expect(status(await rows(centredPage(), 'policy'), '1.band')).toBe('fail');
   });
+  it('1.grid is not asked of the empty, error and offline states (nothing to place side by side)', async () => {
+    for (const st of ['empty', 'error', 'offline']) expect(status(await rows(bandPage('1.grid'), `inbox-${st}`), '1.grid')).toBeUndefined();
+  });
   it('1.grid is N/A under 1440 and never asked of beneficiaries', async () => {
     expect(status(await rows(bandPage('1.grid'), 'inbox', 1024), '1.grid')).toBe('na');
     expect(status(await rows(bandPage('1.grid'), 'beneficiaries'), '1.grid')).toBeUndefined();

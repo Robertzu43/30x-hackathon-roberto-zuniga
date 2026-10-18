@@ -830,3 +830,10 @@ Next: finish refinement, record the film walkthrough on the refined product, mer
 - State found by git: integration e5762cc (docs only after Task 57/57b). Task 58 worktree: commits d5f4af5, 9b2965a plus 8 modified tracked files (scripts/ux-gate*, scripts/ux-layout*, web/Inbox.test.tsx, web/dashboard/InvoiceTable.tsx, web/pages/Inbox.tsx, docs/ux/gate-finance.md) and ~412 untracked docs/ux screenshots; no builder report was ever written. Task 59 worktree: commits df07073 (part 1), 2349788 (part 2), 0a88668 (3a), b7d929b (3b); clean except the node_modules link; part 4 (single-flight, R-177) not started.
 - Ruling: the dead builders' runs for Task 58 and Task 59 do not count as used attempts (neither reported) — why: the launcher's instruction, and the budget counts attempts that reported, not crashes — cost if wrong: one extra builder attempt on each.
 - Note: a ledger-only commit with --no-verify was refused by the safety classifier; not retried. Ledger commits go through scripts/sync.sh (its sanctioned path) from now on.
+
+## Heartbeat 2026-10-18 08:48Z
+Done: preflight passed after the usage-limit stop.
+In progress: Tasks 58 (layout/step cards/video slot) and 59 (QA fixes) resumed with fresh builders; D48 fold with product.
+Blocked: nothing (email/Telegram live parts wait on your domain/bot token, optional).
+Rulings since last: dead builders' runs not counted as attempts.
+Next: Tasks 60-62 (tour, copy, KPI state), D48 channels card, D38 gate, deploy, PRODUCT READY FOR FILM by ~15:00Z.

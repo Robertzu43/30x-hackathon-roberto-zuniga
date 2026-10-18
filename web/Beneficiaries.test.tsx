@@ -233,7 +233,7 @@ test('a 500 offers a retry that loads the profile (AC-91 item 4)', async () => {
   let n = 0;
   at({ 'GET /api/screen/beneficiary/b1': () => (++n === 1 ? json({ error: 'boom' }, 500) : profile) });
   expect((await screen.findByRole('alert')).textContent).toContain('No pude cargar');
-  fireEvent.click(screen.getByRole('button', { name: 'Intentar de nuevo' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
   expect((await screen.findByRole('heading', { level: 1 })).textContent).toBe('Laura Méndez');
 });
 

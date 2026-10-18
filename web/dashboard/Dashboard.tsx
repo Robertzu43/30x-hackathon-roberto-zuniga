@@ -18,8 +18,9 @@ export type DashboardData = {
   approvals_total: number;
 };
 
-/** `deciding`: the pending count while the first-login pass runs; an empty section then says so instead (AC-107, R-145). */
-export default function Dashboard({ data, onMore, deciding = 0 }: { data: DashboardData; onMore: () => void; deciding?: number }) {
+/** `deciding`: the pending count while the first-login pass runs; an empty section then says so instead (AC-107, R-145).
+ *  `run`: n of m of this tab's run; the four tiles show it in place of their figures (AC-121). */
+export default function Dashboard({ data, onMore, deciding = 0, run = null }: { data: DashboardData; onMore: () => void; deciding?: number; run?: { n: number; m: number } | null }) {
   const { t, lang, locale } = useT();
   const { kpis: k } = data;
   const usd = new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format;
@@ -29,16 +30,18 @@ export default function Dashboard({ data, onMore, deciding = 0 }: { data: Dashbo
   const payee = (p: string | null) => (p ? <span data-user="">{p}</span> : t('period.unread'));
   const moreAsking = data.approvals_total - data.approvals.length;
   const moreDue = data.due_soon_total - data.due_soon.length;
+  const busy = run ? t('dash.kpi.deciding', run) : undefined;
   const empty = (key: string) => <p className="muted">{deciding ? t('entry.still_deciding', { n: deciding }) : t(key)}</p>;
   return (
     <div className="dash">
       <div className="dash-kpis" data-block>
-        <Kpi label={t('dash.kpi.today')} value={k.to_pay_today_usd} kind="usd"
+        <Kpi label={t('dash.kpi.today')} value={k.to_pay_today_usd} kind="usd" busy={busy}
           hint={k.to_pay_today_count === 1 ? t('dash.kpi.today_hint.one') : t('dash.kpi.today_hint', { n: k.to_pay_today_count })} />
-        <Kpi label={t('dash.kpi.awaiting')} value={k.awaiting_count} kind="count" hint={t('dash.kpi.awaiting_hint', { usd: usd(k.awaiting_usd) })} />
-        <Kpi label={t('dash.kpi.stopped')} value={k.stopped_month_count} kind="count" />
-        <Kpi label={t('dash.kpi.autonomy')} value={k.autonomy_pct} kind="pct"
-          hint={k.autonomy_pct === null ? undefined : t('period.autonomy_of', { n: k.autonomy_n, m: k.autonomy_m })} />
+        <Kpi label={t('dash.kpi.awaiting')} value={k.awaiting_count} kind="count" busy={busy} hint={t('dash.kpi.awaiting_hint', { usd: usd(k.awaiting_usd) })} />
+        <Kpi label={t('dash.kpi.stopped')} value={k.stopped_month_count} kind="count" busy={busy} />
+        <Kpi label={t('dash.kpi.autonomy')} value={k.autonomy_pct} kind="pct" busy={busy}
+          hint={run ? t('period.autonomy_of', { n: run.m, m: run.m }) // the held lines: this hint wraps by its digits, so hold the final n = m
+            : k.autonomy_pct === null ? undefined : t('period.autonomy_of', { n: k.autonomy_n, m: k.autonomy_m })} />
       </div>
 
       <section className="dash-card dash-wide dash-approvals" data-block aria-labelledby="dash-approvals">

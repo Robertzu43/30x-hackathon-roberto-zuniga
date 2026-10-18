@@ -97,7 +97,8 @@ export default function Demo() {
           <button type="button" className="link" aria-pressed={lang === 'en'} onClick={() => setLang('en', true)}>English</button>
         </div>
         <div className="demo-pitch">
-          <h1>{t('demo.title')}</h1>
+          <h1>{t('brand.headline')}</h1>
+          <p>{t('brand.subline')}</p>
           <div className="demo-problem">
             {[1, 2, 3].map((n) => <p key={n} data-testid="problem-line">{t(`demo.problem.${n}`)}</p>)}
           </div>
@@ -177,7 +178,7 @@ export default function Demo() {
         )}
       </section>
 
-      <footer className="demo-footer" data-block>{`${t('app.name')}, ${t('app.tagline')}.`}</footer>
+      <footer className="demo-footer" data-block>{`${t('app.name')} · ${t('brand.built_for')}`}</footer>
     </div>
   );
 }

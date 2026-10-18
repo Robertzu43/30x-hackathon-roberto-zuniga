@@ -61,3 +61,7 @@
 .chart-kpi-value .chart-unit { font-size: var(--text-sm); }
 .chart-kpi-na { color: var(--ink-2); font-size: var(--text-base); font-weight: 400; }
 .chart-kpi-hint { font-size: var(--text-sm); color: var(--ink-2); }
+/* AC-121: the run text fits one line of the value's own height; the hold is the hint's lines, unseen (R-176 CLS) */
+.chart-kpi-busy { display: flex; align-items: center; height: calc(1.2 * min(var(--text-xl), 12cqi)); font-size: min(var(--text-sm), 8cqi); font-weight: 400; color: var(--ink-2); white-space: nowrap; }
+.chart-kpi-hold { font-size: var(--text-sm); visibility: hidden; }
+.chart-kpi-hold::before { content: attr(data-hint); }

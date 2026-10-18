@@ -41,6 +41,29 @@ test('KPI strip: four tiles with the R-124 figures in the tab locale (AC-101)', 
   expect((await screen.findByRole('group', { name: /^Autonomía: 80\s?%$/ })).textContent).toContain('8 de 10 facturas decididas solas y correctamente');
 });
 
+test('during a run the four tiles read «Decidiendo… n de m» and no figure; without a run they show the figures (AC-121)', async () => {
+  const { unmount } = renderAt(<Dashboard data={DATA} onMore={() => {}} run={{ n: 15, m: 29 }} />);
+  const tiles = await screen.findAllByRole('group', { name: /^(Por pagar hoy|Esperando tu aprobación|Frenadas este mes|Autonomía): Decidiendo… 15 de 29$/ });
+  expect(tiles).toHaveLength(4);
+  for (const t of tiles) expect(t.textContent!.replace(/15|29/g, '')).not.toMatch(/[%$\d]/);
+  unmount();
+  renderAt(<Dashboard data={DATA} onMore={() => {}} run={null} />);
+  expect(await screen.findByRole('group', { name: 'Frenadas este mes: 3' })).toBeTruthy();
+});
+
+test('during a run the Autonomía tile holds the hint\'s lines for its final width, n = m: the hint wraps by its digits (AC-121, R-176)', async () => {
+  const { container } = renderAt(<Dashboard data={{ ...DATA, kpis: { ...DATA.kpis, autonomy_pct: null, autonomy_n: 0, autonomy_m: 0 } }} onMore={() => {}} run={{ n: 7, m: 29 }} />);
+  await screen.findByRole('group', { name: 'Autonomía: Decidiendo… 7 de 29' });
+  expect([...container.querySelectorAll('.chart-kpi-hold')].map((h) => h.getAttribute('data-hint')).pop()).toBe('29 de 29 facturas decididas solas y correctamente');
+});
+
+test('in English the tiles read «Deciding… n of m» (AC-121)', async () => {
+  localStorage.setItem('lang', 'en');
+  renderAt(<Dashboard data={DATA} onMore={() => {}} run={{ n: 15, m: 29 }} />);
+  expect(await screen.findAllByRole('group', { name: /: Deciding… 15 of 29$/ })).toHaveLength(4);
+  localStorage.clear();
+});
+
 test('one order prepared today reads in the singular', async () => {
   show({ ...DATA, kpis: { ...DATA.kpis, to_pay_today_count: 1 } });
   expect((await screen.findByRole('group', { name: /^Por pagar hoy: / })).textContent).toContain('1 orden preparada hoy');

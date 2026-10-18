@@ -6,7 +6,7 @@ export const es: Record<string, string> = {
   'trace.via.email_file': '{source} del correo que envió {sender}',
   'trace.source.message': 'el mensaje',
   'portal.title': 'Facturas para {company}',
-  'portal.greeting': 'Hola, soy Thesaurus, el agente de pagos de {company}. Envíame tu factura o cuenta de cobro.',
+  'portal.greeting': 'Hola, soy Thesaurus, el agente de cuentas por pagar de {company}. Envíame tu factura o cuenta de cobro.',
   // AC-116 (b), R-171: the first-message hints as three step cards (exact copy).
   'portal.steps.1.title': 'Envía tu factura',
   'portal.steps.1.text': 'Adjunta un PDF, PNG o JPEG de hasta 10 MB, o pega el texto.',
@@ -61,7 +61,7 @@ export const en: Record<string, string> = {
   'trace.via.email_file': '{source} from the email sent by {sender}',
   'trace.source.message': 'the message',
   'portal.title': 'Invoices for {company}',
-  'portal.greeting': "Hi, I'm Thesaurus, {company}'s payments agent. Send me your invoice or bill.",
+  'portal.greeting': 'Hi, I\'m Thesaurus, {company}\'s accounts payable agent. Send me your invoice or bill.',
   'portal.steps.1.title': 'Send your invoice',
   'portal.steps.1.text': 'Attach a PDF, PNG or JPEG up to 10 MB, or paste the text.',
   'portal.steps.2.title': 'Thesaurus reads it',

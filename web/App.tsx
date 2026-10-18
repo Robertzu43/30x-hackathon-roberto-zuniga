@@ -77,7 +77,7 @@ function TopBar({ onTour }: { onTour: () => void }) {
   return (
     <header className="topbar">
       <Logo />
-      <span className="muted">{t('app.tagline')}</span>
+      <span className="muted">{t('brand.descriptor')}</span>
       <div className="topbar-actions">
         <div className="lang" role="group" aria-label={t('topbar.language')}>
           {(['es', 'en'] as const).map((l) => (

@@ -41,6 +41,7 @@ export default function Inbox() {
   const [outcome, setOutcome] = useState('');
   const [adding, setAdding] = useState(false);
   const [batches, setBatches] = useState(0);
+  const [tail, setTail] = useState(false); // AC-121: a run just ended and the screen data loaded after its last call is not there yet
   const screen = useScreen<Screen>(screens.inbox());
   const d = screen.data;
   const failed = !d && screen.error !== undefined;
@@ -56,7 +57,7 @@ export default function Inbox() {
     if (again.current) {
       again.current = false;
       refresh();
-    }
+    } else setTail(false);
   };
   const refresh = () => {
     if (refreshing.current) return void (again.current = true);
@@ -77,7 +78,16 @@ export default function Inbox() {
   }, [pass.batches]);
   const shown = run.running || run.result ? run : pass; // «Ejecutar agente» pressed after the pass shows its own run
   const busy = run.running || pass.running;
+  const [was, setWas] = useState(busy); // in render, not in an effect: no frame between the run's end and the tiles' «Decidiendo» staying
+  if (was !== busy) {
+    setWas(busy);
+    if (!busy) setTail(true);
+  }
+  useEffect(() => {
+    if (tail && !refreshing.current) refresh();
+  }, [tail]);
   const held = pass.running || pass.result !== null;
+  const pending = d ? d.invoices.filter((r) => !r.outcome).length : 0;
   const mins = lastRun ? Math.floor((Date.now() - Date.parse(lastRun.at)) / 60_000) : 0;
 
   return (
@@ -104,7 +114,7 @@ export default function Inbox() {
       </p>
       <p className="muted">{t('inbox.reevaluate_note')}</p>
       <RunProgress run={shown} mode="pending" progressKey={shown === pass ? 'entry.deciding' : undefined}
-        pending={shown === pass && held ? (d ? d.invoices.filter((r) => !r.outcome).length : null) : undefined} />
+        pending={shown === pass && held ? (d ? pending : null) : undefined} />
       {adding && <NewInvoice />}
       </div>
 
@@ -126,7 +136,8 @@ export default function Inbox() {
         </>
       ) : (
         <>
-          {d.dashboard && <Dashboard data={d.dashboard} onMore={() => setOutcome('ESCALAR')} deciding={pass.running ? d.invoices.filter((r) => !r.outcome).length : 0} />}
+          {d.dashboard && <Dashboard data={d.dashboard} onMore={() => setOutcome('ESCALAR')} deciding={pass.running ? pending : 0}
+            run={busy || tail ? { n: shown.progress?.n ?? 0, m: shown.progress?.m ?? pending } : null} />}
           {/* keyed: a reused div would carry the skeleton dashboard's box into the card's place, a layout shift (AC-91 item 4) */}
           {link && <div key="portal" data-block><PortalLinkCard link={link} /></div>}
           <div className="activity-box" data-block tabIndex={held ? 0 : undefined}>{/* held: it scrolls inside, so it takes focus (axe) */}

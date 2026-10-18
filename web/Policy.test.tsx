@@ -220,8 +220,8 @@ test('a normal company saves name, approver email and language; a 400 shows its 
 });
 
 test.each([
-  ['es', 'Correo del aprobador', 'Guardar empresa', 'Las empresas de prueba no envían correos; las escalaciones esperan en el tablero.', 'Empresa guardada.'],
-  ['en', 'Approver email', 'Save company', 'Trial companies send no email; escalations wait on the dashboard.', 'Company saved.'],
+  ['es', 'Correo del aprobador', 'Guardar empresa', 'Tu empresa de prueba no envía correos: lo que necesite tu respuesta te espera en la Bandeja.', 'Empresa guardada.'],
+  ['en', 'Approver email', 'Save company', 'Your trial company sends no email: anything that needs your answer waits for you in the Inbox.', 'Company saved.'],
 ])('a trial company: the approver field is read-only with why, and a save never sends it (AC-93, R-115) %s', async (lang, label, saveLabel, why, saved) => {
   localStorage.setItem('lang', lang);
   const trial = { ...company, name: 'Empresa de prueba 7', approver_email: null, is_trial: true };
@@ -310,8 +310,8 @@ test('English: mixed and escalated-only headers (R-68)', async () => {
   expect(await screen.findByText('If you press "Re-evaluate pending", the agent will change the result of 1 escalated invoice(s):')).toBeTruthy();
 });
 
-const sentenceEs = 'Fuente de tasas: Yahoo Finance (respaldo: open.er-api.com). Tu empresa puede conectar otra fuente —su banco, su proveedor de tesorería o la tasa de Blinka— agregando un proveedor; ver README, sección «Tasas de cambio».';
-const sentenceEn = 'Rate source: Yahoo Finance (fallback: open.er-api.com). Your company can connect another source (its bank, its treasury provider or Blinka\'s rate) by adding a provider; see README, section "Tasas de cambio".';
+const sentenceEs = 'Las tasas de mercado vienen de una fuente pública y se guardan con la fecha en que se consultaron. Tu empresa puede conectar la suya: su banco, su tesorería o la tasa de Blinka (ver README, «Tasas de cambio»).';
+const sentenceEn = 'Market rates come from a public source and are stored with the date they were fetched. Your company can connect its own: its bank, its treasury or Blinka\'s rate (see README, "Tasas de cambio").';
 
 test('«Tasas de mercado» lists each rate read-only: 1 USD in units, USD per unit, source, fetched time in Bogotá and status (AC-76)', async () => {
   setup();
@@ -437,7 +437,7 @@ test('the screen fails: a designed message with a «Reintentar» next step that 
   setup({ 'GET /api/fx': json({ error: 'boom' }, 500) });
   renderAt(<Policy />);
   expect(await screen.findByText('I could not load the policy. Reload the page.')).toBeTruthy();
-  expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
 });
 
 // AC-99 (R-109): while the screen loads, every card is drawn in its loaded markup with placeholder data, hidden; the market

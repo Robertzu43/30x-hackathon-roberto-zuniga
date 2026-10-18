@@ -1,7 +1,6 @@
 const en: Record<string, string> = {
   'test.hello': 'Hello, {name}',
   'app.name': 'Thesaurus',
-  'app.tagline': 'a payments agent built for Blinka',
   'screen.inbox': 'Inbox',
   'screen.invoice': 'Invoice detail',
   'screen.policy': 'Policy',

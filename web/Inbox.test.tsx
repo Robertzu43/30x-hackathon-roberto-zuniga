@@ -316,7 +316,7 @@ test('a payee outside the directory is one entry labelled as read on its oldest 
   localStorage.setItem('lang', 'en');
   setup({ 'GET /api/invoices': [at('12', 'p2', 'PIXEL LAB'), at('10', 'p1', 'Pixel Lab S.A.S.'), at('09', 'u1', null)] });
   await screen.findByText('ESCALAR · p2');
-  expect(payeeOptions()).toEqual(['All', 'Pixel Lab S.A.S.', 'Payee not read']);
+  expect(payeeOptions()).toEqual(['All', 'Pixel Lab S.A.S.', 'Beneficiary not read']);
   choosePayee('Pixel Lab S.A.S.');
   expect(items()).toHaveLength(2);
 });
@@ -569,7 +569,7 @@ test('the shell\'s pass shows its progress sentence in RunProgress\'s place, kee
   let release: (v: unknown) => void = () => {};
   const { f } = setup({ 'POST /api/invoices/run': () => (calls(f, 'POST', '/api/invoices/run').length === 1
     ? batch({ PAGAR: 5, remaining: 24, cursor: 'c1' }) : new Promise((r) => (release = r))) }, DASH, true);
-  expect(await screen.findByText('Decidiendo tus facturas pendientes… 5 de 29. Las cifras se actualizan con cada decisión.')).toBeTruthy();
+  expect(await screen.findByText('Decidiendo tus facturas pendientes… 5 de 29. Las cifras aparecen al terminar.')).toBeTruthy();
   const run = screen.getByRole('button', { name: 'Ejecutar agente' }) as HTMLButtonElement;
   expect([run.disabled, run.getAttribute('aria-busy')]).toEqual([true, 'true']);
   fireEvent.click(run);
@@ -610,6 +610,51 @@ test('each call of the pass refreshes the screen data with one screen request in
   expect(screenCalls(f)).toHaveLength(2);
 });
 
+// AC-121 (a): the four tiles show the run, not figures that are still moving.
+const TILES = /^(Por pagar hoy|Esperando tu aprobación|Frenadas este mes|Autonomía): /;
+const tiles = () => screen.queryAllByRole('group', { name: TILES });
+
+test('during the pass the four tiles read «Decidiendo… n de m», with no figure; when it ends, the server\'s figures (AC-121)', async () => {
+  let release: (v: unknown) => void = () => {};
+  const { f } = setup({ 'POST /api/invoices/run': () => (calls(f, 'POST', '/api/invoices/run').length === 1
+    ? batch({ PAGAR: 15, remaining: 14, cursor: 'c1' }) : new Promise((r) => (release = r))) }, DASH, true);
+  await waitFor(() => expect(tiles().map((t) => t.getAttribute('aria-label')!.split(': ')[1])).toEqual(Array(4).fill('Decidiendo… 15 de 29')));
+  for (const t of tiles()) expect(t.textContent!.replace(/15|29/g, '')).not.toMatch(/[%$\d]/);
+  release(batch({ PAGAR: 14 }));
+  expect(await screen.findByRole('group', { name: 'Frenadas este mes: 2' })).toBeTruthy();
+  expect(tiles().map((t) => t.getAttribute('aria-label'))).not.toContainEqual(expect.stringContaining('Decidiendo'));
+});
+
+test('«Ejecutar agente» shows the same tile state during its run, and the figures after it (AC-121)', async () => {
+  let release: (v: unknown) => void = () => {};
+  const { f } = setup({ 'POST /api/invoices/run': () => (calls(f, 'POST', '/api/invoices/run').length === 1
+    ? batch({ PAGAR: 1, remaining: 1, cursor: 'c1' }) : new Promise((r) => (release = r))) });
+  await screen.findByRole('group', { name: 'Frenadas este mes: 2' });
+  expect(tiles()).toHaveLength(4);
+  fireEvent.click(screen.getByRole('button', { name: 'Ejecutar agente' }));
+  await waitFor(() => expect(tiles().map((t) => t.getAttribute('aria-label')!.split(': ')[1])).toEqual(Array(4).fill('Decidiendo… 1 de 2')));
+  release(batch({ PAGAR: 1 }));
+  expect(await screen.findByRole('group', { name: 'Frenadas este mes: 2' })).toBeTruthy();
+});
+
+test('a run that ends keeps the tiles on «Decidiendo» until the first screen data loaded after its last call is there (AC-121)', async () => {
+  let loads = 0;
+  const held: Array<() => void> = [];
+  setup({ 'POST /api/invoices/run': batch({ PAGAR: 1 }),
+    'GET /api/invoices': async () => { if (++loads > 1) await new Promise<void>((r) => held.push(r)); return ROWS; } });
+  await screen.findByRole('group', { name: 'Frenadas este mes: 2' });
+  fireEvent.click(screen.getByRole('button', { name: 'Ejecutar agente' }));
+  expect(await screen.findByText('1 PAGAR · 0 FRENAR · 0 ESCALAR')).toBeTruthy(); // the run is over, its refresh is out
+  expect(screen.getAllByRole('group', { name: /: Decidiendo… 1 de 1$/ })).toHaveLength(4);
+  await waitFor(() => { held.splice(0).forEach((r) => r()); expect(screen.getByRole('group', { name: 'Frenadas este mes: 2' })).toBeTruthy(); });
+});
+
+test('in English the tiles read «Deciding… n of m» during the pass (AC-121)', async () => {
+  localStorage.setItem('lang', 'en');
+  setup({ 'GET /api/invoices': PENDING, 'POST /api/invoices/run': () => new Promise(() => {}) }, DASH, true);
+  expect(await screen.findAllByRole('group', { name: /: Deciding… 0 of 2$/ })).toHaveLength(4);
+});
+
 test('a failed call of the pass stops it with the response text; the rows stay «Pendiente» and Bandeja stays usable (AC-107, AC-40)', async () => {
   setup({ 'GET /api/invoices': PENDING,
     'POST /api/invoices/run': new Response(JSON.stringify({ error: 'El agente no está disponible ahora.' }), { status: 500 }) }, DASH, true);
@@ -644,7 +689,7 @@ test('from its first paint the pass line reads «0 de <pending rows>»; until th
   await waitFor(() => expect(give && view.container.querySelector('.run-box')).toBeTruthy());
   expect(view.container.querySelectorAll('.run-box > :not(.run-ghost)')).toHaveLength(0);
   give!([...PENDING, ROWS[0]]);
-  const line = await screen.findByText('Decidiendo tus facturas pendientes… 0 de 2. Las cifras se actualizan con cada decisión.');
+  const line = await screen.findByText('Decidiendo tus facturas pendientes… 0 de 2. Las cifras aparecen al terminar.');
   expect(line.className).not.toMatch(/run-ghost/);
   expect(screen.queryByText(/0 de …/)).toBeNull();
 });
@@ -652,7 +697,7 @@ test('from its first paint the pass line reads «0 de <pending rows>»; until th
 test('in English, the progress sentence and the still-deciding text (AC-107)', async () => {
   localStorage.setItem('lang', 'en');
   setup({ 'GET /api/invoices': PENDING, 'POST /api/invoices/run': () => new Promise(() => {}) }, EMPTY_DASH, true);
-  expect(await screen.findByText('Deciding your pending invoices… 0 of 2. The figures update with each decision.')).toBeTruthy();
+  expect(await screen.findByText('Deciding your pending invoices… 0 of 2. The figures appear when it finishes.')).toBeTruthy();
   expect(await screen.findAllByText('Thesaurus is still deciding 2 invoices; anything that needs your answer will appear here.')).toHaveLength(2);
 });
 

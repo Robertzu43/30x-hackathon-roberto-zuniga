@@ -8,6 +8,7 @@ import Login from './pages/Login';
 import { currentSession } from './test/supabase';
 import { enterApp } from './transition';
 import { DEMO_EMAIL, fakeAuth, mockApi, renderAt, signedInAs } from './test/utils';
+import { en as brandEn, es as brandEs } from '../src/i18n/features/brand';
 
 // AC-109: the real enterApp runs (jsdom has no View Transitions, so the swap is instant); the spy proves the door uses it.
 vi.mock('./transition', async (load) => {
@@ -56,6 +57,12 @@ test.each([
 
 test('/login is public and full-bleed', () => expect(routes.find((r) => r.path === '/login')).toMatchObject({ public: true, fullBleed: true }));
 
+test.each([['es', brandEs], ['en', brandEn]])('the lead is the brand sub-line, in %s (AC-119)', (lang, brand) => {
+  localStorage.setItem('lang', lang);
+  setup();
+  expect(screen.getByText(brand['brand.subline']!).className).toBe('login-lead');
+});
+
 test('offers "Español | English", an email field and "Enviar código" (AC-40)', () => {
   setup();
   expect(screen.getByRole('button', { name: 'Español' })).toBeTruthy();
@@ -68,7 +75,7 @@ test('the email asks Supabase for a code and reaches the 6-digit code state', as
   setup();
   const code = await sendEmail();
   expect(fakeAuth.signInWithOtp).toHaveBeenCalledWith({ email: 'ana@empresa.co', options: { shouldCreateUser: true } });
-  expect(screen.getByText('Te enviamos un código de 6 dígitos a ana@empresa.co.')).toBeTruthy();
+  expect(screen.getByText('Te envié un código de 6 dígitos a ana@empresa.co.')).toBeTruthy();
   expect([code.getAttribute('inputmode'), code.getAttribute('maxlength'), code.getAttribute('pattern')]).toEqual(['numeric', '6', '\\d{6}']);
 });
 
@@ -77,7 +84,7 @@ test('a failed send says so and stays on the email step', async () => {
   setup();
   fireEvent.change(screen.getByLabelText('Correo'), { target: { value: 'ana@empresa.co' } });
   fireEvent.click(screen.getByRole('button', { name: 'Enviar código' }));
-  expect(await screen.findByText('No pudimos enviar el código. Revisa el correo e intenta de nuevo.')).toBeTruthy();
+  expect(await screen.findByText('No pude enviar el código. Revisa tu correo e intenta de nuevo.')).toBeTruthy();
   expect(screen.queryByLabelText('Código de 6 dígitos')).toBeNull();
 });
 

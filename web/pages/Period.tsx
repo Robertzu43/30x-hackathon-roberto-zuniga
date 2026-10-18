@@ -1,7 +1,8 @@
 // Periodo (AC-44, D17, R-01, AC-53): the month's money and the three honesty figures from GET /api/period.
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { screens, thisMonth, useScreen } from '../api';
+import { useFirstRun } from '../firstRun';
 import { useT } from '../i18n';
 import PeriodCharts, { type Charts } from '../period/PeriodCharts';
 import { StepIcon } from '../components/StepCards';
@@ -42,6 +43,19 @@ export default function Period() {
   const data = screen.data?.period;
   const failed = !data && screen.error !== undefined; // UX-13: any failure (offline, 500) gets the designed message, never the raw text
   const shown = data ?? SKELETON;
+  // AC-121 (b): while this tab's first-login pass runs, and until the figures loaded after its last call are here, the two
+  // percentages show the run. («Ejecutar agente» lives on Bandeja and ends there; it is not visible from this screen.)
+  const pass = useFirstRun();
+  const [tail, setTail] = useState(false);
+  const [was, setWas] = useState(pass.running);
+  if (was !== pass.running) {
+    setWas(pass.running);
+    if (!pass.running) setTail(true);
+  }
+  useEffect(() => {
+    if (tail) void screen.reload().finally(() => setTail(false));
+  }, [tail]);
+  const deciding = pass.running || tail ? t('dash.kpi.deciding', { n: pass.progress?.n ?? 0, m: pass.progress?.m ?? '…' }) : null;
   const charts = data ? screen.data?.charts : SKELETON_CHARTS; // null on an older Worker: the AC-44 page alone
 
   const usd = (n: number | null) => (n === null ? '—' : new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', currencyDisplay: 'code' }).format(n));
@@ -70,7 +84,7 @@ export default function Period() {
         <div className={data ? undefined : 'skeleton'} aria-hidden={data ? undefined : true} inert={!data}>
           <div className="period-figures" data-block>
             <div className="period-fig">
-              <p className="big">{t('period.autonomy', { v: shown.autonomy_pct === null ? '—' : pct(shown.autonomy_pct) })}</p>
+              <p className="big">{deciding ?? t('period.autonomy', { v: shown.autonomy_pct === null ? '—' : pct(shown.autonomy_pct) })}</p>
               <p>{t('period.autonomy_of', shown.autonomy)}</p>
               <p>{t('period.autonomy_why')}</p>
             </div>
@@ -80,7 +94,7 @@ export default function Period() {
               <p>{t('period.violations_why')}</p>
             </div>
             <div className="period-fig">
-              <p className="big">{t('period.explained', { pct: pct(shown.explained_pct) })}</p>
+              <p className="big">{deciding ?? t('period.explained', { pct: pct(shown.explained_pct) })}</p>
               <p>{t('period.explained_why')}</p>
             </div>
           </div>

@@ -235,6 +235,46 @@ Status of every entry: open. Source: "hands" = seen by hand in Chromium, "gate" 
 - Screenshot: none.
 - Category: confusing copy. Severity: low. Status: fixed (Task 32a).
 
+### UX-25 The gate did not see an amount overflowing its card (F1)
+- Screen: inbox, KPI cards. Width: 360 and 390. Language: es.
+- Steps: gate item 1 (docs/ux/gate-finance.md, Task 33).
+- Expected: a text run that passes the edge of its card (clipped or painted over by the next card) fails item 1.
+- Actual: no gate row looked at it; the amount read «US$ 18.409,3».
+- Screenshot: docs/ux/inbox-360-es.png
+- Category: broken state. Severity: high. Status: fixed in the harness (Task 57b, new row `1.edge`, R-165); the layout fix is Task 57.
+
+### UX-26 inbox-empty passed on the generic error page (F2)
+- Screen: inbox, empty state. Width: all. Language: es and en.
+- Steps: gate `inbox` empty cell.
+- Expected: the empty state is forced by patching the real `/api/screen/inbox` with `invoices: []`; the error page never counts as empty.
+- Actual: the gate answered `[]`, Bandeja fell into «No pude abrir esta pantalla…» and `4.state` passed.
+- Screenshot: none.
+- Category: broken state. Severity: medium. Status: fixed in the harness (Task 57b, R-165).
+
+### UX-27 The tour was judged on a busy state it cannot have (G2)
+- Screen: tour. Width: 390. Language: es and en.
+- Steps: gate 4.busy on «Siguiente».
+- Expected: N/A with «el paso cambia al instante, sin petición (R-161)», and FAIL if «n de 7» or the tour's closing did not change within 100 ms.
+- Actual: FAIL, because the step changes in place with no disabled or aria-busy state.
+- Screenshot: none.
+- Category: confusing copy. Severity: low. Status: fixed in the harness (Task 57b, R-161).
+
+### UX-28 The gate's upload name tripped the key pattern (G3)
+- Screen: new-invoice-file. Width: all. Language: es and en.
+- Steps: gate 5.words.
+- Expected: the harness uploads a realistic name, `Factura AS-0087.png` (R-162).
+- Actual: `factura.png` matched the i18n-key pattern.
+- Screenshot: none.
+- Category: confusing copy. Severity: low. Status: fixed in the harness (Task 57b, R-162).
+
+### UX-29 The ask screen was opened on a route that does not exist
+- Screen: ask. Width: all. Language: es and en.
+- Steps: gate `ask` with no --route.
+- Expected: the ask box is on Bandeja, so the default route is "/".
+- Actual: the gate guessed /ask.
+- Screenshot: none.
+- Category: dead link. Severity: low. Status: fixed in the harness (Task 57b).
+
 ## Checked and fine (evidence, not defects)
 
 - No sideways scroll at 390 or 1440 on any screen (`scrollWidth` 390/390 and 1440/1440); the beneficiaries and period tables scroll inside their own card (table 556 px in a 356 px card).

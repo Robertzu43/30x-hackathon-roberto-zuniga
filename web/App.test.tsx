@@ -372,3 +372,53 @@ test('a deep link with a stored session and an unfinished tour stays on Polític
   fireEvent.click(await signedInTopBar('Ver tutorial')); // asked for on purpose, it still starts
   await waitFor(() => expect(document.querySelector('.tour')).not.toBeNull());
 });
+
+// Part B 3 (Task 52c; R-135, R-141, AC-95, AC-98): the top bar names the company for every signed-in user but the shared demo
+// one, asked once per page load; until it answers the slot keeps its box, empty, and the placeholder is never a name.
+const COMPANY_OF = (name: string) => ({ 'GET /api/company': { id: 'c1', name, approver_email: null, lang: 'es', is_demo: false, is_trial: false } });
+const companyCalls = (f: ReturnType<typeof mockApi>) => f.mock.calls.filter(([u, i]) => u === '/api/company' && (i?.method ?? 'GET') === 'GET');
+const topbar = () => document.querySelector('.topbar')!;
+
+test.each([
+  ['a password, OTP or saved-trial user', () => signedInAs('ana@empresa.co', SEEN)],
+  ['an unsaved trial', () => { signedInAs('', SEEN); Object.assign(currentSession()!.user, { is_anonymous: true }); }],
+])('%s sees the company name in the top bar, asked once across navigation and a remount (R-135)', async (_who, sign) => {
+  sign();
+  const f = mockApi({ ...INBOX, ...COMPANY_OF('Empresa de prueba 7'), 'GET /api/screen/policy': { versions: [], company: null, fx: { rates: [] } } });
+  const view = renderAt(<App />);
+  await signedInTopBar();
+  expect(await within(topbar() as HTMLElement).findByText('Empresa de prueba 7')).toBeTruthy();
+  fireEvent.click(within(screen.getByRole('navigation', { name: 'Secciones' })).getByRole('link', { name: 'Política' }));
+  expect(await screen.findByRole('heading', { name: 'Política', level: 1 })).toBeTruthy();
+  expect(within(topbar() as HTMLElement).getByText('Empresa de prueba 7')).toBeTruthy(); // in-app navigation: no second ask
+  view.unmount();
+  renderAt(<App />); // stands in for a reload: a new page load asks once more
+  await signedInTopBar();
+  expect(await within(topbar() as HTMLElement).findByText('Empresa de prueba 7')).toBeTruthy();
+  expect(companyCalls(f)).toHaveLength(2);
+  expect(topbar().textContent).not.toMatch(/tu empresa de prueba/);
+});
+
+test('until /api/company answers the name slot is there and empty, never the placeholder (R-135)', async () => {
+  signedInAs('', SEEN);
+  Object.assign(currentSession()!.user, { is_anonymous: true });
+  let answer: (v: unknown) => void = () => {};
+  mockApi({ ...INBOX, 'GET /api/company': () => new Promise((r) => (answer = r)) });
+  renderAt(<App />);
+  await signedInTopBar();
+  const slot = topbar().querySelector('.trial-company')!;
+  expect([slot.textContent, slot.hasAttribute('data-user')]).toEqual(['', false]);
+  answer({ id: 'c1', name: 'Empresa de prueba 7' });
+  await waitFor(() => expect(slot.textContent).toBe('Empresa de prueba 7'));
+  expect(slot.hasAttribute('data-user')).toBe(true);
+});
+
+test('the shared demo user shows no company slot and asks nothing (R-135)', async () => {
+  signedInAs(DEMO_EMAIL, SEEN);
+  const f = mockApi({ ...INBOX, ...COMPANY_OF('Andina Labs') });
+  renderAt(<App />);
+  await signedInTopBar();
+  await act(async () => {});
+  expect(topbar().querySelector('.trial-company')).toBeNull();
+  expect(companyCalls(f)).toHaveLength(0);
+});

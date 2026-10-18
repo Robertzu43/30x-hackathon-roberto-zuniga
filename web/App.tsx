@@ -28,6 +28,9 @@ export const routes: PageRoute[] = [
   { path: '/approve/:token', public: true, load: () => import('./pages/Approve') },
 ];
 const pages = routes.map((r) => ({ route: r, Page: lazy(r.load) }));
+/** R-150 lever 3 (AC-107): Bandeja's chunk, fetched by /login and /demo once usable and on a door's hover or focus (AC-97 target 4 unchanged). */
+export const prefetchInbox = () => void routes[0]!.load().catch(() => {}); // offline: the landing shows the chunk error
+export const whenIdle = (f: () => void) => void (window.requestIdleCallback ? window.requestIdleCallback(f) : setTimeout(f, 1));
 const nav = routes.filter((r) => r.nav);
 const warm = (r: PageRoute) => {
   r.load().catch(() => {}); // offline: the click shows the error
@@ -84,18 +87,14 @@ function TopBar({ onTour }: { onTour: () => void }) {
         {session && (
           <>
             <button type="button" onClick={onTour}>{t('topbar.tour')}</button>
+            {/* R-135: every user but the shared demo one; empty in its reserved width until the name arrives (AC-91 CLS) */}
+            {!isDemoUser(session.user, demoEmail) && <span className="trial-company" data-user={company ? '' : undefined}>{company}</span>}
             {isTrial(session.user) ? ( // AC-94: an anonymous user has no email to show
               <>
-                <span className="trial-company" data-user={company ? '' : undefined}>{company ?? t('trial.company')}</span>{/* reserved width: the name arriving never reflows the bar (AC-91 CLS) */}
                 <span className="muted">{t('trial.unsaved')}</span>
                 <button type="button" onClick={save}>{t('trial.save')}</button>
               </>
-            ) : (
-              <>
-                {company && <span className="trial-company" data-user="">{company}</span>}{/* R-135: a saved trial keeps its company name */}
-                <span className="muted">{session.user.email}</span>
-              </>
-            )}
+            ) : <span className="muted">{session.user.email}</span>}
             <button type="button" onClick={() => guard(signOut)}>{t('topbar.sign_out')}</button>
           </>
         )}

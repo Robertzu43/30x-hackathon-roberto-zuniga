@@ -93,6 +93,13 @@ for w in 'create or replace function public.screen_period() returns jsonb' 'crea
   'create function public.screen_beneficiary(p_id uuid) returns jsonb' 'grant execute on function public.screen_beneficiary(uuid) to authenticated;'; do
   echo "$dash" | grep -qF "$w" || fail "dashboard migration lacks: $w (AC-98, AC-104)"; done
 
+# Task 52c (R-150 lever 1): create or replace keeps screen_inbox's signature, security invoker
+TRIM=supabase/migrations/20261018000100_inbox_trim.sql
+[ -f "$TRIM" ] || fail "missing $TRIM"
+trim=$(sed 's/--.*$//' "$TRIM")
+echo "$trim" | grep -qi 'security definer' && fail "the trimmed screen_inbox is security definer (AC-98, R-122)"
+echo "$trim" | grep -qF 'create or replace function public.screen_inbox(p_lang text) returns jsonb' || fail "trim migration lacks screen_inbox's signature (AC-98)"
+
 # Task 39c (AC-96 Clarified, R-133; AC-07): the trial invoice cap in the database, one additive security-invoker trigger
 CAP=supabase/migrations/20261017001200_trial_invoice_cap.sql
 [ -f "$CAP" ] || fail "missing $CAP"
@@ -385,7 +392,21 @@ out=$(printf "begin;\nupdate public.beneficiaries set archived = true where comp
 # Task 45 (AC-101, AC-103, AC-104, R-132): Bandeja carries Periodo's rows next to its unchanged keys; each decision has its
 # time (the trend's day); the profile answers only the caller's company's non-archived beneficiary
 expect "$UA" "select (select array_agg(k order by k) from jsonb_object_keys(public.screen_inbox('es')) k)::text" '^\{beneficiaries,invoices,last_run,period,portal_slug\}$' "screen_inbox keys (AC-98, R-132)"
-expect "$UA" "select public.screen_inbox('es') -> 'period' = public.screen_period()" '^t$' "screen_inbox lacks Periodo's rows (AC-101)"
+# R-150 lever 1 (Task 52c, migration 20261018000100): Bandeja's period keeps Periodo's keys and rows, with only the decisions
+# of non-archived invoices, and checks only where the invoice has no stored fields (all AC-101's dashboard reads); its invoice
+# rows carry no long texts (raw_text, payment)
+inp="(public.screen_inbox('es') -> 'period')"
+UF=a2000000-0000-4000-8000-000000000001   # a decided invoice of A stored without fields: its checks stand in for them
+sql -c "insert into public.invoices (id, company_id, source) values ('$UF', '$CA', 'chat'); insert into public.decisions (company_id, invoice_id, seq, outcome, actor, checks)
+  values ('$CA', '$UF', 1, 'FRENAR', 'agent', '[{\"id\":\"lectura\",\"verdict\":\"no_cumple\"}]')" >/dev/null || fail "unread decided invoice fixture"
+expect "$UA" "select $inp - 'decisions' = (public.screen_period() - 'decisions')" '^t$' "screen_inbox lacks Periodo's rows (AC-101)"
+expect "$UA" "select count(*) from jsonb_array_elements($inp -> 'decisions') e join public.invoices i on i.id = (e ->> 'invoice_id')::uuid where i.archived" '^0$' "screen_inbox carries an archived invoice's decision (R-150)"
+expect "$UA" "select jsonb_array_length($inp -> 'decisions') = (select count(*) from public.decisions d join public.invoices i on i.id = d.invoice_id where d.company_id = '$CA' and not i.archived)" '^t$' "screen_inbox misses a decision of a listed invoice (AC-101)"
+expect "$UA" "select count(*) from jsonb_array_elements($inp -> 'decisions') e join public.decisions d on d.invoice_id = (e ->> 'invoice_id')::uuid and d.seq = (e ->> 'seq')::int
+  join public.invoices i on i.id = d.invoice_id where e -> 'checks' is distinct from coalesce(case when i.fields is null then d.checks end, 'null'::jsonb)
+  or (e ->> 'created_at')::timestamptz is distinct from d.created_at or e ->> 'outcome' is distinct from d.outcome or e ->> 'actor' is distinct from d.actor" '^0$' "screen_inbox decisions differ from the record (R-150)"
+expect "$UA" "select bool_or(i.fields is null) and bool_or(i.fields is not null) from public.decisions d join public.invoices i on i.id = d.invoice_id where d.company_id = '$CA' and not i.archived" '^t$' "fixture lacks decided invoices with and without fields (R-150)"
+expect "$UA" "select count(*) from jsonb_array_elements(public.screen_inbox('es') -> 'invoices') e where e ? 'raw_text' or e ? 'payment' or not (e ? 'question_es' and e ? 'decided_at' and e ? 'fields' and e ? 'origin')" '^0$' "screen_inbox rows carry long texts or miss a key the Worker reads (R-150)"
 expect "$UA" "select count(*) from jsonb_array_elements(public.screen_period() -> 'decisions') e where (e ->> 'created_at')::timestamptz is distinct from
   (select d.created_at from public.decisions d where d.invoice_id = (e ->> 'invoice_id')::uuid and d.seq = (e ->> 'seq')::int)" '^0$' "screen_period decisions lack created_at (AC-103)"
 expect "$UA" "select jsonb_array_length(public.screen_period() -> 'decisions') > 0" '^t$' "screen_period has no decisions to check (AC-103)"

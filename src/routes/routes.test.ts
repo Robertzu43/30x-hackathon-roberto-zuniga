@@ -894,10 +894,15 @@ describe('GET /api/screen/* and Detalle: one RPC per screen, the same data as th
     expect(m).toMatchObject({ calls: 2, rpcs: ['screen_inbox'], queries: 0 });
     const beneficiaries = (await old('/api/beneficiaries') as Row[]).map(({ id, name }) => ({ id, name }));
     expect(beneficiaries.length).toBeGreaterThan(1);
-    expect(m.body).toEqual({ invoices: await old('/api/invoices'), last_run: await old('/api/agent/last-run'), portal: await old('/api/portal-link'),
+    // R-150 lever 1: the same rows as /api/invoices, only what Bandeja draws; Detalle loads the long texts itself.
+    const drawn = (r: Row) => { const f = r.fields as Row | null;
+      return { id: r.id, outcome: r.outcome, headline: r.headline, received_at: r.received_at, amount_usd: r.amount_usd, origin: r.origin, sender: r.sender,
+        fields: f && { payee_name: f.payee_name, invoice_number: f.invoice_number, concept: f.concept } }; };
+    expect(m.body).toEqual({ invoices: (await old('/api/invoices') as Row[]).map(drawn), last_run: await old('/api/agent/last-run'), portal: await old('/api/portal-link'),
       beneficiaries, dashboard: expect.objectContaining({ kpis: expect.any(Object) }) }); // its values: the D39 describe below
     expect((m.body.beneficiaries as Row[])[0]).toEqual({ id: 'a0', name: 'Aaa Primero' });
-    expect((m.body.invoices as Row[]).map((r) => r.company_id)).toEqual(['A', 'A', 'A']);
+    expect((m.body.invoices as Row[]).map((r) => r.id).sort()).toEqual(db.tables.invoices!.filter((i) => i.company_id === 'A').map((i) => i.id).sort());
+    expect(m.res.headers.get('Server-Timing')).toMatch(/^app;dur=\d+$/); // R-150: the server's own time, perf.mjs's INFO column
     expect(db.rpcs.filter((r) => r.name === 'screen_inbox').at(-1)!.args).toEqual({ p_lang: 'es' });
   });
 

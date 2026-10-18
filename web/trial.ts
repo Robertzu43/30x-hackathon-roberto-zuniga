@@ -4,13 +4,13 @@
  *   guardLeave(user, leave, warn)  the one guard every action that ends the session calls (UI: useLeaveGuard)
  *   startTrial(lang)               anonymous sign-in (the signup trigger seeds «Empresa de prueba <n>"); the shell then runs the first-login pass (AC-107)
  *   enterDemo()                    «Entrar como Andina Labs» (AC-46)
- *   useTrialCompany()              the trial's company name, null until loaded, for a user who never was a trial in this tab, or for another user
+ *   useTrialCompany()              the signed-in user's company name (R-135: every user but the shared demo one), null until loaded
  */
 import type { User } from '@supabase/supabase-js';
 import { useEffect, useState } from 'react';
 import type { Lang } from '../src/i18n';
-import { api, config, supabase } from './api';
-import { DEMO_TOUR, useSession } from './auth';
+import { companyName, config, startInbox, supabase } from './api';
+import { DEMO_TOUR, isDemoUser, useSession } from './auth';
 import { markFirstRun } from './firstRun';
 
 const DEMO_PASSWORD = 'andina-demo-2026'; // public by design (D8, AC-46), same as src/routes/demo.ts
@@ -26,25 +26,35 @@ export async function startTrial(lang: Lang): Promise<boolean> {
     .then((sb) => sb.auth.signInAnonymously({ options: { data: { lang } } })) // AC-41: the page's language, stored on the user
     .catch((e: Error) => ({ data: null, error: e }));
   if (error) return false;
-  if (data?.user) markFirstRun(data.user.id);
+  if (data?.user) {
+    markFirstRun(data.user.id);
+    startInbox(data.user.id); // R-150 lever 2
+  }
   return true;
 }
 
 export async function enterDemo(): Promise<boolean> {
   sessionStorage.setItem(DEMO_TOUR, '1'); // before signing in: the sign-in event may reach the app first (R-62)
-  const { error } = await Promise.all([supabase(), config()])
+  const { data, error } = await Promise.all([supabase(), config()])
     .then(([sb, c]) => sb.auth.signInWithPassword({ email: c.demo_email, password: DEMO_PASSWORD }))
-    .catch((e: Error) => ({ error: e }));
+    .catch((e: Error) => ({ data: null, error: e }));
   if (error) sessionStorage.removeItem(DEMO_TOUR);
+  else if (data?.user) startInbox(data.user.id); // R-150 lever 2
   return !error;
 }
 
 export function useTrialCompany(): string | null {
-  const user = useSession().session?.user;
-  const trial = isTrial(user);
-  const [found, setFound] = useState<{ id?: string; name: string } | null>(null);
+  const { session, demoEmail } = useSession();
+  const uid = session?.user.id;
+  const ask = !!uid && !isDemoUser(session?.user, demoEmail);
+  const [found, setFound] = useState<{ uid: string; name: string } | null>(null);
   useEffect(() => {
-    if (trial) void api.get<{ name: string }>('/api/company').then((c) => setFound({ id: user?.id, name: c.name }), () => undefined); // the fallback text stands
-  }, [user?.id, trial]);
-  return found?.id === user?.id ? found?.name ?? null : null; // R-135: stays after «Guardar mi acceso» (same user id, no longer anonymous), never leaks to another user
+    if (!ask) return;
+    let live = true;
+    companyName().then((name) => live && setFound({ uid: uid!, name }), () => undefined); // the slot stays empty
+    return () => {
+      live = false;
+    };
+  }, [uid, ask]);
+  return found && found.uid === uid ? found.name : null; // never leaks to another user
 }

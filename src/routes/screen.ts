@@ -23,7 +23,11 @@ export interface PeriodRows {
 // screen_period's rows since migration 001100: each decision with its time (AC-103's trend).
 type TimedRows = PeriodRows & { decisions: Array<PeriodRows['decisions'][number] & { created_at: string }> };
 // screen_inbox's invoice rows (invoice_current), as far as AC-101 reads them.
-type InboxRow = Row & { decided_at: string | null; question_es: string | null; question_en: string | null };
+type InboxRow = Row & { decided_at: string | null; question_es: string | null; question_en: string | null; headline: string | null;
+  origin?: string; sender?: string | null };
+// R-150 lever 1: a row as Bandeja's table draws it (web/dashboard/InvoiceTable.tsx); Detalle loads the long texts itself.
+const drawn = ({ id, outcome, headline, received_at, amount_usd, origin, sender, fields: f }: InboxRow) => ({ id, outcome, headline, received_at, amount_usd,
+  origin, sender, fields: f && { payee_name: f.payee_name, invoice_number: f.invoice_number, concept: f.concept } });
 type Group = { beneficiary: string | null; paid_usd: number; committed_usd: number; count: number };
 type FxRow = { currency: string; usd_per_unit: number | string; source: string; fetched_at: string };
 
@@ -188,12 +192,18 @@ const read = async <T>(c: Context<AuthEnv>, fn: string, args: Record<string, unk
 const deny = (c: Context<AuthEnv>) => c.json({ error: 'No autorizado' }, 401);
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
 
-export const screen = new Hono<AuthEnv>().use('*', requireAuth)
+export const screen = new Hono<AuthEnv>()
+  .use('/inbox', async (c, next) => { // R-150: the server's own time on Bandeja's request, perf.mjs's INFO column
+    const t0 = Date.now();
+    await next();
+    c.header('Server-Timing', `app;dur=${Date.now() - t0}`);
+  })
+  .use('*', requireAuth)
   .get('/inbox', async (c) => {
     const asked = c.req.query('lang');
     const d = await read<{ invoices: InboxRow[]; last_run: unknown; portal_slug: string; beneficiaries: Array<{ id: string; name: string }>; period: PeriodRows }>(
       c, 'screen_inbox', { p_lang: asked === 'es' || asked === 'en' ? asked : c.var.lang });
-    return d ? c.json({ invoices: d.invoices, last_run: d.last_run, portal: portalOf(c.env, d.portal_slug), beneficiaries: d.beneficiaries,
+    return d ? c.json({ invoices: d.invoices.map(drawn), last_run: d.last_run, portal: portalOf(c.env, d.portal_slug), beneficiaries: d.beneficiaries,
       dashboard: dashboardOf(d.invoices, d.period, today()) }) : deny(c);
   })
   .get('/period', async (c) => {

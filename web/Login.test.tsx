@@ -259,3 +259,57 @@ test('an unsaved trial signing in with a password for another account is warned 
   fireEvent.click(within(warning).getByRole('button', { name: 'Salir de todos modos' }));
   await waitFor(() => expect(fakeAuth.signInWithPassword).toHaveBeenCalledOnce());
 });
+
+// R-150 lever 2 (AC-107, AC-98): the door puts Bandeja's one request in flight as the sign-in resolves (here `/` is a stub, so
+// only the door can have asked); lever 3: the Inbox chunk is fetched once /login is usable and on a door's hover or focus.
+const inboxCalls = (f: ReturnType<typeof mockApi>) => f.mock.calls.filter(([u]) => String(u).startsWith('/api/screen/inbox')).map(([u]) => u);
+test.each([
+  ['the code door', async () => { await sendEmail(); enterCode('123456'); }],
+  ['the password door', async () => withPassword('ana@empresa.co', 'secreta-123')],
+])('%s asks for Bandeja\'s data once, when the sign-in resolves, not before (R-150 lever 2)', async (_, enter) => {
+  const f = setup();
+  await new Promise((r) => setTimeout(r, 20));
+  expect(inboxCalls(f)).toEqual([]);
+  await enter();
+  expect(await screen.findByText('bandeja')).toBeTruthy();
+  await waitFor(() => expect(inboxCalls(f)).toEqual(['/api/screen/inbox?lang=es']));
+});
+
+test('a returning user whose saved language differs: the door asks in that language, the one Bandeja will show (R-150, AC-41)', async () => {
+  fakeAuth.verifyOtp.mockImplementationOnce(async () => {
+    signedInAs('ana@empresa.co', { lang: 'en' });
+    fakeAuth.onAuthStateChange.mock.calls.forEach(([cb]) => cb('SIGNED_IN', currentSession()));
+    return { data: { session: currentSession() }, error: null };
+  });
+  const f = mockApi({ 'POST /api/invoices/run': () => new Promise(() => {}) });
+  renderAt(<Routes><Route path="/login" element={<Login />} /><Route path="/" element={<Lang />} /></Routes>, { at: '/login' });
+  await sendEmail();
+  enterCode('123456');
+  expect(await screen.findByText('bandeja en')).toBeTruthy();
+  await waitFor(() => expect(inboxCalls(f)).toEqual(['/api/screen/inbox?lang=en']));
+});
+
+test('a deep link sign-in lands on its page and asks nothing for Bandeja (R-62, R-150)', async () => {
+  const f = mockApi();
+  renderAt(<Routes><Route path="/login" element={<Login />} /><Route path="/policy" element={<p>política</p>} /></Routes>,
+    { at: { pathname: '/login', state: { from: '/policy' } } as unknown as string });
+  await sendEmail();
+  enterCode('123456');
+  expect(await screen.findByText('política')).toBeTruthy();
+  await new Promise((r) => setTimeout(r, 20));
+  expect(inboxCalls(f)).toEqual([]);
+});
+
+test('once usable /login fetches the Inbox chunk, signing nobody in; a door\'s hover or focus fetches it too (R-150 lever 3)', async () => {
+  const load = vi.spyOn(routes[0]!, 'load');
+  const f = setup();
+  await waitFor(() => expect(load).toHaveBeenCalled());
+  expect([fakeAuth.verifyOtp, fakeAuth.signInWithPassword, fakeAuth.signInWithOtp].map((s) => s.mock.calls.length)).toEqual([0, 0, 0]);
+  expect(inboxCalls(f)).toEqual([]);
+  load.mockClear();
+  fireEvent.pointerOver(screen.getByRole('button', { name: 'Probar con mi propia empresa' }));
+  expect(load).toHaveBeenCalledOnce();
+  load.mockClear();
+  fireEvent.focusIn(screen.getByRole('button', { name: 'Entrar con contraseña' }));
+  expect(load).toHaveBeenCalledOnce();
+});

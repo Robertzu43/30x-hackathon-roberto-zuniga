@@ -1,7 +1,8 @@
 import type { Session } from '@supabase/supabase-js';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { supabase } from '../api';
+import { startInbox, supabase } from '../api';
+import { prefetchInbox, whenIdle } from '../App';
 import { useLeaveGuard } from '../components/LeaveTrialWarning';
 import LogoIntro from '../components/LogoIntro';
 import { MIN, PasswordField } from '../components/SaveAccess';
@@ -33,6 +34,7 @@ export default function Login() {
   const [picked, setPicked] = useState<Lang | null>(null); // only a click on this screen counts as a choice
   const pick = (l: Lang) => { setPicked(l); setLang(l); };
   const { guard, warning } = useLeaveGuard();
+  useEffect(() => whenIdle(prefetchInbox), []); // R-150 lever 3: once usable; and on a door's hover or focus, below
 
   const send = (e: FormEvent) => {
     e.preventDefault();
@@ -84,6 +86,8 @@ export default function Login() {
 
   // After either sign-in (code or password): nothing else is awaited before Bandeja (AC-107).
   const signedIn = (session?: Session | null) => {
+    const saved: unknown = session?.user.user_metadata?.lang;
+    if (!picked && (saved === 'es' || saved === 'en')) setLang(saved); // AuthProvider applies it too; Bandeja's request asks in it
     if (picked) {
       // AuthProvider applies the language saved on the user from this same session object: the choice just made is put
       // there at once, so it shows now, and the write that stores it (AC-41) is fired, not awaited.
@@ -91,6 +95,7 @@ export default function Login() {
       void supabase().then((sb) => sb.auth.updateUser({ data: { lang: picked } })).catch(() => undefined);
     }
     if (session) markFirstRun(session.user.id); // the shell decides what is pending, in budgeted calls, after landing (AC-70)
+    if (session && typeof from !== 'string') startInbox(session.user.id); // R-150 lever 2: Bandeja's data, beside the route change
     void enterApp(() => navigate(typeof from === 'string' ? from : '/', { replace: true })); // AC-109
   };
 
@@ -100,7 +105,7 @@ export default function Login() {
         <h1><LogoIntro screen="login" /></h1>{/* the logo is the wordmark: the name is shown once (AC-80) */}
         <p className="login-lead">{t('login.lead')}</p>
       </section>
-      <section className="login-form">
+      <section className="login-form" onPointerOver={prefetchInbox} onFocus={prefetchInbox}>
         <div className="lang-switch" role="group" aria-label={t('login.language')}>
           <button type="button" className="link" aria-pressed={lang === 'es'} onClick={() => pick('es')}>Español</button>
           <span aria-hidden="true">|</span>

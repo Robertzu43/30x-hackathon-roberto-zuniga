@@ -101,11 +101,15 @@ export default function Inbox() {
               })}
       </p>
       <p className="muted">{t('inbox.reevaluate_note')}</p>
-      <RunProgress run={shown} mode="pending" progressKey={shown === pass ? 'entry.deciding' : undefined} />
+      <RunProgress run={shown} mode="pending" progressKey={shown === pass ? 'entry.deciding' : undefined}
+        pending={shown === pass && held ? (d ? d.invoices.filter((r) => !r.outcome).length : null) : undefined} />
       {adding && <NewInvoice />}
 
       {failed ? (
-        <p role="alert" className="error">{t('inbox.load_error')}</p>
+        <div className="inbox-error">{/* only after the one retry (R-150 lever 4) */}
+          <p role="alert" className="error">{t('inbox.load_failed')}</p>
+          <button type="button" onClick={() => void screen.reload()}>{t('inbox.retry')}</button>
+        </div>
       ) : !d ? (
         <>
           <p role="status" className="sr-only">{t('inbox.loading')}</p>

@@ -121,11 +121,24 @@ test('empty state', async () => {
   expect(await screen.findByText('Todavía no hay facturas. Usa «Nueva factura» para subir un PDF o una imagen, o pegar un correo o un chat.')).toBeTruthy();
 });
 
-test('error state shows a plain message and no skeleton', async () => {
-  const { view } = setup({ 'GET /api/invoices': new Response(JSON.stringify({ error: 'boom' }), { status: 503 }) });
-  expect((await screen.findByRole('alert')).textContent).toBe('No pude cargar las facturas. Recarga la página para intentar de nuevo.');
+test('a second 5xx shows a plain message with «Reintentar», no skeleton; «Reintentar» loads Bandeja (R-150 lever 4)', async () => {
+  let n = 0;
+  const { f, view } = setup({ 'GET /api/invoices': () => (++n <= 2 ? new Response(JSON.stringify({ error: 'boom' }), { status: 503 }) : ROWS) });
+  expect((await screen.findByRole('alert')).textContent).toBe('No pude cargar las facturas. Revisa tu conexión e intenta de nuevo.');
+  expect(screenCalls(f)).toHaveLength(2); // the one retry, then the message
   expect(view.container.querySelector('.skeleton')).toBeNull();
   expect(screen.queryByRole('table')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
+  await screen.findByText(/supera el umbral/);
+  expect(screen.queryByRole('alert')).toBeNull();
+});
+
+test('one 5xx is retried with the skeleton kept and no message (R-150 lever 4)', async () => {
+  let n = 0;
+  const { f } = setup({ 'GET /api/invoices': () => (++n === 1 ? new Response(JSON.stringify({ error: 'boom' }), { status: 500 }) : ROWS) });
+  await screen.findByText(/supera el umbral/);
+  expect(screenCalls(f)).toHaveLength(2);
+  expect(screen.queryByRole('alert')).toBeNull();
 });
 
 test('"Ejecutar agente" runs the loop: progress, list reloads, summed summary, last-run refreshed (AC-29, AC-70, AC-63)', async () => {
@@ -542,7 +555,7 @@ test('the shell\'s pass shows its progress sentence in RunProgress\'s place, kee
   expect(calls(f, 'POST', '/api/invoices/run')).toHaveLength(2); // one loop per tab
   release(batch({ PAGAR: 20, FRENAR: 3, ESCALAR: 1 }));
   expect(await screen.findByText('25 PAGAR · 3 FRENAR · 1 ESCALAR')).toBeTruthy();
-  expect(screen.queryByText(/Decidiendo tus facturas/)).toBeNull();
+  expect(screen.queryByText(/Decidiendo tus facturas/, { ignore: '.run-ghost' })).toBeNull(); // the hidden line only holds the box
   expect(run.disabled).toBe(false);
 });
 
@@ -603,10 +616,22 @@ test('during the pass an empty «Necesita tu respuesta» and «Vence pronto» sa
   expect(screen.queryByText(STILL)).toBeNull();
 });
 
+// Part B 2 (Task 52c): before the first call answers the line already counts the «Pendiente» rows; before the data, its box is empty.
+test('from its first paint the pass line reads «0 de <pending rows>»; until the data is there its box is reserved and empty (AC-107)', async () => {
+  let give: ((v: unknown) => void) | undefined;
+  const { view } = setup({ 'GET /api/invoices': () => new Promise((r) => (give = r)), 'POST /api/invoices/run': () => new Promise(() => {}) }, DASH, true);
+  await waitFor(() => expect(give && view.container.querySelector('.run-box')).toBeTruthy());
+  expect(view.container.querySelectorAll('.run-box > :not(.run-ghost)')).toHaveLength(0);
+  give!([...PENDING, ROWS[0]]);
+  const line = await screen.findByText('Decidiendo tus facturas pendientes… 0 de 2. Las cifras se actualizan con cada decisión.');
+  expect(line.className).not.toMatch(/run-ghost/);
+  expect(screen.queryByText(/0 de …/)).toBeNull();
+});
+
 test('in English, the progress sentence and the still-deciding text (AC-107)', async () => {
   localStorage.setItem('lang', 'en');
   setup({ 'GET /api/invoices': PENDING, 'POST /api/invoices/run': () => new Promise(() => {}) }, EMPTY_DASH, true);
-  expect(await screen.findByText('Deciding your pending invoices… 0 of …. The figures update with each decision.')).toBeTruthy();
+  expect(await screen.findByText('Deciding your pending invoices… 0 of 2. The figures update with each decision.')).toBeTruthy();
   expect(await screen.findAllByText('Thesaurus is still deciding 2 invoices; anything that needs your answer will appear here.')).toHaveLength(2);
 });
 

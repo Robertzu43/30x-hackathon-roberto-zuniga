@@ -47,3 +47,7 @@
 .inbox-held .dash-due .dash-box { height: 22rem; overflow-y: auto; }
 .inbox-held .activity-box { height: 28rem; overflow-y: auto; }
 .inbox-held .dash-headline { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; min-height: 3.2em; }
+/* The pass line and AC-29's summary in one grid cell (RunProgress `pending`): the box is the taller line's height at any width. */
+.run-box { display: grid; }
+.run-box > * { grid-area: 1 / 1; }
+.run-ghost { visibility: hidden; }

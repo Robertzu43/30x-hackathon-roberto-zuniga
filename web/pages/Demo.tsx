@@ -2,6 +2,8 @@
 // the problem in Blinka's words, the agent loop and the pitch line, Andina Labs' read-only inbox and Periodo figures.
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { fetchRetry } from '../api';
+import { prefetchInbox, whenIdle } from '../App';
 import { isDemoUser, useSession } from '../auth';
 import { useLeaveGuard } from '../components/LeaveTrialWarning';
 import LogoIntro from '../components/LogoIntro';
@@ -40,14 +42,15 @@ export default function Demo() {
   const run = useRunAgent({ first: '/api/demo/reset', next: '/api/invoices/run' });
   const { guard, warning } = useLeaveGuard(); // AC-94 (R-119): entering the shared demo ends an unsaved trial
 
-  // Public and cached 60 s by the API; a retry or a reset skips the browser cache.
+  // Public and cached 60 s by the API; a «Reintentar» or a reset skips the browser cache.
   const load = (fresh = false) => {
     setFailed(false);
-    fetch('/api/demo/overview', fresh ? { cache: 'no-store' } : {})
+    fetchRetry('/api/demo/overview', fresh ? { cache: 'no-store' } : {}) // R-150: one 5xx is retried, the skeleton stays
       .then((r) => (r.ok ? (r.json() as Promise<Overview>) : Promise.reject(new Error(String(r.status)))))
       .then(setData, () => setFailed(true));
   };
   useEffect(() => load(), []);
+  useEffect(() => whenIdle(prefetchInbox), []); // R-150 lever 3: once usable; and on a door's hover or focus (the hero)
   // R-78, D14: /demo opens in Spanish unless this tab chose otherwise; whatever another judge picked never carries over.
   useEffect(() => {
     if (sessionStorage.getItem('lang') === null) setLang('es', true);
@@ -84,7 +87,7 @@ export default function Demo() {
         <button type="button" className="link" aria-pressed={lang === 'en'} onClick={() => setLang('en', true)}>English</button>
       </div>
 
-      <header className="demo-hero">
+      <header className="demo-hero" onPointerOver={prefetchInbox} onFocus={prefetchInbox}>
         <LogoIntro screen="demo" />
         <h1>{t('demo.title')}</h1>
         <div className="demo-problem">

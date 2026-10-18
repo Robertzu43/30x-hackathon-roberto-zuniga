@@ -170,3 +170,34 @@ test.each([
     expect(cached('/api/screen/period?month=2026-10'), getFirst ? 'GET answered first' : 'write answered first').toBeUndefined();
   }
 });
+
+// R-150 lever 4 (AC-107): one retry, about 300 ms later, on a 5xx from a screen GET or the demo overview; never a POST.
+const status = (n: number) => new Response(JSON.stringify({ error: `fallo ${n}` }), { status: n });
+test.each(['/api/screen/inbox?lang=es', '/api/demo/overview'])('a 5xx on GET %s is retried once, about 300 ms later', async (path) => {
+  signedInAs('ana@empresa.co');
+  let n = 0;
+  const at: number[] = [];
+  const f = mockApi({ [`GET ${path}`]: () => (at.push(Date.now()), ++n === 1 ? status(503) : { ok: n }) });
+  expect(await api.get(path)).toEqual({ ok: 2 });
+  expect(f.mock.calls.filter(([u]) => u === path)).toHaveLength(2);
+  expect(at[1]! - at[0]!).toBeGreaterThanOrEqual(250);
+});
+
+test('a second 5xx throws the ApiError of the second answer; there is no third request', async () => {
+  let n = 0;
+  const f = mockApi({ 'GET /api/screen/inbox?lang=es': () => status(++n === 1 ? 503 : 500) });
+  const e = await api.get('/api/screen/inbox?lang=es').catch((x: unknown) => x);
+  expect([e instanceof ApiError, (e as ApiError).status, (e as ApiError).message]).toEqual([true, 500, 'fallo 500']);
+  expect(f.mock.calls.filter(([u]) => u === '/api/screen/inbox?lang=es')).toHaveLength(2);
+});
+
+test.each([
+  ['POST', '/api/invoices/run', 503],
+  ['GET', '/api/screen/inbox?lang=es', 404],
+  ['GET', '/api/company', 503], // R-150 names Bandeja's request and the demo overview only
+  ['GET', '/api/screen/policy', 500],
+])('%s %s answering %i is not retried', async (method, path, code) => {
+  const f = mockApi({ [`${method} ${path}`]: () => status(code) });
+  await expect(method === 'POST' ? api.post(path) : api.get(path)).rejects.toBeInstanceOf(ApiError);
+  expect(f.mock.calls.filter(([u]) => u === path)).toHaveLength(1);
+});

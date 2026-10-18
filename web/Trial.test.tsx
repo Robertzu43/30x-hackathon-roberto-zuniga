@@ -114,7 +114,7 @@ test('from the door: Bandeja and the tour before any run answers, then the pass 
   fireEvent.click(await screen.findByRole('button', { name: 'Probar con mi propia empresa' }));
   expect(await screen.findByRole('dialog')).toBeTruthy(); // tour step 1, on landing
   expect(screen.getByRole('heading', { level: 1, name: 'Bandeja' })).toBeTruthy();
-  expect(await screen.findByText('Decidiendo tus facturas pendientes… 0 de …. Las cifras se actualizan con cada decisión.')).toBeTruthy();
+  expect(await screen.findByText('Decidiendo tus facturas pendientes… 0 de 1. Las cifras se actualizan con cada decisión.')).toBeTruthy(); // the «Pendiente» rows (Part B 2)
   expect(runCalls(f)).toHaveLength(1);
   release({ PAGAR: 1, FRENAR: 0, ESCALAR: 0, errors: 0, remaining: 0, cursor: null });
   expect(await screen.findByText('1 PAGAR · 0 FRENAR · 0 ESCALAR')).toBeTruthy();
@@ -325,4 +325,39 @@ test.each([
   const row = screen.getByRole('listitem');
   expect(row.textContent).toContain(shown);
   expect(row.textContent).not.toContain('invitado:');
+});
+
+// R-150 lever 2 (AC-107, AC-98): through the whole app, each of the four doors makes one data request for Bandeja: the door
+// starts it as the sign-in resolves and Bandeja takes that promise. Nobody is signed in and nothing is asked before the click.
+const inboxCalls = (f: ReturnType<typeof mockApi>) => f.mock.calls.filter(([u]) => String(u).startsWith('/api/screen/inbox'));
+const click = (name: string) => async () => fireEvent.click(await screen.findByRole('button', { name }));
+test.each([
+  ['«Probar con mi propia empresa» on /demo', '/demo', click('Probar con mi propia empresa'), () => auth.signInAnonymously],
+  ['«Probar con mi propia empresa» on /login', '/login', click('Probar con mi propia empresa'), () => auth.signInAnonymously],
+  ['«Entrar como Andina Labs»', '/demo', click('Entrar como Andina Labs'), () => fakeAuth.signInWithPassword],
+  ['«Verificar código»', '/login', async () => {
+    fireEvent.change(await screen.findByLabelText('Correo'), { target: { value: 'ana@empresa.co' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar código' }));
+    fireEvent.change(await screen.findByLabelText('Código de 6 dígitos'), { target: { value: '123456' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Entrar' }));
+  }, () => fakeAuth.verifyOtp],
+  ['«Entrar» in «Entrar con contraseña»', '/login', async () => {
+    fireEvent.click(await screen.findByRole('button', { name: 'Entrar con contraseña' }));
+    fireEvent.change(screen.getByLabelText('Correo'), { target: { value: 'ana@empresa.co' } });
+    fireEvent.change(screen.getByLabelText('Contraseña'), { target: { value: 'secreta-123' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Entrar' }));
+  }, () => fakeAuth.signInWithPassword],
+] as const)('%s: one data request for Bandeja, started by the door when the sign-in resolves (R-150 lever 2, AC-98)', async (_, at, enter, signIn) => {
+  const row = { id: 'i1', outcome: null, headline: null, received_at: '2026-10-10T15:00:00Z', fields: { payee_name: 'Nubia Diseño' }, origin: 'app' };
+  const f = mockApi({ ...COMPANY, 'GET /api/demo/overview': OVERVIEW, [RUN]: () => new Promise(() => {}), 'GET /api/agent/activity': { items: [] },
+    'GET /api/screen/inbox?lang=es': { invoices: [row], last_run: null, portal: null, beneficiaries: [], dashboard: null } });
+  renderAt(<App />, { at });
+  await new Promise((r) => setTimeout(r, 20));
+  expect([signIn().mock.calls.length, inboxCalls(f).length]).toEqual([0, 0]);
+  await enter();
+  expect(await screen.findByRole('heading', { level: 1, name: 'Bandeja' })).toBeTruthy();
+  await waitFor(() => expect(document.querySelector('table.inbox-list tbody tr[data-id="i1"]')).not.toBeNull()); // drawn from data
+  await new Promise((r) => setTimeout(r, 50));
+  expect(signIn()).toHaveBeenCalledOnce();
+  expect(inboxCalls(f)).toHaveLength(1);
 });

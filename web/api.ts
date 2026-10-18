@@ -32,6 +32,13 @@ export class ApiError extends Error {
   }
 }
 
+/** R-150 lever 4 (AC-107): a 5xx is asked once more, about 300 ms later, while the caller's skeleton stays. GETs only. */
+export const fetchRetry = async (path: string, init?: RequestInit): Promise<Response> => {
+  const res = await fetch(path, init);
+  return res.status < 500 ? res : new Promise<Response>((ok) => setTimeout(() => ok(fetch(path, init)), 300));
+};
+const retried = (method: string, path: string) => method === 'GET' && /^\/api\/(screen\/inbox|demo\/overview)\b/.test(path);
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const { data } = await (await supabase()).auth.getSession();
   const headers = new Headers();
@@ -45,7 +52,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   }
   const write = method !== 'GET';
   if (write) dropCache(); // AC-100: any write from this tab; again once it settles, so a GET that left during it is not kept
-  const res = await fetch(path, { method, headers, body: payload }).finally(() => write && dropCache());
+  const res = await (retried(method, path) ? fetchRetry : fetch)(path, { method, headers, body: payload }).finally(() => write && dropCache());
   const json = (await res.json().catch(() => ({}))) as { error?: string };
   if (!res.ok) throw new ApiError(json.error ?? res.statusText, res.status);
   return json as T;
@@ -80,10 +87,33 @@ export const dropCache = () => {
   era++;
 };
 export const cacheOwner = (uid: string | undefined) => {
-  if (uid !== owner) dropCache();
+  if (uid !== owner) {
+    dropCache();
+    company = undefined;
+    handed = undefined;
+  }
   owner = uid;
 };
+// R-135, R-141 (AC-98): GET /api/company once per signed-in user per page load, for the top bar's name; a failure is asked again.
+let company: Promise<string> | undefined;
+export const companyName = (): Promise<string> => {
+  if (!company) {
+    const mine = api.get<{ name: string }>('/api/company').then((c) => c.name);
+    mine.catch(() => company === mine && (company = undefined));
+    company = mine;
+  }
+  return company;
+};
 const keyOf = (path: string) => `${storedLang()} ${path}`;
+// R-150 lever 2 (AC-107, AC-98): a door puts Bandeja's one request in flight as its sign-in resolves, beside the route change
+// and the chunk; Bandeja's first load takes that promise instead of asking again. Tab memory only (R-122), this user only.
+let handed: { key: string; answer: Promise<unknown> } | undefined;
+export const startInbox = (uid: string) => {
+  cacheOwner(uid);
+  const path = screens.inbox();
+  handed = { key: keyOf(path), answer: api.get(path) };
+  handed.answer.catch(() => {}); // Bandeja shows its own error
+};
 export const cached = <T = unknown>(path: string) => cache.get(keyOf(path)) as T | undefined;
 
 /** GET a screen's data. One request per path at a time, so a prefetch and the screen share it; the answer is kept for this tab. */
@@ -92,7 +122,9 @@ export function load<T>(path: string): Promise<T> {
   const at = era;
   let p = inflight.get(key) as Promise<T> | undefined;
   if (!p) {
-    p = api.get<T>(path).then((d) => {
+    const door = handed?.key === key ? (handed.answer as Promise<T>) : undefined;
+    if (door) handed = undefined;
+    p = (door ?? api.get<T>(path)).then((d) => {
       if (at === era) cache.set(key, d);
       return d;
     }).finally(() => at === era && inflight.delete(key));

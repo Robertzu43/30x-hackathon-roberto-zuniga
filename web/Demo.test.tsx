@@ -82,10 +82,19 @@ test('its own switch shows English headlines, kept for this tab only (R-78)', as
   expect(localStorage.getItem('lang')).toBeNull();
 });
 
-test('overview 503: a message and a retry that loads the inbox', async () => {
+test('one overview 503 is retried with the skeleton kept; no message (R-150 lever 4)', async () => {
+  let calls = 0;
+  mockApi({ 'GET /api/demo/overview': () => (++calls === 1 ? new Response(JSON.stringify({ error: 'x' }), { status: 503 }) : overview) });
+  app();
+  expect(await screen.findByText('90 %')).toBeTruthy();
+  expect(calls).toBe(2);
+  expect(screen.queryByRole('alert')).toBeNull();
+});
+
+test('overview 503 twice: a message and a retry that loads the inbox', async () => {
   let calls = 0;
   mockApi({
-    'GET /api/demo/overview': () => (++calls === 1 ? new Response(JSON.stringify({ error: 'x' }), { status: 503 }) : overview),
+    'GET /api/demo/overview': () => (++calls <= 2 ? new Response(JSON.stringify({ error: 'x' }), { status: 503 }) : overview),
   });
   app();
   expect((await screen.findByRole('alert')).textContent).toMatch(/no está disponible/);
@@ -281,4 +290,22 @@ test('the skeleton is gone once the overview arrives', async () => {
   const { container } = app();
   await screen.findByText('1.800 USD a Estudio Kairos, retainer de octubre, dentro de reglas');
   expect(container.querySelector('.skeleton')).toBeNull();
+});
+
+// R-150 lever 3 (AC-107): once /demo is usable the Inbox chunk is fetched, and a door's hover or focus fetches it too; nobody
+// is signed in and Bandeja's data is not asked for before the click (R-150 rejects (b), the pre-signed session).
+test('once usable /demo fetches the Inbox chunk and signs nobody in; a door\'s hover or focus fetches it too (R-150 lever 3)', async () => {
+  const { routes } = await import('./App');
+  const load = vi.spyOn(routes[0]!, 'load');
+  const f = mockApi({ 'GET /api/demo/overview': overview });
+  app();
+  await waitFor(() => expect(load).toHaveBeenCalled());
+  expect(fakeAuth.signInWithPassword).not.toHaveBeenCalled();
+  expect(f.mock.calls.filter(([u]) => String(u).startsWith('/api/screen/'))).toHaveLength(0);
+  load.mockClear();
+  fireEvent.pointerOver(screen.getByRole('button', { name: 'Entrar como Andina Labs' }));
+  expect(load).toHaveBeenCalledOnce();
+  load.mockClear();
+  fireEvent.focusIn(screen.getByRole('button', { name: 'Probar con mi propia empresa' }));
+  expect(load).toHaveBeenCalledOnce();
 });

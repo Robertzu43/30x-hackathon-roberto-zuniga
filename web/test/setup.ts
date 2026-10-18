@@ -1,6 +1,6 @@
 import { cleanup, configure } from '@testing-library/react';
 import { afterEach, beforeEach, vi } from 'vitest';
-import { dropCache } from '../api';
+import { cacheOwner, dropCache } from '../api';
 import { mockApi } from './utils';
 import { resetFakeAuth } from './supabase';
 
@@ -24,4 +24,5 @@ afterEach(() => {
   localStorage.clear();
   sessionStorage.clear();
   dropCache(); // AC-100's per-tab cache would carry one test's answers into the next
+  cacheOwner(undefined); // and so would the per-user company name (a new page load)
 });

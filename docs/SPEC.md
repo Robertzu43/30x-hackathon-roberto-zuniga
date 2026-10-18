@@ -1033,6 +1033,9 @@ Trace: D40, D42 (targets 5 and 6). Rubric: V. técnica, Presentación. Tasks: 44
   - Evidence, added to QA's network-tab check:
     - in-app navigation to each screen shows exactly one data request and no session request;
     - a deep link shows one data request, plus at most one `/api/config` and one `/api/company`.
+- Clarified (R-177, QA run 2 of 2, 18 Oct ~06:00Z; built in Task 59): a hover or focus prefetch (AC-100) is part of that screen's load, not an extra request beside it. When the person then opens the screen, it uses the prefetch's request, whether that request is still in flight or has finished. It never sends a second, identical request. There is one request in flight per screen key. AC-100's per-tab cache and revalidation do not change.
+  - Evidence: a `web` test. Hover, then click: the fetch is called once. A click without a hover: once. QA on the deployed URL: a normal pointer hover, then a click on Beneficiarios and on Política, 3 rounds each, shows one data GET per round.
+  - Fallback (R-180): if the single-flight is not merged by 09:30Z, hover and focus prefetch only the page's chunk, not its data. AC-100's data prefetch, a SHOULD, is then cut, the ledger says so, and the click makes the one request.
 
 Evidence:
 - `npx vitest run src/routes src/lib`, with a fake db that counts calls: each screen GET makes at most 1 RPC. JWT cases: valid gives 200; expired, bad signature or wrong `aud` gives 401.
@@ -1057,7 +1060,7 @@ Evidence:
 Trace: D40 (levers). Rubric: V. técnica. Tasks: 42 (placement), 43.
 
 **AC-100 (SHOULD)** When a user moves around the app, the system feels instant.
-- Prefetch. Hovering over or focusing a nav link prefetches that page's chunk and its screen data.
+- Prefetch. Hovering over or focusing a nav link prefetches that page's chunk and its screen data. A click after the prefetch uses that same request (AC-98 Clarified, R-177). If R-180's 09:30Z fallback is taken, only the chunk is prefetched.
 - Per-tab cache. A screen visited before in this tab shows its last data at once and revalidates it. The cache is dropped after any write from this tab.
 - Approve and reject. Within 100 ms the buttons are disabled and the card reads «Enviando tu respuesta…» / "Sending your answer…". The result (PAGAR, FRENAR, or ESCALAR again) is shown only from the server's answer, never predicted (R-122). On an error the card comes back with the server's message.
 
@@ -1260,6 +1263,21 @@ These guardrails do not move:
     - one retry on a 5xx from a screen GET or `/api/demo/overview`.
   - A run that ends on «No pude cargar las facturas…» fails.
   - `perf.mjs` reports the sign-in, gap, request, server-time (`Server-Timing`), byte and `/api/health` baseline columns as INFO.
+- Clarified (QA run 2 of 2, 18 Oct ~06:00Z; R-175, R-176, R-179; built in Task 59):
+  - Reload during the pass (R-175). A reload resumes from the tab's pass flag. The door sets that flag in `sessionStorage`. It is cleared when the pass ends, when a call of the pass fails, and on sign-out. When any app screen mounts in a tab whose flag is set and where no pass is running, the shell starts the pass again for the invoices still pending.
+    - What a juror who refreshes in the first 20 s sees: Bandeja lands as usual, in under 2 s. Rows the server already decided show their chips, and the rest show «Pendiente». The progress line reads «0 de <n>» / "0 of <n>", where <n> is the pending count in the reloaded data, and it counts up. «Ejecutar agente» is busy, as the same run. Every row is decided within 30 s of the reloaded landing (AC-47's bound, counted from the reload). No invoice is decided twice (R-25).
+    - The resume never starts for the demo user. It never starts in a tab without the flag: a new tab, a later login or another device. It never starts after the pass has ended or stopped on a failed call; the cron decides those rows (AC-40 Clarified). Starting a pass on every landing whenever invoices are pending is not this AC (docs/IDEAS.md).
+    - The server may still be busy with the call the reload cut off. If it answers that the company's run is busy, that is not an error: the pass waits about 2 s and tries again, up to 3 times, and only then stops as a failed call.
+    - Evidence:
+      - `web/firstRun.test.tsx`. A mount with the flag set and no pass running starts exactly one `POST /api/invoices/run`. With the flag clear, there is none. For the demo user, there is none. The flag is cleared at the end of the pass and on a failed call. A "busy" answer is retried, not shown.
+      - Playwright on a local Worker, and QA on the deployed URL: the trial door, then a reload at about 5 s and again at about 10 s into the pass. Each reload shows a new `POST /api/invoices/run` within 2 s of the reloaded landing, then «0 de n» counting up, and every row decided within 30 s of the reload. Afterwards, every seeded invoice has exactly one first-run decision.
+  - Layout while late data arrives (R-176). The CLS bounds do not move. CLS stays at or under 0.01 from landing to the end of the pass (this AC), and from the click to the end of the transition (AC-109). That holds on every door, in every run, with or without a pass. Nothing that arrives after first paint moves anything:
+    - The top bar has the same height, and its actions are in the same place, before and after the company name arrives. The name sits in a one-line slot that ends with an ellipsis when it is too long, with the full name in `title`.
+    - Every Bandeja block that fills from data holds its loaded box from first paint (AC-99's skeleton rule). That covers the portal card, the KPI tiles, the dashboard sections and «Actividad del agente».
+    - Evidence:
+      - The D38 gate's `entry` row gains a slow-data mode. The harness holds `/api/company` for 1.500 ms and `/api/screen/inbox` for 800 ms. It runs the password, trial and demo doors at 390 and 1440 px, in es, 3 runs each, and every run must be ≤ 0.01. The builder's report shows this mode failing on the code QA run 2 tested (the password door at 390), and passing after the fix.
+      - QA on the deployed URL runs 5 entries per door at 390 and 1440 px, in es: OTP with an Admin-API code, password, trial and demo. Every run must be ≤ 0.01. Any run over that reports its layout-shift sources. Machine load is recorded, but it does not excuse a run.
+  - The OTP door's button (R-179). On the code step it reads «Verificar código» / "Verify code", the name D42 (1) and this AC give it. Evidence: `web/Login.test.tsx`, and QA's look at the code step in es and en.
 
 Evidence:
 - `npx vitest run web/Login.test.tsx web/Trial.test.tsx web/Demo.test.tsx web/Inbox.test.tsx web/AgentActivity.test.tsx`, plus a test file for the pass's own module:
@@ -1309,7 +1327,7 @@ Evidence:
 - On the deployed URL, in Playwright:
   - every logo animation in `document.getAnimations()` animates only `transform` or `opacity` and ends by 1.200 ms;
   - with `reducedMotion: 'reduce'` there are no such animations;
-  - the door button is enabled at 100 ms after `DOMContentLoaded`, and a click at that moment starts the sign-in;
+  - the door button is in the DOM and enabled at first contentful paint or earlier, and a click at that moment starts the sign-in. Clarified (R-178, QA run 2 of 2): «enabled and clickable from first paint» is the rule that binds. The earlier wording, "100 ms after `DOMContentLoaded`", was only one example of it. QA run 2 measured the door enabled 54-92 ms before first contentful paint, which passes;
   - CLS is 0 during the intro.
 - Screenshots `docs/ux/login-intro-end-1440-es.png` and `docs/ux/demo-intro-end-390-en.png`. The UX reviewer compares them with the static logo.
 - The video's first seconds (AC-50 Clarified).
@@ -1322,7 +1340,7 @@ Trace: D42 (2), D37, D30. Rubric: Presentación. Tasks: 53.
 - Timing. The transition lasts 300 to 500 ms. It starts when the web navigates to Bandeja, and it never waits for Bandeja's data.
 - How. It animates `transform` and `opacity` only. It may use the browser's View Transitions API, a native platform feature, or a CSS transform on the logo. No animation library.
 - Fallbacks. In a browser without View Transitions, or with `prefers-reduced-motion: reduce`, the swap is instant.
-- No layout jump. CLS stays at or under 0.01 from the click to the end of the transition.
+- No layout jump. CLS stays at or under 0.01 from the click to the end of the transition. Clarified (R-176, QA run 2 of 2): this bound is not relaxed. It holds when the company name and Bandeja's data arrive late, and AC-107's Clarified block lists the slow-data gate mode and QA's 5 runs per door that prove it.
 - It counts inside AC-107's 2 s. AC-97 target 5's end condition waits for it to end.
 - The tour's first step shows after the transition ends (AC-42 Clarified). «Volver a mi empresa de prueba» uses the same transition, and it is not timed.
 
@@ -2193,6 +2211,55 @@ Rulings folding D45 (product, 18 Oct ~05:40Z; product questions, not disputes; n
   - Principle: company-can-deploy-Monday and Roberto's "before FREEZE". Loser's best argument: "record Task 37 now on the current layout, in parallel with 58; a raw path does not need the new margins".
 - **R-174 Correction to R-164: the app prints what Intl prints (AC-44, AC-77, AC-91 item 5; F4).** The builder of Task 57 measured that `Intl.NumberFormat('es-CO', { style: 'percent' })` prints «62%», with no space, in both Node and Chromium. So R-164's sentence «es prints 62 % with Intl's no-break space» was false. Its mechanism stands unchanged: every percentage the app formats goes through `Intl.NumberFormat(<tab locale>, { style: 'percent' })`, and tests compare with that same call's output in the same runtime, never with a hand-typed string. The app prints exactly what Intl prints for the tab's locale; today that is «62%» in es-CO and "62%" in en-US. AC-44's figures, AC-77's «confianza de la IA», and AC-91 item 5's example now say "the percentage as Intl prints it", and no AC requires a space, a no-break space, or its absence. A hand-written `{n} %` or `{n}%` in any dictionary string, es or en, is still a `5.locale` fail. This corrects a factual example; it does not reopen R-164's choice of option (a). Principle: evidence (the measured output wins over the ruling's example).
 
+Re-scope after QA run 2 of 2 on Tasks 52, 52c, 52d, 40d, 53 and 54 (product, 18 Oct ~06:00Z; four MUST FAILs with the QA budget spent; nobody was asked; the evidence is the ledger's «QA run 2 of 2 verdict»):
+- **R-175 A reload during the first-login pass resumes it, keyed on the tab's flag (AC-107 Clarified; FAIL 1).** Option (a), with a narrower trigger than the one proposed. The resume is keyed on the tab's own pass flag (`sessionStorage`, set by the door, cleared at the end of the pass, on a failed call and on sign-out). It is not keyed on "the company has pending invoices". That is the mechanism AC-107 and Task 52's brief already describe, and a reload keeps `sessionStorage`. The broader trigger would start an agent pass on every later login and in every new tab, which no AC asks for. That idea goes to docs/IDEAS.md.
+  - Why not (b). AC-107 is never cut, and its text says the pass resumes in the same tab. Under (b), a juror who refreshes in the first 20 s would look at 18 to 27 «Pendiente» rows for up to an hour. Periodo, the KPI tiles and «Necesita tu respuesta» would show a half-decided company, and the tour's step 4 would point at a row that never resolves. That is the first impression D42 (1) exists to protect, and the cron is the fallback for a closed tab, not for a refresh.
+  - What is true for that juror after the fix: AC-107's Clarified block above, word for word.
+  - Principle: the company's actual user (a juror who refreshes), then scope (the AC already says resume).
+  - Loser's best argument, (b), verbatim: "the cron already decides what is left (AC-40 Clarified), a refresh in the first 20 s is rare, and an honest «Pendiente» with «Ejecutar agente» one click away costs no code on a never-cut path four hours before FREEZE".
+- **R-176 The CLS bound stays MUST. Late data fills boxes that are already reserved (AC-107, AC-109; FAIL 2).** The bound is not relaxed. The shifts QA found are not caused by load:
+  - the top bar's actions drop 44 px when the company name arrives;
+  - the portal card and the dashboard blocks pop in at 1.0-1.2 s.
+  Both are plain defects of rules that already exist. R-135 and Task 52c Part B 3 say the name slot «keeps its box and stays empty, with no layout shift». AC-99 says every screen renders a skeleton with its loaded markup. Under load, the same code still moves the page for a juror on a slow laptop: 0.32 at 390 px is a visible jump on the first screen they see.
+  - The smallest change:
+    - the top bar keeps one height and fixed action positions at each width, from first paint, with the name in a one-line slot that ends with an ellipsis;
+    - each Bandeja block that fills from data renders its loaded box from first paint.
+  - The proof is deterministic, not load-dependent: the gate's `entry` row gains a slow-data mode that holds `/api/company` for 1.500 ms and `/api/screen/inbox` for 800 ms.
+  - Owner: Task 59, not Task 58. Task 58's gate must keep the slow-data mode green on the new layout (R-180).
+  - Principle: evidence (a reproducible check, not a lucky run), then the company's actual user.
+  - Loser's best argument, verbatim: "Bound AC-107's CLS to the pass, which is what R-145 was written for, and leave the top bar's late name to AC-91's gate, which passes it locally; 15 of 28 runs on a machine at load 3-9 with a foreign ffmpeg is noise, not a defect".
+- **R-177 A click after the hover prefetch uses the prefetch's request (AC-98 Clarified; FAIL 3).** Option (a): single-flight per screen key. AC-98 Clarified (R-141) already says «each screen load makes exactly one» data request, and two identical GETs 300 ms apart are two database round trips for one screen. (b) would make the prefetch, which exists to save time, double the database load on every hovered navigation.
+  - Fallback at 09:30Z (R-180): cut AC-100's data prefetch, a SHOULD. Hover and focus then prefetch only the chunk. The MUST is never weakened to keep a SHOULD.
+  - Principle: evidence (the AC's own count), then scope (cut the SHOULD before the MUST).
+  - Loser's best argument, (b), verbatim: "the prefetch started before the click, so after the click the critical path still has one request; counting the hover as part of the load punishes the lever AC-100 asked for".
+- **R-178 AC-108: «enabled from first paint» binds, and QA run 2 already passes it (FAIL 4, first part).** The AC's rule is «the form, the door and every button are enabled and clickable from first paint», and D42 (2) says «never delays input». Nobody can click a button before it is painted. A door that is enabled 54-92 ms before first contentful paint delays no input. The Evidence line's "100 ms after `DOMContentLoaded`" was a way to test the rule that assumed paint comes within 100 ms. It is not a second requirement. How fast the first paint itself comes is graded by AC-97 target 1. The Evidence line is reworded to first contentful paint. AC-108 passes on QA run 2's recorded measurements, with no code change and no re-test.
+  - Principle: evidence (the test measures the behaviour the AC promises).
+  - Loser's best argument, verbatim: "100 ms after DOMContentLoaded is a fixed number a tester can check without knowing when paint happened; re-anchoring it on first paint after a FAIL moves the goalpost".
+- **R-179 The OTP code step's button reads «Verificar código» / "Verify code" (AC-107; FAIL 4, second part).** D42 (1) is Roberto's text, and it names the door «Verificar código». AC-107 and AC-97's `entry otp` row repeat that name. «Entrar» is also the password form's button on the same page, so two different doors would carry the same label. The change is one dictionary value in es and en. Any script, e2e test or recording step that finds the button by its old text is updated in the same task.
+  - Principle: scope (Roberto's words bind).
+  - Loser's best argument, verbatim: "«Entrar» matches the password form and the busy text «Entrando…», and the door was QA'd and timed under that label; renaming it now touches perf.mjs selectors, e2e and the video on a never-cut path".
+- **R-180 Task 59, its place beside Task 58, its cuts, and how it is verified without a QA run 3 (AC-107, AC-109, AC-98, AC-100).**
+  - One new Task 59 holds R-175, R-176, R-177 and R-179. R-178 needs no code. The task is in docs/PLAN-D28.md, section «QA run 2 re-scope: Task 59».
+  - It is built now, in parallel with Task 58's window, in its own worktree and seat. It does not wait for Task 57: it rebases onto 57 when 57 merges.
+  - Merge order on the shared files (`web/App.tsx`, `web/styles.css`, `web/dashboard/*`, `web/pages/inbox.css`, `web/pages/Inbox.tsx`, `src/i18n/features/auth.ts`, `scripts/ux-gate.mjs`): whichever of 58 and 59 merges second rebases. That task then re-runs the slow-data `entry` mode on the merged code before its review, so the CLS proof always runs on the final layout. Task 59 keeps its CSS to heights and reserved boxes on existing selectors. It touches no width, max-width or grid, so it does not collide with Task 58's band.
+  - Build order, which is also the priority if time runs short:
+    1. R-179's label (minutes);
+    2. R-175's resume;
+    3. R-176's top bar, then the Bandeja boxes;
+    4. R-177's single-flight.
+  - Cuts:
+    - At 09:30Z, if (4) is not merged, R-177's fallback cuts AC-100's data prefetch, a SHOULD.
+    - At 10:00Z, Task 59 merges whatever parts have passed review. Each part is its own commit with its own tests.
+    - If (2) or (3) is not in by 10:00Z, neither is relaxed and neither is cut to SHOULD. README «Lo que no está hecho» states QA run 2's numbers for it, and the ledger keeps the FAIL open.
+    - 10:30Z is the last product deploy (R-173). No MUST is cut.
+  - Verification, with the QA budget:
+    - QA run 2's budget on Tasks 52 to 54 is spent, and no QA run 3 is held on them.
+    - Task 59 is a new task created by this re-scope. The budget rule yields to the re-scope only this far: Task 59 gets one QA run, not two. That run is limited to the four items in its brief, and it re-tests nothing that QA run 2 passed.
+    - The QA run goes into Task 58's QA run when both are on the same deploy. Otherwise a fresh `qa` seat runs it.
+    - If an item fails there, there is no second run: the item comes to product, and README states the measured numbers.
+  - Principle: company-can-deploy-Monday (every MUST reaches the deployed URL or is reported honestly), then evidence (a live check exists for each fix).
+  - Loser's best argument, verbatim: "fold the CLS fix into Task 58, which rewrites the top bar and Bandeja's blocks anyway; two builders on the same five files three hours before the last deploy invites a bad rebase".
+
 ---
 
 ## Task to AC map
@@ -2271,7 +2338,8 @@ Rulings folding D45 (product, 18 Oct ~05:40Z; product questions, not disputes; n
 | 35b README to D43 + SUBMISSION refresh (amended 18 Oct ~03:00Z) | AC-110 (README order, links, numbers with sources), AC-49 / AC-51 Clarified (D41 doors, «Para el jurado», «Velocidad», SES verified identity, not-done items; D43 opening, R-151; D44 links, R-152) |
 | 55 D43 architecture diagram generator | AC-110 (`docs/architecture/*`, icons and licences R-153, R-154, copies in `web/public/demo/`) |
 | 56 D44 launch film | AC-111, AC-50 / AC-51 Clarified (video links), AC-110 item 2 (thumbnail), AC-114 (from D45: swaps `web/public/demo/video.json` to the film, R-169) |
-| 58 D45 layout band, /demo hero video, step cards, tour card, gate at 1920 | AC-112, AC-113, AC-114, AC-115, AC-116, AC-91 Clarified (D45, R-172), AC-110 item 2 (README thumbnail = poster), AC-42 / AC-45 / AC-66 / AC-108 (regressions) |
+| 58 D45 layout band, /demo hero video, step cards, tour card, gate at 1920 | AC-112, AC-113, AC-114, AC-115, AC-116, AC-91 Clarified (D45, R-172), AC-110 item 2 (README thumbnail = poster), AC-42 / AC-45 / AC-66 / AC-108 (regressions), AC-107 / AC-109 CLS slow-data mode kept green on the new layout (R-176, R-180) |
+| 59 QA run 2 fixes: reload resume, late-data CLS, prefetch single-flight, OTP label (R-175..R-180) | AC-107 Clarified (R-175, R-176, R-179), AC-109 (CLS, R-176), AC-98 Clarified (R-177), AC-100 (fallback cut only, R-180), AC-108 (no code; R-178 evidence wording) |
 | 37 (from D45) | AC-114 (re-records `happy-path.webm` in place with its poster and es/en `.vtt`, R-169) |
 | 52 D42 entry speed: land first, the pass on Bandeja | AC-107, AC-92 Amended, AC-40 Amended, AC-42 Clarified (tour on landing, stable anchors), AC-78 Clarified, AC-99 Clarified, AC-91 (gate: `login`, `login-password`, `demo`, `trial`, `inbox`) |
 | 52c Demo door under 2 s (R-150) + QA E5a defects | AC-107 Clarified, AC-97 target 5, AC-98, AC-99 Clarified, AC-91 item 4, AC-95 (R-135), AC-109 (CLS) |

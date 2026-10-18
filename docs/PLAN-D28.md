@@ -804,6 +804,7 @@ From D45 (R-173): the two film cut times above move to 12:00Z and 13:00Z; the 14
   - finance: `login,login-password,tour,inbox,trial,new-invoice,detail-pagar,detail-frenar,detail-escalar,detail-unread,ask,policy,beneficiaries,beneficiary,period,approve,demo,save-access,leave-trial` with their designed states;
   - vendor: `portal,portal-reply,portal-error,status,status-invalid` with their designed states;
   - at 360, 390, 768, 1024, 1440 and 1920, es and en. `docs/ux/gate-finance.md` and `docs/ux/gate-vendor.md` show every row passing, including the new D45 rows. The screenshots are committed under `docs/ux/`.
+  - If Task 59 has merged before 58's review, run its slow-data `entry` mode as well: password, trial and demo doors, at 390 and 1440, every run ≤ 0.01 on the new layout (R-176, R-180). If 58 merges first, Task 59 runs it after its rebase.
 - Report: the measured band x and width for `demo` and `inbox` at 1440 and 1920; the video's transferred bytes before a click; which cuts, if any, were taken and at which checkpoint.
 - Review: one code reviewer (findings at ≥ 95 citing AC-112..AC-116 or a CLAUDE.md rule), plus one fresh UX reviewer for the gate (briefed with `design-taste-frontend` and `minimalist-ui`, never the builder). The UX reviewer reads the 1440 and 1920 screenshots against AC-112..AC-116, every screenshot against D38, and the gate tables; each failed item blocks (D38). 2 passes each.
 - Deploy "D45" (the orchestrator, from integration after the merge and a green full suite): `wrangler deploy` for the main Worker and for `portal/` (the `facturas` Worker). Then `curl -sI` on `/demo/video.json`, the poster and both `.vtt` files (content types per AC-114), and `node scripts/perf.mjs` for the `/demo` rows (AC-97 must stay PASS).
@@ -834,3 +835,73 @@ From D45 (R-173): the two film cut times above move to 12:00Z and 13:00Z; the 14
 - ~09:00-10:30Z: Task 37 re-records (poster and `.vtt` included).
 - ~10:30-12:00Z: Task 56 phase B (demo assets, allowed in FREEZE); the film cut times are 12:00Z and 13:00Z; the film is merged by 14:00Z.
 - After Task 37: Task 38, the final QA happy path, and the merge to main.
+
+# QA run 2 re-scope: Task 59 (product, 18 Oct ~06:00Z)
+
+> QA run 2 of 2 on Tasks 52, 52c, 52d, 40d, 53 and 54 failed four MUST items, and the budget is spent. The rulings are R-175..R-180 in `docs/SPEC.md`. The ACs are AC-107 Clarified (R-175, R-176, R-179), AC-109 (R-176), AC-98 Clarified (R-177) and AC-100 (the R-180 fallback). AC-108's FAIL 4 is closed by R-178, with no code. Where this section and a ruling differ, the ruling wins.
+
+## Binding order and rules
+- Task 59 is built now, in parallel with Task 58's window. It has its own worktree and seat.
+  - Branch `r202610162341/task/59-qa2-fixes`, from `r202610162341/integration` at dispatch. It rebases onto Task 57 when 57 merges.
+  - Seat: the next free builder seat. If the senior seat is held for Task 58, a junior-builder builds it; the brief below is complete enough for a junior.
+- Never lower a bar. If a part misses the clock, it ships as an honest open FAIL in README «Lo que no está hecho» and in the ledger, and no AC is relaxed (R-180).
+- No migration and no Worker route change. Web, i18n and scripts only.
+- Budgets: 2 builder attempts and 2 reviewer passes. QA gets one run only, limited to the items below (R-180).
+
+## Task
+
+**Task 59: QA run 2 fixes: reload resume, late-data CLS, prefetch single-flight, OTP label (AC-107, AC-109, AC-98, AC-100; R-175..R-180).**
+- Build order. This is the priority, and each part is its own commit with its own tests:
+  1. **OTP label (R-179).** `src/i18n/features/auth.ts`: `login.verify` becomes «Verificar código» / "Verify code". Update every selector that finds the old text, in `scripts/perf.mjs`, `scripts/ux-gate.mjs`, `e2e/*` and `scripts/record-happy-path.mjs`, if they use it. Test: `web/Login.test.tsx`, the code step's button name in es and en.
+  2. **Reload resume (R-175).** Files: `web/firstRun.tsx` and `web/firstRun.test.tsx`. Add `web/App.tsx` or `web/pages/Inbox.tsx` only if the mount point needs it.
+     - On mount, if the tab's pass flag is set and no pass is running, start the pass for the pending invoices.
+     - The flag is cleared at the end of the pass, on a failed call and on sign-out.
+     - There is never a pass for the demo user, and never two passes in one tab.
+     - A "run busy" answer from the server is retried after about 2 s, up to 3 times, and only then becomes a failed call.
+     - The progress line starts at «0 de <pending in the reloaded data>».
+     - Unit tests as AC-107 Clarified lists them.
+     - A Playwright check on a local Worker (`scripts/qa-server.sh`): the trial door, then reloads at about 5 s and about 10 s. Each reload shows a new POST within 2 s, every row is decided within 30 s of the reload, and each seeded invoice has exactly one first-run decision.
+  3. **Late-data CLS (R-176).**
+     - First, red: add the slow-data mode to the gate's `entry` row in `scripts/ux-gate.mjs`, with its test. The harness holds `/api/company` for 1.500 ms and `/api/screen/inbox` for 800 ms. It runs the password, trial and demo doors at 390 and 1440, in es, 3 runs each. Record the failing run on today's code (the password door at 390) in the report.
+     - Then the fix, using the gate's layout-shift attribution to find each element:
+       - the top bar (`web/App.tsx` and `web/styles.css`): one height and fixed action positions at each width from first paint; the name in a one-line slot that ends with an ellipsis, with the full name in `title`;
+       - Bandeja (`web/pages/Inbox.tsx`, `web/pages/inbox.css`, `web/dashboard/Dashboard.tsx`, `web/dashboard/dashboard.css`, and the portal card's component): every block that fills from data renders its loaded box from first paint.
+     - Heights and reserved boxes only, on existing selectors. Do not touch any width, max-width or grid: those are Task 58's band.
+     - Green: every slow-data run is ≤ 0.01, and the `trial` and `inbox` gate rows still pass at 390 and 1440, in es and en.
+  4. **Prefetch single-flight (R-177).** The module that holds the per-tab screen cache and the hover/focus prefetch (Task 43's; `web/api.ts` or the screen loader), and its test. One request in flight per screen key. A navigation joins the in-flight prefetch, or uses its finished result. Test: hover then click calls fetch once, and a click alone calls it once.
+     - Fallback at 09:30Z if this part is not merged: hover and focus prefetch only the chunk. AC-100's data prefetch is cut, a SHOULD, and the ledger says so.
+- QA run 2's own specs are the red tests. Run them against the local Worker, or against a preview if they take a base URL. They must end green with their assertions unchanged:
+  - `e2e/ac107-reload.spec.ts` (R-175);
+  - `e2e/qa52x-cls.spec.ts` (R-176);
+  - `e2e/ac98-dup.spec.ts` (R-177).
+  There is one exception: `e2e/ac108-intro.spec.ts`. Only its "100 ms after DOMContentLoaded" assertion may change, to R-178's wording (in the DOM and enabled at first contentful paint). The report quotes the diff.
+- Checks before the report: `npm run lint && npm run typecheck && npm test && npm run build`; `npx vitest run web scripts`; the local Playwright reload check and the e2e specs above; the slow-data `entry` mode red, then green; the gate rows `login`, `login-password`, `trial`, `inbox`, `entry`, `beneficiaries` and `policy` at 390 and 1440, in es and en.
+- Report: which parts are in, the slow-data CLS values before and after, the reload timings, the fetch counts, and any selector renamed for R-179.
+- Review: one code reviewer. Its findings must be at ≥ 95 and cite AC-107, AC-109, AC-98 or a CLAUDE.md rule. The gate tables are the UX evidence, and no separate UX reviewer is needed, because no visible design changes beyond the label.
+- Estimate: 1.5 h build (0.1 label, 0.5 resume, 0.6 CLS, 0.3 single-flight), plus 0.5 h review and a fix round.
+
+## Shared files with Task 58 (whichever merges second rebases and re-runs the slow-data `entry` mode before its review)
+| File | Order |
+|---|---|
+| `web/App.tsx`, `web/styles.css` (top bar) | 57 → 59 and 58, either order; 59 changes heights only |
+| `web/pages/Inbox.tsx`, `web/pages/inbox.css`, `web/dashboard/Dashboard.tsx`, `web/dashboard/dashboard.css` | 57 → 59 and 58, either order; 59 changes reserved boxes only |
+| `src/i18n/features/auth.ts` | 59 (`login.verify`) and 58 (`tour.count`), either order; different keys |
+| `scripts/ux-gate.mjs` | 57b, 58 and 59: whichever merges later rebases |
+| `web/firstRun.tsx`, the prefetch/cache module | 59 only |
+
+## Deploy and verification (no QA run 3 on Tasks 52-54)
+- Deploy: with Task 58's "D45" deploy if both have merged by then; that is the preferred single deploy. If 59 merges first and 58 is not ready by 09:00Z, the orchestrator deploys 59 alone. 10:30Z is the last product deploy (R-173).
+- After the deploy, the orchestrator runs `node scripts/perf.mjs` for the four `entry` rows. Each must stay under 2.000 ms (AC-107 speed, no regression).
+- QA, one run, on the deployed URL, only these items. It goes inside Task 58's QA run when both are on the same deploy; otherwise one fresh `qa` seat runs it:
+  - a. Reload: the trial door, reloads at about 5 s and about 10 s into the pass, 3 entries. Each reload shows a new `POST /api/invoices/run` within 2 s of the reloaded landing and «0 de n» counting up, and every row is decided within 30 s of the reload. Each seeded invoice has one first-run decision. Periodo shows «Violaciones 0».
+  - b. CLS: the OTP door (Admin-API code), password, trial and demo, at 390 and 1440, in es, 5 runs each (40 runs). Every run is ≤ 0.01, measured from the click to the end of the transition, and for trial to the end of the pass. Report each value, plus the layout-shift sources of any run over the bound. Record the machine load.
+  - c. AC-98: a normal pointer hover, then a click on Beneficiarios and on Política, 3 rounds each. Each round shows one data GET. A click without a hover also shows one.
+  - d. The OTP code step reads «Verificar código» in es and "Verify code" in en.
+- A failed item gets no second QA run. It comes to product, and README «Lo que no está hecho» states its measured numbers.
+
+## Clock (UTC, target; FREEZE 11:00Z)
+- ~06:00Z: dispatch 59 at once, in parallel with 58.
+- ~07:30-08:00Z: 59 is reviewed and merged. If 58 has not merged by then, 58 rebases onto 59 before its review.
+- 09:30Z: if part 4 is not merged, take R-177's fallback.
+- 10:00Z: the last merge of 59's parts.
+- 10:30Z: the last product deploy, then QA items a-d.

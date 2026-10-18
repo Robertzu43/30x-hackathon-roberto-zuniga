@@ -13,4 +13,5 @@ One line per idea, who had it, which AC it would serve. Nothing here gets built 
 - Plainer words than «LLM» and «JEV» in the /demo pitch copy, for finance readers (Task 33 gate, AC-79 / R-166).
 - A shorter top bar at 360 and 390 px. Today the bar takes about 275 px before the h1 (Task 33 gate, AC-91 / R-166).
 - Show the six /demo agent-loop stages as one row of 6 at ≥ 1440 px, the way the README diagram draws the loop. R-171 chose 3 across (product, AC-116 / R-171).
+- On any landing, in any tab, start an agent pass whenever the company has pending invoices, not only to resume the tab's own first-login pass. R-175 keys the resume on the tab's flag instead (orchestrator's option (a) as proposed, AC-107 / R-175).
 - Add a play glyph to the README video thumbnail with an ffmpeg overlay. Today «▶ Ver el video» sits under a plain poster (product, AC-114 / R-169).

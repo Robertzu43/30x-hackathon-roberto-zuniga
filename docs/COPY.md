@@ -1,5 +1,7 @@
 # Copy deck (D47 (4), product, 18 Oct ~06:30Z)
 
+El producto que se evalúa está en `README.md` y `docs/ARCHITECTURE.md`. Este archivo es el contrato de los textos de la interfaz (`src/i18n/copy.test.ts` comprueba las tablas).
+
 Owner: product (R-185). Applied by Task 61, except the rows under «Owned by Task 60», which Task 60 applies with AC-121. Disputes about wording come to product, as product questions. The binding ACs are AC-118, AC-119 and AC-120 (spec on branch `archive-full-main`, `docs/SPEC.md`, section 13i).
 
 ## How to read this deck

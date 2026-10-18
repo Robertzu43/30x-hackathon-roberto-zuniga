@@ -18,15 +18,15 @@ Hoy una factura llega por correo, PDF o chat. Alguien de finanzas la compara con
 
 QUÉ HACE, COMO AGENTE
 Cada factura recorre un ciclo: percibe (PDF, imagen, correo o chat pegado, o el portal) → lee (Amazon Nova Lite en AWS Bedrock, con Workers AI de respaldo, en campos con confianza) → consulta (directorio, política, periodo, duplicados, tasa de cambio) → decide (el motor de reglas) → actúa (registra, escala, escribe al aprobador, prepara la orden de pago) → rinde cuentas (el registro).
-Trabaja solo: cada 5 minutos revisa lo pendiente. Tiene tres resultados: PAGAR (cumple las 13 reglas), FRENAR (duplicado exacto o sobre el límite por pago) y ESCALAR (le pregunta a una persona: "Juan, la factura #2044 de Nube Sur LLC por 4.200 USD supera tu umbral de 2.500 USD. ¿La pago?", con Aprobar y Rechazar).
+Trabaja solo: cada 5 minutos revisa lo pendiente. Tiene tres resultados: PAGAR (el agente solo si los 13 controles cumplen; una persona solo puede desbloquear ocho), FRENAR (duplicado exacto o sobre el límite por pago) y ESCALAR (le pregunta a una persona: "Juan, la factura #2044 de Nube Sur LLC por 4.200 USD supera tu umbral de 2.500 USD. ¿La pago?", con Aprobar y Rechazar).
 Usa la tasa de mercado (Yahoo Finance, respaldo open.er-api.com) o la de la política; sin tasa vigente, escala.
 La IA se ve: «Leído por IA» en cada factura y «Pregúntale a Thesaurus», un chat que responde solo con el registro y no puede aprobar ni pagar nada.
 Portal de proveedores: https://facturas.30x-hackathon-roberto-zuniga.workers.dev/andina-labs. El proveedor manda su factura sin cuenta y ve un estado en palabras fijas, nunca cuentas ni razones.
 
 SEGURIDAD POR DISEÑO
 El reto descalifica un pago fuera de las reglas, así que no confía en que el código se porte bien:
-1. Ningún modelo decide ni escribe un pago. Solo la función pura decide() produce PAGAR, y solo si los 13 controles cumplen.
-2. La base de datos rechaza un PAGAR fuera de las reglas, aunque el Worker tuviera un error. Honestidad: la consulta literal de AC-16 sin filtro devuelve 1, una fila que QA falsificó por REST antes del bloqueo; el agente no la escribió ni salió pago alguno.
+1. Ningún modelo decide ni escribe un pago. El único PAGAR sale de outcomeOf() en src/engine/decide.ts. Un PAGAR del agente exige los 13 controles en «cumple», sin overrides. Una persona solo puede desbloquear ocho controles (HUMAN_OVERRIDABLE); presupuesto, saldo, límite por pago, duplicado exacto y moneda sin tasa siguen bloqueando.
+2. La base de datos aplica esa misma regla (supabase/migrations/20261018000300_pagar_check_ids.sql), aunque escriba la clave de servicio. El replay de las 29 no tiene un PAGAR cuya etiqueta no sea PAGAR. Una fila que una prueba insertó por REST antes del trigger no es una decisión del agente; ese insert, hoy, lo rechaza el trigger.
 3. Ningún usuario escribe decisiones, ni la cuenta pública de la demo: solo el agente del servidor.
 4. El registro es de solo adición; PAGAR y FRENAR son finales.
 5. Los enlaces de aprobación van firmados, vencen a las 48 horas y se usan una vez; abrirlos no actúa.
@@ -38,17 +38,19 @@ EXPLICABILIDAD
 Cada factura tiene un registro legible sin abrir el código: un titular, "Lo que hice", "Lo que leí" y "Lo que decidí", qué tendría que pasar para pagarla, la política y quién actuó. Salen en español e inglés. Periodo muestra Autonomía, Violaciones y Decisiones explicadas sobre 29 facturas, normales y con trampa.
 
 CÓMO PROBARLO
-Abre https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo y pulsa «Probar con mi propia empresa»: copia privada de Andina Labs, sin correo ni cuenta; el agente decide las 29 facturas ante ti. «Entrar como Andina Labs» es la vista compartida. Sube /demo/invoices/01.pdf (FRENAR, duplicado exacto), pega el chat de un proveedor nuevo (ESCALAR), pregunta en «Pregúntale a Thesaurus», o rechaza la factura de Laura Méndez (cuenta cambiada) y aprueba la de Nube Sur (PAGAR).
+Vídeo oficial: https://www.youtube.com/watch?v=z8IdL3_Skvg
+Abre https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo y pulsa «Probar con mi propia empresa»: copia privada de Andina Labs, sin correo ni cuenta; el agente decide las 29 facturas ante ti. «Entrar como Andina Labs» es la vista compartida. Sube /demo/invoices/01.pdf (FRENAR, duplicado exacto), pega el chat de un proveedor nuevo (ESCALAR), pregunta en «Pregúntale a Thesaurus», o rechaza la factura de Laura Méndez (cuenta cambiada) y aprueba la de Nube Sur (PAGAR). npm test corre la suite; no levanta un servidor.
 
 LO QUE NO ESTÁ HECHO
-SES: AWS negó el acceso de producción; el correo llega solo a direcciones verificadas (una: la del aprobador de la demo), así que ninguna puerta pide códigos. Los correos de «Guardar mi acceso» no se verifican. La entrada por correo, probada solo con correos de ejemplo, está apagada hasta agregar un dominio. JEV no existe. Cloudflare gratuito: lotes en ejecuciones grandes. Si Bedrock y el respaldo fallan, la factura entra «sin leer» y se escala. En fotos la guardia del monto solo ve lo que el modelo transcribe. Retenciones y descuentos en el total se escalan. El recorrido guiado aún no ilumina el elemento de cada paso (AC-117). La tarjeta «Canales», «Subir factura» y la etiqueta de canal (AC-123 a AC-125) están especificadas, sin fusionar. Telegram (AC-126) no existe: hoy las facturas entran por el portal, subidas o pegadas. «Decidiendo… n de m» (AC-121) sale en la Bandeja en toda ejecución y en Periodo solo en el primer ingreso. A 2560 px (AC-122) las pantallas siguen el diseño de D45; sus filas de prueba no están registradas. La película de lanzamiento (150 s, narrada) está en el repositorio (web/public/demo/thesaurus-launch.mp4) y en «Video demo». Fallos abiertos: en celulares el diseño salta al aterrizar en cerca de 1 de 3 entradas, y el «m» de «n de m» cambia al recargar. Detalle en el README.
+SES está en sandbox (src/lib/email.ts): el correo de escalación solo llega a direcciones verificadas, y sin claves se anota y la decisión no cambia. Por eso la demo no pide un código. La entrada por correo está probada con ejemplos y apagada (INBOUND_EMAIL_DOMAIN vacío). JEV no está en el código de decisión. No hay CSV ni varias políticas por categoría. La pantalla Canales está en docs/COPY.md y no está en la app; Telegram no existe. En fotos la guardia del monto solo ve lo que el modelo transcribe. Una nota de crédito o un total que no cuadra escala. Si Bedrock y el respaldo fallan, la factura entra sin leer y escala. En el celular la página todavía puede moverse un poco al aterrizar; las tarjetas reservan altura para que el gráfico no empuje. La película oficial está en YouTube; el mp4 de 150 s y el recorrido de 128 s siguen en el Worker. Detalle en el README.
 ---
 
 ## Enlaces (los tres primeros son obligatorios)
 
 - **Repositorio público de GitHub:** https://github.com/Robertzu43/30x-hackathon-roberto-zuniga (debe estar en público antes de enviar)
 - **Demo (URL):** https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo
-- **Video demo (URL):** https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo/thesaurus-launch.mp4 (película de lanzamiento, 150 s)
-- **Recorrido completo sin editar:** https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo/happy-path.webm
+- **Video demo (URL):** https://www.youtube.com/watch?v=z8IdL3_Skvg (película oficial)
+- **Copia alojada del lanzamiento (150 s):** https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo/thesaurus-launch.mp4
+- **Recorrido completo sin editar (128 s):** https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo/happy-path.webm
 - **Portal de proveedores:** https://facturas.30x-hackathon-roberto-zuniga.workers.dev/andina-labs
 - **Diagrama de arquitectura:** https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo/architecture.png (SVG: https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo/architecture.svg)

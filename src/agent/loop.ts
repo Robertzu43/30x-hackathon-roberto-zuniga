@@ -1,6 +1,15 @@
-// The agent (D22, AC-61): per invoice, in arrival order, the stages percibe -> lee -> consulta -> decide -> actua, then
-// rindeCuentas once per run. No model picks a tool, the order or an outcome: the only model call is the reader at `lee`.
-// Every path that decides an invoice calls runAgent: ingest, "Ejecutar agente", login, "Reevaluar", "Reiniciar demo", cron.
+// The agent: per invoice, in arrival order, percibe -> lee -> consulta -> decide -> actua, then
+// rindeCuentas once per run. Every path that decides an invoice calls runAgent: ingest, "Ejecutar agente",
+// login, "Reevaluar", "Reiniciar demo", cron.
+//
+// Safety invariants:
+// - No model picks a tool, the order or an outcome. The only model call on this path is the reader at `lee`
+//   (`extractFields` in src/lib/llm.ts). The outcome written here is always `decide()`'s return value.
+// - PAGAR and FRENAR are final: only trigger 'reevaluate' re-decides an ESCALAR. A failed mail never
+//   changes the decision (`notify` catches and returns).
+// - The company lock lives in insert_decision (pg_advisory_xact_lock on the company id). A STALE_PERIOD
+//   retry re-reads the month before writing, so two invoices cannot both commit the same budget.
+// - A write starts only when the whole attempt fits the subrequest budget. Otherwise the invoice stays untouched.
 import { z } from 'zod';
 import { validFields } from '../engine/checks';
 import { headline } from '../engine/explain';

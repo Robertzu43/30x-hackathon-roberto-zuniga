@@ -1,6 +1,9 @@
-// The amount guard ("guardia del monto", R-80, AC-14 Clarified): deterministic code over the document text, run at `lee`
-// before and independently of the field model. A credit-note signal or a total that does not add up makes the amount
-// unknown, so the invoice escalates whatever the model answered.
+// The amount guard ("guardia del monto"): deterministic code over the document text, run at `lee`
+// before and independently of the field model.
+//
+// Safety invariant: a non-null return sets read_error to 'nota_credito' or 'total_no_cuadra'.
+// validFields() then clears the amount, lectura stays 'no_verificado', and decide() cannot return PAGAR
+// for that invoice, whatever amount the model wrote. A photo is guarded only on the text the reader transcribed.
 import type { InvoiceFields, ReadError } from '../engine/types';
 import { parseAmount, round2 } from './money';
 

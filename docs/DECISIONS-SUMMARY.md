@@ -4,7 +4,7 @@ El registro completo (`docs/DECISIONS.md`, `docs/LEDGER.md`, el plan y la especi
 
 ## Tres resultados
 
-- **PAGAR** solo si los 13 controles cumplen. Lo escribe únicamente `decide()` en `src/engine/decide.ts`.
+- **PAGAR** lo devuelve solo `outcomeOf` en `src/engine/decide.ts`. Sin overrides hacen falta los 13 controles, todos en `cumple`. Una persona puede dejar otro veredicto solo en los ocho de `HUMAN_OVERRIDABLE`, y el trigger de Postgres exige lo mismo.
 - **FRENAR** (final) solo por duplicado exacto o por pasar el límite por pago (`FRENAR_ON`).
 - **ESCALAR** en todo lo demás: dato que falta, regla que no cumple, o «no se pudo verificar». Si coinciden FRENAR y ESCALAR, gana FRENAR.
 

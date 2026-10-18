@@ -1,4 +1,10 @@
--- PAGAR requires the 13 engine check ids (AC-69). Length alone let 13 copies of one passing check through.
+-- Safety invariant of public.decisions_guard(), the database half of src/engine/decide.ts:
+-- - PAGAR and FRENAR are final (FINAL_DECISION). A human row is allowed only after an ESCALAR (NOT_ESCALATED).
+-- - An agent PAGAR needs the 13 engine check ids, each distinct, every verdict 'cumple', and no `overridden` key.
+--   Length alone is not enough: 13 copies of one passing check are PAGAR_OUTSIDE_RULES.
+-- - A human PAGAR may leave a verdict other than 'cumple' only when `overridden` is an object and the id is one of
+--   umbral_aprobacion, beneficiario_permitido, beneficiario_cuenta, acuerdo, duplicado_probable, vencimiento,
+--   periodo, lectura. Budget, balance, per-payment limit, exact duplicate and moneda cannot be overridden.
 -- Forward-only: replaces decisions_guard; no drop, delete or truncate.
 create or replace function public.decisions_guard() returns trigger language plpgsql set search_path = '' as $$
 declare

@@ -1,6 +1,10 @@
 {
   "name": "thesaurus",
   "private": true,
+  "description": "Accounts-payable agent: an LLM reads invoices, decide() returns PAGAR, FRENAR or ESCALAR, and Postgres rejects a PAGAR outside the rules.",
+  "engines": {
+    "node": ">=22.22.2"
+  },
   "type": "module",
   "scripts": {
     "lint": "eslint .",

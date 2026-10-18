@@ -97,8 +97,9 @@ export default function Login() {
       void supabase().then((sb) => sb.auth.updateUser({ data: { lang: picked } })).catch(() => undefined);
     }
     if (session) markFirstRun(session.user.id); // the shell decides what is pending, in budgeted calls, after landing (AC-70)
-    if (session && typeof from !== 'string') startInbox(session.user.id); // R-150 lever 2: Bandeja's data, beside the route change
-    void enterApp(() => navigate(typeof from === 'string' ? from : '/', { replace: true })); // AC-109
+    const to = typeof from === 'string' ? from : '/'; // the root URL arrives here with from '/': still Bandeja
+    if (session && to === '/') startInbox(session.user.id); // R-150 lever 2: Bandeja's data, beside the route change
+    void enterApp(() => navigate(to, { replace: true })); // AC-109
   };
 
   return (

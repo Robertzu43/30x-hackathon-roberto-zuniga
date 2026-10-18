@@ -300,6 +300,16 @@ test('a deep link sign-in lands on its page and asks nothing for Bandeja (R-62, 
   expect(inboxCalls(f)).toEqual([]);
 });
 
+test('RequireAuth sends the root URL here with from "/": the door still asks for Bandeja once (R-150 lever 2)', async () => {
+  const f = mockApi();
+  renderAt(<Routes><Route path="/login" element={<Login />} /><Route path="/" element={<p>bandeja</p>} /></Routes>,
+    { at: { pathname: '/login', state: { from: '/' } } as unknown as string });
+  await sendEmail();
+  enterCode('123456');
+  expect(await screen.findByText('bandeja')).toBeTruthy();
+  await waitFor(() => expect(inboxCalls(f)).toEqual(['/api/screen/inbox?lang=es']));
+});
+
 test('once usable /login fetches the Inbox chunk, signing nobody in; a door\'s hover or focus fetches it too (R-150 lever 3)', async () => {
   const load = vi.spyOn(routes[0]!, 'load');
   const f = setup();

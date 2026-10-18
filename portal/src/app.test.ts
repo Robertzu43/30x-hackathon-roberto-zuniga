@@ -302,6 +302,15 @@ describe('user data markers (Task 34b, R-131, AC-91 item 5)', () => {
     rules();
   });
 
+  it('an upload file name is marked in the composer chip (the span, not the remove button) and in the vendor bubble', async () => {
+    await open({ view: 'chat', company: 'A' });
+    pick(new File(['x'], 'factura-AS-0087.pdf', { type: 'application/pdf' }));
+    expect(marked().map((e) => [e.tagName, e.textContent])).toEqual([['SPAN', 'factura-AS-0087.pdf']]);
+    typeAndSend('adjunto');
+    expect(marked(bubble(1)).map((e) => [e.tagName, e.className, e.textContent])).toEqual([['P', '', 'adjunto'], ['P', 'file', 'factura-AS-0087.pdf']]);
+    rules();
+  });
+
   it('the reply marks only the payee and the number, in both languages; prefixes, amount and status stay copy', async () => {
     await open({ view: 'chat', company: 'A' });
     typeAndSend('mi factura');

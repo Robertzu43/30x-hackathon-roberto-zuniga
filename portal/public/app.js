@@ -64,7 +64,7 @@ function bubble(m) {
   if (m.from === 'me') b.append(el('span', { class: 'sr-only', text: `${tr('portal.you')}: ` }));
   const lines = m.lines ? m.lines[lang] : m.keys ? m.keys.map((k) => tr(k, { company })) : [m.text];
   b.append(...lines.filter(Boolean).map((text) => (m.from === 'me' ? el('p', { 'data-user': '', text }) : line(text, !!m.lines))));
-  if (m.file) b.append(el('p', { class: 'file', text: m.file }));
+  if (m.file) b.append(el('p', { class: 'file', 'data-user': '', text: m.file }));
   if (m.link) b.append(el('p', { text: tr('portal.reply.link') }), el('p', {}, el('a', { href: m.link, text: m.link })), copyButton(m.link));
   if (m.pending) b.classList.add('pending');
   return b;
@@ -80,6 +80,7 @@ function setFile(f) {
   file = f;
   ui.chip.hidden = !f;
   ui.chipName.textContent = f ? f.name : '';
+  ui.chipName.toggleAttribute('data-user', !!f); // R-131: the file name is data; the remove button beside it is not
   if (!f) ui.fileInput.value = '';
 }
 

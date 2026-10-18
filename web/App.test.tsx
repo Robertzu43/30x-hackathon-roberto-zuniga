@@ -411,6 +411,7 @@ test('until /api/company answers the name slot is there and empty, never the pla
   answer({ id: 'c1', name: 'Empresa de prueba 7' });
   await waitFor(() => expect(slot.textContent).toBe('Empresa de prueba 7'));
   expect(slot.hasAttribute('data-user')).toBe(true);
+  expect(slot.getAttribute('title')).toBe('Empresa de prueba 7'); // R-176: one line with an ellipsis; the full name on hover
 });
 
 test('the shared demo user shows no company slot and asks nothing (R-135)', async () => {

@@ -87,8 +87,8 @@ function TopBar({ onTour }: { onTour: () => void }) {
         {session && (
           <>
             <button type="button" onClick={onTour}>{t('topbar.tour')}</button>
-            {/* R-135: every user but the shared demo one; empty in its reserved width until the name arrives (AC-91 CLS) */}
-            {!isDemoUser(session.user, demoEmail) && <span className="trial-company" data-user={company ? '' : undefined}>{company}</span>}
+            {/* R-135: every user but the shared demo one; empty in its reserved one-line box until the name arrives (R-176) */}
+            {!isDemoUser(session.user, demoEmail) && <span className="trial-company" title={company || undefined} data-user={company ? '' : undefined}>{company}</span>}
             {isTrial(session.user) ? ( // AC-94: an anonymous user has no email to show
               <>
                 <span className="muted">{t('trial.unsaved')}</span>

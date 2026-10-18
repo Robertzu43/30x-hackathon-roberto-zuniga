@@ -515,6 +515,7 @@ test('while loading, the dashboard, the table and the last-run line are a skelet
   const skeletons = [...view.container.querySelectorAll<HTMLElement>('.skeleton:not(.inbox-last-run)')];
   expect(skeletons.map((s) => [s.getAttribute('aria-hidden'), s.hasAttribute('inert')])).toEqual([['true', true], ['true', true]]);
   expect(skeletons[0]!.querySelector('.dash-kpis')).not.toBeNull();
+  expect([!!skeletons[0]!.querySelector('.portal-card'), !!skeletons[0]!.querySelector('.activity-box')]).toEqual([true, true]); // R-176: their boxes from first paint
   expect(skeletons[1]!.querySelectorAll('tbody tr a').length).toBeGreaterThan(0);
   expect(view.container.querySelector('.inbox-last-run.skeleton')).not.toBeNull();
 });

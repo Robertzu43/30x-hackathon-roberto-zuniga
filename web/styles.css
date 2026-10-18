@@ -53,6 +53,7 @@ a { color: var(--ink); text-underline-offset: 3px; } /* UX-11: never the browser
 .topbar .logo { align-self: center; }
 .topbar-actions { margin-left: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 0.5rem 0.75rem; font-size: var(--text-sm); min-width: 0; } /* AC-112: every wrapped row, so the last control, ends on the band's right edge */
 .topbar-actions .muted { overflow-wrap: anywhere; }
+.topbar-actions .trial-company { width: 13em; min-height: 1lh; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } /* R-176: one box from first paint, the name arriving moves nothing */
 .topbar .lang { display: flex; gap: 0.25rem; }
 
 button {

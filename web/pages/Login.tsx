@@ -120,7 +120,7 @@ export default function Login() {
               <label htmlFor="login-email">{t('login.email')}</label>
               <input id="login-email" type="email" autoComplete="email" required autoFocus value={email} onChange={(e) => setEmail(e.target.value)} />
               <PasswordField id="login-password" value={password} onChange={setPassword} autoComplete="current-password" />
-              <button type="submit" className="primary" disabled={busy} aria-busy={busy}>{t(busy ? 'entry.signing_in' : 'login.verify')}</button>
+              <button type="submit" className="primary" disabled={busy} aria-busy={busy}>{t(busy ? 'entry.signing_in' : 'login.enter')}</button>
               <button type="button" className="link" onClick={() => { setWithPassword(false); setError(''); }}>{t('account.back')}</button>
             </form>
             {warning}

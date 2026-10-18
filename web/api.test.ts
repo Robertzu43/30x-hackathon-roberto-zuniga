@@ -80,6 +80,26 @@ test('load remembers a screen answer for this tab; a prefetch and the screen sha
   expect(fetchMock.mock.calls.filter(([u]) => u === '/api/screen/policy')).toHaveLength(1);
 });
 
+// AC-98 Clarified (R-177): the click after a hover opens the screen on the prefetch's request, in flight or finished.
+test('hover then click calls fetch once, even when the prefetch finished first', async () => {
+  signedInAs('ana@empresa.co');
+  const fetchMock = mockApi({ 'GET /api/screen/beneficiaries': { beneficiaries: [] } });
+  const gets = () => fetchMock.mock.calls.filter(([u]) => u === '/api/screen/beneficiaries').length;
+  prefetch('/api/screen/beneficiaries');
+  await vi.waitFor(() => expect(cached('/api/screen/beneficiaries')).toBeDefined()); // the prefetch is done
+  expect(await load('/api/screen/beneficiaries')).toEqual({ beneficiaries: [] }); // the click: the screen's load
+  expect(gets()).toBe(1);
+  await load('/api/screen/beneficiaries'); // a later visit revalidates (AC-100)
+  expect(gets()).toBe(2);
+});
+
+test('a click alone calls fetch once', async () => {
+  signedInAs('ana@empresa.co');
+  const fetchMock = mockApi({ 'GET /api/screen/policy': { versions: [] } });
+  await load('/api/screen/policy');
+  expect(fetchMock.mock.calls.filter(([u]) => u === '/api/screen/policy')).toHaveLength(1);
+});
+
 test.each([
   ['api.post', () => api.post('/api/invoices/run')],
   ['api.put', () => api.put('/api/company', {})],

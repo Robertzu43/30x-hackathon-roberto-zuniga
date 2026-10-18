@@ -12,7 +12,7 @@
  */
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
-import { useSession } from './auth';
+import { isDemoUser, useSession } from './auth';
 import { useRunAgent, type RunAgent } from './components/RunProgress';
 
 export const FIRST_RUN = 'first-run';
@@ -24,7 +24,8 @@ const Ctx = createContext<FirstRun>(IDLE);
 export const useFirstRun = (): FirstRun => useContext(Ctx);
 
 export function FirstRunProvider({ children }: { children: ReactNode }) {
-  const uid = useSession().session?.user.id;
+  const { session, ready, demoEmail } = useSession();
+  const uid = isDemoUser(session?.user, demoEmail) ? undefined : session?.user.id; // never a pass for the demo user (AC-107)
   const { pathname } = useLocation(); // the entry sets the flag, then navigates: the move re-checks it
   const [batches, setBatches] = useState(0);
   const [owner, setOwner] = useState<string>(); // the user of this tab's pass, running or ended
@@ -32,18 +33,27 @@ export function FirstRunProvider({ children }: { children: ReactNode }) {
   now.current = uid;
   const busy = useRef(false); // one pass per tab, StrictMode's second effect included
   const startedFor = useRef<string | undefined>(undefined);
-  const run = useRunAgent({ first: '/api/invoices/run', onBatch: () => setBatches((n) => n + 1), stop: () => now.current !== startedFor.current });
+  const run = useRunAgent({ first: '/api/invoices/run', onBatch: () => setBatches((n) => n + 1), stop: () => now.current !== startedFor.current, busyWait: 2000 });
+  useEffect(() => {
+    if (ready && !session) sessionStorage.removeItem(FIRST_RUN); // signed out (R-175)
+  }, [ready, session]);
   useEffect(() => {
     if (!uid || busy.current || sessionStorage.getItem(FIRST_RUN) !== uid) return;
     busy.current = true;
     startedFor.current = uid;
     setOwner(uid);
     setBatches(0);
+    // R-175: a reload aborts the call in flight after the page starts leaving; that is not the pass failing, so the flag stays
+    // for the reloaded page to resume. The end of the pass and a failed call clear it.
+    let leaving = false;
+    const leave = () => (leaving = true);
+    addEventListener('pagehide', leave);
     void run.start().then(() => {
+      removeEventListener('pagehide', leave);
       busy.current = false;
-      if (now.current === uid) sessionStorage.removeItem(FIRST_RUN);
-      else setOwner(undefined); // stopped for another user: their own flag, if their entry set one, starts their pass now
+      if (now.current !== uid) setOwner(undefined); // stopped for another user: their own flag, if their entry set one, starts their pass now
+      else if (!leaving) sessionStorage.removeItem(FIRST_RUN);
     });
   }, [uid, pathname, owner]);
-  return <Ctx.Provider value={owner === uid ? { ...run, batches } : IDLE}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={uid && owner === uid ? { ...run, batches } : IDLE}>{children}</Ctx.Provider>;
 }

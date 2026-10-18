@@ -43,7 +43,7 @@ test(`AC-109 ${door} x${RUNS}`, async ({ browser }: any) => {
       await page.route('**/auth/v1/otp*', (r: any) => r.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
       await page.goto(`${URL_}/login`); await page.getByLabel('Correo').fill(otp[i % otp.length].email); await page.getByRole('button', { name: 'Enviar código' }).click();
       await page.getByLabel('Código de 6 dígitos').fill(await adminOtp(otp[i % otp.length].email)); await page.waitForTimeout(500);
-      return () => page.getByRole('button', { name: 'Entrar', exact: true }).click();
+      return () => page.getByRole('button', { name: 'Verificar código', exact: true }).click();
     });
     out.push(r);
   }

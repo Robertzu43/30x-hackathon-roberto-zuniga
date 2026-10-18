@@ -2,6 +2,7 @@
 // The D38 UX gate (AC-91). Usage:
 //   node scripts/ux-gate.mjs --base <url> [--screens inbox,policy|all] [--only 6.palette] [--palette]
 //                            [--mutate] [--route id=/path] [--approve-token t] [--status-token t]
+//   --slow with --screens entry: R-176's slow-data mode (/api/company held 1.500 ms, /api/screen/inbox 800 ms; 3 runs per door, es)
 // Needs Playwright (local node_modules, else the global one) and Chromium (/opt/pw-browsers/chromium, or GATE_CHROMIUM).
 // Writes docs/ux/<screen>-<width>-<lang>.png and docs/ux/gate-<experience>.md; exits 1 when any item failed.
 import { execSync } from 'node:child_process';
@@ -87,8 +88,11 @@ export const SCREENS = [
   { id: 'beneficiary', exp: 'finance', path: (v) => `/beneficiaries/${v.beneficiary}`, needs: 'beneficiary', na: 'the demo has no beneficiary' },
   // D42 (AC-109): the hand-over from /login (password door, the public demo user) and from /demo into Bandeja. N/A until the transition exists.
   { id: 'entry', exp: 'finance', path: '/login', auth: false, entry: true, doors: {
-    login: { path: '/login', go: async (page, o) => { await clickButton(/contraseña|password/i)(page); await page.locator('#login-email').fill(o.opts.vars.demoEmail); await page.locator('#login-password').fill(DEMO.password); return page.locator('form:has(#login-password) button[type="submit"]'); } },
+    login: { path: '/login', go: async (page, o) => { // slow data: a fresh user of its own company, whose name arrives late (R-176); else the demo user
+      const u = o.opts.slow ? await o.opts.vars.pwUser() : { email: o.opts.vars.demoEmail, password: DEMO.password };
+      await clickButton(/contraseña|password/i)(page); await page.locator('#login-email').fill(u.email); await page.locator('#login-password').fill(u.password); return page.locator('form:has(#login-password) button[type="submit"]'); } },
     demo: { path: '/demo', go: async (page) => page.getByRole('button', { name: /entrar como andina labs|sign in as andina labs/i }) },
+    trial: { path: '/login', go: async (page) => page.getByRole('button', { name: /probar con mi propia empresa|try it with my own company/i }) }, // a new anonymous trial company each run
   } },
   { id: 'beneficiary-empty', base: 'beneficiary', exp: 'finance', path: (v) => `/beneficiaries/${v.beneficiary}`, needs: 'beneficiary', na: 'the demo has no beneficiary', fake: { path: '/api/screen/beneficiary/', patch: (j) => ({ ...j, totals: { paid_month_usd: 0, paid_total_usd: 0, invoices: 0 }, history: [], last: [] }) } }, // the real profile with no payments
 ];
@@ -389,10 +393,16 @@ function logoWatch() {
 const passEnded = () => document.querySelectorAll('#invoices tbody tr').length > 0 && !document.querySelector('#invoices tbody .chip-pending');
 // Entry (AC-109): recorded from the click. Layout shifts within 500 ms of an input are excused by the browser, so they are collected raw and summed here.
 export const entryCls = (shifts, t0) => shifts.filter((x) => x.t >= t0).reduce((n, x) => n + x.v, 0);
+// R-176: the entry cells. Normal: every door at 390 and 1440, in es and en. Slow data (--slow): the doors in es, 3 runs each.
+export const entryCells = (screen, slow) => Object.keys(screen.doors).flatMap((door) => (slow ? [1, 2, 3] : [0]).flatMap((run) =>
+  (slow ? ['es'] : LANGS).flatMap((lang) => [390, 1440].map((width) => ({ screen, state: null, width, lang, kind: 'entry', door, run })))));
+const SLOW = { '/api/company': 1500, '/api/screen/inbox': 800 }; // ms each response is held (R-176)
 function entryWatch() {
   const e = (window.__e = { t0: null, shifts: [], seen: false, vt: null });
   addEventListener('click', (ev) => { e.t0 = ev.timeStamp; }, true);
-  new PerformanceObserver((l) => { for (const x of l.getEntries()) e.shifts.push({ t: x.startTime, v: x.value }); }).observe({ type: 'layout-shift' });
+  const name = (n) => !n ? '?' : n.nodeType !== 1 ? `#text in ${name(n.parentElement)}` : `${n.tagName.toLowerCase()}${typeof n.className === 'string' && n.className.trim() ? '.' + n.className.trim().split(/\s+/).join('.') : ''}`;
+  const box = (r) => `${Math.round(r.y)}+${Math.round(r.height)}`;
+  new PerformanceObserver((l) => { for (const x of l.getEntries()) e.shifts.push({ t: x.startTime, v: x.value, src: (x.sources ?? []).map((s) => `${name(s.node)} y ${box(s.previousRect)} -> ${box(s.currentRect)}`) }); }).observe({ type: 'layout-shift' });
   const start = document.startViewTransition?.bind(document);
   if (start) document.startViewTransition = (...a) => { e.vt = start(...a); e.seen = true; return e.vt; };
   const watch = () => { // a transition done with CSS on the page's own elements counts too
@@ -595,7 +605,7 @@ export async function runCell(browser, job) {
 
 // AC-109: the hand-over from a door into Bandeja, checked for CLS from the click to the end of the transition (item 4) and for console lines (item 6).
 // N/A while the app starts no transition (neither a View Transition nor an animation on the login or demo page).
-async function runEntry(browser, { base, screen, door, width, lang, opts = {} }) {
+async function runEntry(browser, { base, screen, door, width, lang, run, opts = {} }) {
   const rows = [];
   const add = (r) => wanted(opts.only, r.id) && rows.push({ screen: screen.id, width, lang, ...r });
   const context = await browser.newContext({ viewport: { width, height: HEIGHT[width] ?? 800 }, deviceScaleFactor: width <= 390 ? 2 : 1, hasTouch: width <= 390, locale: lang === 'es' ? 'es-CO' : 'en-US' });
@@ -605,6 +615,12 @@ async function runEntry(browser, { base, screen, door, width, lang, opts = {} })
     page.on('console', (m) => ['error', 'warning'].includes(m.type()) && logs.push(`${m.type()}: ${m.text().slice(0, 120)}`));
     page.on('pageerror', (e) => logs.push(`pageerror: ${String(e.message).slice(0, 120)}`));
     await page.addInitScript(INIT, { lang, session: null, tour: false });
+    const held = []; // slow data: each held response, so the reading waits until the late data is on screen
+    if (opts.slow) await page.route((u) => new URL(u).pathname in SLOW, async (route) => {
+      const p = sleep(SLOW[new URL(route.request().url()).pathname]).then(() => route.fallback()).catch(() => {});
+      held.push(p);
+      return p;
+    });
     const { path, go } = screen.doors[door];
     await page.goto(base + path, { waitUntil: 'load', timeout: 30_000 });
     await page.waitForSelector('h1', { timeout: 15_000 });
@@ -616,10 +632,21 @@ async function runEntry(browser, { base, screen, door, width, lang, opts = {} })
     await page.waitForFunction(() => location.pathname === '/', null, { timeout: 15_000, polling: 'raf' });
     await page.evaluate(() => window.__e.vt?.finished.catch(() => {})); // the end of the transition
     await sleep(150);
+    let until = 'the end of the transition';
+    if (opts.slow) { // R-176: on until the held data has arrived and painted, and for a door with a pass until it ends (AC-107)
+      await sleep(SLOW['/api/company'] + 200); // the company name is asked for after landing
+      await Promise.all(held);
+      await sleep(500);
+      until = 'the late data';
+      if (door !== 'demo' && await page.$('#invoices') && await page.waitForFunction(passEnded, null, { timeout: 60_000, polling: 500 }).then(() => true, () => false)) until = 'the end of the pass'; // a new user's first login has a pass; the demo user never does
+      await sleep(300);
+    }
     const e = await page.evaluate(() => ({ t0: window.__e.t0, shifts: window.__e.shifts, seen: window.__e.seen }));
     if (!e.seen) return ['4.cls', '6.console'].forEach((id) => add(R(id, 'na', 0, `${door} door: the entry transition (AC-109) does not exist yet`))), rows;
     const cls = entryCls(e.shifts, e.t0);
-    add(P('4.cls', cls > 0.01, +cls.toFixed(4), `${door} door: CLS ${cls.toFixed(4)} from the click to the end of the transition (limit 0.01)`));
+    const mode = opts.slow ? ` (slow data: /api/company +${SLOW['/api/company']} ms, /api/screen/inbox +${SLOW['/api/screen/inbox']} ms; run ${run})` : '';
+    const why = cls > 0.01 ? `; moved: ${[...new Set(e.shifts.filter((x) => x.t >= e.t0).flatMap((x) => x.src))].slice(0, 4).join('; ')}` : '';
+    add(P('4.cls', cls > 0.01, +cls.toFixed(4), `${door} door${mode}: CLS ${cls.toFixed(4)} from the click to ${until} (limit 0.01)${why}`));
     add(P('6.console', logs.length > 0, logs.length, `${door} door: ${logs.length} console errors or warnings from the click${logs.length ? ': ' + logs.slice(0, 3).join('; ') : ''}`));
     return rows;
   } catch (e) {
@@ -780,12 +807,23 @@ export async function trialSession(base) {
   return { key: `sb-${new URL(cfg.supabaseUrl).hostname.split('.')[0]}-auth-token`, value: JSON.stringify(await r.json()) };
 }
 
+// R-176: a confirmed password user made with the Admin API (QA's way; nothing is ever deleted). Needs SUPABASE_SERVICE_ROLE_KEY.
+// A new company takes its name from the email's local part: this one is longer than the top bar's name slot on purpose.
+// The tour is marked seen: its overlay scrolls the page, and scroll anchoring would hide a shift under the top bar.
+export async function adminUser(supabaseUrl, key) {
+  const rnd = () => Math.random().toString(36).slice(2, 10);
+  const u = { email: `gate-r176-${rnd()}-cuentas-por-pagar@example.com`, password: `Gate-${rnd()}9z` };
+  const r = await fetch(`${supabaseUrl}/auth/v1/admin/users`, { method: 'POST', headers: { apikey: key, authorization: `Bearer ${key}`, 'content-type': 'application/json' }, body: JSON.stringify({ ...u, email_confirm: true, user_metadata: { tour_seen: true } }) });
+  if (!r.ok) throw new Error(`admin user failed: ${r.status}`);
+  return u;
+}
+
 function args(argv) {
   const a = { route: {}, bool: new Set() };
   for (let i = 0; i < argv.length; i++) {
     if (!argv[i].startsWith('--')) continue;
     const k = argv[i].slice(2);
-    if (['palette', 'mutate'].includes(k)) a.bool.add(k);
+    if (['palette', 'mutate', 'slow'].includes(k)) a.bool.add(k);
     else if (k === 'route') { const [id, p] = argv[++i].split('='); a.route[id] = p; } else a[k] = argv[++i];
   }
   return a;
@@ -812,9 +850,14 @@ export async function main(argv) {
     const list = await fetch(`${base}/api/beneficiaries`, { headers: { authorization: `Bearer ${JSON.parse(session.value).access_token}` } }).then((r) => r.json()).catch(() => []);
     vars.beneficiary = Array.isArray(list) ? list[0]?.id : undefined;
   }
-  if (picked.some((s) => s.entry)) vars.demoEmail = (await fetch(`${base}/api/config`).then((r) => r.json()).catch(() => ({}))).demo_email;
+  if (picked.some((s) => s.entry)) {
+    const cfg = await fetch(`${base}/api/config`).then((r) => r.json()).catch(() => ({}));
+    vars.demoEmail = cfg.demo_email;
+    if (a.bool.has('slow') && !process.env.SUPABASE_SERVICE_ROLE_KEY) throw new Error('--slow: the password door needs SUPABASE_SERVICE_ROLE_KEY for its Admin-API users');
+    vars.pwUser = () => adminUser(cfg.supabaseUrl, process.env.SUPABASE_SERVICE_ROLE_KEY);
+  }
   const dicts = await loadDicts();
-  const opts = { only, dicts, session, trialSession: trialSess, vars, mutate: a.bool.has('mutate'), shots: true };
+  const opts = { only, dicts, session, trialSession: trialSess, vars, mutate: a.bool.has('mutate'), slow: a.bool.has('slow'), shots: true };
 
   const cells = [];
   for (const s of picked.map((x) => ({ ...x, path: a.route[x.id] ?? x.path }))) {
@@ -822,7 +865,7 @@ export async function main(argv) {
       if (typeof s.na === 'string') { console.log(`ux-gate: ${s.id} N/A (${s.na})`); rows.push({ screen: s.id, width: 390, lang: 'es', ...R('0.reach', 'na', 0, s.na) }); } else console.log(`ux-gate: ${s.id} skipped (needs --${s.needs.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase())})`);
       continue;
     }
-    if (s.entry) { for (const door of Object.keys(s.doors)) for (const lang of LANGS) for (const width of [390, 1440]) cells.push({ screen: s, state: null, width, lang, kind: 'entry', door }); continue; }
+    if (s.entry) { cells.push(...entryCells(s, a.bool.has('slow'))); continue; }
     const set = [null, ...(s.states ?? [])];
     for (const state of set) for (const lang of LANGS) for (const width of WIDTHS) cells.push({ screen: s, state, width, lang, kind: 'static' });
     for (const lang of LANGS) for (const kind of ['dynamic', 'loading', ...(s.intro ? ['reduced'] : [])]) if (!only || only.some((p) => (kind === 'dynamic' ? /^(3\.focus|3\.enter|4\.busy)/ : kind === 'reduced' ? /^6\.reduced/ : /^4\.loading/).test(p))) cells.push({ screen: s, state: null, width: 390, lang, kind });
@@ -833,7 +876,7 @@ export async function main(argv) {
     for (let c = cells[next++]; c; c = cells[next++]) {
       const r = await runCell(browser, { ...c, base, opts });
       rows.push(...r);
-      console.log(`${c.screen.id}${c.state ? '-' + c.state : ''} ${c.width}/${c.lang} ${c.kind}: ${r.filter((x) => x.status === 'fail').length} failed`);
+      console.log(`${c.screen.id}${c.state ? '-' + c.state : ''} ${c.width}/${c.lang} ${c.kind}: ${r.filter((x) => x.status === 'fail').length} failed${opts.slow ? `, ${c.door} CLS ${r.find((x) => x.id === '4.cls')?.value}` : ''}`);
     }
   };
   await Promise.all(Array.from({ length: JOBS }, worker));
@@ -844,7 +887,7 @@ export async function main(argv) {
   for (const exp of new Set(picked.map((s) => s.exp))) {
     const sections = {};
     for (const r of agg) if (picked.find((s) => s.exp === exp && (r.screen === s.id || s.states?.some((st) => r.screen === cellLabel(s, st))))) (sections[r.screen] ??= []).push(r);
-    if (!only) {
+    if (!only && !opts.slow) { // a slow run is a probe: it prints its failures and leaves the gate document as it was
       mkdirSync(join(ROOT, 'docs/ux'), { recursive: true });
       writeGate(join(ROOT, 'docs/ux', `gate-${exp}.md`), exp, sections, base);
     }

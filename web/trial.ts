@@ -2,7 +2,7 @@
  * The trial door (AC-92, AC-94; R-119, R-120).
  *   isTrial(user)              an unsaved trial: an anonymous session, which lives only in this browser
  *   guardLeave(user, leave, warn)  the one guard every action that ends the session calls (UI: useLeaveGuard)
- *   startTrial(lang, onProgress)   anonymous sign-in (the signup trigger seeds «Empresa de prueba <n>"), then the first-login pass
+ *   startTrial(lang)               anonymous sign-in (the signup trigger seeds «Empresa de prueba <n>"); the shell then runs the first-login pass (AC-107)
  *   enterDemo()                    «Entrar como Andina Labs» (AC-46)
  *   useTrialCompany()              the trial's company name, null until loaded or when not a trial
  */
@@ -11,7 +11,7 @@ import { useEffect, useState } from 'react';
 import type { Lang } from '../src/i18n';
 import { api, config, supabase } from './api';
 import { DEMO_TOUR, useSession } from './auth';
-import { runUntilDone, type Progress } from './runAgent';
+import { markFirstRun } from './firstRun';
 
 const DEMO_PASSWORD = 'andina-demo-2026'; // public by design (D8, AC-46), same as src/routes/demo.ts
 
@@ -20,13 +20,13 @@ export const isTrial = (user: User | null | undefined): boolean => user?.is_anon
 export const guardLeave = (user: User | null | undefined, leave: () => void, warn: (leave: () => void) => void): void =>
   isTrial(user) ? warn(leave) : leave();
 
-/** False when the sign-in fails (AC-96's rate limit, network, Auth down); the run itself never blocks (AC-40). */
-export async function startTrial(lang: Lang, onProgress: (p: Progress) => void): Promise<boolean> {
-  const { error } = await supabase()
+/** False when the sign-in fails (AC-96's rate limit, network, Auth down). Nothing after the sign-in is awaited (AC-107). */
+export async function startTrial(lang: Lang): Promise<boolean> {
+  const { data, error } = await supabase()
     .then((sb) => sb.auth.signInAnonymously({ options: { data: { lang } } })) // AC-41: the page's language, stored on the user
-    .catch((e: Error) => ({ error: e }));
+    .catch((e: Error) => ({ data: null, error: e }));
   if (error) return false;
-  await runUntilDone({ first: '/api/invoices/run', onProgress });
+  if (data?.user) markFirstRun(data.user.id);
   return true;
 }
 

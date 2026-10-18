@@ -39,3 +39,11 @@
   .dash-table table { min-width: 40rem; }
   .dash-table td a { display: inline-block; min-height: 44px; }
 }
+
+/* AC-107 (R-145, AC-99 Clarified): once the first-login pass ran in this tab, the sections that grow as decisions arrive keep a fixed
+   box no larger than their own maximum (3 approvals, 5 due rows, 10 activity items) and scroll inside; a row keeps its height while
+   its headline changes from the pending line to the decision (two lines, the rest on the detail). */
+.inbox-held .dash-approvals .dash-box { height: 24rem; overflow-y: auto; }
+.inbox-held .dash-due .dash-box { height: 22rem; overflow-y: auto; }
+.inbox-held .activity-box { height: 28rem; overflow-y: auto; }
+.inbox-held .dash-headline { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; min-height: 3.2em; }

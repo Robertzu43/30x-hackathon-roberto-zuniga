@@ -1,7 +1,7 @@
 /**
  * UI for budgeted agent runs (AC-70). Used by Bandeja, Politica and /demo.
  *
- *   const run = useRunAgent({ first, next?, onBatch? });   // same options as runUntilDone, see ../runAgent.ts
+ *   const run = useRunAgent({ first, next?, onBatch?, stop? });   // same options as runUntilDone, see ../runAgent.ts
  *   <button disabled={run.running} onClick={run.start}>...</button>
  *   <RunProgress run={run} mode="pending" | "reevaluate" progressKey?="run.progress" />
  *
@@ -13,7 +13,7 @@ import { useRef, useState } from 'react';
 import { useT } from '../i18n';
 import { runUntilDone, type Progress, type RunResult } from '../runAgent';
 
-type Opts = Pick<Parameters<typeof runUntilDone>[0], 'first' | 'next' | 'onBatch'>;
+type Opts = Pick<Parameters<typeof runUntilDone>[0], 'first' | 'next' | 'onBatch' | 'stop'>;
 export type RunAgent = { start: () => Promise<RunResult | undefined>; running: boolean; progress: Progress | null; result: RunResult | null };
 
 export function useRunAgent(opts: Opts): RunAgent {

@@ -53,7 +53,7 @@ test('shows the inbox rows (outcome + one-line reason) and the three Periodo fig
   expect(within(figures).getByText(pct(90))).toBeTruthy();
   expect(within(figures).getByText('0')).toBeTruthy();
   expect(within(figures).getByText(pct(100))).toBeTruthy();
-  expect(screen.getAllByRole('link', { name: /Ver el recorrido en video/ })[0]!.getAttribute('href')).toBe('/demo/happy-path.webm'); // [1]: the video box's own fallback (AC-114)
+  expect(screen.getByRole('link', { name: /Ver el recorrido en video/ }).getAttribute('href')).toBe('/demo/thesaurus-launch.mp4');
   expect(screen.queryByRole('group', { name: /Filtrar/ })).toBeNull();
 });
 
@@ -327,22 +327,17 @@ test('once usable /demo fetches the Inbox chunk and signs nobody in; a door\'s h
   expect(load).toHaveBeenCalledOnce();
 });
 
-// AC-114 (R-169): the hero holds the video, read from /demo/video.json; AC-112 markers for the gate.
-test('the hero plays the manifest video in place, with its poster, inside the one band (AC-114, AC-112)', async () => {
-  const manifest = { src: '/demo/happy-path.webm', type: 'video/webm', poster: '/demo/happy-path-poster.jpg', tracks: [{ src: '/demo/happy-path.es.vtt', srclang: 'es', label: 'Español' }] };
-  mockApi({ 'GET /api/demo/overview': overview, 'GET /demo/video.json': manifest });
-  const { container } = app();
-  await waitFor(() => expect(container.querySelector('video')?.getAttribute('poster')).toBe('/demo/happy-path-poster.jpg'));
-  expect(container.querySelector('[data-band] .demo-hero [data-hero-video] video')).toBeTruthy();
-  expect(screen.getByRole('button', { name: 'Reproducir el video' })).toBeTruthy();
-  expect(container.querySelectorAll('[data-band]')).toHaveLength(1);
-});
-
-test('no manifest: the box shows «No pude cargar el video.» and the walkthrough link stays (AC-114)', async () => {
+// The hero embeds the official YouTube film inside the one band (AC-112). The hosted mp4 is the fallback link only.
+test('the hero embeds the YouTube film inside the one band, and the mp4 is only a link', async () => {
   mockApi({ 'GET /api/demo/overview': overview });
-  app();
-  expect(await screen.findByText('No pude cargar el video.')).toBeTruthy();
-  expect(screen.getAllByRole('link', { name: /Ver el recorrido en video/ }).length).toBeGreaterThan(0);
+  const { container } = app();
+  const frame = await screen.findByTitle('Ver el recorrido en video');
+  expect(frame.tagName).toBe('IFRAME');
+  expect(frame.getAttribute('src')).toBe('https://www.youtube-nocookie.com/embed/z8IdL3_Skvg');
+  expect(container.querySelector('[data-band] .demo-hero [data-hero-video] iframe')).toBe(frame);
+  expect(container.querySelector('video')).toBeNull();
+  expect(screen.getByRole('link', { name: /Ver el recorrido en video/ }).getAttribute('href')).toBe('/demo/thesaurus-launch.mp4');
+  expect(container.querySelectorAll('[data-band]')).toHaveLength(1);
 });
 
 // AC-116 (a): «Cómo funciona» (docs/COPY.md) as six numbered step cards in AC-66's order and words.

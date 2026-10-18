@@ -20,3 +20,9 @@ test('a key defined twice across dictionaries throws, naming the key and both fi
 test('interpolates', () => expect(t('es', 'test.hello', { name: 'Ana' })).toBe('Hola, Ana'));
 test('interpolates in en', () => expect(t('en', 'test.hello', { name: 'Ana' })).toBe('Hello, Ana'));
 test('unknown key returns the key', () => expect(t('es', 'nope.key')).toBe('nope.key'));
+// AC-120: product ruling, one voice in both languages (beneficiary, not payee; «How it works», not «How the agent works»).
+test.each([
+  ['demo.loop.title', 'How it works'],
+  ['demo.stage.consulta.text', "It checks the beneficiary directory, the policy, the period's budget and earlier invoices."],
+  ['portal.steps.2.text', 'It replies with the beneficiary, amount, currency and number it read.'],
+])('en %s is the ruled copy', (key, text) => expect(ui.en[key]).toBe(text));

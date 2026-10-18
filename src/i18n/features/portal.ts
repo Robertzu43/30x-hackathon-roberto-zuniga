@@ -65,7 +65,7 @@ export const en: Record<string, string> = {
   'portal.steps.1.title': 'Send your invoice',
   'portal.steps.1.text': 'Attach a PDF, PNG or JPEG up to 10 MB, or paste the text.',
   'portal.steps.2.title': 'Thesaurus reads it',
-  'portal.steps.2.text': 'It replies with the payee, amount, currency and number it read.',
+  'portal.steps.2.text': 'It replies with the beneficiary, amount, currency and number it read.',
   'portal.steps.3.title': 'Keep your link',
   'portal.steps.3.text': 'The status link lets you follow your invoice without an account.',
   'portal.steps.label': 'How it works',

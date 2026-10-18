@@ -357,7 +357,7 @@ describe('first-message hints as step cards (AC-116 b)', () => {
     await open({ view: 'chat', company: 'Andina Labs Inc.' }, '/andina-labs', 'en');
     expect(cards().map((c) => [c[1], c[2]])).toEqual([
       ['Send your invoice', 'Attach a PDF, PNG or JPEG up to 10 MB, or paste the text.'],
-      ['Thesaurus reads it', 'It replies with the payee, amount, currency and number it read.'],
+      ['Thesaurus reads it', 'It replies with the beneficiary, amount, currency and number it read.'],
       ['Keep your link', 'The status link lets you follow your invoice without an account.'],
     ]);
   });

@@ -11,7 +11,8 @@
 > | **Reto** | Blinka · «Agentes que pagan por la empresa»: leer facturas, decidir **PAGAR / FRENAR / ESCALAR** dentro de reglas configurables y registrar por qué. |
 > | **Demo** | https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo → «Probar con mi propia empresa» (sin cuenta ni correo) |
 > | **Video** | [Película de 150 s](https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo/thesaurus-launch.mp4) · [recorrido sin editar](https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo/happy-path.webm) |
-> | **Autonomía** | 29/29 facturas con el resultado esperado; 18 decididas de punta a punta sin una persona, 11 escaladas a propósito (ver abajo). |
+> | **Resultado correcto** | **29/29.** Cada factura coincide con su etiqueta en [`docs/demo/DATASET.md`](docs/demo/DATASET.md) (15 PAGAR, 3 FRENAR, 11 ESCALAR). Las 11 escaladas son el resultado correcto, no un fallo. |
+> | **Autonomía** | 18/29 (62 %): solo las que el agente cierra solo (PAGAR o FRENAR). Las 11 ESCALAR correctas no cuentan. |
 > | **Seguridad** | 0 pagos fuera de las reglas. Solo la función pura [`decide()`](src/engine/decide.ts) puede producir PAGAR, y un trigger de Postgres ([`supabase/migrations/`](supabase/migrations/)) rechaza cualquier PAGAR que no cumpla los 13 controles. |
 > | **Explicabilidad** | Cada factura tiene un registro legible («Lo que hice / Lo que leí / Lo que decidí») en español e inglés, generado con plantillas, nunca por un modelo. |
 > | **Código clave** | [`src/engine/`](src/engine/) (reglas) · [`src/agent/loop.ts`](src/agent/loop.ts) (ciclo del agente) · [`docs/demo/DATASET.md`](docs/demo/DATASET.md) (29 facturas normales y trampa) |
@@ -81,10 +82,9 @@ El reto descalifica cualquier pago fuera de las reglas, así que la seguridad no
 
 Medidos sobre las 29 facturas de Andina Labs, una empresa ficticia ([`docs/demo/DATASET.md`](docs/demo/DATASET.md)):
 
-- **Precisión**: 15 PAGAR, 3 FRENAR y 11 ESCALAR esperados, obtenidos con 0 diferencias.
+- **Resultado correcto esperado: 29/29.** 15 PAGAR, 3 FRENAR y 11 ESCALAR, iguales a la etiqueta de cada factura en [`docs/demo/DATASET.md`](docs/demo/DATASET.md). El motor lo afirma en `src/engine/decide.test.ts` (tasa del 17 oct y ±20 %). Las 11 ESCALAR son correctas: el reto pide permiso de una persona cuando algo se sale de las reglas. Pagarlas solas sería un pago fuera de las reglas. Ninguna se puede cerrar sola sin ese riesgo (detalle en [`docs/DECISIONS-SUMMARY.md`](docs/DECISIONS-SUMMARY.md)).
 - **Violaciones: 0.** El agente no produjo ningún PAGAR fuera de las reglas. La base de datos tiene además un trigger que lo impide; se añadió después de que una prueba de QA intentara insertar un PAGAR inválido directamente por REST, y esa fila de prueba no salió del agente.
-- **Autonomía**: 18 de 29 (62 %) decididas de punta a punta sin una persona.
-- **Por qué hay 11 escaladas**: no son dudas del agente. Son las trampas del dataset que las reglas del reto obligan a llevar a una persona: beneficiario nuevo, cuenta cambiada, monto que no cuadra con el acuerdo, posible duplicado, factura ilegible, umbral de aprobación superado (2), factura vencida, fuera del periodo, saldo insuficiente y presupuesto agotado. Pagarlas solas violaría las reglas.
+- **Autonomía: 18 de 29 (62 %).** Es otra cifra. Solo cuenta un PAGAR o un FRENAR de la primera decisión del agente que coincide con la etiqueta (`solo` en `src/routes/screen.ts`). Las 11 ESCALAR correctas no entran en el 18.
 - **Pruebas**: unas 2.300 pruebas automáticas (Vitest) y pruebas del harness en bash/Python, en CI.
 
 ## Cómo correrlo
@@ -114,7 +114,7 @@ Cloudflare Workers (Hono) sirve la API, la app (Vite + React) y los crones. El W
 | [`portal/`](portal/) | el portal de proveedores |
 | [`supabase/migrations/`](supabase/migrations/) | esquema, RLS y triggers de seguridad |
 | [`e2e/`](e2e/), [`scripts/`](scripts/) | pruebas de navegador, despliegue, siembra y medición |
-| [`docs/`](docs/) | dataset, decisiones ([`DECISIONS.md`](docs/DECISIONS.md)), plan y arquitectura |
+| [`docs/`](docs/) | problema ([`PROBLEM.md`](docs/PROBLEM.md)), dataset, decisiones en corto ([`DECISIONS-SUMMARY.md`](docs/DECISIONS-SUMMARY.md)), arquitectura y velocidad ([`perf.md`](docs/perf.md)) |
 
 El proceso de construcción con agentes (especificación completa, registro de trabajo y skills) se conserva en la rama [`archive-full-main`](https://github.com/Robertzu43/30x-hackathon-roberto-zuniga/tree/archive-full-main).
 
@@ -132,4 +132,4 @@ Roberto Zúñiga. Licencia [MIT](LICENSE).
 
 ---
 
-**English summary.** Thesaurus is an accounts-payable agent for Blinka's challenge. An LLM (Amazon Nova Lite on Bedrock) only reads invoices into fields. A pure function, `decide()`, applies 13 deterministic checks and returns PAY / HOLD / ESCALATE, and a Postgres trigger rejects any PAY outside the rules. Every decision has a human-readable record in ES/EN. On the 29-invoice demo dataset it reaches the expected outcome on 29/29 with 0 violations. Try it at https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo; run the tests with `npm ci && npm test`.
+**English summary.** Thesaurus is an accounts-payable agent for Blinka's challenge. An LLM (Amazon Nova Lite on Bedrock) only reads invoices into fields. A pure function, `decide()`, applies 13 deterministic checks and returns PAY / HOLD / ESCALATE, and a Postgres trigger rejects any PAY outside the rules. Every decision has a human-readable record in ES/EN. On the 29-invoice demo dataset the expected-correct outcome rate is 29/29 (15 PAY, 3 HOLD, 11 ESCALATE): the escalations are the correct labels, not misses. Autonomy is the other number, 18/29, and counts only invoices the agent closes alone. Try it at https://30x-hackathon.30x-hackathon-roberto-zuniga.workers.dev/demo; run the tests with `npm ci && npm test`.

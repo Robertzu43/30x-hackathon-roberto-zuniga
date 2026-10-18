@@ -1,6 +1,6 @@
 # Copy deck (D47 (4), product, 18 Oct ~06:30Z)
 
-Owner: product (R-185). Applied by Task 61, except the rows under «Owned by Task 60», which Task 60 applies with AC-121. Disputes about wording come to product, as product questions. The binding ACs are AC-118, AC-119 and AC-120 in `docs/SPEC.md`, section 13i.
+Owner: product (R-185). Applied by Task 61, except the rows under «Owned by Task 60», which Task 60 applies with AC-121. Disputes about wording come to product, as product questions. The binding ACs are AC-118, AC-119 and AC-120 (spec on branch `archive-full-main`, `docs/SPEC.md`, section 13i).
 
 ## How to read this deck
 - Each table row is: priority, key, language, before, after.
@@ -261,6 +261,6 @@ The unknown-slug reply and the bad-file reply reuse AC-83's and AC-85's existing
 - AC-116's verbatim step-card copy, written by product for Task 58, and the six AC-66 stage words.
 - The /demo pitch line and JEV's status line (R-30, D27): Roberto's words, inside the «Cómo funciona» section, where D47 allows them.
 - `email_in.*`, the intake reply to vendors: already plain, first person.
-- Plurals written «factura(s)» in `policy.header_*`, `policy.unread_pending`, `run.errors_*` and `period.violations_alert`. Fixing them needs plural selection, which is logic, so they stay. The idea is in docs/IDEAS.md.
-- The English mix of "I could not" and "I couldn't". es-CO is the working language, and the mix does not change meaning. The idea is in docs/IDEAS.md.
+- Plurals written «factura(s)» in `policy.header_*`, `policy.unread_pending`, `run.errors_*` and `period.violations_alert`. Fixing them needs plural selection, which is logic, so they stay. The note is on branch `archive-full-main` (`docs/IDEAS.md`).
+- The English mix of "I could not" and "I couldn't". es-CO is the working language, and the mix does not change meaning. The note is on branch `archive-full-main` (`docs/IDEAS.md`).
 - Keys that Task 58 adds after this deck (the /demo stage-card sentences, its labels): Task 62's fresh UX reviewer reads them against the voice rules above. A finding there is a product question.

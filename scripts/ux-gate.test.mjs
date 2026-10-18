@@ -1,4 +1,4 @@
-/* global URL, setTimeout, console, process */
+/* global URL, setTimeout, console, document, process */
 // The gate's own checks (AC-91): a fixture page with one known violation per item, driven by ?bad=<check id>.
 // The clean page must pass every check; each bad variant must fail exactly the check it names.
 import { execFileSync } from 'node:child_process';
@@ -7,7 +7,7 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { aggregate, EMPTY_BODY, FONTS, launch, main, MSG, PALETTE, renderGate, runCell, SCREENS, unreadId, writeGate } from './ux-gate.mjs';
+import { aggregate, EMPTY_BODY, entryCls, FONTS, launch, logoSettled, main, MSG, PALETTE, renderGate, runCell, SCREENS, unreadId, writeGate } from './ux-gate.mjs';
 
 const DICTS = {
   es: { 'f.approve': 'Aprobar', 'f.hello': 'Hola {name}', 'f.title': 'Bandeja', 'f.empty': 'Todavía no hay facturas.', 'f.retry': 'Reintentar', 'f.send': 'Enviar', 'f.save': 'Guardar cambios', 'f.err': 'No pude cargar los datos. Inténtalo de nuevo.', 'f.decide': 'decide', 'f.nopay': 'No puedo mostrar este pago', 'f.nopay.next': 'Pídele a quien te lo envió que lo reenvíe.', 'f.offline': 'Sin conexión. Revisa tu conexión e inténtalo de nuevo.', 'f.failed': 'No se pudo enviar. Inténtalo de nuevo.' },
@@ -44,11 +44,15 @@ const page = (bad, lang) => {
     '3.focus': 'button.primary:focus,button.primary:focus-visible{outline:none;box-shadow:none}',
     '6.palette': '.pal{color:#ff00aa}',
     '6.fonts': '.fnt{font-family:"Comic Sans MS",cursive}',
+    intro: '.lg span{display:inline-block;animation:lg 200ms 2400ms both} @keyframes lg{from{color:#bbbbbb}to{color:#111111}} @media (prefers-reduced-motion: reduce){.lg span{animation:none}}', // the letters are light grey until the intro ends
+    'intro-motion': '.lg span{display:inline-block;animation:lg 200ms 2400ms both} @keyframes lg{from{color:#bbbbbb}to{color:#111111}}',
+    'intro-short': '.lg span{display:inline-block;animation:lg 200ms 500ms both} @keyframes lg{from{color:#bbbbbb}to{color:#111111}}',
   }[bad] ?? ''}`;
   const body = `
   <header>${bad === '6.logo' ? '' : '<svg data-logo role="img" aria-label="Logo" width="32" height="32" viewBox="0 0 32 32"><rect width="32" height="32" fill="#111111"/></svg>'}</header>
   <main>
-  <h1 id="h">${t['f.title']}</h1>
+  <h1 id="h">${bad.startsWith('intro') ? '<span class="lg">' + ['The', 'sau', 'rus'].map((c) => `<span>${c}</span>`).join('') + '</span>' : t['f.title']}</h1>
+  ${bad === 'pass' ? '<section id="invoices"><table class="inbox-list"><tbody><tr><td><span class="chip chip-pending">Pendiente</span></td></tr></tbody></table></section>' : ''}
   <span class="sr-only">Texto solo para lectores de pantalla</span>
   <div id="list"></div>
   <p>${lang === 'es' ? '1.234,50 COP' : '1,234.50 COP'}</p>
@@ -97,6 +101,7 @@ const page = (bad, lang) => {
     fetch('/api/act', { method: 'POST' });
   });
   if (bad === '4.cls') setTimeout(() => { const d = document.createElement('div'); d.style.height = '120px'; document.querySelector('main').prepend(d); }, 300);
+  if (bad === 'pass') setTimeout(() => { document.querySelector('.chip').className = 'chip chip-PAGAR'; const d = document.createElement('div'); d.style.height = '120px'; document.querySelector('main').prepend(d); }, 4000); // the pass ends: the last row is decided and the page shifts
   if (bad === '6.console') console.error('boom');
   if (bad === '7.longtask') setTimeout(() => { const e = Date.now() + 450; while (Date.now() < e); }, 100);
   if (bad === '0.reach') history.replaceState(null, '', '/elsewhere');
@@ -158,6 +163,18 @@ const echoFixture = (lang) => `<!doctype html><html lang="${lang}"><head><meta c
   document.getElementById('f').addEventListener('submit', (e) => { e.preventDefault(); const p = document.createElement('p'); p.textContent = document.getElementById('m').value; document.querySelector('.log').append(p); });
   </script></body></html>`;
 
+// D42/AC-109: a login page whose button hands over to Bandeja. ?v=instant swaps at once, vt runs the swap inside a View Transition,
+// shift adds a layout shift 100 ms later (inside the 500 ms the browser excuses after an input), console logs an error after the click.
+const entryPage = (v) => `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>e</title><style>body{margin:0;font:16px sans-serif} #app{padding:16px;min-height:400px}</style></head><body><div id="app"><h1>Entrar</h1><button id="go" class="primary" type="button">Entrar</button><p>cuerpo</p></div><script>
+  const swap = () => {
+    history.pushState(null, '', '/');
+    document.getElementById('app').innerHTML = '<h1>Bandeja</h1><button class="primary" type="button">Nueva factura</button><p>cuerpo</p>';
+    if (${JSON.stringify(v)} === 'shift') setTimeout(() => document.getElementById('app').prepend(Object.assign(document.createElement('div'), { style: 'height:150px' })), 100);
+    if (${JSON.stringify(v)} === 'console') console.error('boom');
+  };
+  document.getElementById('go').onclick = () => (${JSON.stringify(v)} === 'instant' ? swap() : document.startViewTransition(swap));
+  </script></body></html>`;
+
 // AC-91/AC-103: the real charts.css around a chart with its sr-only data table (long cells) and visible text.
 const chartPage = () => `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>c</title><style>${readFileSync('web/charts/charts.css', 'utf8')}</style></head><body><main><h1>Gráfico</h1><figure class="chart" style="position:relative"><figcaption class="chart-title">Pagado por mes</figcaption><p class="chart-summary">Resumen visible del gráfico.</p><table class="chart-sr"><caption>Pagado por mes</caption><thead><tr><th scope="col">Mes</th><th scope="col">Pagado en dólares</th></tr></thead><tbody><tr><th scope="row">Octubre de 2026</th><td>USD 1.800,00 pagados a Laura</td></tr><tr><th scope="row">Septiembre de 2026</th><td>USD 2.400,00 pagados a Pixel Lab</td></tr></tbody></table></figure><p>Texto después del gráfico.</p></main></body></html>`;
 // The beneficiaries list as the real screen reads it: { beneficiaries: [...] }; any other shape never leaves «Cargando…».
@@ -175,6 +192,7 @@ beforeAll(async () => {
     if (u.pathname === '/pq' || u.pathname === '/ps') return void res.writeHead(200, { 'content-type': 'text/html' }).end(portalPage(u.pathname === '/pq' ? 'q' : 's'));
     if (u.pathname.startsWith('/approve/')) return void res.writeHead(200, { 'content-type': 'text/html' }).end(approvePage(u, u.pathname.slice(9)));
     if (u.pathname.startsWith('/api/approve/')) return void res.writeHead(+(u.searchParams.get('s') ?? 404), { 'content-type': 'application/json' }).end('{"error":"invalid_token"}');
+    if (u.pathname === '/ef') return void res.writeHead(200, { 'content-type': 'text/html' }).end(entryPage(u.searchParams.get('v')));
     if (u.pathname === '/ov') return void res.writeHead(200, { 'content-type': 'text/html' }).end(overlapPage(u.searchParams.get('mode')));
     if (u.pathname === '/pf') return void res.writeHead(200, { 'content-type': 'text/html' }).end(req.method === 'POST' ? '{"ok":true}' : portalFixture(u.searchParams.has('bare')));
     if (u.pathname === '/pe') return void res.writeHead(200, { 'content-type': 'text/html' }).end(echoFixture(u.searchParams.get('lang') === 'en' ? 'en' : 'es'));
@@ -659,4 +677,69 @@ describe('the harness types a message in the tab language (Task 32b)', () => {
     expect(['5.mixed', '5.locale'].map((id) => status(rs, id)), JSON.stringify(rs.filter((r) => r.id.startsWith('5.')))).toEqual(['pass', 'pass']);
     expect(rs.find((r) => r.id === '5.locale').measured).toContain('excluded: 0 user-data nodes');
   }, 60_000);
+});
+
+describe('trial: CLS runs from landing to the end of the first-login pass (D42, R-143)', () => {
+  const screen = (extra) => ({ id: 'fixture', exp: 'test', path: '/f?bad=pass', primary: '#go', ...extra });
+  it('is flagged on the trial screen', () => expect(SCREENS.find((s) => s.id === 'trial').pass).toBe(true));
+  it('counts the shift that comes when the last row is decided', async () => {
+    const r = (await run(screen({ pass: true }))).find((x) => x.id === '4.cls');
+    expect(r.status, JSON.stringify(r)).toBe('fail');
+    expect(r.measured).toContain('end of the pass');
+  }, 60_000);
+  it('other screens still read the CLS soon after load, before that shift', async () => {
+    expect(status(await run(screen()), '4.cls')).toBe('pass');
+  }, 60_000);
+});
+
+describe('login and demo are checked after the logo intro (D42, AC-108)', () => {
+  const screen = (extra = {}) => ({ id: 'fixture', exp: 'test', path: '/f?bad=intro&lang=es', primary: '#go', ...extra });
+  it.each(['login', 'demo'])('%s waits for the intro and runs the reduced-motion pass', (id) => expect(SCREENS.find((s) => s.id === id).intro).toBe(true));
+  it('axe sees the final frame when the screen waits (the letters are light grey until then)', async () => {
+    expect(status(await run(screen({ intro: true })), '3.contrast')).toBe('pass');
+    expect(status(await run(screen()), '3.contrast')).toBe('fail');
+  }, 60_000);
+  it('logoSettled waits until no animation is running on the logo', async () => {
+    const ctx = await browser.newContext();
+    const p = await ctx.newPage();
+    await p.goto(`${base}/f?bad=intro-short`);
+    const t0 = Date.now();
+    await logoSettled(p);
+    expect(await p.evaluate(() => document.getAnimations().filter((a) => a.playState === 'running').length)).toBe(0);
+    expect(Date.now() - t0).toBeGreaterThan(300); // it waited for the intro
+    await ctx.close();
+  }, 30_000);
+  it('with reduced motion the logo is at rest at first paint', async () => {
+    expect(status(await run(screen({ intro: true }), { kind: 'reduced' }), '6.reduced')).toBe('pass');
+  }, 60_000);
+  it('fails when the logo still animates under reduced motion', async () => {
+    expect(status(await run(screen({ intro: true, path: '/f?bad=intro-motion&lang=es' }), { kind: 'reduced' }), '6.reduced')).toBe('fail');
+  }, 60_000);
+});
+
+describe('entry: the hand-over into Bandeja (AC-109, AC-91 Clarified)', () => {
+  const entry = (v) => ({ id: 'entry', exp: 'test', entry: true, doors: { login: { path: `/ef?v=${v}`, go: (page) => page.locator('#go') } } });
+  const go = (v) => run(entry(v), { kind: 'entry', door: 'login', width: 390 });
+  it('is a finance screen with a login and a demo door', () => {
+    const s = SCREENS.find((x) => x.id === 'entry');
+    expect(s.exp).toBe('finance');
+    expect(Object.keys(s.doors)).toEqual(['login', 'demo']);
+  });
+  it('is N/A, never a pass or a fail, while no transition exists', async () => {
+    const rs = await go('instant');
+    expect(rs.map((r) => [r.id, r.status])).toEqual([['4.cls', 'na'], ['6.console', 'na']]);
+    expect(rs[0].measured).toMatch(/AC-109/);
+  }, 60_000);
+  it('passes CLS and console for a clean transition', async () => {
+    const rs = await go('vt');
+    expect(rs.map((r) => [r.id, r.status]), JSON.stringify(rs)).toEqual([['4.cls', 'pass'], ['6.console', 'pass']]);
+  }, 60_000);
+  it('counts a layout shift right after the click, which the browser excuses as recent input', async () => {
+    const rs = await go('shift');
+    expect(status(rs, '4.cls'), JSON.stringify(rs)).toBe('fail');
+  }, 60_000);
+  it('fails on a console error during the hand-over', async () => {
+    expect(status(await go('console'), '6.console')).toBe('fail');
+  }, 60_000);
+  it('entryCls adds the shifts from the click on, input or not', () => expect(entryCls([{ t: 1, v: 0.5 }, { t: 12, v: 0.004 }, { t: 15, v: 0.006 }], 10)).toBeCloseTo(0.01));
 });

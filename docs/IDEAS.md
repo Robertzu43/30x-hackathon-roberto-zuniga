@@ -5,3 +5,4 @@ One line per idea, who had it, which AC it would serve. Nothing here gets built 
 - Amount guard: read a three-letter word before parentheses as a currency only when it is an ISO code, so «Total for (2) items: 500» is not a false nota_credito ESCALAR (builder 7e, AC-14 / R-82 (A)-(B)).
 - Cloudflare Turnstile CAPTCHA on anonymous sign-in (Supabase supports it); needs a Turnstile site only Roberto can create (product, AC-96 / R-117, Q17).
 - Open Bandeja instantly for a new trial and let the activity panel show the agent deciding in the background (product, AC-92 / R-120's rejected option; proposed again by the launcher at 21:42Z with QA's 14.6-18.4 s, R-139).
+- ux-gate item 7 `7.usable`: count a busy (disabled, aria-busy) «Ejecutar agente» as usable like AC-97 target 5 does, or the trial screen fails 7.usable while the first-login pass runs once Task 52 lands Bandeja first (builder 52b, AC-91 item 7 / R-143).

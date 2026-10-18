@@ -42,13 +42,16 @@ const newInvoice = (i, text) => async (page, o) => {
   if (text) await page.locator('form.new-invoice textarea').fill(MSG[o.lang]);
   else await page.locator('form.new-invoice input[type="file"]').setInputFiles({ name: 'factura.png', mimeType: 'image/png', buffer: PNG });
 };
+// Types the harness message and sends it; the gate answers the POST itself (REPLY, below), so no invoice is read and none is created (AC-85).
 const sendPortal = async (page, o) => {
-  if (!o.mutate) return 'na: portal-reply sends a real message (one AI read); pass --mutate';
   await page.locator('textarea, input[type="text"]').first().fill(MSG[o.lang]);
   await page.locator('button[type="submit"], button.primary').first().click();
-  await page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => {});
-  await page.waitForTimeout(1500);
+  await page.locator('a[href*="/estado/"]').first().waitFor({ timeout: 10_000 }); // the reply bubble with its status link
 };
+// The portal Worker's answer to a send ({ ok, reply, status_path }), recorded: the reply shows payee, number and amount as the vendor sees them.
+const REPLY = { ok: true, status_path: '/estado/gate-reply-token', reply: {
+  es: ['Esto leí en tu factura:', 'Beneficiario: Ana Souza', 'Monto y moneda: 10.000 BRL', 'Número: AS-0941', 'Estado: en revisión'],
+  en: ['This is what I read on your invoice:', 'Payee: Ana Souza', 'Amount and currency: 10,000 BRL', 'Number: AS-0941', 'Status: under review'] } };
 const clickButton = (name) => async (page) => { await page.getByRole('button', { name }).first().click(); };
 export const SCREENS = [
   { id: 'login', exp: 'finance', path: '/login', auth: false, intro: true, fill: { '#login-email': 'gate@example.test' } },
@@ -68,7 +71,7 @@ export const SCREENS = [
   { id: 'approve', exp: 'finance', path: (v) => `/approve/${v.approveToken ?? 'invalid'}`, auth: false },
   { id: 'demo', exp: 'finance', path: '/demo', auth: false, intro: true }, // intro: checked after the wordmark intro ends, then once more with reduced motion (D42, AC-108)
   { id: 'portal', exp: 'vendor', path: '/andina-labs', auth: false, states: STATES, primary: 'button[type="submit"], button.primary', compose: 'textarea', send: true, na: { empty: 'sin estado vacío por diseño' } }, // compose: typed before 4.busy, an empty send takes the error path; send: error and offline type a message and send it
-  { id: 'portal-reply', exp: 'vendor', path: '/andina-labs', auth: false, prepare: sendPortal, primary: 'button[type="submit"], button.primary' },
+  { id: 'portal-reply', exp: 'vendor', path: '/andina-labs', auth: false, prepare: sendPortal, compose: 'textarea', fake: { post: REPLY }, primary: 'button[type="submit"], button.primary' }, // fake.post: every send is answered by the gate; compose: the dynamic pass types before its click
   { id: 'portal-error', exp: 'vendor', path: '/no-such-portal-gate', auth: false, notFound: true }, // designed 404 (R-103)
   { id: 'status', exp: 'vendor', path: (v) => `/estado/${v.statusToken}`, auth: false, states: STATES, needs: 'statusToken', na: { empty: SERVER_PAGE, error: SERVER_PAGE } }, // server-rendered; offline is the page's own notice
   { id: 'status-invalid', exp: 'vendor', path: '/estado/token-invalido-gate', auth: false, notFound: true },
@@ -85,6 +88,12 @@ export const SCREENS = [
   } },
   { id: 'beneficiary-empty', base: 'beneficiary', exp: 'finance', path: (v) => `/beneficiaries/${v.beneficiary}`, needs: 'beneficiary', na: 'the demo has no beneficiary', fake: { path: '/api/screen/beneficiary/', patch: (j) => ({ ...j, totals: { paid_month_usd: 0, paid_total_usd: 0, invoices: 0 }, history: [], last: [] }) } }, // the real profile with no payments
 ];
+
+// The label of one cell's rows, screenshots and table section. A state label must never equal a screen id (portal + error vs the portal-error 404 screen).
+export const cellLabel = (screen, state) => {
+  const label = screen.id + (state ? '-' + state : '');
+  return state && SCREENS.some((s) => s.id === label) ? `${screen.id}-state-${state}` : label;
+};
 
 // ---- Playwright and Chromium ----
 export async function launch() {
@@ -382,7 +391,8 @@ function installRoutes(page, base, { state, guard, delayGets, gate, fake }) {
     if (data && path === '/api/fx' && req.method() === 'GET' && state === 'fx-error') return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"gate"}' });
     if (data && !config && state === 'error') return route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"gate"}' });
     if (data && !config && state === 'empty' && req.method() === 'GET') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(path in EMPTY_BODY ? EMPTY_BODY[path] : []) });
-    if (fake && data && req.method() === 'GET' && path.startsWith(fake.path)) {
+    if (fake?.post && data && req.method() === 'POST') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fake.post) });
+    if (fake?.path && data && req.method() === 'GET' && path.startsWith(fake.path)) {
       try { return await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(fake.patch(await (await route.fetch()).json())) }); }
       catch { return route.abort().catch(() => {}); } // the context closed (or the origin dropped) while the request was in flight: nothing left to answer
     }
@@ -413,7 +423,7 @@ const axeJs = () => (axeSource ??= readFileSync(require.resolve('axe-core/axe.mi
 export async function runCell(browser, job) {
   if (job.kind === 'entry') return runEntry(browser, job);
   const { base, screen, state, width, lang, kind, opts = {} } = job;
-  const label = screen.id + (state ? '-' + state : '');
+  const label = cellLabel(screen, state);
   const rows = [];
   const add = (r) => wanted(opts.only, r.id) && rows.push({ screen: label, width, lang, ...r });
   if (state && screen.na?.[state]) return add(R('4.state', 'na', 0, screen.na[state])), rows; // a designed state this screen has no way to reach
@@ -502,7 +512,7 @@ export async function runCell(browser, job) {
     }
     if (screen.prepare) {
       const skip = await screen.prepare(page, { ...opts, lang });
-      if (typeof skip === 'string' && skip.startsWith('na')) return [...rows, { screen: label, width, lang, ...R('0.reach', 'na', 0, skip) }];
+      if (typeof skip === 'string' && skip.startsWith('na')) return [...rows, { screen: label, width, lang, skipped: true, ...R('0.reach', 'na', 0, skip) }]; // skipped: the table shows N/A, not the PASS taken before prepare
       await sleep(500);
     }
     for (const [sel, v] of Object.entries(screen.fill ?? {})) await page.locator(sel).first().fill(v).catch(() => {});
@@ -646,12 +656,13 @@ export function aggregate(rows) {
   }
   return [...groups.values()].map((g) => {
     const failing = g.filter((r) => r.status === 'fail');
+    const skipped = failing.length ? undefined : g.find((r) => r.skipped);
     const pool = failing.length ? failing : g;
     const shown = (r) => r.users?.length ?? +r.measured.includes('excluded:');
-    const worst = pool.reduce((a, b) => (b.value > a.value || (b.value === a.value && shown(b) > shown(a)) ? b : a)); // a tie keeps the row that printed the most exclusions
+    const worst = skipped ?? pool.reduce((a, b) => (b.value > a.value || (b.value === a.value && shown(b) > shown(a)) ? b : a)); // a tie keeps the row that printed the most exclusions
     const users = {}; // R-131: per language, the biggest count and every distinct text excluded
     for (const r of g) if (r.users) { const u = (users[r.lang] ??= { n: 0, texts: new Set() }); u.n = Math.max(u.n, r.users.length); r.users.forEach((t) => u.texts.add(t)); }
-    const status = failing.length ? 'fail' : g.some((r) => r.status === 'pass') ? 'pass' : g[0].status;
+    const status = failing.length ? 'fail' : skipped ? 'na' : g.some((r) => r.status === 'pass') ? 'pass' : g[0].status;
     return { screen: g[0].screen, id: g[0].id, status, value: worst.value, measured: `${worst.measured} @${worst.width}/${worst.lang}`, cells: g.length, failing: failing.length, ...(Object.keys(users).length && { users }) };
   }).sort((a, b) => order(a.id).localeCompare(order(b.id)));
 }
@@ -779,7 +790,7 @@ export async function main(argv) {
   let failed = 0;
   for (const exp of new Set(picked.map((s) => s.exp))) {
     const sections = {};
-    for (const r of agg) if (picked.find((s) => s.exp === exp && (r.screen === s.id || s.states?.some((st) => r.screen === `${s.id}-${st}`)))) (sections[r.screen] ??= []).push(r);
+    for (const r of agg) if (picked.find((s) => s.exp === exp && (r.screen === s.id || s.states?.some((st) => r.screen === cellLabel(s, st))))) (sections[r.screen] ??= []).push(r);
     if (!only) {
       mkdirSync(join(ROOT, 'docs/ux'), { recursive: true });
       writeGate(join(ROOT, 'docs/ux', `gate-${exp}.md`), exp, sections, base);
